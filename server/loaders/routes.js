@@ -960,6 +960,52 @@ export function loadRoutes(app, system) {
     safeMount('/api/gridbot',   checkReady, gridBotRoutes);
     safeMount('/api/conceive',  conceiveRoutes);
 
+    // ── ASI System Routes ─────────────────────────────────────────────────
+    app.get('/api/asi/status', (req, res) => {
+        try {
+            res.json({
+                kernel:        system.asiKernel?.getStatus()       || null,
+                benchmark:     system.benchmark?.getStatus()       || null,
+                constitutional: system.constitutional?.getStatus() || null,
+                transfer:      system.transfer?.getStatus()        || null,
+                longHorizon:   system.longHorizon?.getStatus()     || null,
+            });
+        } catch (e) { res.status(500).json({ error: e.message }); }
+    });
+
+    app.get('/api/asi/benchmark', (req, res) => {
+        try { res.json(system.benchmark?.getDashboardData() || {}); }
+        catch (e) { res.status(500).json({ error: e.message }); }
+    });
+
+    app.get('/api/asi/transfers', (req, res) => {
+        try { res.json(system.transfer?.getTransfers() || []); }
+        catch (e) { res.status(500).json({ error: e.message }); }
+    });
+
+    app.get('/api/asi/constitutional', (req, res) => {
+        try { res.json({ constraints: system.constitutional?.getConstraints() || [], audit: system.constitutional?.audit(20) || [] }); }
+        catch (e) { res.status(500).json({ error: e.message }); }
+    });
+
+    app.post('/api/asi/cycle', checkReady, async (req, res) => {
+        try {
+            if (!system.asiKernel) return res.status(503).json({ error: 'ASI Kernel not initialized' });
+            const result = await system.asiKernel.runCycle();
+            res.json({ ok: true, cycle: result });
+        } catch (e) { res.status(500).json({ error: e.message }); }
+    });
+
+    app.post('/api/asi/vision', checkReady, async (req, res) => {
+        try {
+            const { description, horizon } = req.body;
+            if (!description) return res.status(400).json({ error: 'description required' });
+            if (!system.longHorizon) return res.status(503).json({ error: 'LongHorizonPlanner not initialized' });
+            const vision = await system.longHorizon.setVision(description, horizon || '30d');
+            res.json({ ok: true, vision });
+        } catch (e) { res.status(500).json({ error: e.message }); }
+    });
+
     // 7. MISSING COMPONENTS (Dream, Muse, etc.)
     app.get('/api/dream/insights', (req, res) => {
         const raw = system.dreamArbiter?.getInsights?.() || [];

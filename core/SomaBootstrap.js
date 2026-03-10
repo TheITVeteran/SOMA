@@ -6,6 +6,13 @@ import crypto from 'crypto';
 import toolRegistry from './ToolRegistry.js';
 import { SafeArbiter } from './SafeArbiter.js';
 
+// ── ASI Systems ──────────────────────────────────────────────────────────────
+import { ConstitutionalCore }   from './ConstitutionalCore.js';
+import { CapabilityBenchmark }  from './CapabilityBenchmark.js';
+import { TransferSynthesizer }  from './TransferSynthesizer.js';
+import { LongHorizonPlanner }   from './LongHorizonPlanner.js';
+import { ASIKernel }            from './ASIKernel.js';
+
 export class SomaBootstrap {
     constructor(rootPath, config) {
         this.rootPath = rootPath;
@@ -33,10 +40,14 @@ export class SomaBootstrap {
             // Phase 3: Add autonomous learning systems (on top of Trinity)
             await this._phase3_learningSystems(modules);
 
+            // Phase ASI: Close the recursive self-improvement loop
+            await this._phase_asi();
+
             console.log('\n╔═══════════════════════════════════════════════════════════════════════╗');
             console.log('║  🎉 SOMA Bootstrap Complete!                                         ║');
             console.log('║  🔱 Trinity Architecture: ACTIVE                                     ║');
             console.log('║  🧠 Autonomous Systems: ACTIVE                                       ║');
+            console.log('║  ⚡ ASI Kernel: ACTIVE                                               ║');
             console.log('╚═══════════════════════════════════════════════════════════════════════╝\n');
 
             // Generate Trinity Status Report
@@ -561,6 +572,8 @@ export class SomaBootstrap {
                     capabilities: ['execute-task'],
                     instance: { handleMessage: async (env) => agent.execute(env) }
                 });
+                // Save Black agent instance so we can subscribe to its alerts later
+                if (name === 'BlackAgent') this.system.blackAgent = agent;
                 console.log(`   ✅ ${name} registered`);
             } catch (e) {
                 console.error(`   ⚠️  Failed to initialize ${name}:`, e.message);
@@ -1291,6 +1304,61 @@ export class SomaBootstrap {
         await this.system.goalPlanner.initialize();
         this.system.messageBroker.registerArbiter('GoalPlannerArbiter', { instance: this.system.goalPlanner });
         console.log('   ✅ GoalPlannerArbiter ready');
+
+        // ── Wire Black's alerts → GoalPlanner ───────────────────────────────
+        // Black monitors system health and emits alerts. Here we turn those
+        // alerts into real goals so SOMA acts on her own warnings instead of
+        // just logging them.
+        if (this.system.blackAgent) {
+            const _blackGoalCooldown = new Map(); // prevent duplicate goals per alert type
+            const COOLDOWN_MS = 10 * 60 * 1000;  // 10 minutes between same-type goals
+
+            this.system.blackAgent.on('alert', async (alert) => {
+                try {
+                    const now = Date.now();
+                    const last = _blackGoalCooldown.get(alert.type) || 0;
+                    if (now - last < COOLDOWN_MS) return; // still in cooldown
+                    _blackGoalCooldown.set(alert.type, now);
+
+                    const goalMap = {
+                        memory: {
+                            title:       'Free up system memory',
+                            description: `Black reported high memory usage (${alert.message}). Run garbage collection, clear caches, and identify any memory-leaking processes. Then verify memory usage drops below 80%.`,
+                            priority:    alert.severity === 'critical' ? 90 : 70,
+                        },
+                        cpu: {
+                            title:       'Reduce CPU load',
+                            description: `Black reported high CPU usage (${alert.message}). Identify the heaviest processes, throttle or defer non-essential background work, and verify load drops to normal.`,
+                            priority:    alert.severity === 'critical' ? 85 : 65,
+                        },
+                        disk: {
+                            title:       'Free up disk space',
+                            description: `Black reported high disk usage (${alert.message}). Clean up temporary files, old logs, and stale caches. Identify the largest directories consuming space.`,
+                            priority:    alert.severity === 'critical' ? 80 : 60,
+                        },
+                    };
+
+                    const template = goalMap[alert.type];
+                    if (!template) return;
+
+                    await this.system.goalPlanner.createGoal({
+                        type:        'operational',
+                        category:    'system_health',
+                        title:       template.title,
+                        description: template.description,
+                        priority:    template.priority,
+                        confidence:  0.95,
+                        rationale:   `Black agent alert [${alert.severity}]: ${alert.message}`,
+                        metadata:    { source: 'black_agent', alertType: alert.type, severity: alert.severity }
+                    });
+
+                    console.log(`[Black → GoalPlanner] 🎯 Created goal: "${template.title}" (${alert.severity})`);
+                } catch (err) {
+                    console.error('[Black → GoalPlanner] Failed to create goal:', err.message);
+                }
+            });
+            console.log('   ✅ Black alerts → GoalPlanner wired');
+        }
 
         // Recursive Self-Model
         this.system.selfModel = new RecursiveSelfModel({
@@ -2146,6 +2214,89 @@ export class SomaBootstrap {
     async _phase6_integration(modules) {
         console.log('\n🔗 PHASE 6: Integration & Finalization...');
         // AGI-Integration and plugins will be moved here
+    }
+
+    // ─── Phase ASI: Recursive Self-Improvement Loop ───────────────────────────
+    async _phase_asi() {
+        console.log('\n⚡ Initializing ASI Systems...');
+
+        try {
+            // 1. Constitutional Core — must be first (safety gate for everything else)
+            this.system.constitutional = new ConstitutionalCore();
+            await this.system.constitutional.initialize();
+            console.log('   ✅ ConstitutionalCore ready');
+
+            // 2. Capability Benchmark — must be second (needed by ASIKernel)
+            this.system.benchmark = new CapabilityBenchmark({ system: this.system });
+            await this.system.benchmark.initialize();
+            // Take an initial baseline snapshot
+            this.system.benchmark.snapshot().catch(() => {});
+            console.log('   ✅ CapabilityBenchmark ready');
+
+            // 3. Transfer Synthesizer — cross-domain pattern extraction
+            this.system.transfer = new TransferSynthesizer({
+                system: this.system,
+                brain:  this.system.quadBrain,
+            });
+            await this.system.transfer.initialize();
+            console.log('   ✅ TransferSynthesizer ready');
+
+            // 4. Long Horizon Planner — vision-level planning
+            this.system.longHorizon = new LongHorizonPlanner({
+                system: this.system,
+                brain:  this.system.quadBrain,
+            });
+            await this.system.longHorizon.initialize();
+            console.log('   ✅ LongHorizonPlanner ready');
+
+            // 5. ASI Kernel — closes the loop
+            this.system.asiKernel = new ASIKernel({ system: this.system });
+            await this.system.asiKernel.initialize();
+            console.log('   ✅ ASIKernel ready');
+
+            // Wire ASI events → messageBroker for frontend consumption
+            if (this.system.messageBroker) {
+                this.system.asiKernel.on('improvement', (data) => {
+                    this.system.messageBroker.publish?.('asi_improvement', data);
+                    this.system.ws?.broadcast?.('asi_improvement', data);
+                });
+                this.system.asiKernel.on('blocked', (data) => {
+                    this.system.messageBroker.publish?.('asi_blocked', data);
+                });
+            }
+
+            // Wire AutonomousHeartbeat to trigger ASI cycle when tension is high
+            if (this.system.autonomousHeartbeat) {
+                const _origTick = this.system.autonomousHeartbeat.tick?.bind(this.system.autonomousHeartbeat);
+                if (_origTick) {
+                    this.system.autonomousHeartbeat.tick = async function (...args) {
+                        // Run ASI cycle if drive tension is high and kernel isn't busy
+                        const drive = this.drive?.getStatus?.() || {};
+                        if (drive.tension > 0.6 && this.system.asiKernel && !this.system.asiKernel._busy) {
+                            this.system.asiKernel.runCycle().catch(() => {});
+                        }
+                        return _origTick(...args);
+                    };
+                }
+            }
+
+            // Daily long-horizon alignment (midnight cron)
+            if (this.system.autonomousHeartbeat?.addSchedule) {
+                this.system.autonomousHeartbeat.addSchedule({
+                    id:       'asi_daily_align',
+                    name:     'ASI daily goal alignment',
+                    schedule: { kind: 'cron', expr: '0 0 * * *' },
+                    message:  'ASI daily: align goals to long-horizon milestones',
+                });
+            }
+
+            console.log('[SOMA] ⚡ ASI Kernel online — recursive self-improvement ACTIVE');
+
+        } catch (err) {
+            // ASI systems are enhancement — never block SOMA boot on their failure
+            console.warn(`   ⚠️  ASI systems failed to initialize: ${err.message}`);
+            console.warn('   SOMA will continue without ASI recursive improvement.');
+        }
     }
 
     getHealth() {

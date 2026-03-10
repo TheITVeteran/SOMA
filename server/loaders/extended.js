@@ -125,6 +125,8 @@ import { IdolSenturianArbiter } from '../../arbiters/IdolSenturianArbiter.js';
 // PARALLEL WORKFORCE: MicroAgentPool
 // ──────────────────────────────────────────
 const { MicroAgentPool } = require('../../microagents/MicroAgentPool.cjs');
+const LocalModelManager = (() => { try { return require('../../arbiters/LocalModelManager.cjs'); } catch(e) { console.warn('[extended] LocalModelManager load failed:', e.message); return null; } })();
+const EdgeWorkerOrchestrator = (() => { try { return require('../../arbiters/EdgeWorkerOrchestrator.cjs'); } catch(e) { console.warn('[extended] EdgeWorkerOrchestrator load failed:', e.message); return null; } })();
 
 // ──────────────────────────────────────────
 // NETWORK IDENTITY: ThalamusArbiter
@@ -163,9 +165,10 @@ async function yieldEventLoop() {
 }
 
 // Memory ceiling — skip non-essential arbiters if heap exceeds this.
-// 400MB is plenty for Tier 1 + lean Tier 2. Heavyweight arbiters
-// (ReasoningChamber, ContextManager, etc.) are gated behind SOMA_LOAD_HEAVY.
-const HEAP_CEILING_MB = 400;
+// Machine has 15.74 GB RAM, Node heap set to 4096MB — 2500MB ceiling is safe.
+const HEAP_CEILING_MB = process.env.SOMA_HEAP_CEILING_MB
+    ? parseInt(process.env.SOMA_HEAP_CEILING_MB, 10)
+    : 2500;
 
 async function safeLoad(name, factory, options = {}) {
     // Memory guard FIRST — skip immediately without waiting if over ceiling
@@ -187,12 +190,16 @@ async function safeLoad(name, factory, options = {}) {
 
         const load = async () => {
             const instance = await factory();
-            if (instance && typeof instance.initialize === 'function') {
-                await instance.initialize();
-            } else if (instance && typeof instance.onInitialize === 'function') {
-                await instance.onInitialize();
-            } else if (instance && typeof instance.onActivate === 'function') {
-                await instance.onActivate();
+            // Skip init if already active (some arbiters self-initialize in constructor)
+            const alreadyActive = instance?.status === 'active' || instance?.initialized === true || instance?.ready === true;
+            if (!alreadyActive) {
+                if (instance && typeof instance.initialize === 'function') {
+                    await instance.initialize();
+                } else if (instance && typeof instance.onInitialize === 'function') {
+                    await instance.onInitialize();
+                } else if (instance && typeof instance.onActivate === 'function') {
+                    await instance.onActivate();
+                }
             }
             return instance;
         };
@@ -203,7 +210,9 @@ async function safeLoad(name, factory, options = {}) {
         console.log(`    ✅ ${name} (+${memDelta}MB, heap: ${totalMB}MB)`);
         return instance;
     } catch (e) {
-        console.warn(`    ⚠️ ${name} skipped: ${e.message}`);
+        const rootCause = e.context?.cause?.message || e.cause?.message;
+        const msg = rootCause ? `${e.message} (cause: ${rootCause})` : e.message;
+        console.warn(`    ⚠️ ${name} skipped: ${msg}`);
         return null;
     }
 }
@@ -486,7 +495,7 @@ export async function loadExtendedSystems(system) {
 
     ext.codeObserver = await safeLoad('CodeObservationArbiter', () =>
         new CodeObservationArbiter({ rootPath })
-    );
+    , { timeoutMs: 60000 });
 
     // ═══════════════════════════════════════════
     // PHASE C: Cognitive Enhancement
@@ -495,11 +504,11 @@ export async function loadExtendedSystems(system) {
 
     ext.hippocampus = await safeLoad('HippocampusArbiter', () =>
         new HippocampusArbiter({
-            mnemonicArbiter: system.mnemonicArbiter,
+            mnemonic: system.mnemonicArbiter,
             knowledgeGraph: system.knowledgeGraph,
             messageBroker: system.messageBroker
         })
-    );
+    , { timeoutMs: 120000 });
 
     ext.metaCortex = await safeLoad('MetaCortexArbiter', () =>
         new MetaCortexArbiter({
@@ -513,7 +522,7 @@ export async function loadExtendedSystems(system) {
             knowledgeGraph: system.knowledgeGraph,
             worldModel: system.worldModel
         })
-    );
+    , { timeoutMs: 60000 });
 
     ext.knowledgeGenerator = await safeLoad('KnowledgeAugmentedGenerator', () =>
         new KnowledgeAugmentedGenerator({
@@ -536,12 +545,12 @@ export async function loadExtendedSystems(system) {
     );
 
     ext.adversarialDebate = await safeLoad('AdversarialDebate', () =>
-        new AdversarialDebate({ quadBrain: system.quadBrain })
-    );
+        new AdversarialDebate({ quadBrain: system.quadBrain, rootPath })
+    , { timeoutMs: 60000 });
 
     ext.tradeLearning = await safeLoad('TradeLearningEngine', () =>
         new TradeLearningEngine({ outcomeTracker: ext.outcomeTracker, rootPath })
-    );
+    , { timeoutMs: 60000 });
 
     ext.backtestEngine = await safeLoad('BacktestEngine', () =>
         new BacktestEngine({ quadBrain: system.quadBrain, mtfAnalyzer: ext.mtfAnalyzer, regimeDetector: ext.regimeDetector, rootPath })
@@ -549,7 +558,7 @@ export async function loadExtendedSystems(system) {
 
     ext.smartOrderRouter = await safeLoad('SmartOrderRouter', () =>
         new SmartOrderRouter({ rootPath })
-    );
+    , { timeoutMs: 30000 });
 
     ext.positionSizer = await safeLoad('AdaptivePositionSizer', () =>
         new AdaptivePositionSizer({ rootPath })
@@ -625,10 +634,11 @@ export async function loadExtendedSystems(system) {
             quadBrain:    system.quadBrain,
             outcomeTracker: ext.outcomeTracker,
             messageBroker: system.messageBroker,
-            nemesis:      system.nemesis,       // quality-gate for proposed changes
-            memory:       system.mnemonicArbiter
+            nemesis:      system.nemesis       // quality-gate for proposed changes
+            // memory omitted — BaseArbiterV4 uses its own TransmitterManager;
+            // MnemonicArbiter lacks the stats() method BaseArbiter expects
         })
-    );
+    , { timeoutMs: 60000 });
     if (ext.selfImprovement) {
         system.selfImprovement = ext.selfImprovement;
         // Wire into SelfEvolvingGoalEngine so improvement goals have an executor
@@ -673,7 +683,22 @@ export async function loadExtendedSystems(system) {
             toolRegistry: system.toolRegistry,
             system
         })
-    );
+    , { timeoutMs: 60000 });
+
+    // ── SomaAgenticExecutor: Moved early (PHASE B) to avoid heap ceiling ──
+    // Originally at PHASE G (~line 1105) where heap was already >400MB.
+    // GoalPlanner and quadBrain are already available here.
+    ext.agenticExecutor = await safeLoad('SomaAgenticExecutor', () => {
+        const executor = new SomaAgenticExecutor({ maxIterations: 15, sessionTimeout: 300_000 });
+        executor.initialize({
+            brain: system.quadBrain,
+            memory: system.mnemonicArbiter,
+            goalPlanner: ext.goalPlanner || system.goalPlanner,
+            system
+        });
+        system.agenticExecutor = executor;
+        return executor;
+    });
 
     // ═══════════════════════════════════════════
     // PHASE F: Knowledge & Research
@@ -724,7 +749,7 @@ export async function loadExtendedSystems(system) {
                 edgeWorker: system.edgeWorker,
                 messageBroker: system.messageBroker
             })
-        );
+        , { timeoutMs: 30000 });
     } else {
         console.log('    ⏭️ CuriosityWebAccessConnector deferred (times out, SOMA_LOAD_HEAVY)');
         ext.webResearcher = null;
@@ -769,7 +794,7 @@ export async function loadExtendedSystems(system) {
             messageBroker: system.messageBroker
         });
         return result?.identityArbiter || null;
-    }, { timeoutMs: 90000 });
+    }, { timeoutMs: 180000 });
 
     // UserProfile (+322MB zombie), ContextManager (+141MB), SocialAutonomy — heavyweight.
     // Gate behind SOMA_LOAD_HEAVY. Chat and Mission Control work fine without them.
@@ -838,7 +863,7 @@ export async function loadExtendedSystems(system) {
         });
         rsm.system = system;
         await rsm.initialize(system);
-        delete rsm.initialize;
+        rsm.status = 'active'; // prevent safeLoad double-init
         return rsm;
     });
 
@@ -859,15 +884,15 @@ export async function loadExtendedSystems(system) {
 
     ext.selfDrivenCuriosity = await safeLoad('SelfDrivenCuriosityConnector', () =>
         new SelfDrivenCuriosityConnector({
-            codeObserver: ext.codeObserver,
-            conversationExtractor: ext.curiosityExtractor,
-            curiosityEngine: ext.curiosityEngine,
+            codeObserver:           ext.codeObserver,
+            conversationExtractor:  ext.curiosityExtractor,
+            curiosityEngine:        ext.curiosityEngine,
             quadBrain: system.quadBrain,
             selfModel: ext.recursiveSelfModel,
             knowledgeGraph: system.knowledgeGraph,
             messageBroker: system.messageBroker
         })
-    );
+    , { timeoutMs: 30000 });
 
     ext.reflexScout = await safeLoad('ReflexScoutArbiter', () =>
         new ReflexScoutArbiter({
@@ -1102,18 +1127,6 @@ export async function loadExtendedSystems(system) {
         return engine;
     });
 
-    // ── SomaAgenticExecutor: Real tool-using ReAct execution engine ──
-    ext.agenticExecutor = await safeLoad('SomaAgenticExecutor', () => {
-        const executor = new SomaAgenticExecutor({ maxIterations: 15, sessionTimeout: 300_000 });
-        executor.initialize({
-            brain: system.quadBrain,
-            memory: system.mnemonicArbiter,
-            goalPlanner: ext.goalPlanner || system.goalPlanner,
-            system
-        });
-        system.agenticExecutor = executor;
-        return executor;
-    });
 
     // ── MicroAgentPool: Parallel workforce ──
     ext.microAgentPool = await safeLoad('MicroAgentPool', () => {
@@ -1150,7 +1163,40 @@ export async function loadExtendedSystems(system) {
         }
         system.microAgentPool = pool;
         if (ext.agenticExecutor) ext.agenticExecutor.pool = pool;
+        // Spawn BlackAgent and register it in MessageBroker so direct routing works
+        pool.spawnAgent?.('black', { name: 'BlackAgent' })
+            ?.then(agent => {
+                if (agent && system.messageBroker?.registerArbiter) {
+                    system.messageBroker.registerArbiter('BlackAgent', {
+                        instance: agent, type: 'micro-agent', capabilities: ['monitor', 'metrics']
+                    });
+                    system.blackAgent = agent;
+                }
+            })
+            ?.catch(() => {});
         return pool;
+    });
+
+    // ── LocalModelManager: local fine-tuning lifecycle ──
+    ext.localModelManager = await safeLoad('LocalModelManager', async () => {
+        if (!LocalModelManager) throw new Error('module unavailable');
+        const Cls = LocalModelManager.LocalModelManager || LocalModelManager.default || LocalModelManager;
+        const mgr = new Cls({ baseModel: 'gemma3:4b', autoFineTune: true });
+        await mgr.initialize();
+        system.localModelManager = mgr;
+        console.log('    🦙 LocalModelManager ← Ollama, auto fine-tune enabled');
+        return mgr;
+    });
+
+    // ── EdgeWorkerOrchestrator: distributed learning task deployment ──
+    ext.edgeWorkerOrchestrator = await safeLoad('EdgeWorkerOrchestrator', async () => {
+        if (!EdgeWorkerOrchestrator) throw new Error('module unavailable');
+        const Cls = EdgeWorkerOrchestrator.EdgeWorkerOrchestrator || EdgeWorkerOrchestrator.default || EdgeWorkerOrchestrator;
+        const orch = new Cls({ name: 'EdgeWorkerOrchestrator' });
+        if (orch.initialize) await orch.initialize({ messageBroker: system.messageBroker });
+        system.edgeWorkerOrchestrator = orch;
+        console.log('    ⚡ EdgeWorkerOrchestrator ← MessageBroker');
+        return orch;
     });
 
     // NighttimeLearningOrchestrator — autonomous learning during idle periods

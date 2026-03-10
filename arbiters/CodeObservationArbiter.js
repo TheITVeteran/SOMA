@@ -113,7 +113,7 @@ export class CodeObservationArbiter extends EventEmitter {
     try {
       // Register with Dream Audit Broker
       this.dreamBroker = getDreamAuditBroker();
-      await this.dreamBroker.initialize();
+      this.dreamBroker.initialize().catch(e => console.warn(`[${this.name}] dreamBroker init deferred:`, e.message));
 
       this.dreamBrokerAPI = this.dreamBroker.registerSystem(`${this.name}`, {
         type: 'code-observation',
