@@ -93,18 +93,28 @@ export default function OnboardingWizard({ onComplete }) {
       // Last answer — save everything
       setSaving(true);
       setStep('closing');
+      // Mark onboarded immediately so a refresh never re-triggers the wizard
+      localStorage.setItem('soma_onboarded', '1');
+
+      // Race the backend against a 20s client-side timeout so we never hang on "Remembering..."
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 20000);
       try {
         const res = await fetch('/api/soma/onboard/complete', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ answers: newAnswers }),
+          signal: controller.signal,
         });
         const data = await res.json();
         setClosing(data.closing || "I'll remember all of this. Let's get to work.");
       } catch {
+        // Timeout or network error — still let the user through
         setClosing("I'll remember all of this. Let's get to work.");
+      } finally {
+        clearTimeout(timeout);
+        setSaving(false);
       }
-      setSaving(false);
     }
   };
 

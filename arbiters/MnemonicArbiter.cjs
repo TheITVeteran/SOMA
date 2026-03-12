@@ -107,6 +107,7 @@ class MnemonicArbiter extends BaseArbiter {
       this.registerMessageHandler('recall', this._handleRecall.bind(this));
       this.registerMessageHandler('forget', this._handleForget.bind(this));
       this.registerMessageHandler('stats', this._handleStats.bind(this));
+      this.registerMessageHandler('recall_recent', this._handleRecallRecent.bind(this));
 
       this.log('info', 'MnemonicArbiter ready - 3-tier hybrid memory online');
     } catch (error) {
@@ -509,6 +510,47 @@ class MnemonicArbiter extends BaseArbiter {
   }
 
   /**
+   * RecallRecent - Retrieve memories from a specified duration
+   */
+  async recallRecent(durationMs = 86400000, limit = 10) { // Default to 24 hours (86,400,000 ms) and 10 memories
+    const startTime = Date.now();
+    const cutoffTime = Date.now() - durationMs;
+
+    // Directly query the cold tier (SQLite) for time-based retrieval
+    return await new Promise((resolve) => {
+      setImmediate(() => {
+        const stmt = this.db.prepare(`
+          SELECT id, content, metadata, created_at, accessed_at, importance
+          FROM memories
+          WHERE created_at > ? OR accessed_at > ?
+          ORDER BY accessed_at DESC, created_at DESC
+          LIMIT ?
+        `);
+
+        const results = stmt.all(cutoffTime, cutoffTime, limit);
+
+        const mapped = results.map(r => ({
+          id: r.id,
+          content: r.content,
+          metadata: JSON.parse(r.metadata || '{}'),
+          createdAt: r.created_at,
+          accessedAt: r.accessed_at,
+          importance: r.importance,
+          tier: 'cold'
+        }));
+
+        this.log('info', `Recalled ${mapped.length} recent memories from cold tier (duration: ${durationMs / 3600000}h)`);
+
+        resolve({
+          results: mapped,
+          tier: 'cold',
+          latency: Date.now() - startTime
+        });
+      });
+    });
+  }
+
+  /**
    * Forget - Remove from all tiers
    */
   async forget(id) {
@@ -753,13 +795,22 @@ class MnemonicArbiter extends BaseArbiter {
     await this.sendMessage(envelope.from, 'stats_response', stats);
   }
 
+  async _handleRecallRecent(envelope) {
+    const result = await this.recallRecent(
+      envelope.payload.durationMs,
+      envelope.payload.limit
+    );
+    await this.sendMessage(envelope.from, 'recall_recent_response', result);
+  }
+
   getAvailableCommands() {
     return [
       ...super.getAvailableCommands(),
       'remember',
       'recall',
       'forget',
-      'stats'
+      'stats',
+      'recall_recent'
     ];
   }
 }
