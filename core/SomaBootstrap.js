@@ -615,7 +615,8 @@ export class SomaBootstrap {
             learningPipeline: this.system.learningPipeline,
             messageBroker: this.system.messageBroker,
             optimizationInterval: 100,
-            minExperiencesForOptimization: 50
+            minExperiencesForOptimization: 50,
+            fixProposalSystem: this.system.fixProposal // Pass FixProposalSystem
         });
         await this.system.metaLearning.initialize({
             experienceBuffer: this.system.learningPipeline.experienceBuffer,
@@ -1350,7 +1351,7 @@ export class SomaBootstrap {
                         confidence:  0.95,
                         rationale:   `Black agent alert [${alert.severity}]: ${alert.message}`,
                         metadata:    { source: 'black_agent', alertType: alert.type, severity: alert.severity }
-                    });
+                    }, 'autonomous');
 
                     console.log(`[Black → GoalPlanner] 🎯 Created goal: "${template.title}" (${alert.severity})`);
                 } catch (err) {
@@ -1443,7 +1444,8 @@ export class SomaBootstrap {
         this.system.fixProposal = new FixProposalSystem({
             quadBrain: this.system.quadBrain,
             codeObserver: this.system.codeObserver,
-            minConfidence: 0.7
+            minConfidence: 0.7,
+            messageBroker: this.system.messageBroker // Pass the message broker
         });
         await this.system.fixProposal.initialize();
         this.system.messageBroker.registerArbiter('FixProposalSystem', { instance: this.system.fixProposal });
@@ -1841,7 +1843,13 @@ export class SomaBootstrap {
         await this.system.quantumSim.initialize();
         console.log('   ✅ Quantum Simulation Arbiter active (Ready for Circuit Simulation)');
 
-        // Physics Simulation (Embodied Learning)
+        // Physics Simulation (Embodied Learning) — disabled until fully implemented
+        // Gate behind SOMA_LOAD_SIMULATION=true to prevent runaway CPU/memory in daemon
+        if (process.env.SOMA_LOAD_SIMULATION !== 'true') {
+            console.log('\n🎮 Physics Simulation: SKIPPED (set SOMA_LOAD_SIMULATION=true to enable)');
+        } else
+        // eslint-disable-next-line no-constant-condition
+        if (true) {
         console.log('\n🎮 Initializing Physics Simulation for Embodied Learning...');
         try {
             this.system.simulation = new SimulationArbiter({ name: 'SimulationArbiter', port: 8081 });
@@ -1871,6 +1879,7 @@ export class SomaBootstrap {
         } catch (error) {
             console.error('   ⚠️  Physics Simulation failed to start:', error.message);
         }
+        } // end SOMA_LOAD_SIMULATION guard
 
         // Gist Arbiter (Wisdom Distiller)
         this.system.gistArbiter = new GistArbiter({ name: 'GistArbiter', threshold: 20 });
