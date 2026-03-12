@@ -162,14 +162,39 @@ export function setupWebSocket(server, wss, system) {
     const broadcast = (type, payload) => {
         const message = JSON.stringify({ type, payload });
         dashboardClients.forEach(client => {
-            if (client.readyState === 1) client.send(message);
+            if (client.readyState === 1) {
+                try { client.send(message); } catch { /* dead socket — heartbeat will clean up */ }
+            }
         });
         io.emit(type, payload);
     };
 
     approvalSystem.addWebSocketListener((event, data) => broadcast(event, data));
 
+    // ── Heartbeat: ping all clients every 30s, terminate any that don't pong ──
+    // Silently-dead connections (NAT timeout, adapter sleep, background tab) never
+    // fire 'close' without this — leaving dead sockets in dashboardClients forever
+    // and leaving the frontend with no event to trigger reconnect.
+    setInterval(() => {
+        dashboardClients.forEach(ws => {
+            if (!ws.isAlive) {
+                dashboardClients.delete(ws);
+                try { ws.terminate(); } catch { /* already gone */ }
+                return;
+            }
+            ws.isAlive = false;
+            try { ws.ping(); } catch { /* socket errored, heartbeat will clean next round */ }
+        });
+    }, 30000);
+
     wss.on('connection', (ws, req) => {
+        ws.isAlive = true;
+        ws.on('pong', () => { ws.isAlive = true; });
+        ws.on('error', (err) => {
+            // Log but never crash — ECONNRESET / EPIPE are normal client-side drops
+            console.warn(`[WS] Client error (${err.code || err.message}) — will be cleaned by heartbeat`);
+            dashboardClients.delete(ws);
+        });
         dashboardClients.add(ws);
         logger.info(`[WS] Dashboard client connected from ${req.socket.remoteAddress}`);
 
@@ -306,30 +331,33 @@ Write ONE short, natural opening — something you genuinely want to say right n
             }
         });
 
-        ws.on('close', () => dashboardClients.delete(ws));
+        ws.on('close', () => { ws.isAlive = false; dashboardClients.delete(ws); });
     });
 
     // 3. Telemetry Pulse (Broadcast Metrics to Dashboard)
     setInterval(() => {
         if (dashboardClients.size === 0) return;
-
-        const snapshot = buildSystemSnapshot(system);
-        const metricsPayload = {
-            uptime: snapshot.uptime,
-            cpu: snapshot.cpu,
-            ram: snapshot.ram,
-            gpu: snapshot.gpu,
-            network: snapshot.network,
-            status: snapshot.status,
-            agents: snapshot.agents,
-            systemDetail: snapshot.systemDetail,
-            neuralLoad: snapshot.neuralLoad,
-            contextWindow: snapshot.contextWindow,
-            counts: snapshot.counts,
-            cognitive: snapshot.cognitive
-        };
-        broadcast('metrics', metricsPayload);
-        broadcast('pulse', buildPulsePayload(snapshot));
+        try {
+            const snapshot = buildSystemSnapshot(system);
+            const metricsPayload = {
+                uptime: snapshot.uptime,
+                cpu: snapshot.cpu,
+                ram: snapshot.ram,
+                gpu: snapshot.gpu,
+                network: snapshot.network,
+                status: snapshot.status,
+                agents: snapshot.agents,
+                systemDetail: snapshot.systemDetail,
+                neuralLoad: snapshot.neuralLoad,
+                contextWindow: snapshot.contextWindow,
+                counts: snapshot.counts,
+                cognitive: snapshot.cognitive
+            };
+            broadcast('metrics', metricsPayload);
+            broadcast('pulse', buildPulsePayload(snapshot));
+        } catch (e) {
+            console.warn('[WS] Metrics snapshot error (non-fatal):', e.message);
+        }
     }, 2000);
 
     console.log('      ✅ Socket.IO & WebSocket Manager ready (Unified + Approval Gate)');
