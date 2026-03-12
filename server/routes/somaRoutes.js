@@ -628,29 +628,32 @@ ${personaContext}${characterContext}`.trim()
             let responseText = result?.text || result?.response || result?.output || (typeof result === 'string' ? result : "I processed your request but couldn't formulate a text response.");
 
             // ── NEMESIS: Adversarial quality gate — catch hallucinations before they reach the user ──
+            // Hard-capped at 8s total so it never delays the response past the client timeout.
             let nemesisVerdict = null;
             try {
-                // Use shared system.nemesis (created in extended.js, scores persisted to SQLite)
                 const nemesis = system.nemesis || null;
                 if (nemesis && responseText.length > 30) {
-                    // geminiCallback: routes to QuadBrain's LOGOS for the deep linguistic review (Stage 2)
                     const geminiCallback = async (prompt) => {
                         const brain = getBrain();
                         if (!brain) return { text: '' };
                         return brain.reason(prompt, { quickResponse: true, systemOverride: 'nemesis_review' });
                     };
-                    nemesisVerdict = await nemesis.evaluateResponse(result?.brain || 'LOGOS', message, result || { text: responseText }, geminiCallback);
+                    nemesisVerdict = await Promise.race([
+                        nemesis.evaluateResponse(result?.brain || 'LOGOS', message, result || { text: responseText }, geminiCallback),
+                        new Promise((_, reject) => setTimeout(() => reject(new Error('nemesis timeout')), 8000))
+                    ]).catch(() => null);
 
-                    // Force revision if response completely fails numeric evaluation
                     if (nemesisVerdict?.needsRevision) {
                         const critique = nemesisVerdict.linguistic?.summary || nemesisVerdict.reason || 'Response lacked grounding or had logical issues';
                         const revisionPrompt = `Your previous response had a quality issue: "${critique}"\n\nPlease provide a revised, grounded, accurate response to the original question: "${message.substring(0, 300)}"`;
                         const brain = getBrain();
                         if (brain) {
-                            const revised = await brain.reason(revisionPrompt, { quickResponse: true }).catch(() => null);
+                            const revised = await Promise.race([
+                                brain.reason(revisionPrompt, { quickResponse: true }),
+                                new Promise((_, reject) => setTimeout(() => reject(new Error('revision timeout')), 8000))
+                            ]).catch(() => null);
                             if (revised?.text) {
                                 console.log(`[NEMESIS] ✏️  Response revised (score was ${nemesisVerdict.score?.toFixed(2) || '?'})`);
-                                // Persist revision pair — premium training data (bad→good + why)
                                 nemesis.persistRevisionPair(message, responseText, critique, revised.text, nemesisVerdict.score);
                                 responseText = revised.text;
                             }
