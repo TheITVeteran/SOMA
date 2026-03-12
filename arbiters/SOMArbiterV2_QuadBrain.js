@@ -1948,11 +1948,18 @@ As a ${fragment.specialization} expert, provide a specialized, accurate response
       throw new Error('DEEPSEEK_API_KEY not configured');
     }
 
+    // DeepSeek context window is ~64K tokens (~256K chars). Keep well under to leave room for output.
+    // Truncate from the front (keep most recent context) if the prompt is too long.
+    const MAX_PROMPT_CHARS = 180000;
+    const safePrompt = prompt.length > MAX_PROMPT_CHARS
+      ? '...[earlier context trimmed]\n' + prompt.slice(prompt.length - MAX_PROMPT_CHARS)
+      : prompt;
+
     const requestBody = {
       model: 'deepseek-chat',
       messages: [
         { role: 'system', content: 'You are SOMA, a self-organizing meta-intelligence. Provide clear, accurate, and helpful responses.' },
-        { role: 'user', content: prompt }
+        { role: 'user', content: safePrompt }
       ],
       temperature: Math.min(temperature, 1.0),
       max_tokens: maxTokens

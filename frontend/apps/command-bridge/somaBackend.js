@@ -6,7 +6,7 @@ class SomaBackend {
     this.ws = null;
     this.listeners = {};
     this.reconnectAttempts = 0;
-    this.maxReconnectAttempts = 5;
+    this.maxReconnectAttempts = Infinity; // keep trying forever — server will come back
     this.reconnectDelay = 3000;
     this.isConnecting = false;
     this.connectionState = 'disconnected'; // disconnected, health_check, connecting, connected, error
@@ -237,18 +237,14 @@ class SomaBackend {
 
   // Attempt to reconnect
   attemptReconnect() {
-    if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-      console.error('[SomaBackend] Max reconnect attempts reached');
-      this.emit('error', { message: 'Max reconnect attempts reached' });
-      return;
-    }
-
     this.reconnectAttempts++;
-    console.log(`[SomaBackend] Reconnecting in ${this.reconnectDelay}ms (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})...`);
+    // Exponential backoff: 3s → 6s → 12s → ... capped at 30s
+    const delay = Math.min(this.reconnectDelay * Math.pow(1.5, Math.min(this.reconnectAttempts - 1, 6)), 30000);
+    console.log(`[SomaBackend] Reconnecting in ${Math.round(delay / 1000)}s (attempt ${this.reconnectAttempts})...`);
 
     setTimeout(() => {
       this.connect();
-    }, this.reconnectDelay);
+    }, delay);
   }
 
   // Start polling REST API for updates (Fallback only)
