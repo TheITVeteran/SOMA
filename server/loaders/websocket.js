@@ -171,6 +171,13 @@ export function setupWebSocket(server, wss, system) {
 
     approvalSystem.addWebSocketListener((event, data) => broadcast(event, data));
 
+    // Forward plan_updated from GoalPlannerArbiter → frontend via WebSocket
+    try {
+        const broker = require('../../core/MessageBroker.cjs');
+        broker.subscribe('WebSocketLoader', 'plan_updated');
+        broker.on('plan_updated', (payload) => broadcast('plan_updated', payload.payload));
+    } catch { /* non-fatal — plan tab will still work via REST poll */ }
+
     // ── Heartbeat: ping all clients every 30s, terminate any that don't pong ──
     // Silently-dead connections (NAT timeout, adapter sleep, background tab) never
     // fire 'close' without this — leaving dead sockets in dashboardClients forever

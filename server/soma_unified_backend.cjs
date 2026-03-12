@@ -149,7 +149,7 @@ class SomaUnifiedBackend {
   }
 
   setupSocketHandlers(io) {
-    this.io = io;
+    this.io = io; // Assign io to instance for later use in plan_updated broadcast
 
     io.on('connection', (socket) => {
       console.log(`✅ Client connected: ${socket.id}`);
@@ -330,12 +330,36 @@ class SomaUnifiedBackend {
         }
       });
 
+      // Plan fetch
+      socket.on('plan:fetch', async () => {
+        try {
+          console.log('📋 Plan fetch requested');
+          const response = await messageBroker.sendMessage({
+            from: 'SomaUnifiedBackend',
+            to: 'GoalPlannerArbiter',
+            type: 'query_plan',
+            payload: {}
+          });
+          socket.emit('plan:response', { success: true, plan: response.plan, updatedAt: response.updatedAt });
+        } catch (error) {
+          console.error('Failed to fetch plan:', error.message);
+          socket.emit('plan:response', { success: false, error: error.message });
+        }
+      });
+
       socket.on('disconnect', () => {
         console.log(`❌ Client disconnected: ${socket.id}`);
       });
+    }); // This closes io.on('connection')
+
+    // Listen for plan updates from GoalPlannerArbiter and broadcast to all clients
+    // This should be outside the io.on('connection') block
+    messageBroker.subscribe('SomaUnifiedBackend', 'plan_updated');
+    messageBroker.on('plan_updated', (payload) => {
+      console.log('📢 Broadcasting plan update to clients');
+      this.io.emit('plan:updated', payload.payload); // Use this.io to broadcast to all
     });
   }
-
   async start() {
     const server = http.createServer((req, res) => {
       // Basic HTTP endpoint for health checks
