@@ -22,7 +22,7 @@ console.log('\n✅ Test 3: Nested Object Redaction');
 logger.info('Config loaded:', {
   server: { port: 3001, host: 'localhost' },
   auth: {
-    api_key: 'AIzaSyCkHgyLEpVF1MS5fbWgF3w3tM_T5vRU48M',
+    api_key: 'yours here',
     secret: 'my-secret-key',
     token: 'bearer-token-12345'
   },
@@ -38,8 +38,8 @@ logger.info('API request:', {
 // Test 5: Multiple patterns
 console.log('\n✅ Test 5: Multiple Sensitive Fields');
 logger.info('Full credentials:', {
-  GEMINI_API_KEY: 'AIzaSyCkHgyLEpVF1MS5fbWgF3w3tM_T5vRU48M',
-  DEEPSEEK_API_KEY: 'sk-f4c19f3599604bb3936426356290bf71',
+  GEMINI_API_KEY: 'yours here',
+  DEEPSEEK_API_KEY: 'yours here',
   password: 'admin123',
   session_id: 'sess_1234567890',
   user: 'barry',
