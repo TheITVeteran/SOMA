@@ -64,13 +64,16 @@ Copy `config/api-keys.env.example` to `config/api-keys.env` and fill in what you
 
 | Key | What it unlocks | Required? |
 |---|---|---|
-| `GEMINI_API_KEY` | Main reasoning brain | Recommended |
+| `DEEPSEEK_API_KEY` | Primary reasoning brain | **Recommended** |
+| `OLLAMA_BASE_URL` | Local inference (no key needed) | Optional |
 | `OPENAI_API_KEY` | Fallback LLM | Optional |
 | `ANTHROPIC_API_KEY` | Fallback LLM | Optional |
-| `BRAVE_API_KEY` | Live web search | Optional |
+| `BRAVE_API_KEY` | Live web search (500/mo free tier) | Optional |
 | `GROQ_API_KEY` | Fast inference fallback | Optional |
 
-Without any API keys, SOMA runs with Ollama (local). Set `OLLAMA_BASE_URL=http://localhost:11434` if Ollama is on a different host.
+**Minimum to run:** Either a `DEEPSEEK_API_KEY` or a local [Ollama](https://ollama.com) instance. SOMA needs at least one brain.
+
+DeepSeek is the recommended primary — it's cheap, fast, and has a large context window. Get a key at [platform.deepseek.com](https://platform.deepseek.com).
 
 ---
 
@@ -146,16 +149,20 @@ All arbiters communicate through a pub/sub MessageBroker. The system degrades gr
 |---|---|---|
 | `SOMA_LOAD_HEAVY` | `false` | Load Phase B-I cognitive arbiters |
 | `SOMA_LOAD_TRADING` | `false` | Load trading pipeline (Phase D) |
+| `SOMA_HYBRID_SEARCH` | `false` | Enable semantic Storage tab (requires 290MB ML model) |
+| `SOMA_LOAD_VISION` | `false` | Enable VisionProcessingArbiter + CLIP (loads in background) |
 | `SOMA_HEAP_CEILING_MB` | `2500` | Heap ceiling before skipping heavy arbiters |
 | `NODE_ENV` | `development` | Set to `production` for optimized mode |
 | `SOMA_GPU` | `false` | Enable GPU acceleration |
+
+All of these are pre-set in `start_production.bat` (Windows) and `start.sh` (Linux/macOS). You only need to set them manually if running via `node launcher_ULTRA.mjs` directly.
 
 ---
 
 ## Chat API
 
 ```bash
-curl -X POST http://localhost:3001/api/chat \
+curl -X POST http://localhost:3001/api/soma/chat \
   -H "Content-Type: application/json" \
   -d '{"message": "Hello SOMA", "conversationId": "my-session"}'
 ```
