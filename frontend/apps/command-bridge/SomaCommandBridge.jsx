@@ -649,8 +649,16 @@ const SomaCommandBridge = () => {
     setIsSomaBusy(isThinking);
   }, [isThinking]);
 
-  // 4. Chat history restoration removed - no active chat UI in Command Bridge
-  // (Chat interface lives in individual modules like Arbiterium)
+  // 4. Orb conversation history — load from backend when neural link is established
+  useEffect(() => {
+    if (!isOrbConnected || orbConversation.length > 0) return;
+    fetch('/api/orb/history?sessionId=orb-link&limit=30')
+      .then(r => r.json())
+      .then(data => {
+        if (data.messages?.length) setOrbConversation(data.messages);
+      })
+      .catch(() => {});
+  }, [isOrbConnected]);
 
   // Fetch personality traits when backend connects
   useEffect(() => {
@@ -1803,6 +1811,20 @@ const SomaCommandBridge = () => {
                 <p className="text-[9px] text-zinc-600 uppercase tracking-widest">
                   {isListening ? 'SOMA is listening...' : isThinking ? 'Processing neural patterns...' : isTalking ? 'SOMA is responding...' : 'Neural interface standby'}
                 </p>
+
+                {/* Whisper offline banner */}
+                {isOrbConnected && (orbSystemStatus.whisperServer === 'fallback' || orbSystemStatus.whisperServer === 'error') && (
+                  <div className="mt-3 w-full max-w-sm bg-amber-500/10 border border-amber-500/30 rounded-xl px-4 py-2.5 text-center">
+                    <p className="text-[10px] text-amber-400 font-bold uppercase tracking-widest mb-1">
+                      {orbSystemStatus.whisperServer === 'fallback' ? '⚠ Browser STT Active' : '✗ No STT Available'}
+                    </p>
+                    <p className="text-[9px] text-amber-300/70 leading-relaxed">
+                      {orbSystemStatus.whisperServer === 'fallback'
+                        ? 'Whisper server offline — using Chrome/Edge speech recognition. Firefox unsupported. For accuracy, run a Whisper server on :5002.'
+                        : 'No speech recognition available. Use the text input below or open Chrome/Edge.'}
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
 

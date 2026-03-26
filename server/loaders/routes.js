@@ -1515,6 +1515,39 @@ export async function loadRoutes(app, system) {
         });
     });
 
+    // ── ORB: File context injection (@filename in OrbWidget queries) ──────
+    app.post('/api/fs/read', async (req, res) => {
+        const { path: filePath } = req.body || {};
+        if (!filePath) return res.status(400).json({ success: false, error: 'path is required' });
+        if (!isAllowedPath(filePath)) {
+            return res.status(403).json({ success: false, error: 'Path outside allowed roots' });
+        }
+        try {
+            const content = await fs.readFile(path.resolve(filePath), 'utf8');
+            res.json({ success: true, content, path: filePath });
+        } catch (e) {
+            res.status(404).json({ success: false, error: e.message });
+        }
+    });
+
+    // ── ORB: Conversation history (persist sessions across refreshes) ────
+    app.get('/api/orb/history', async (req, res) => {
+        const { sessionId = 'orb-link', limit = 30 } = req.query;
+        try {
+            const history = system.conversationHistory
+                ? await system.conversationHistory.getRecentMessages(parseInt(limit), { sessionId })
+                : [];
+            const messages = (history || []).map(h => ({
+                role: h.role === 'assistant' ? 'soma' : 'user',
+                text: h.content || h.text || '',
+                timestamp: h.timestamp || Date.now()
+            }));
+            res.json({ success: true, messages });
+        } catch (e) {
+            res.json({ success: true, messages: [] });
+        }
+    });
+
     const kevin = system.kevinArbiter || system.kevinManager;
     if (kevin) app.locals.kevinArbiter = kevin;
 

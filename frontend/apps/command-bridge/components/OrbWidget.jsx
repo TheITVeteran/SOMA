@@ -156,98 +156,26 @@ const OrbWidget = () => {
     return { query, context };
   };
   
-  // Simple chat handler (no multi-arbiter reasoning)
-  const handleSimpleChat = async (query) => {
-    // Check cache first
-    const cacheKey = query.toLowerCase().trim();
-    if (responseCacheRef.current.has(cacheKey)) {
-      console.log('[OrbWidget] Using cached response');
-      return responseCacheRef.current.get(cacheKey);
-    }
-    
-    const responses = {
-      greeting: "Hello! I'm SOMA, your intelligent assistant. How can I help you today?",
-      status: "I'm online and ready to assist you with reasoning, coding, and more!",
-      identity: "I'm SOMA - a multi-arbiter AI system with advanced reasoning capabilities.",
-      thanks: "You're welcome! Let me know if you need anything else.",
-      goodbye: "Goodbye! Feel free to come back anytime.",
-      capabilities: "I can help with complex reasoning, code generation, debugging, and natural conversations. Try asking me anything!",
-      confirmation: "Got it!",
-      test: "System operational. All arbiters online."
-    };
-    
-    const lowerQuery = query.toLowerCase().trim();
-    let response = responses.greeting;
-    
-    if (/^(hi|hello|hey|greetings|good morning|good afternoon|good evening)\b/.test(lowerQuery)) {
-      response = responses.greeting;
-    } else if (/^(how are you|what's up|sup|wassup)\b/.test(lowerQuery)) {
-      response = responses.status;
-    } else if (/^(who are you|what are you|tell me about yourself)\b/.test(lowerQuery)) {
-      response = responses.identity;
-    } else if (/^(thanks|thank you|thx)\b/.test(lowerQuery)) {
-      response = responses.thanks;
-    } else if (/^(bye|goodbye|see you|later)\b/.test(lowerQuery)) {
-      response = responses.goodbye;
-    } else if (/^(what can you do|help|what are your capabilities)\b/.test(lowerQuery)) {
-      response = responses.capabilities;
-    } else if (/^(are you there|are you online|can you hear me)\b/.test(lowerQuery)) {
-      response = responses.status;
-    } else if (/^(yes|no|ok|okay|sure)$/.test(lowerQuery)) {
-      response = responses.confirmation;
-    } else if (/^(test|testing)$/.test(lowerQuery)) {
-      response = responses.test;
-    }
-    
-    const result = { text: response, mode: 'chat' };
-    
-    // Cache the response
-    responseCacheRef.current.set(cacheKey, result);
-    
-    return result;
-  };
-  
-  // Reasoning handler (multi-arbiter)
-  const handleReasoning = async (query, context) => {
-    const response = await fetch('/api/reason', {
+  // Unified SOMA chat handler — routes all query types through /api/soma/chat
+  // The backend fast-path handles greetings instantly; heavy reasoning takes longer.
+  const callSoma = async (query, context, mode) => {
+    const history = (context?.conversationHistory || []).slice(-5).flatMap(h => [
+      { role: 'user', content: h.user },
+      { role: 'assistant', content: h.assistant }
+    ]);
+    const message = mode === 'code' ? `[CODE TASK] ${query}` : query;
+
+    const res = await fetch('/api/soma/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ query, context })
+      body: JSON.stringify({ message, sessionId: 'orb-widget', history })
     });
-    
-    if (!response.ok) {
-      throw new Error(`SOMA API error: ${response.status}`);
-    }
-    
-    const data = await response.json();
+
+    if (!res.ok) throw new Error(`SOMA error: ${res.status}`);
+    const data = await res.json();
     return {
-      text: data.response || data.text || 'Reasoning complete.',
-      tree: data.tree,
-      arbiters: data.arbiters,
-      confidence: data.confidence,
-      mode: 'reasoning'
-    };
-  };
-  
-  // Code task handler
-  const handleCodeTask = async (query, context) => {
-    const response = await fetch('/api/code/task', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ task: query, context })
-    });
-    
-    if (!response.ok) {
-      throw new Error(`SOMA API error: ${response.status}`);
-    }
-    
-    const data = await response.json();
-    return {
-      text: data.response || data.code || 'Code task complete.',
-      code: data.code,
-      tests: data.tests,
-      explanation: data.explanation,
-      mode: 'code'
+      text: data.response || data.text || "I'm here.",
+      mode: mode || 'reasoning'
     };
   };
   
@@ -269,20 +197,11 @@ const OrbWidget = () => {
         conversationHistory: conversationHistory.slice(-5) // Last 5 exchanges
       };
       
-      // Detect command type
+      // Detect command type (for mode badge display)
       const commandType = detectCommandType(query);
       console.log('[OrbWidget] Command type:', commandType);
-      
-      let result;
-      
-      // Route to appropriate handler
-      if (commandType === 'chat') {
-        result = await handleSimpleChat(query);
-      } else if (commandType === 'code') {
-        result = await handleCodeTask(query, enhancedContext);
-      } else {
-        result = await handleReasoning(query, enhancedContext);
-      }
+
+      const result = await callSoma(query, enhancedContext, commandType);
       
       // Store response data for expanded view
       setResponseData(result);
