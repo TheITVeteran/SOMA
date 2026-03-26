@@ -1800,7 +1800,7 @@ const SomaCommandBridge = () => {
                 title={orbSidebarCollapsed ? "Expand Neural Session" : "Collapse Neural Session"}
               >
                 <div className={`absolute inset-0 rounded-full bg-purple-500/20 blur-md transition-opacity duration-500 ${orbSidebarCollapsed ? 'opacity-100 animate-pulse' : 'opacity-0'}`} />
-                <Brain className={`w-5 h-5 relative z-10 transition-transform duration-500 ${orbSidebarCollapsed ? 'scale-110 rotate-[360deg]' : 'group-hover:rotate-12'}`} />
+                <img src="/icon.svg" alt="SOMA" className={`w-5 h-5 relative z-10 transition-transform duration-500 ${orbSidebarCollapsed ? 'scale-110 rotate-[360deg]' : 'group-hover:rotate-12'}`} />
                 {orbSidebarCollapsed && (
                   <span className="absolute left-full ml-3 px-2 py-1 bg-black/80 border border-white/10 rounded text-[9px] text-purple-300 uppercase tracking-widest whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none">
                     Session Logs
@@ -1824,7 +1824,7 @@ const SomaCommandBridge = () => {
                   }`}
                   onClick={() => isOrbConnected ? disconnectOrb() : connectOrb()}
                 >
-                  {isOrbConnected ? 'â— Disengage Neural Link' : 'â—‹ Establish Neural Link'}
+                  {isOrbConnected ? '● Disengage Neural Link' : '○ Establish Neural Link'}
                 </button>
 
                 {/* Manual Input Field */}
