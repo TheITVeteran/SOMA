@@ -278,8 +278,30 @@ class SomaBackend {
       case 'soma_activity':
         this.emit('soma_activity', payload);
         break;
+      case 'soma_lifecycle':
+        this.emit('soma_lifecycle', payload);
+        break;
       case 'vision_update':
         this.emit('vision_update', payload);
+        break;
+      case 'ghost_message':
+        this.emit('ghost_message', payload);
+        break;
+      case 'ui_navigate':
+        this.emit('ui_navigate', payload);
+        break;
+      // ── AXIS real-time chat events ─────────────────────────────────────────
+      case 'axis.message':
+      case 'axis.message_edited':
+      case 'axis.message_deleted':
+      case 'axis.reaction':
+      case 'axis.channel_created':
+      case 'axis.channel_deleted':
+      case 'axis.workspace_created':
+      case 'axis.workspace_deleted':
+      case 'axis.member_joined':
+      case 'axis.member_removed':
+        this.emit(type, payload);
         break;
       default:
         // suppress noisy unknown-type logs in production

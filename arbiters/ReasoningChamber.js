@@ -16,6 +16,8 @@
 export class ReasoningChamber {
   constructor(config = {}) {
     this.name = config.name || 'ReasoningChamber';
+    this.lobe = 'LOGOS'; // Neural index: logic/code lobe
+    this.tier = 'cognitive';
 
     // Dependencies (can be injected)
     this.causalityArbiter = config.causalityArbiter || null;

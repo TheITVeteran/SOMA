@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat Interface</title>
+    <style>
+        .message {
+            margin-bottom: 10px;
+            padding: 10px;
+            border-radius: 8px;
+        }
+        .message.own {
+            background-color: #e3f2fd;
+            margin-left: 20%;
+        }
+        .message.ai {
+            background-color: #f5f5f5;
+            margin-right: 20%;
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+        }
+        .message-avatar {
+            font-size: 20px;
+        }
+        .message-content {
+            flex: 1;
+        }
+        #chatMessages {
+            height: 400px;
+            overflow-y: auto;
+            border: 1px solid #ccc;
+            padding: 10px;
+            margin-bottom: 10px;
+        }
+        #chatInput {
+            width: 80%;
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        button {
+            padding: 8px 16px;
+            background-color: #2196F3;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        .progress-fill {
+            height: 10px;
+            background-color: #2196F3;
+            border-radius: 5px;
+            transition: width 1s ease;
+        }
+    </style>
+</head>
+<body>
+    <div id="chatMessages"></div>
+    <input type="text" id="chatInput" placeholder="Type your message..." onkeypress="handleChatKeypress(event)">
+    <button onclick="sendMessage()">Send</button>
+
+    <script>
+        function sendMessage() {
+            const input = document.getElementById('chatInput');
+            const messages = document.getElementById('chatMessages');
+            
+            if (input.value.trim() === '') return;
+            
+            // Add user message
+            const userMessage = document.createElement('div');
+            userMessage.className = 'message own';
+            userMessage.innerHTML = `
+                <div class="message-content">
+                    <p style="margin: 0;">${input.value}</p>
+                </div>
+            `;
+            messages.appendChild(userMessage);
+            
+            // Check if @conceive was mentioned
+            if (input.value.includes('@conceive')) {
+                setTimeout(() => {
+                    const aiMessage = document.createElement('div');
+                    aiMessage.className = 'message ai';
+                    aiMessage.innerHTML = `
+                        <div class="message-avatar">🤖</div>
+                        <div class="message-content">
+                            <div style="font-weight: 600; color: #2c3e50; margin-bottom: 4px;">@conceive</div>
+                            <p style="margin: 0;">Analyzing your request... I'll help with that financial analysis right away.</p>
+                        </div>
+                    `;
+                    messages.appendChild(aiMessage);
+                    messages.scrollTop = messages.scrollHeight;
+                }, 1000);
+            }
+            
+            input.value = '';
+            messages.scrollTop = messages.scrollHeight;
+        }
+
+        function handleChatKeypress(event) {
+            if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault();
+                sendMessage();
+            }
+        }
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function() {
+            // Animate progress bars
+            const progressBars = document.querySelectorAll('.progress-fill');
+            progressBars.forEach((bar, index) => {
+                setTimeout(() => {
+                    bar.style.width = bar.dataset.width || '100%';
+                }, index * 200);
+            });
+        });
+    </script>
+</body>
+</html>

@@ -35,10 +35,18 @@ class UniversalImpulser extends EventEmitter {
     this._monitorInterval = null;
     this._indexWriteLock = Promise.resolve();
     this._draining = false; // Queue drain lock to prevent race conditions
+    
+    // Memory Buffering to prevent IO/RAM Spikes
+    this._hippocampusBuffer = [];
+    this._bufferFlushLock = false;
+    this._bufferFlushInterval = setInterval(() => this._flushHippocampusBuffer(), 10000); // Flush every 10s
   }
 
   // Helper to ensure sequential index updates
-  async _updateIndex(entry) {
+  async _updateIndex(entries) {
+    if (!Array.isArray(entries)) entries = [entries];
+    if (entries.length === 0) return;
+
     // Chain onto the lock promise
     this._indexWriteLock = this._indexWriteLock.then(async () => {
       try {
@@ -51,7 +59,7 @@ class UniversalImpulser extends EventEmitter {
           idx = [];
         }
 
-        idx.push(entry);
+        idx.push(...entries);
         // Keep last 10k entries to prevent infinite growth
         if (idx.length > 10000) idx = idx.slice(-10000);
 
@@ -66,6 +74,44 @@ class UniversalImpulser extends EventEmitter {
     });
     
     return this._indexWriteLock;
+  }
+
+  async _flushHippocampusBuffer() {
+      if (this._bufferFlushLock || this._hippocampusBuffer.length === 0) return;
+      this._bufferFlushLock = true;
+      
+      const batch = [...this._hippocampusBuffer];
+      this._hippocampusBuffer = []; // Clear immediately to allow new entries
+      
+      const indexEntries = [];
+      
+      try {
+          // Write all files in parallel (but capped to the batch size, usually ~100 max)
+          await Promise.all(batch.map(async (record) => {
+              const filename = `${this.type}_${Date.now()}_${crypto.randomUUID().slice(0,6)}.json`;
+              const filepath = path.join(this.hippocampusPath, filename);
+              await fs.writeFile(filepath, JSON.stringify(record, null, 2), 'utf8');
+              
+              indexEntries.push({ 
+                  file: filename, 
+                  createdAt: Date.now(), 
+                  type: this.type, 
+                  processorType: record.processorType || 'unknown', 
+                  summary: record.summary || null 
+              });
+          }));
+          
+          if (indexEntries.length > 0) {
+              await this._updateIndex(indexEntries);
+          }
+          this.logger.info(`[${this.name}] Flushed ${batch.length} records to hippocampus`);
+      } catch (e) {
+          this.logger.error(`[${this.name}] Error flushing hippocampus buffer: ${e.message}`);
+          // Put them back if we failed completely, though some might have written
+          this._hippocampusBuffer.push(...batch); 
+      } finally {
+          this._bufferFlushLock = false;
+      }
   }
 
   async initialize() {
@@ -133,21 +179,14 @@ class UniversalImpulser extends EventEmitter {
   }
   async storeInHippocampus(record) {
     try {
-      const filename = `${this.type}_${Date.now()}_${crypto.randomUUID().slice(0,6)}.json`;
-      const filepath = path.join(this.hippocampusPath, filename);
-      await fs.writeFile(filepath, JSON.stringify(record, null, 2), 'utf8');
+      this._hippocampusBuffer.push(record);
       
-      // Update index sequentially
-      await this._updateIndex({ 
-        file: filename, 
-        createdAt: Date.now(), 
-        type: this.type, 
-        processorType: record.processorType || 'unknown', 
-        summary: record.summary || null 
-      });
+      // Flush if we hit batch size
+      if (this._hippocampusBuffer.length >= 50) {
+        // Run async without blocking the task processing loop
+        this._flushHippocampusBuffer().catch(() => {});
+      }
       
-      this.logger.info(`[${this.name}] Stored hippocampus file: ${filename}`);
-
       // Broadcast high-quality knowledge for downstream consumption
       // (TrainingDataCollector, KnowledgeGraphFusion)
       if (record.result && (record.result.quality?.level === 'high' || record.result.summary)) {
@@ -168,7 +207,7 @@ class UniversalImpulser extends EventEmitter {
           }).catch(() => {});
       }
 
-      return { success: true, file: filename, path: filepath };
+      return { success: true, buffered: true };
     } catch (err) {
       this.logger.error(`[${this.name}] storeInHippocampus error: ${err.message}`);
       return { success: false, error: err.message };

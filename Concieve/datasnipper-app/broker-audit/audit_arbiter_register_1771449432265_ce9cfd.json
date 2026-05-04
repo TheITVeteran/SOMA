@@ -1,0 +1,18 @@
+{
+  "event": "arbiter_register",
+  "ts": 1771449432265,
+  "data": {
+    "name": "ConceiveStorage",
+    "meta": {
+      "type": "storage",
+      "capabilities": [
+        "store",
+        "retrieve",
+        "analyze",
+        "compress",
+        "cleanup",
+        "backup"
+      ]
+    }
+  }
+}

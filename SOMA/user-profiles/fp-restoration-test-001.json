@@ -1,0 +1,22 @@
+{
+  "userId": "restoration-test-001",
+  "sessions": 1,
+  "totalMessages": 2,
+  "avgMsgLength": 16,
+  "questionRatio": 1,
+  "vocabRichness": 0.938,
+  "avgWordLength": 6.13,
+  "typicalStyle": "inquisitive-verbose",
+  "hourHistogram": {
+    "15": 2
+  },
+  "topicFreq": {
+    "architecture": 2
+  },
+  "recentTopics": [
+    "architecture"
+  ],
+  "lastSeen": 1775934032079,
+  "lastUpdated": 1775934352892,
+  "createdAt": 1775934032080
+}

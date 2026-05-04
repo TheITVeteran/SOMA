@@ -26,6 +26,8 @@
     "preflight": "node core/PreFlightCheck.js",
     "safe-start": "node core/PreFlightCheck.js && node start-dev.cjs",
     "health": "node health-check.cjs",
+    "health:autonomy": "node scripts/verify-autonomy-health.mjs",
+    "health:expertise": "node scripts/verify-expertise-runtime.mjs",
     "kill": "taskkill /F /IM electron.exe /T 2>nul & powershell -NoProfile -Command \"Get-NetTCPConnection -LocalPort 3001,8081 -ErrorAction SilentlyContinue | Select-Object -ExpandProperty OwningProcess | Sort-Object -Unique | ForEach-Object { Stop-Process -Id $_ -Force -ErrorAction SilentlyContinue }\"",
     "restart": "npm run kill && timeout /t 2 /nobreak && npm run start:all",
     "cli": "node cli/soma-cli.mjs"

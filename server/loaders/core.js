@@ -59,7 +59,7 @@ export async function loadCoreSystems() {
 
     // 7. Legacy/Utility Guardians
     core.pulseArbiter = new PulseArbiter({ name: 'Pulse', messageBroker });
-    core.kevinArbiter = new KevinArbiter({ name: 'KEVIN-Main', messageBroker });
+    core.kevinArbiter = new KevinArbiter({ name: 'KEVIN-Main', messageBroker, lobe: 'THALAMUS' });
     core.balancer = new CognitiveBalancer(null);
     
     await Promise.all([

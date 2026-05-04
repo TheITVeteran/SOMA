@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Search, File, Terminal, Activity, Zap, Command, Hash, ArrowRight } from 'lucide-react';
+import { Search, File, Terminal, Activity, Zap, Network, ArrowRight } from 'lucide-react';
 
 const CommandPalette = ({ isOpen, onClose, onNavigate, onExecute }) => {
   const [query, setQuery] = useState('');
@@ -19,6 +19,7 @@ const CommandPalette = ({ isOpen, onClose, onNavigate, onExecute }) => {
   // Default options when query is empty
   const defaultOptions = [
     { id: 'nav-kevin', type: 'nav', label: 'Go to K.E.V.I.N.', icon: Activity, action: () => onNavigate('kevin') },
+    { id: 'nav-spine', type: 'nav', label: 'Go to Spine', icon: Network, action: () => onNavigate('spine') },
     { id: 'nav-steve', type: 'nav', label: 'Go to S.T.E.V.E. (Workflow)', icon: Terminal, action: () => onNavigate('workflow') },
     { id: 'nav-storage', type: 'nav', label: 'Go to Storage', icon: File, action: () => onNavigate('storage') },
     { id: 'cmd-restart', type: 'cmd', label: 'Restart Backend', icon: Zap, action: () => onExecute('restart_system') },

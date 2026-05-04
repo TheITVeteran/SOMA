@@ -18,6 +18,7 @@ export class DiscoverySwarm extends BaseArbiterV4 {
         });
 
         this.engineering = opts.engineering || null;
+        this.quadBrain = opts.quadBrain || null;
     }
 
     /**

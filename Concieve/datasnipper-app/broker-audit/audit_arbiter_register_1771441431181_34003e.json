@@ -1,0 +1,17 @@
+{
+  "event": "arbiter_register",
+  "ts": 1771441431181,
+  "data": {
+    "name": "ConceiveSoma",
+    "meta": {
+      "type": "soma_intelligence",
+      "capabilities": [
+        "analyze_finance",
+        "audit",
+        "detect_fraud",
+        "chat",
+        "forecast"
+      ]
+    }
+  }
+}

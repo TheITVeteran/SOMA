@@ -183,12 +183,25 @@ export function setupWebSocket(server, wss, system) {
 
     approvalSystem.addWebSocketListener((event, data) => broadcast(event, data));
 
+    // Expose broadcast so any route module can push real-time events (Axis chat, etc.)
+    system.broadcast = broadcast;
+
     // Forward plan_updated from GoalPlannerArbiter → frontend via WebSocket
     try {
         const broker = require('../../core/MessageBroker.cjs');
         broker.subscribe('WebSocketLoader', 'plan_updated');
         broker.on('plan_updated', (payload) => broadcast('plan_updated', payload.payload));
     } catch { /* non-fatal — plan tab will still work via REST poll */ }
+
+    // 🔱 RESONANCE HEARTBEAT: Forward the 400ms cognitive pulse → frontend
+    try {
+        const broker = require('../../core/MessageBroker.cjs');
+        broker.subscribe('WebSocketLoader.resonance', 'system.resonance.pulse');
+        broker.on('system.resonance.pulse', (envelope) => {
+            const pulse = envelope.payload || envelope;
+            broadcast('resonance_pulse', pulse);
+        });
+    } catch { /* non-fatal */ }
 
     // Forward real GMN peer connect/disconnect events → frontend in real-time
     try {
@@ -211,6 +224,26 @@ export function setupWebSocket(server, wss, system) {
         broker.on('alert.triggered', (envelope) => broadcast('alert_triggered', envelope.payload || envelope));
     } catch { /* non-fatal */ }
 
+    // Forward autonomous activity feed → frontend for live notification strip
+    try {
+        const broker = require('../../core/MessageBroker.cjs');
+        broker.subscribe('WebSocketLoader.activity', 'soma.activity');
+        broker.on('soma.activity', (envelope) => {
+            const p = envelope.payload || envelope;
+            if (system.activityFeed) {
+                system.activityFeed.unshift({
+                    type:      p.type      || 'activity',
+                    title:     p.title     || '',
+                    summary:   p.summary   || '',
+                    timestamp: p.timestamp || Date.now(),
+                    source:    p.source    || 'unknown'
+                });
+                if (system.activityFeed.length > 100) system.activityFeed.length = 100;
+            }
+            broadcast('soma_activity', p);
+        });
+    } catch { /* non-fatal */ }
+
     // Forward RepoWatcherDaemon file changes → frontend for contextual "Ask SOMA →" prompts
     try {
         const broker = require('../../core/MessageBroker.cjs');
@@ -218,6 +251,32 @@ export function setupWebSocket(server, wss, system) {
         broker.on('repo.file.changed', (envelope) => {
             const p = envelope.payload || envelope;
             broadcast('repo_activity', { filename: p.filename, path: p.path, timestamp: Date.now() });
+        });
+    } catch { /* non-fatal */ }
+
+    // Ghost messages: any part of SOMA can call system.ghostMessage(text, emotion)
+    // and the floating ghost orb on the frontend will narrate it.
+    try {
+        system.ghostMessage = (text, emotion = 'thinking') => {
+            broadcast('ghost_message', { text, emotion, ts: Date.now() });
+        };
+        const broker = require('../../core/MessageBroker.cjs');
+        broker.subscribe('WebSocketLoader.ghost', 'soma.ghost');
+        broker.on('soma.ghost', (envelope) => {
+            const p = envelope.payload || envelope;
+            broadcast('ghost_message', { text: p.text, emotion: p.emotion || 'thinking', ts: Date.now() });
+        });
+    } catch { /* non-fatal */ }
+
+    // UI navigation: SOMA navigates her own Command Bridge
+    // Any system can call broker.publish('soma.ui.navigate', { tab, section })
+    // and the frontend will switch to that tab + spotlight it.
+    try {
+        const broker = require('../../core/MessageBroker.cjs');
+        broker.subscribe('WebSocketLoader.uiNav', 'soma.ui.navigate');
+        broker.on('soma.ui.navigate', (envelope) => {
+            const p = envelope.payload || envelope;
+            broadcast('ui_navigate', { tab: p.tab, section: p.section || null, label: p.label || p.tab, ts: Date.now() });
         });
     } catch { /* non-fatal */ }
 

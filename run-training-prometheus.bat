@@ -30,14 +30,14 @@ set OUTPUT_DIR=models\soma-prometheus-%DATE:~-4,4%%DATE:~-7,2%%DATE:~-10,2%
 
 echo [SOMA Train] Data: %DATA_PATH%
 echo [SOMA Train] Output: %OUTPUT_DIR%
-echo [SOMA Train] Model: google/gemma-3-4b-it
+echo [SOMA Train] Model: nvidia/Minitron-4B-Base
 echo [SOMA Train] This will take 30-90 minutes depending on GPU.
 echo.
 
 %PYTHON% train-soma-llama.py ^
     --data "%DATA_PATH%" ^
     --output "%OUTPUT_DIR%" ^
-    --model google/gemma-3-4b-it ^
+    --model nvidia/Minitron-4B-Base ^
     --epochs 3 ^
     --batch-size 2 ^
     --max-seq-len 2048 ^

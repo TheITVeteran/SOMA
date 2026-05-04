@@ -167,6 +167,7 @@ class MnemonicArbiter extends BaseArbiter {
       maxContextSize: 200,
       ...opts
     });
+    this.tier = 'cognitive';
 
     // Cache injection
     this.cache = opts.cache || null;
@@ -283,7 +284,20 @@ class MnemonicArbiter extends BaseArbiter {
       this.registerMessageHandler('optimize', this._handleOptimize.bind(this));
       this.registerMessageHandler('deep_cleanup', this._handleDeepCleanup.bind(this)); // NEW: Digital Constipation Fix
 
+      // Register with lobe metadata so subscribeByLobe routing works
+      try {
+        messageBroker.registerArbiter(this.name, {
+          role: 'memory',
+          capabilities: ['remember', 'recall', 'forget'],
+          instance: this,
+          lobe: 'LOGOS'
+        });
+      } catch (e) {
+        this.log('warn', 'Could not register with MessageBroker lobe index', { error: e.message });
+      }
+
       // Subscribe to RSS pressure signal — reactively flush warm tier when memory is critical
+      // (cross-lobe monitoring signal — stays as plain subscribe)
       try {
         messageBroker.subscribe('system.resource.critical', (signal) => {
           const { rssPercent, issue } = signal?.payload || {};
@@ -362,6 +376,14 @@ class MnemonicArbiter extends BaseArbiter {
     db.exec(`
       CREATE TABLE IF NOT EXISTS memories (
         id TEXT PRIMARY KEY,
+        content TEXT NOT NULL
+      );
+    `);
+    this._migrateMemorySchema(db);
+
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS memories (
+        id TEXT PRIMARY KEY,
         content TEXT NOT NULL,
         metadata TEXT,
         embedding_id TEXT,
@@ -412,7 +434,32 @@ class MnemonicArbiter extends BaseArbiter {
       );
       CREATE INDEX IF NOT EXISTS idx_purgatory_pruned_at ON purgatory(pruned_at DESC);
       `);
+    this._migrateMemorySchema(db);
     db.exec('ANALYZE;');
+  }
+
+  _migrateMemorySchema(db) {
+    const columns = new Set(
+      db.prepare("PRAGMA table_info(memories)").all().map(column => column.name)
+    );
+
+    const requiredColumns = [
+      ['metadata', "ALTER TABLE memories ADD COLUMN metadata TEXT"],
+      ['embedding_id', "ALTER TABLE memories ADD COLUMN embedding_id TEXT"],
+      ['sector', "ALTER TABLE memories ADD COLUMN sector TEXT DEFAULT 'GEN'"],
+      ['created_at', "ALTER TABLE memories ADD COLUMN created_at INTEGER DEFAULT 0"],
+      ['accessed_at', "ALTER TABLE memories ADD COLUMN accessed_at INTEGER DEFAULT 0"],
+      ['access_count', "ALTER TABLE memories ADD COLUMN access_count INTEGER DEFAULT 0"],
+      ['importance', "ALTER TABLE memories ADD COLUMN importance REAL DEFAULT 0.5"],
+      ['tier', "ALTER TABLE memories ADD COLUMN tier TEXT DEFAULT 'cold'"]
+    ];
+
+    for (const [column, sql] of requiredColumns) {
+      if (!columns.has(column)) {
+        db.exec(sql);
+        columns.add(column);
+      }
+    }
   }
 
   async _initSQLite() {
@@ -1662,7 +1709,7 @@ KEY INSIGHTS:`;
     if (!this.db || !entries.length) return 0;
     
     const moveStmt = this.db.prepare(`
-      INSERT INTO purgatory (id, content, metadata, substance_score, pruned_reason, created_at, pruned_at)
+      INSERT OR IGNORE INTO purgatory (id, content, metadata, substance_score, pruned_reason, created_at, pruned_at)
       SELECT id, content, metadata, ?, ?, created_at, ?
       FROM memories WHERE id = ?
     `);
@@ -1699,7 +1746,7 @@ KEY INSIGHTS:`;
     if (!this.db) return false;
     
     const moveStmt = this.db.prepare(`
-      INSERT INTO memories (id, content, metadata, created_at, accessed_at, importance, tier)
+      INSERT OR IGNORE INTO memories (id, content, metadata, created_at, accessed_at, importance, tier)
       SELECT id, content, metadata, created_at, ?, 0.6, 'cold'
       FROM purgatory WHERE id = ?
     `);

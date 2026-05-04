@@ -8,7 +8,7 @@ import { ContentExtractor } from '../server/utils/ContentExtractor.js';
 
 /**
  * ReflectionsArbiter â€” PROJECT REFLECTIONS
- * v0.4 â€” SOMA's Mirror with Brainstorming Crystallization
+ * v0.5 â€” SOMA's Mirror with Graphify Semantic Indexing
  */
 export class ReflectionsArbiter extends BaseArbiter {
   static role = 'knowledge-vault';
@@ -17,13 +17,15 @@ export class ReflectionsArbiter extends BaseArbiter {
     'append-stream',
     'query-vault',
     'distill-session',
-    'auto-index'
+    'auto-index',
+    'semantic-linking'
   ];
 
   constructor(id, config = {}) {
     super({ name: id || 'ReflectionsArbiter', role: 'knowledge-vault', ...config });
     this.vaultPath = config.vaultPath || path.join(process.cwd(), 'data', 'vault', 'reflections');
     this.extractor = new ContentExtractor();
+    this.graphify = config.graphify; // Link to GraphifyArbiter
   }
 
   async onInitialize() {
@@ -86,11 +88,90 @@ ${chatLog.slice(-2000)}
       const filePath = path.join(this.vaultPath, filename);
       await fs.writeFile(filePath, mdContent);
 
+      // 🕸️ Trigger Graphify Update
+      if (this.graphify) {
+          console.log('[Reflections] 🕸️ Triggering Graphify update for new concept...');
+          this.graphify.triggerUpdate().catch(e => console.warn('[Reflections] Graphify update failed:', e.message));
+      }
+
       return { success: true, path: filePath, title: sessionTitle };
     } catch (err) {
       console.error('[Reflections] Crystallization failed:', err.message);
       return { success: false, error: err.message };
     }
+  }
+
+  async saveMuseSessionArtifact({ title, chatLog, museResponse = '', structured = null, metadata = {} }) {
+    const date = new Date().toISOString();
+    const safeTitle = String(title || 'Muse Concept')
+      .toLowerCase()
+      .replace(/[^a-z0-9\s_-]/g, '')
+      .trim()
+      .replace(/\s+/g, '_')
+      .substring(0, 48) || 'muse_concept';
+    const filename = `muse_${safeTitle}_${Date.now()}.md`;
+    const spark = structured?.spark || '';
+    const variant = structured?.variant || '';
+    const critique = structured?.critique || '';
+    const crystallize = structured?.crystallize || museResponse || '';
+    const tags = Array.from(new Set([
+      'muse',
+      'creative',
+      'concept',
+      ...(metadata.tags || [])
+    ])).filter(Boolean);
+
+    const mdContent = `---
+title: ${JSON.stringify(title || 'Muse Concept')}
+category: concept
+type: muse-session
+created: ${date}
+source: Project Muse
+persona: Muse
+brain: AURORA
+status: crystallized
+tags: [${tags.join(', ')}]
+---
+
+# ${title || 'Muse Concept'}
+
+## Premise
+
+${crystallize}
+
+${spark ? `## Spark\n\n${spark}\n\n` : ''}${variant ? `## Variant\n\n${variant}\n\n` : ''}${critique ? `## Critique\n\n${critique}\n\n` : ''}## Next Action
+
+- [ ] Turn this concept into the smallest testable artifact.
+
+## Links To Explore
+
+- [[Muse Persona]]
+- [[Creative Systems]]
+- [[Prototype]]
+
+## Raw Session
+
+${chatLog}
+
+---
+*Crystallized via Project Muse*
+`;
+
+    const filePath = path.join(this.vaultPath, filename);
+    await fs.writeFile(filePath, mdContent);
+
+    if (this.graphify) {
+      this.graphify.triggerUpdate().catch(e => console.warn('[Reflections] Graphify update failed:', e.message));
+    }
+
+    await messageBroker.publish('vault_entry_added', {
+      type: 'muse_session',
+      title,
+      filename,
+      timestamp: Date.now()
+    });
+
+    return { success: true, path: filePath, filename, title };
   }
 
   async handleIngestion(payload) {
@@ -118,6 +199,12 @@ ${content}
 
       const vaultFile = path.join(this.vaultPath, `${noteTitle}_${Date.now()}.md`);
       await fs.writeFile(vaultFile, mdContent);
+      
+      // 🕸️ Trigger Graphify Update
+      if (this.graphify) {
+          this.graphify.triggerUpdate().catch(e => console.warn('[Reflections] Graphify update failed:', e.message));
+      }
+
       return { success: true, path: vaultFile };
     } catch (err) {
       console.error('[Reflections] Ingestion failed:', err.message);
@@ -142,7 +229,13 @@ ${content}
     const titleLine = metadata.title ? `title: ${metadata.title}\n` : '';
     const contextLine = metadata.context ? `context: ${metadata.context}\n` : '';
     const mdContent = `---\ncreated: ${date}\n${titleLine}${contextLine}type: quick-note\ntags: [${tags.join(', ')}]\n---\n\n${text}\n`;
-    await fs.writeFile(path.join(this.vaultPath, filename), mdContent);
+    const fullPath = path.join(this.vaultPath, filename);
+    await fs.writeFile(fullPath, mdContent);
+
+    // 🕸️ Trigger Graphify Update
+    if (this.graphify) {
+        this.graphify.triggerUpdate().catch(e => console.warn('[Reflections] Graphify update failed:', e.message));
+    }
 
     await messageBroker.publish('vault_entry_added', { type: 'quick_note', content: text, timestamp: Date.now() });
     return { success: true, filename };

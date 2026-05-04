@@ -43,5 +43,6 @@ export const ArbiterCapability = {
   TOOL_EXECUTION: 'tool_execution',
   ADVERSARIAL_DEBATE: 'adversarial_debate',
   KNOWLEDGE_SYNTHESIS: 'knowledge_synthesis',
-  PATTERN_RECOGNITION: 'pattern-recognition'
+  PATTERN_RECOGNITION: 'pattern-recognition',
+  CHEMISTRY_EXPERIMENT: 'chemistry-experiment'
 };

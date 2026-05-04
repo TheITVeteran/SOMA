@@ -1,0 +1,17 @@
+{
+  "event": "arbiter_register",
+  "ts": 1771447855280,
+  "data": {
+    "name": "ConceiveTimekeeper",
+    "meta": {
+      "capabilities": [
+        "schedule",
+        "synchronize",
+        "recover",
+        "evolve",
+        "temporal_pulse",
+        "audit_automation"
+      ]
+    }
+  }
+}

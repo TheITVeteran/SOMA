@@ -12,6 +12,9 @@ export default defineConfig({
       '@': path.resolve(process.cwd(), './frontend/apps/command-bridge')
     }
   },
+  optimizeDeps: {
+    entries: ['index.html']
+  },
   server: {
     port: 5173,
     strictPort: true,
@@ -41,7 +44,7 @@ export default defineConfig({
     }
   },
   build: {
-    outDir: '../dist',
+    outDir: 'dist',
     emptyOutDir: true
   }
 })

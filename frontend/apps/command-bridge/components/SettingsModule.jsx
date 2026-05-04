@@ -24,8 +24,11 @@ const SettingsModule = ({
     wakeWordActive,
     onWakeWordToggle
 }) => {
-    const [activeDomain, setActiveDomain] = useState('authority');
-    const [isSettingsLocked, setIsSettingsLocked] = useState(true);
+    const [activeDomain, setActiveDomain] = useState(() => localStorage.getItem('settings_active_domain') || 'authority');
+    const [isSettingsLocked, setIsSettingsLocked] = useState(() => localStorage.getItem('settings_locked') !== 'false');
+
+    const setActiveDomainPersist = (id) => { localStorage.setItem('settings_active_domain', id); setActiveDomain(id); };
+    const setIsSettingsLockedPersist = (v) => { const next = typeof v === 'function' ? v(isSettingsLocked) : v; localStorage.setItem('settings_locked', String(next)); setIsSettingsLocked(next); };
 
     const handleSettingChange = (action) => {
         if (isSettingsLocked) return;
@@ -126,7 +129,7 @@ const SettingsModule = ({
             case 'network':
                 return <NetworkDomain somaBackend={somaBackend} />;
             case 'evolution':
-                return <EvolutionDomain isLocked={isSettingsLocked} setIsLocked={setIsSettingsLocked} />;
+                return <EvolutionDomain isLocked={isSettingsLocked} setIsLocked={setIsSettingsLockedPersist} />;
             default:
                 return <div className="p-8 text-center text-zinc-500">Select a domain to configure</div>;
         }
@@ -150,12 +153,23 @@ const SettingsModule = ({
                             Warning: Changes propagate immediately.
                         </span>
                     </p>
+                    <button
+                        onClick={() => setIsSettingsLockedPersist(v => !v)}
+                        className={`mt-3 w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg border text-xs font-bold uppercase tracking-wider transition-all ${
+                            isSettingsLocked
+                                ? 'bg-zinc-800/60 border-zinc-700 text-zinc-400 hover:bg-zinc-700/60 hover:text-zinc-200'
+                                : 'bg-emerald-500/10 border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/20'
+                        }`}
+                    >
+                        {isSettingsLocked ? <Lock className="w-3.5 h-3.5" /> : <Unlock className="w-3.5 h-3.5" />}
+                        {isSettingsLocked ? 'Unlock Controls' : 'Lock Controls'}
+                    </button>
                 </div>
                 <div className="flex-1 overflow-y-auto custom-scrollbar p-3 space-y-1">
                     {domains.map(domain => (
                         <button
                             key={domain.id}
-                            onClick={() => setActiveDomain(domain.id)}
+                            onClick={() => setActiveDomainPersist(domain.id)}
                             className={`w-full text-left p-3 rounded-lg border transition-all duration-200 group relative overflow-hidden ${activeDomain === domain.id
                                 ? 'bg-white/5 border-white/10 text-white shadow-lg'
                                 : 'bg-transparent border-transparent text-zinc-400 hover:bg-white/5 hover:text-zinc-200'

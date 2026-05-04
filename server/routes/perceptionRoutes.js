@@ -48,7 +48,7 @@ const HEALTH_TTL = 10000;
 
 /**
  * GET /api/perception/health
- * Returns: capability map, web watch list, current attention focus
+ * Returns: full perception layer snapshot — daemons, arbiters, attention, signals, memory
  */
 router.get('/health', (req, res) => {
     try {
@@ -65,25 +65,89 @@ router.get('/health', (req, res) => {
         const vision    = global.SOMA_COS?.visionDaemon;
         const attention = global.SOMA_COS?.attentionArbiter;
 
+        // Pull from system object (set as global by bootstrap)
+        const sys           = global.__SOMA_SYSTEM || {};
+        const daemonManager = sys.daemonManager;
+        const broker        = sys.messageBroker;
+        const attArbiter    = sys.attentionArbiter || attention;
+
+        // ── Daemon layer ────────────────────────────────────────────────────
+        let daemonList = [];
+        try {
+            const raw = daemonManager?.health?.() || [];
+            daemonList = raw.map(d => ({
+                name:     d.name     || 'unknown',
+                status:   d.active   ? 'active' : (d.shouldBeRunning ? 'crashed' : 'stopped'),
+                restarts: d.restartCount ?? 0,
+                lastSeen: d.lastSeen ?? null,
+            }));
+        } catch { /* non-fatal */ }
+
+        const daemonActive  = daemonList.filter(d => d.status === 'active').length;
+        const daemonCrashed = daemonList.filter(d => d.status === 'crashed').length;
+
+        // ── Arbiter layer ───────────────────────────────────────────────────
+        let arbiterTotal = 0;
+        const lobes = { LOGOS: 0, AURORA: 0, THALAMUS: 0, PROMETHEUS: 0, unlobed: 0 };
+        try {
+            arbiterTotal = broker?.arbiters?.size ?? 0;
+            for (const lobe of ['LOGOS', 'AURORA', 'THALAMUS', 'PROMETHEUS']) {
+                const s = broker?.lobeIndex?.get?.(lobe);
+                lobes[lobe] = s ? s.size : 0;
+            }
+            const lobed = lobes.LOGOS + lobes.AURORA + lobes.THALAMUS + lobes.PROMETHEUS;
+            lobes.unlobed = Math.max(0, arbiterTotal - lobed);
+        } catch { /* non-fatal */ }
+
+        // ── Attention layer ─────────────────────────────────────────────────
+        const attentionFocus = attArbiter?.currentFocus ?? attArbiter?.focusTopic ?? null;
+
+        // ── Signal / broker stats ───────────────────────────────────────────
+        let brokerStats = {};
+        let recentCount = 0;
+        try {
+            brokerStats = broker?.getMetrics?.() ?? {};
+            recentCount = brokerStats.historySize ?? broker?.messageHistory?.length ?? 0;
+        } catch { /* non-fatal */ }
+
+        // ── Memory ──────────────────────────────────────────────────────────
+        const mem = process.memoryUsage();
+        const heapMB    = Math.round(mem.heapUsed  / 1024 / 1024);
+        const heapMaxMB = Math.round(mem.heapTotal  / 1024 / 1024);
+
         const body = {
             success: true,
+            // ── New structured perception snapshot ──
+            daemons: {
+                total:   daemonList.length,
+                active:  daemonActive,
+                crashed: daemonCrashed,
+                list:    daemonList,
+            },
+            arbiters: {
+                total: arbiterTotal,
+                lobes,
+            },
+            attention: {
+                focus:  attentionFocus,
+                engine: attArbiter ? 'active' : 'missing',
+            },
+            signals: {
+                recentCount,
+                brokerStats,
+            },
+            memory: {
+                heapMB,
+                heapMaxMB,
+            },
+            // ── Legacy fields (kept for backward compat) ──
             capabilities: capDaemon?.getCapabilityMap?.() ?? { note: 'CapabilityDiscoveryDaemon not loaded yet' },
             watchlist:    webDaemon?.getWatchList?.()    ?? {},
             vision: {
-                active: !!vision?.active,
-                channel: vision?.channel || 'desktop',
+                active:        !!vision?.active,
+                channel:       vision?.channel || 'desktop',
                 lastPerception: vision?.lastPerception || null,
-                metrics: vision?.metrics || {}
-            },
-            attention: {
-                focus:       attention?.focusTopic  ?? 'general',
-                focusExpiry: attention?.focusExpiry ?? null,
-                focusActive: !!(attention?.focusExpiry && attention.focusExpiry > now)
-            },
-            daemons: {
-                capability: !!capDaemon,
-                webPerception: !!webDaemon,
-                vision: !!vision
+                metrics:       vision?.metrics || {}
             },
             timestamp: now
         };

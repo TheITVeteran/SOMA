@@ -124,7 +124,9 @@ class GoalPlannerArbiter extends BaseArbiter {
     try {
       messageBroker.registerArbiter(this.name, this, {
         type: GoalPlannerArbiter.role,
-        capabilities: GoalPlannerArbiter.capabilities
+        capabilities: GoalPlannerArbiter.capabilities,
+        lobe: 'PROMETHEUS',
+        tier: 'strategic'
       });
       this.logger.info(`[${this.name}] Registered with MessageBroker`);
     } catch (err) {
@@ -134,14 +136,14 @@ class GoalPlannerArbiter extends BaseArbiter {
   }
 
   _subscribeBrokerMessages() {
-    // Direct topic subscriptions (correct broker API: subscribe(topic, handler))
+    // Lobe-scoped subscriptions — only fires when the signal originates within PROMETHEUS
     // DriveArbiter publishes here when tension >= planningThreshold
-    messageBroker.subscribe('drive.planning.needed', (envelope) => {
+    messageBroker.subscribeByLobe('PROMETHEUS', 'drive.planning.needed', (envelope) => {
       this.runPlanningCycle().catch(() => {});
     });
 
     // Broadcast goal lifecycle events so other arbiters can react
-    messageBroker.subscribe('planning_pulse', (envelope) => {
+    messageBroker.subscribeByLobe('PROMETHEUS', 'planning_pulse', (envelope) => {
       this.runPlanningCycle().catch(() => {});
     });
 
@@ -255,7 +257,7 @@ class GoalPlannerArbiter extends BaseArbiter {
 
       // Deduplication — reject if a similar active goal already exists (all non-user sources)
       if (source !== 'user') {
-        const duplicate = this._findSimilarActiveGoal(goalData.category, goalData.title);
+        const duplicate = this._findSimilarActiveGoal(goalData.category, goalData.title, goalData);
         if (duplicate) {
           this.logger.info(`[${this.name}] Skipping duplicate goal "${goalData.title}" — similar active goal exists: "${duplicate.title}"`);
           return { success: false, error: 'Duplicate goal exists', existingGoalId: duplicate.id };
@@ -769,25 +771,89 @@ class GoalPlannerArbiter extends BaseArbiter {
 
   /**
    * Check if a similar active goal already exists (deduplication)
-   * Matches on same category + overlapping keywords in title
+   * Matches on same category + overlapping intent across title, description, and rationale.
    */
-  _findSimilarActiveGoal(category, title) {
-    const titleWords = new Set(title.toLowerCase().split(/\s+/).filter(w => w.length > 3));
+  _findSimilarActiveGoal(category, title, goalData = {}) {
+    const candidate = this._goalIntentSignature({
+      category,
+      title,
+      description: goalData.description || '',
+      metadata: goalData.metadata || {},
+      rationale: goalData.rationale || ''
+    });
+
     for (const goalId of this.activeGoals) {
       const goal = this.goals.get(goalId);
       if (!goal || goal.category !== category) continue;
-      const goalWords = new Set(goal.title.toLowerCase().split(/\s+/).filter(w => w.length > 3));
-      // Count overlapping words
-      let overlap = 0;
-      for (const w of titleWords) {
-        if (goalWords.has(w)) overlap++;
-      }
-      // If >50% of words overlap, it's a duplicate
-      if (titleWords.size > 0 && overlap / titleWords.size > 0.5) {
+
+      const existing = this._goalIntentSignature(goal);
+      if (candidate.key && candidate.key === existing.key) return goal;
+
+      const overlap = this._setOverlap(candidate.tokens, existing.tokens);
+      const sameSource = (goal.metadata?.source || '') === (goalData.metadata?.source || '');
+      const strongIntentMatch = overlap >= 0.58;
+      const sourceBackedMatch = sameSource && overlap >= 0.42;
+
+      if (strongIntentMatch || sourceBackedMatch) {
         return goal;
       }
     }
     return null;
+  }
+
+  _goalIntentSignature(goal = {}) {
+    const text = [
+      goal.category || '',
+      goal.title || '',
+      goal.description || '',
+      goal.rationale || '',
+      goal.metadata?.rationale || '',
+      goal.metadata?.why || '',
+      goal.metadata?.gap || '',
+      goal.metadata?.searchQuery || ''
+    ].join(' ').toLowerCase();
+
+    const synonymMap = new Map([
+      ['browse', 'web'], ['browser', 'web'], ['browsing', 'web'], ['navigation', 'web'],
+      ['navigator', 'web'], ['scrape', 'web'], ['scraping', 'web'], ['puppeteer', 'web'],
+      ['playwright', 'web'], ['internet', 'web'], ['github', 'repository'], ['repos', 'repository'],
+      ['repo', 'repository'], ['investigate', 'research'], ['evaluate', 'research'],
+      ['study', 'research'], ['integrate', 'integration'], ['activate', 'integration'],
+      ['autonomous', 'autonomy'], ['agentic', 'autonomy'], ['capability', 'capability']
+    ]);
+
+    const stop = new Set([
+      'this', 'that', 'with', 'from', 'into', 'using', 'based', 'would', 'could',
+      'should', 'current', 'currently', 'existing', 'system', 'soma', 'goal',
+      'goals', 'rationale', 'search', 'query', 'ability', 'able', 'allow',
+      'allows', 'directly', 'robust', 'well', 'good', 'basic'
+    ]);
+
+    const tokens = new Set(
+      text
+        .replace(/[^a-z0-9 ]/g, ' ')
+        .split(/\s+/)
+        .filter(w => w.length > 3 && !stop.has(w))
+        .map(w => synonymMap.get(w) || w.replace(/s$/, ''))
+    );
+
+    const keyTokens = Array.from(tokens)
+      .filter(w => ['web', 'research', 'integration', 'autonomy', 'repository', 'capability', 'memory', 'learning', 'causality', 'audio', 'vision', 'code'].includes(w))
+      .sort();
+
+    return {
+      tokens,
+      key: keyTokens.length >= 2 ? `${goal.category || ''}:${keyTokens.join('|')}` : ''
+    };
+  }
+
+  _setOverlap(a, b) {
+    if (!a?.size || !b?.size) return 0;
+    let hits = 0;
+    for (const token of a) {
+      if (b.has(token)) hits++;
+    }
+    return hits / Math.min(a.size, b.size);
   }
 
   // ═══════════════════════════════════════════════════════════
@@ -1750,13 +1816,13 @@ class GoalPlannerArbiter extends BaseArbiter {
       // createGoal()'s runtime dedup check. Run dedup on every restore so the file
       // never accumulates duplicates regardless of how they got there.
       {
-        const seen = new Map(); // normalizedTitle -> first goal id
+        const seen = new Map(); // intentKey -> first goal id
         const dupIds = new Set();
         for (const id of Array.from(this.activeGoals)) {
           const g = this.goals.get(id);
           if (!g) continue;
-          // Strip punctuation/quotes, lowercase — catches Gemini-style "quoted titles"
-          const normalized = (g.title || '').toLowerCase().replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim();
+          const sig = this._goalIntentSignature(g);
+          const normalized = sig.key || (g.title || '').toLowerCase().replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim();
           if (seen.has(normalized)) {
             // Keep the one with higher priority; defer the other
             const existingId = seen.get(normalized);

@@ -95,6 +95,26 @@
         ]
       },
       {
+        "name": "Medical Deep Dive",
+        "cron": "0 4 * * *",
+        "duration_minutes": 60,
+        "tasks": [
+          {
+            "type": "medical_mission",
+            "arbiter": "NighttimeLearningOrchestrator",
+            "params": {}
+          },
+          {
+            "type": "knowledge_discovery",
+            "arbiter": "NighttimeLearningOrchestrator",
+            "params": {
+              "topics": ["oncology enzymes", "snake venom cancer research", "psilocybin neurogenesis", "urat1 gout pathways"],
+              "maxResultsPerTopic": 5
+            }
+          }
+        ]
+      },
+      {
         "name": "Weekend Deep Dive",
         "cron": "0 2 * * 0",
         "duration_minutes": 180,

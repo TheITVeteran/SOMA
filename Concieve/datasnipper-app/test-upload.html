@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>File Upload Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .test-section { margin: 20px 0; padding: 20px; border: 1px solid #ccc; }
+        button { padding: 10px 20px; margin: 10px; cursor: pointer; }
+        input[type="file"] { margin: 10px 0; }
+        .hidden { display: none; }
+        .result { background: #f0f0f0; padding: 10px; margin: 10px 0; }
+    </style>
+</head>
+<body>
+    <h1>File Upload Testing</h1>
+
+    <div class="test-section">
+        <h2>Test 1: Direct File Input</h2>
+        <input type="file" id="direct-file" multiple>
+        <button onclick="testDirectUpload()">Test Direct Upload</button>
+        <div id="direct-result" class="result"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>Test 2: Hidden File Input with Button (Like ProjectWorkspace)</h2>
+        <button onclick="document.getElementById('hidden-file').click()">📎 Click to Upload Files</button>
+        <input type="file" id="hidden-file" class="hidden" multiple>
+        <div id="hidden-result" class="result"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>Test 3: API Test</h2>
+        <button onclick="testAPI()">Test Backend Connection</button>
+        <div id="api-result" class="result"></div>
+    </div>
+
+    <script>
+        // Direct upload test
+        document.getElementById('direct-file').addEventListener('change', function(e) {
+            const files = e.target.files;
+            document.getElementById('direct-result').innerHTML = 
+                `Selected ${files.length} files: ${Array.from(files).map(f => f.name).join(', ')}`;
+        });
+
+        // Hidden upload test
+        document.getElementById('hidden-file').addEventListener('change', function(e) {
+            const files = e.target.files;
+            document.getElementById('hidden-result').innerHTML = 
+                `Selected ${files.length} files: ${Array.from(files).map(f => f.name).join(', ')}`;
+            testFileUpload(files);
+        });
+
+        function testDirectUpload() {
+            const files = document.getElementById('direct-file').files;
+            if (files.length > 0) {
+                testFileUpload(files);
+            } else {
+                document.getElementById('direct-result').innerHTML = 'No files selected';
+            }
+        }
+
+        function testFileUpload(files) {
+            const formData = new FormData();
+            for (let i = 0; i < files.length; i++) {
+                formData.append('file', files[i]);
+            }
+
+            fetch('http://localhost:5000/api/files/upload', {
+                method: 'POST',
+                body: formData
+            })
+            .then(response => response.json())
+            .then(data => {
+                document.getElementById('hidden-result').innerHTML += 
+                    `<br><strong>Upload Result:</strong> ${JSON.stringify(data)}`;
+            })
+            .catch(error => {
+                document.getElementById('hidden-result').innerHTML += 
+                    `<br><strong>Upload Error:</strong> ${error.message}`;
+            });
+        }
+
+        function testAPI() {
+            fetch('http://localhost:5000/api/health')
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById('api-result').innerHTML = 
+                        `Backend Status: ${JSON.stringify(data)}`;
+                })
+                .catch(error => {
+                    document.getElementById('api-result').innerHTML = 
+                        `Backend Error: ${error.message}`;
+                });
+        }
+    </script>
+</body>
+</html>

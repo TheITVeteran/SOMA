@@ -38,6 +38,7 @@ export class FinanceAgentArbiter extends BaseArbiterV4 {
 
     this.uiConfig = { label: 'Finance', icon: 'DollarSign', color: 'emerald' };
     this.quadBrain = opts.quadBrain || null;
+    this.graphify = opts.graphify; // Link to GraphifyArbiter
     this.knowledgeArbiter = new FinanceKnowledgeArbiter({ rootPath: opts.rootPath || process.cwd() });
     this.portfolio = { cash: 100000, positions: {}, history: [] };
 
@@ -76,6 +77,14 @@ export class FinanceAgentArbiter extends BaseArbiterV4 {
     const startTime = Date.now();
     this._currentPhase = 'DISCOVERY';
 
+    // 🕸️ Semantic Market Context via Graphify
+    let semanticContext = null;
+    if (this.graphify) {
+        this.auditLogger.info(`[Phase 0/7] SEMANTIC: Checking knowledge graph for ${symbol} associations...`);
+        const graphRes = await this.graphify.query(`How does ${symbol} relate to current market regimes, sector trends, or macro-economic entities in our knowledge base?`);
+        if (graphRes.success) semanticContext = graphRes.raw;
+    }
+
     global.__SOMA_FINANCE_ANALYSIS = true;
     try {
         // PHASE 1: MARKET DISCOVERY
@@ -90,7 +99,9 @@ export class FinanceAgentArbiter extends BaseArbiterV4 {
         // PHASE 3: WOLF THESIS (SOMA-WOLF)
         this._currentPhase = 'HYPOTHESIS';
         const wolfPersona = await this._getPersona('Market Wolf');
-        const prompt = `${wolfPersona}\nTask: Generate a STRIKE signal for ${symbol}. Respond in the REQUIRED JSON FORMAT.`;
+        const prompt = `${wolfPersona}
+        ${semanticContext ? `STRATEGIC CONTEXT FROM KNOWLEDGE GRAPH:\n${semanticContext}\n` : ''}
+        Task: Generate a STRIKE signal for ${symbol}. Respond in the REQUIRED JSON FORMAT.`;
         const thesisResult = await this.quadBrain.reason(prompt, 'logos');
         let thesis = thesisResult.response || thesisResult.text;
         

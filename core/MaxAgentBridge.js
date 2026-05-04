@@ -138,25 +138,36 @@ export class MaxAgentBridge {
         return this._fetch(method, path, body);
     }
 
-    async _fetch(method, path, body = null) {
-        const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), this.timeout);
-        try {
-            const res = await fetch(`${this.maxUrl}${path}`, {
-                method,
-                headers: body != null ? { 'Content-Type': 'application/json' } : {},
-                ...(body != null ? { body: JSON.stringify(body) } : {}),
-                signal: controller.signal,
-            });
-            if (!res.ok && path === '/health') return { ok: false };
-            if (!res.ok) throw new Error(`MAX returned HTTP ${res.status} for ${method} ${path}`);
-            return await res.json();
-        } catch (err) {
-            if (err.name === 'AbortError') throw new Error(`MAX request timed out: ${method} ${path}`);
-            throw err;
-        } finally {
-            clearTimeout(timer);
+    /**
+     * SOVEREIGN GATEWAY v1.0.0
+     * Enables Barry (Master SOMA-ID) to remote into MAX for diagnostics via EdgeWorker tunnel.
+     */
+    async establishArchitectLink(remoteNodeId, masterKey, system) {
+        this.logger.log?.(`🤝 [MAX_BRIDGE] Initiating Sovereign Handshake: ${remoteNodeId}`);
+        
+        // 1. Verify Barry's Master ID via Thalamus
+        const thalamus = system?.thalamusArbiter;
+        if (thalamus && typeof thalamus.verifyMasterKey === 'function') {
+            if (!thalamus.verifyMasterKey(masterKey)) {
+                this.logger.error?.('🛑 [MAX_BRIDGE] Handshake Rejected: Unauthorized ID.');
+                return { success: false, reason: 'unauthorized' };
+            }
         }
+
+        // 2. Establish the P2P Edge Tunnel
+        const edge = system?.edgeWorkerOrchestrator;
+        if (edge && typeof edge.connectToNode === 'function') {
+            try {
+                await edge.connectToNode(remoteNodeId);
+                this.logger.log?.('🌌 [MAX_BRIDGE] Sovereign Tunnel Established. Remote diagnostics ACTIVE.');
+                return { success: true, mode: 'P2P_ARCHITECT' };
+            } catch (e) {
+                this.logger.error?.(`❌ [MAX_BRIDGE] Tunnel Failed: ${e.message}`);
+                return { success: false, reason: 'tunnel_failure', error: e.message };
+            }
+        }
+
+        return { success: false, reason: 'orchestrator_offline' };
     }
 }
 

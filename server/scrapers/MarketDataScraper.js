@@ -188,7 +188,12 @@ export async function fetchHistoricalOHLCV(symbol) {
 
     try {
         const result = await runBridge(['history', symbol], 30_000);
-        if (!result.ok || !result.rows?.length) throw new Error('no rows');
+        if (!result.ok || !result.rows?.length) {
+            if (process.env.SOMA_MARKET_HISTORY_VERBOSE === 'true') {
+                console.warn(`[MarketDataScraper] no historical rows for ${symbol}`);
+            }
+            return null;
+        }
         const data = result.rows;
         _historyCache.set(symbol, { data, ts: Date.now() });
         return data;

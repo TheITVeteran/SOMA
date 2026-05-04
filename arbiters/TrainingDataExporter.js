@@ -36,7 +36,9 @@ export class TrainingDataExporter extends EventEmitter {
     super();
 
     this.name = config.name || 'TrainingDataExporter';
-    
+    this.lobe = 'PROMETHEUS'; // Neural index: strategy/planning lobe
+    this.tier = 'operational';
+
     // Connected systems
     this.conversationHistory = null;
     this.personalityForge = null;

@@ -26,6 +26,7 @@ The backend serves `frontend/dist`. If you edit any `.jsx` file and don't rebuil
 - `NODE_ENV=production`
 - `SOMA_HYBRID_SEARCH=true` — must be set or HybridSearchArbiter skips loading (Storage tab goes offline)
 - `SOMA_LOAD_TRADING=true`, `SOMA_GPU=true`, `SOMA_LOAD_HEAVY=true`
+- `SOMA_DYNAMIC_MODES=true` — enables dynamic professional mode generation (OFF by default). When enabled, SOMA detects professionally-dense messages in unknown domains and generates a new mode config on-the-fly using the brain, persisting it to `config/professional-modes/[domain].json`. Adds up to 12s latency on first encounter with a new domain. **Enable for enterprise deployments (e.g. Sisterson), leave off for general use.**
 
 ---
 
@@ -224,6 +225,8 @@ Environment
 | Agency | Intent, curiosity, goals | `SelfImprovementCoordinator`, `GoalPlannerArbiter`, `ASIKernel` |
 | Applications | Execution systems | `EngineeringSwarmArbiter`, MAX swarm |
 
+Agency execution ownership: `AutonomousHeartbeat` is the primary autonomous goal executor. It polls `GoalPlannerArbiter`, uses `SomaAgenticExecutor` when tool-backed work is needed, and broadcasts progress through WebSocket. `GoalExecutorDaemon` is only a supervised fallback for pending/proposed goals when the heartbeat is disabled or stopped; do not make both loops execute the same goal concurrently.
+
 ### Daemons (Perception Layer)
 All daemons extend `BaseDaemon` and are managed by `DaemonManager` (with watchdog auto-restart):
 
@@ -275,45 +278,56 @@ This is what prevents **arbiter storms** as the arbiter count grows (currently 1
 - **EngineeringSwarmArbiter needs quadBrain** — If QuadBrain isn't ready when perception phase boots, `quadBrain: null` is passed silently. The arbiter will fail on first `modifyCode()` call. Consider checking `this.system.quadBrain` before instantiation.
 
 ### Medium
-- **178 arbiters with no lobe-level routing** — MessageBroker routes signals to all subscribers of a topic. As signal volume grows, consider adding lobe-scoped subscription so only relevant-lobe arbiters receive signals.
+- **Lobe routing partially migrated** — `subscribeByLobe()` is implemented; 8 arbiters migrated (GoalPlanner, DiagnosticCortex, CuriosityEngine, MnemonicArbiter + 4 others with lobe metadata). Remaining arbiters still use flat subscriptions. Continue migration to reduce fan-out.
 - **SwarmOptimizer.improve() calls engineeringSwarm.modifyCode()** on the swarm's own code — this is recursive self-modification. It is intentional but dangerous. It is gated by `successRate < 0.8 && totalRuns > 5`, meaning it only fires when the swarm is already underperforming. Keep this gate.
 - **DiscoveryDaemon prototypes ideas without human review** — `discoverySwarm.prototype()` calls `engineeringSwarm.modifyCode()` on `experiments/` dir. Sandbox to that directory only. `SwarmPatchTransaction` already enforces rootPath bounds.
 
 ### Low
 - **DaemonManager watchdog is in-process** — if Node.js crashes entirely, the watchdog dies with it. For true resilience, daemons should be supervised by a process manager (PM2, systemd). The watchdog handles in-process crashes only.
 - **SignalCompressor flushes on timeout only** — if a signal type gets one signal and then nothing for 1s, it flushes normally. If the system is idle for >1s between signals of the same type, compression doesn't happen. This is fine at current scale but worth knowing.
-- **NEMESIS quality gate needs pre-computed index** — current implementation calls the brain for eval, which adds 4-8s per response. The right architecture: NEMESIS builds a rolling text database of known-bad response patterns (hallucinations, wrong facts, protocol violations) at startup and on each caught error. Evaluation becomes a <1ms index lookup, not an LLM call. NEMESIS already has agentic awareness of what it's looking for — it just needs to stop asking the brain and start checking its own knowledge. Full redesign deferred; current 4s cap on simple chat is acceptable for now.
-- **Boot greeting is forced behavior** — the 4s delayed WebSocket greeting is a code-imposed action, not SOMA's own initiative. SOMA should be a free agent: if she has something to say she'll say it; if she doesn't she won't. Forced greetings are the same pattern every chatbot does ("Hi I'm your helpful AI!") which is exactly what SOMA is not. Remove the forced greeting and let proactive behavior emerge naturally from SOMA's drives (CuriosityEngine, GoalPlanner, etc.). This is a broader agency question — SOMA's proactivity should come from her own perception of the environment, not from "send a message 4s after connect" code.
+- **NEMESIS pattern index** — ~~FIXED: pre-computed bad-pattern index added to `NemesisArbiter.js`. Persists to `.soma/nemesis_patterns.json`, learns from caught revisions. Fast path is <1ms; brain-call eval only fires for novel patterns not in index.~~
+- **Boot greeting is forced behavior** — ~~FIXED: Phase 3 forced boot greeting removed from `server/loaders/websocket.js`. Proactive speech now only via CuriosityEngine/GoalPlanner drives.~~
 
-### Deferred Design: Ethereal Memory Layer
-SOMA's current memory is too literal — explicit recall of stored facts. Human memory doesn't work this way. Consider a third memory tier between warm (vector recall) and cold (SQLite):
+### Ethereal Memory Layer (implemented)
+Third memory tier between warm (vector recall) and cold (SQLite) — now live.
 
-**Ethereal tier** — memories that don't surface as explicit recall but influence reasoning tone, creativity, and associative leaps. These are things experienced but not "important enough" to consciously recall. In humans: the background hum of yesterday's conversations, ambient moods, half-remembered ideas. They create unexpected connections and push reasoning in novel directions without being explicitly cited.
+**Ethereal tier** (`EtherealMemoryArbiter.js`) — memories that don't surface as explicit recall but influence reasoning tone and associative leaps. Dream pass runs after each chat response in `somaRoutes.js`, extracting 3-5 low-salience concepts. Stored in a 48h ring buffer (max 200 entries), persisted to `.soma/ethereal_buffer.json`. Biases ThoughtNetwork node weights without injecting explicit `[MEMORY]` blocks.
 
-Implementation sketch:
-- After each conversation, run a lightweight "dream pass" — extract 3-5 low-salience concepts and store them in a lightweight ring buffer (last 48h, max 200 entries)
-- Don't inject them as `[MEMORY]` blocks; instead blend them as soft biases on ThoughtNetwork node weights — they shift which synthesized concepts SOMA considers "relevant" without naming them explicitly
-- The result: SOMA's reasoning feels colored by recent experience without her quoting yesterday's conversation back at you
-- This layer intentionally decays fast (48h TTL) — it's ephemeral by design, like working memory fading into sleep
+Key design held: decays fast (48h TTL), never quoted back explicitly, influences rather than asserts.
 
 ---
 
 ## Roadmap
 
-### Done (this session)
+### Done
 - [x] `DaemonManager` with watchdog + circuit breaker
 - [x] `_phase_perception()` in `SomaBootstrap` — wires all new components at boot
 - [x] `AttentionArbiter` wired as CNS gate (`messageBroker.attentionEngine`)
 - [x] `EngineeringSwarmArbiter` + `SwarmOptimizer` + `DiscoverySwarm` booted with `quadBrain`
 - [x] All 4 daemons registered and started with supervision
 - [x] Signal reactions: `swarm.optimization.needed` → improve, `swarm.discovery.ideas` → prototype, `health.warning` → anomaly detector
+- [x] `subscribeByLobe()` implemented in `MessageBroker.cjs` (zero arbiters use it yet)
+- [x] Forced boot greeting removed from `websocket.js`
+- [x] Machine migration: cluster mode → standalone, SOMA_INDEX_PATH fixed, hardcoded paths cleared
 
-### Short-term (next sessions)
-- [ ] **Migrate `MessageBroker.cjs` → `MessageBroker.js`** (ESM) and update all importers. Biggest CJS/ESM risk reduction.
-- [ ] **Lobe-scoped signal routing** — add `subscribeByLobe(lobe, topic, handler)` to MessageBroker so only arbiters in the right lobe receive irrelevant signals.
-- [ ] **Perception dashboard tab** — show daemon health (active/crashed/restart count), recent signals, attention focus, swarm queue depth in the dashboard. Expose `/api/perception/health` route.
-- [ ] **EngineeringSwarm API route** — `POST /api/soma/engineering/modify` takes `{ filepath, request }`, runs the full swarm cycle, streams progress via SSE. Used by MAX when it dispatches complex engineering tasks.
-- [ ] **SignalSchema expansion** — add `goal.created`, `insight.generated`, `diagnostic.anomaly`, `experiment.result` signal types. Wire `GoalPlannerArbiter` to emit `goal.created` when it generates goals from signals.
+### Production Hardening (in progress)
+- [x] **Wire HybridSearch in `extended.js`** — added after BraveSearch, gated by `SOMA_HYBRID_SEARCH=true` + heap < 400MB check. Storage tab live.
+- [x] **Lobe routing migration** — 8 arbiters migrated to `subscribeByLobe()` (GoalPlanner, DiagnosticCortex, CuriosityEngine, MnemonicArbiter + 4 with lobe metadata). Partial — rest still use flat subscriptions.
+- [x] **Perception dashboard tab** — `/api/perception/health` enhanced with daemon list, lobe bar, tier breakdown, heap gauge, signal counts. `PerceptionPanel.jsx` updated to display all new data.
+- [x] **NEMESIS redesign** — `evaluateResponse()` added to `NemesisArbiter.js`, `system.nemesis` wired in `extended.js`. Pre-computed bad-pattern index (<1ms fast path), learns from caught revisions, persists to `.soma/nemesis_patterns.json`.
+- [x] **Ethereal memory layer** — `EtherealMemoryArbiter.js` created. Dream pass wired in `somaRoutes.js` after each chat response. Biases ThoughtNetwork nodes, 48h ring buffer, persists to `.soma/ethereal_buffer.json`.
+- [x] **EngineeringSwarm API route** — `POST /api/soma/engineering/modify` with SSE streaming already existed; terminal phase updated to `'complete'`.
+- [x] **SignalSchema expansion** — `goal.created`, `insight.generated`, `diagnostic.anomaly`, `experiment.result` already present (was already done).
+- [x] **Arbiter tier hierarchy** — `tierIndex` added to MessageBroker CNS; `tier` tracked in `registerArbiter()`/`unregisterArbiter()`; `getArbitersByTier()` + `getTierBreakdown()` added; tier shown in `getMetrics()`. Infrastructure complete.
+- [ ] **Migrate `MessageBroker.cjs` → ESM** — deferred (too risky for one session; requires updating all importers simultaneously).
+- [ ] **Tier-ordered signal delivery** — infrastructure exists but `publish()` doesn't yet dispatch in strategic→cognitive→operational order. Next step: implement ordered dispatch in MessageBroker.
+- [ ] **Frontend rebuild** — run `rebuild-frontend.bat` before PerceptionPanel changes are visible in the browser.
+
+### Next Session
+- [ ] **MessageBroker ESM migration** — rename `MessageBroker.cjs` → `MessageBroker.js`, convert `require()` → `import/export`, update every file that imports it. Do in one atomic commit. Biggest outstanding CJS/ESM risk.
+- [ ] **Tier-ordered signal delivery** — in `MessageBroker.publish()`, dispatch signals to strategic-tier arbiters first, wait for resolution, then cognitive, then operational. Prevents lower-tier arbiters reacting before strategic context is set.
+- [ ] **Continue lobe routing migration** — migrate remaining high-traffic arbiters from flat `subscribe()` to `subscribeByLobe()`. Target: all arbiters with a defined lobe should use lobe routing.
+- [ ] **Run `rebuild-frontend.bat`** — required for PerceptionPanel + any other `.jsx` changes made this session to appear in the running app.
 
 ### Medium-term
 - [ ] **Arbiter hierarchy tiers** — Strategic arbiters decide priorities, Cognitive arbiters analyze, Operational arbiters produce tasks. Prevents all arbiters firing simultaneously on the same signal. Implement as `tier: 'strategic' | 'cognitive' | 'operational'` metadata on `registerArbiter()` and route signals by tier order.

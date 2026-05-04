@@ -36,6 +36,7 @@ class MnemonicArbiter extends BaseArbiter {
       maxContextSize: 200,
       ...opts
     });
+    this.tier = 'cognitive';
 
     // Configuration
     this.config = {

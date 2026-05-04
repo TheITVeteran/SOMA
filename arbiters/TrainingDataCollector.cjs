@@ -71,8 +71,11 @@ class TrainingDataCollector extends BaseArbiter {
     const enriched = {
       ...interaction,
       timestamp: Date.now(),
-      noveltyScore: this.noveltyTracker ? await this.noveltyTracker.evaluateNovelty(interaction) : 0.5,
-      resourceCost: this.resourceBudget ? this.resourceBudget.getLastAPICost() : 0,
+      noveltyScore: this.noveltyTracker ? await this.noveltyTracker.evaluateNovelty({
+          solution: interaction.output || interaction.response || interaction.result || 'no_output',
+          context: interaction.context || {}
+      }) : 0.5,
+      resourceCost: this.resourceBudget ? (this.resourceBudget.getResourceStatus?.()?.budgets?.apiCalls?.used || 0) : 0,
       brain: interaction.brain || 'unknown',
       confidence: interaction.confidence || 0.5,
       tokenCount: interaction.tokenCount || 0,
@@ -170,6 +173,10 @@ class TrainingDataCollector extends BaseArbiter {
     return novelty * confidence * (1 - errorRate);
   }
 
+  getStats() {
+    return this.getMetrics();
+  }
+
   async exportAndClear() {
     if (this.buffer.length === 0) return;
 
@@ -190,4 +197,7 @@ class TrainingDataCollector extends BaseArbiter {
   }
 }
 
+// Named export for older .cjs loaders
 module.exports = TrainingDataCollector;
+// Also provide named export for ESM interop if needed
+module.exports.TrainingDataCollector = TrainingDataCollector;

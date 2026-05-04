@@ -33,6 +33,7 @@ export class KevinArbiter extends BaseArbiterV4 {
                 ArbiterCapability.MONITOR_HEALTH
             ]
         });
+        this.tier = 'operational';
 
         // Event Emitter for Dashboard Compatibility
         this.events = new EventEmitter();
@@ -102,6 +103,16 @@ export class KevinArbiter extends BaseArbiterV4 {
         await this.loadConfig();
 
         this.auditLogger.info('Kevin Arbiter initialized (Security + Productivity Mode)');
+
+        // Register with MessageBroker so lobe-scoped routing works
+        if (this.messageBroker && typeof this.messageBroker.registerArbiter === 'function') {
+            this.messageBroker.registerArbiter(this.name, {
+                role: this.role,
+                capabilities: this.capabilities,
+                instance: this,
+                lobe: 'THALAMUS'
+            });
+        }
 
         // Check if we can use real email
         if (process.env.EMAIL_ADDRESS && process.env.APP_PASSWORD) {

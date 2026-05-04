@@ -24,6 +24,8 @@ export class PersonalityForgeArbiter extends EventEmitter {
     super();
 
     this.name = config.name || 'PersonalityForgeArbiter';
+    this.lobe = 'AURORA'; // Neural index: creative/emotional lobe
+    this.tier = 'operational';
 
     // Connected systems
     this.mnemonic = null;

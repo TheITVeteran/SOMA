@@ -18,7 +18,7 @@ export class AutonomousCapabilityExpansion extends EventEmitter {
     this.quadBrain = config.quadBrain;
     this.messageBroker = config.messageBroker;
     this.logger = config.logger || console;
-    this.baseDir = 'C:\\Users\\barry\\Desktop\\SOMA';
+    this.baseDir = process.env.SOMA_PATH || process.cwd();
     this.tempDir = path.join(this.baseDir, 'temp-capabilities');
     this.knownRepos = ['Shubhamsaboo/awesome-llm-apps', 'microsoft/autogen', 'langchain-ai/langchain'];
     console.log(`[${this.name}] Ready to expand capabilities autonomously`);

@@ -30,9 +30,15 @@ import researchRoutes from '../../server/routes/researchRoutes.js';
 import somaRoutes from '../../server/routes/somaRoutes.js';
 import notificationRoutes from '../../server/routes/notificationRoutes.js';
 import perceptionRoutes from '../../server/routes/perceptionRoutes.js';
+import createAxisRoutes from '../../server/routes/axisRoutes.js';
+import createSocialRoutes from '../../server/routes/socialRoutes.js';
+import createMaintenanceRoutes from '../../server/routes/maintenanceRoutes.js';
+import createWorkspaceRoutes from '../../server/routes/workspaceRoutes.js';
 import { toggleAutopilot, getAutopilotStatus } from './extended.js';
 import { buildSystemSnapshot } from '../utils/systemState.js';
 import { executeCommand } from '../utils/commandRouter.js';
+import { buildRuntimeMap } from '../../core/SomaRuntimeMap.js';
+import { buildReadinessReport } from '../../core/SomaReadinessScanner.js';
 
 export async function loadRoutes(app, system) {
     console.log('\n[Loader] ðŸ›£ï¸  Mounting Production API Routes...');
@@ -100,6 +106,121 @@ export async function loadRoutes(app, system) {
         };
     };
 
+    const emitLifecycleMessage = (event, payload = {}) => {
+        const message = {
+            event,
+            message: payload.message,
+            expertise: payload.expertise || null,
+            timestamp: Date.now()
+        };
+        if (payload.broadcast !== false) {
+            try { system.ws?.broadcast?.('soma_lifecycle', message); } catch {}
+            try { system.broadcast?.('soma_lifecycle', message); } catch {}
+        }
+        try {
+            if (payload.visible !== false && payload.message) {
+                system.ghostMessage?.(payload.message, payload.emotion || 'thinking');
+            }
+        } catch {}
+        return message;
+    };
+
+    const buildExpertisePromptContext = (loaded) => {
+        const manifest = loaded?.manifest;
+        if (!manifest) return '';
+        return `\n[ACTIVE EXPERTISE]\n` +
+            `- ID: ${manifest.id}\n` +
+            `- Name: ${manifest.name}\n` +
+            `- Description: ${manifest.description || 'No description'}\n` +
+            `- Capabilities: ${(manifest.capabilities || []).join(', ') || 'unspecified'}\n` +
+            `- Standards: ${(manifest.standards || []).join(', ') || 'none declared'}\n` +
+            `Use this expertise to structure the answer. If the question requires evidence or validation, say what evidence would be needed.\n` +
+            `[/ACTIVE EXPERTISE]\n`;
+    };
+
+    const buildActionCapabilityContext = () => {
+        const tools = system.toolRegistry?.getToolsManifest?.() || [];
+        const toolNames = new Set(tools.map(tool => tool.name));
+        const hasComputerControl = !!system.computerControl;
+        const hasAgenticExecutor = !!system.agenticExecutor;
+        const hasVision = !!(system.visionArbiter || system.visionProcessing || system.visionDaemon);
+
+        const actionTools = tools
+            .filter(tool => [
+                'computer_control',
+                'autonomous_computer_use',
+                'vision_scan',
+                'screen_capture',
+                'detect_objects',
+                'vision_analyze',
+                'browser',
+                'browse_objective',
+                'terminal_exec',
+                'shell_exec'
+            ].includes(tool.name))
+            .slice(0, 12);
+
+        if (!hasComputerControl && actionTools.length === 0 && !hasAgenticExecutor) return '';
+
+        return `\n[ACTION CAPABILITIES - LIVE]\n` +
+            `- ComputerControlArbiter: ${hasComputerControl ? 'available' : 'not loaded'}\n` +
+            `- Vision/desktop perception: ${hasVision ? 'available' : 'not loaded'}\n` +
+            `- Agentic executor: ${hasAgenticExecutor ? 'available' : 'not loaded'}\n` +
+            `- Tool registry action tools: ${actionTools.map(tool => tool.name).join(', ') || 'none'}\n` +
+            `- Browser automation uses Puppeteer through ComputerControlArbiter when available.\n` +
+            `- Desktop actions can include screen capture, mouse movement, clicking, typing, and browser navigation when the corresponding tools are live.\n` +
+            `- You must not claim you cannot control the computer if ComputerControlArbiter or computer_control tools are available. Instead explain the real scope and safety limits.\n` +
+            `- Ask for explicit confirmation before destructive, private, financial, credential, external-posting, or broad filesystem actions.\n` +
+            `- If the user asks you to actually perform a tool action, emit a single JSON tool request exactly like {"tool":"computer_control","args":{"actionType":"browser","params":{"action":"launch"}}} or {"tool":"computer_control","args":{"actionType":"click","params":{"x":100,"y":200}}}.\n` +
+            `- For browser work, prefer {"tool":"computer_control","args":{"actionType":"browser","params":{"action":"launch|goto|click|type|screenshot|extract_text","url":"https://...","selector":"...","text":"..."}}}.\n` +
+            `- For complex visual UI work, use {"tool":"autonomous_computer_use","args":{"taskDescription":"..."}}.\n` +
+            `[/ACTION CAPABILITIES]\n`;
+    };
+
+    const extractJsonToolCall = (text = '') => {
+        const toolIndex = text.indexOf('"tool"');
+        if (toolIndex === -1) return null;
+
+        const start = text.lastIndexOf('{', toolIndex);
+        if (start === -1) return null;
+
+        let depth = 0;
+        let inString = false;
+        let escaped = false;
+
+        for (let i = start; i < text.length; i++) {
+            const ch = text[i];
+            if (escaped) {
+                escaped = false;
+                continue;
+            }
+            if (ch === '\\') {
+                escaped = true;
+                continue;
+            }
+            if (ch === '"') {
+                inString = !inString;
+                continue;
+            }
+            if (inString) continue;
+
+            if (ch === '{') depth++;
+            if (ch === '}') {
+                depth--;
+                if (depth === 0) {
+                    try {
+                        const parsed = JSON.parse(text.slice(start, i + 1));
+                        return parsed?.tool ? parsed : null;
+                    } catch {
+                        return null;
+                    }
+                }
+            }
+        }
+
+        return null;
+    };
+
     const checkReady = (req, res, next) => {
         const publicPaths = [
             '/health', 
@@ -160,9 +281,14 @@ export async function loadRoutes(app, system) {
     });
 
     app.get('/api/memory/status', (req, res) => {
-
         const mnemonic = system.mnemonic || system.mnemonicArbiter;
-        const stats = mnemonic?.getMemoryStats ? mnemonic.getMemoryStats() : null;
+        if (!mnemonic) return res.json({ success: false, error: 'MnemonicArbiter not loaded' });
+        
+        const stats = mnemonic.getMemoryStats ? mnemonic.getMemoryStats() : { 
+            vectors: 0, 
+            tiers: { hot: 0, warm: 0, cold: 0 },
+            efficiency: 1.0
+        };
         res.json({
             success: true,
             ...normalizeMemoryStats(stats)
@@ -228,6 +354,57 @@ export async function loadRoutes(app, system) {
                 return res.status(503).json({ success: false, error: 'Reasoning engine offline' });
             }
 
+            const lifecycle = [];
+            let activeExpertise = null;
+            let expertiseContext = '';
+            if (!reqContext?.skipExpertiseRouting && system.expertiseRegistry) {
+                try {
+                    const matches = system.expertiseRegistry.match(query, { limit: 3 });
+                    const best = matches[0];
+                    if (best && best.score >= 15) {
+                        const expertiseLabel = /expertise$/i.test(best.name) ? best.name : `${best.name} expertise`;
+                        const broadcastLifecycle = reqContext?.suppressLifecycleBroadcast !== true;
+                        lifecycle.push(emitLifecycleMessage('expertise.loading', {
+                            message: `I am loading the ${expertiseLabel}. This might take a second.`,
+                            expertise: { id: best.id, name: best.name, score: best.score },
+                            emotion: 'focused',
+                            visible: reqContext?.showLifecycleGhost === true,
+                            broadcast: broadcastLifecycle
+                        }));
+                        const loaded = await system.expertiseRegistry.load(best.id);
+                        activeExpertise = {
+                            id: best.id,
+                            name: best.name,
+                            score: best.score,
+                            reasons: best.reasons || [],
+                            loaded: true,
+                            status: loaded.status || null
+                        };
+                        expertiseContext = buildExpertisePromptContext(loaded);
+                        lifecycle.push(emitLifecycleMessage('expertise.ready', {
+                            message: `The ${expertiseLabel} is ready. I am working through your question now.`,
+                            expertise: activeExpertise,
+                            emotion: 'focused',
+                            visible: reqContext?.showLifecycleGhost === true,
+                            broadcast: broadcastLifecycle
+                        }));
+                        system.lastExpertiseRoute = {
+                            ...activeExpertise,
+                            query,
+                            routedAt: new Date().toISOString()
+                        };
+                    }
+                } catch (error) {
+                    lifecycle.push(emitLifecycleMessage('expertise.error', {
+                        message: `I found a matching expertise, but it did not load cleanly: ${error.message}`,
+                        expertise: activeExpertise,
+                        emotion: 'concerned',
+                        visible: false
+                    }));
+                    console.warn('[ReasonRoute] Expertise routing failed:', error.message);
+                }
+            }
+
             // 1. Memory Recall
             let memoryContext = '';
             if (system.mnemonicArbiter && typeof system.mnemonicArbiter.recall === 'function') {
@@ -266,8 +443,10 @@ export async function loadRoutes(app, system) {
                 } catch (e) {}
             }
 
+            const actionCapabilityContext = buildActionCapabilityContext();
+
             // 4. Reasoning
-            const finalPrompt = `${personaContext}${awarenessContext}${memoryContext}\n${query}`;
+            const finalPrompt = `${personaContext}${awarenessContext}${actionCapabilityContext}${expertiseContext}${memoryContext}\n${query}`;
             console.log(`[ReasonRoute] ðŸ§  Calling Brain (${brain.name}) with prompt length: ${finalPrompt.length}`);
             
             const result = await brain.reason(finalPrompt, {
@@ -299,10 +478,9 @@ export async function loadRoutes(app, system) {
             }
 
             // â”€â”€ FINAL STAGE TOOL SAFETY NET â”€â”€
-            const toolCallMatch = responseText.match(/\{[\s\S]*?"tool"[\s\S]*?\}/);
-            if (toolCallMatch && !reqContext?.isAgenticTask) {
+            const toolCall = extractJsonToolCall(responseText);
+            if (toolCall && !reqContext?.isAgenticTask) {
                 try {
-                    const toolCall = JSON.parse(toolCallMatch[0]);
                     console.log(`[ReasonRoute] ðŸ› ï¸  Caught leaked tool call: ${toolCall.tool}`);
                     const toolResult = await system.toolRegistry.execute(toolCall.tool, toolCall.args);
                     
@@ -323,6 +501,8 @@ export async function loadRoutes(app, system) {
                 response: responseText,
                 brain: result?.brain || 'SOMA',
                 confidence: result?.confidence || 0.8,
+                expertise: activeExpertise,
+                statusMessages: lifecycle,
                 reasoningTree: result?.thoughtProcess || null
             });
         } catch (error) {
@@ -930,10 +1110,7 @@ export async function loadRoutes(app, system) {
     
     app.get('/api/beliefs/contradictions', (req, res) => res.json({ success: true, contradictions: system.beliefSystem?.contradictions ? Array.from(system.beliefSystem.contradictions.values()) : [] }));
     app.get('/api/analytics/summary', (req, res) => res.json({ success: true, summary: system.analytics?.getSummary?.() || {} }));
-    app.get('/api/memory/status', (req, res) => {
-        const rawStats = system.mnemonicArbiter?.getMemoryStats?.();
-        res.json(normalizeMemoryStats(rawStats));
-    });
+
 
     // 3b. APPROVAL SYSTEM ENDPOINTS
     app.get('/api/approval/pending', (req, res) => {
@@ -956,6 +1133,151 @@ export async function loadRoutes(app, system) {
     // 3c. AUTOPILOT MODE ENDPOINTS
     app.get('/api/autopilot/status', (req, res) => {
         res.json({ success: true, ...getAutopilotStatus(system) });
+    });
+
+    app.get('/api/runtime/map', (req, res) => {
+        const runtime = buildRuntimeMap(system);
+        runtime.lastExpertiseRoute = system.lastExpertiseRoute || null;
+        res.json({ success: true, runtime });
+    });
+
+    app.get('/api/spine/readiness', (req, res) => {
+        res.json({
+            success: true,
+            readiness: buildReadinessReport(system)
+        });
+    });
+    app.get('/api/autonomy/health', (req, res) => {
+        const heartbeat = system.autonomousHeartbeat;
+        const executor  = system.agenticExecutor;
+        const planner   = system.goalPlanner || system.goalPlannerArbiter;
+        const tools     = system.toolRegistry?.getToolsManifest?.() || [];
+        const activeIds = Array.from(planner?.activeGoals || []);
+        const activeGoals = activeIds.map(id => planner?.goals?.get(id)).filter(Boolean);
+
+        const checks = {
+            goalPlanner: !!planner,
+            heartbeat: !!heartbeat,
+            heartbeatRunning: !!heartbeat?.isRunning,
+            agenticExecutor: !!executor,
+            quadBrain: !!system.quadBrain,
+            toolRegistry: !!system.toolRegistry,
+            websocket: !!system.ws,
+            executorSeesBrain: executor ? executor.brain === system.quadBrain : false,
+            executorSeesPlanner: executor ? executor.goalPlanner === planner : false,
+            heartbeatSeesSystem: heartbeat ? heartbeat.system === system : false
+        };
+
+        const ok = checks.goalPlanner &&
+            checks.heartbeat &&
+            checks.heartbeatRunning &&
+            checks.agenticExecutor &&
+            checks.quadBrain &&
+            checks.toolRegistry &&
+            checks.executorSeesBrain &&
+            checks.executorSeesPlanner &&
+            checks.heartbeatSeesSystem;
+
+        res.status(ok ? 200 : 503).json({
+            success: true,
+            ok,
+            checks,
+            heartbeat: heartbeat ? {
+                running: heartbeat.isRunning,
+                stats: heartbeat.stats,
+                drive: heartbeat.getDriveStatus?.() || null,
+                schedules: heartbeat.listSchedules?.().length || 0
+            } : null,
+            goals: {
+                total: planner?.goals?.size || 0,
+                active: activeGoals.length,
+                pending: activeGoals.filter(g => g.status === 'pending').length,
+                proposed: activeGoals.filter(g => g.status === 'proposed').length
+            },
+            tools: { count: tools.length }
+        });
+    });
+
+    const getExpertiseRegistry = (res) => {
+        const expertiseRegistry = system.expertiseRegistry;
+        if (!expertiseRegistry) {
+            res.status(503).json({ success: false, error: 'ExpertiseRegistry offline' });
+            return null;
+        }
+        return expertiseRegistry;
+    };
+
+    app.get('/api/expertises/health', (req, res) => {
+        const expertiseRegistry = getExpertiseRegistry(res);
+        if (!expertiseRegistry) return;
+        res.json({ success: true, ...expertiseRegistry.status() });
+    });
+
+    app.get('/api/expertises', (req, res) => {
+        const expertiseRegistry = getExpertiseRegistry(res);
+        if (!expertiseRegistry) return;
+        res.json({ success: true, expertises: expertiseRegistry.list() });
+    });
+
+    app.post('/api/expertises/match', (req, res) => {
+        const expertiseRegistry = getExpertiseRegistry(res);
+        if (!expertiseRegistry) return;
+
+        const { query, limit } = req.body || {};
+        if (!query) return res.status(400).json({ success: false, error: 'query is required' });
+        res.json({
+            success: true,
+            matches: expertiseRegistry.match(query, { limit })
+        });
+    });
+
+    app.post('/api/expertises/load', async (req, res) => {
+        const expertiseRegistry = getExpertiseRegistry(res);
+        if (!expertiseRegistry) return;
+
+        const { id, level } = req.body || {};
+        if (!id) return res.status(400).json({ success: false, error: 'id is required' });
+
+        try {
+            const loaded = await expertiseRegistry.load(id, { level });
+            res.json(loaded);
+        } catch (error) {
+            const status = error.code === 'EXPERTISE_NOT_FOUND' ? 404 : 500;
+            res.status(status).json({ success: false, error: error.message });
+        }
+    });
+
+    app.post('/api/expertises/unload', async (req, res) => {
+        const expertiseRegistry = getExpertiseRegistry(res);
+        if (!expertiseRegistry) return;
+
+        const { id } = req.body || {};
+        if (!id) return res.status(400).json({ success: false, error: 'id is required' });
+
+        try {
+            res.json(await expertiseRegistry.unload(id));
+        } catch (error) {
+            res.status(500).json({ success: false, error: error.message });
+        }
+    });
+
+    app.post('/api/expertises/run', async (req, res) => {
+        const expertiseRegistry = getExpertiseRegistry(res);
+        if (!expertiseRegistry) return;
+
+        const { id, target, level } = req.body || {};
+        if (!id) return res.status(400).json({ success: false, error: 'id is required' });
+        if (!target) return res.status(400).json({ success: false, error: 'target is required' });
+
+        try {
+            res.json({
+                success: true,
+                execution: await expertiseRegistry.run(id, target, { level })
+            });
+        } catch (error) {
+            const status = error.code === 'EXPERTISE_NOT_FOUND' ? 404 : 500;
+            res.status(status).json({ success: false, error: error.message });
+        }
     });
     app.post('/api/autopilot/toggle', (req, res) => {
         const { enabled, component } = req.body || {};
@@ -1028,8 +1350,42 @@ export async function loadRoutes(app, system) {
 
     app.post('/api/reflections/distill', async (req, res) => {
         try {
-            const { chatLog, title } = req.body;
+            const { chatLog, title, mode, history, metadata } = req.body;
             if (!system.reflections) return res.status(503).json({ error: 'Reflections Arbiter not available' });
+            if (!chatLog) return res.status(400).json({ success: false, error: 'chatLog required' });
+
+            if (mode === 'muse') {
+                if (!system.reflections.saveMuseSessionArtifact) {
+                    return res.status(503).json({ success: false, error: 'Muse artifact saver unavailable' });
+                }
+
+                let museResult = null;
+                if (system.expertiseRegistry) {
+                    try {
+                        const prompt = `Crystallize this Muse brainstorming session into a durable creative artifact.\n\n${chatLog}`;
+                        const execution = await system.expertiseRegistry.run('creative/muse', {
+                            prompt,
+                            mode: 'full',
+                            history: history || [],
+                            domain: 'muse-session-crystallization',
+                            constraints: 'Create an artifact that can be saved to a knowledge vault and acted on later.'
+                        }, { level: 'hot' });
+                        museResult = execution.result;
+                    } catch (error) {
+                        console.warn('[Reflections] Muse crystallization package failed:', error.message);
+                    }
+                }
+
+                const result = await system.reflections.saveMuseSessionArtifact({
+                    title: title || 'Muse Concept',
+                    chatLog,
+                    museResponse: museResult?.response || '',
+                    structured: museResult?.structured || null,
+                    metadata: metadata || {}
+                });
+                return res.json(result);
+            }
+
             const result = await system.reflections.distillSession(chatLog, title);
             res.json(result);
         } catch (error) { res.status(500).json({ error: error.message }); }
@@ -1073,26 +1429,179 @@ export async function loadRoutes(app, system) {
         } catch (error) { res.status(500).json({ success: false, error: error.message }); }
     });
 
-    app.get('/api/reflections/search', async (req, res) => {
-        try {
-            const q = (req.query.q || '').toLowerCase().trim();
-            if (!q || q.length < 2) return res.json({ success: true, results: [] });
-            const vaultPath = path.resolve(process.cwd(), 'data', 'vault', 'reflections');
-            await fs.mkdir(vaultPath, { recursive: true });
-            const files = (await fs.readdir(vaultPath)).filter(f => f.endsWith('.md'));
-            const results = [];
-            for (const f of files) {
-                const raw = await fs.readFile(path.join(vaultPath, f), 'utf8').catch(() => '');
-                const stripped = raw.replace(/^---[\s\S]*?---\s*\n?/, '');
-                const idx = stripped.toLowerCase().indexOf(q);
-                if (idx !== -1 || f.toLowerCase().includes(q)) {
-                    const snippet = idx !== -1
-                        ? '...' + stripped.slice(Math.max(0, idx - 30), idx + 100).replace(/\n/g, ' ').trim() + '...'
-                        : '';
-                    results.push({ name: f, snippet });
+    // Initialize SemanticVault globally for reflections
+    const SemanticVault = require('../../core/SemanticVault.cjs');
+    const reflectionsVaultPath = path.resolve(process.cwd(), 'data', 'vault', 'reflections');
+    const semanticVault = new SemanticVault(reflectionsVaultPath);
+
+    const stripFrontmatter = (content = '') => content.replace(/^---[\s\S]*?---\s*\n?/, '').trim();
+
+    const noteIdFromName = (name = '') => name.replace(/\.md$/i, '');
+
+    const normalizeNoteKey = (value = '') => value
+        .toLowerCase()
+        .replace(/\.md$/i, '')
+        .replace(/[_-]+/g, ' ')
+        .replace(/[^\w\s]/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+    const parseFrontmatter = (content = '') => {
+        const match = content.match(/^---\s*\n([\s\S]*?)\n---\s*\n?/);
+        if (!match) return {};
+        const meta = {};
+        for (const line of match[1].split('\n')) {
+            const idx = line.indexOf(':');
+            if (idx === -1) continue;
+            const key = line.slice(0, idx).trim();
+            let value = line.slice(idx + 1).trim();
+            if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'"))) {
+                try { value = JSON.parse(value); } catch { value = value.slice(1, -1); }
+            }
+            meta[key] = value;
+        }
+        return meta;
+    };
+
+    const parseNote = (name, content) => {
+        const body = stripFrontmatter(content);
+        const frontmatter = parseFrontmatter(content);
+        const title = frontmatter.title || body.match(/^#\s+(.+)$/m)?.[1]?.trim() || noteIdFromName(name);
+        const outgoing = [...body.matchAll(/\[\[([^\]]+)\]\]/g)]
+            .map(([, target]) => target.split('|')[0].trim())
+            .filter(Boolean);
+        const tags = [...new Set([
+            ...[...body.matchAll(/(?:^|\s)#([a-zA-Z][\w/-]*)/g)].map(([, tag]) => tag),
+            ...String(frontmatter.tags || '')
+                .replace(/^\[|\]$/g, '')
+                .split(',')
+                .map(tag => tag.trim())
+                .filter(Boolean)
+        ])];
+        const headings = [...body.matchAll(/^(#{1,6})\s+(.+)$/gm)].map(([, depth, text]) => ({
+            depth: depth.length,
+            text: text.trim()
+        }));
+        return {
+            name,
+            id: noteIdFromName(name),
+            key: normalizeNoteKey(title),
+            title,
+            frontmatter,
+            outgoing,
+            tags,
+            headings,
+            body,
+            wordCount: body.split(/\s+/).filter(Boolean).length
+        };
+    };
+
+    const buildReflectionsIndex = async () => {
+        await fs.mkdir(reflectionsVaultPath, { recursive: true });
+        const files = (await fs.readdir(reflectionsVaultPath)).filter(file => file.endsWith('.md'));
+        const notes = [];
+
+        for (const file of files) {
+            const content = await fs.readFile(path.join(reflectionsVaultPath, file), 'utf8').catch(() => '');
+            notes.push(parseNote(file, content));
+        }
+
+        const byName = new Map(notes.map(note => [note.name, note]));
+        const byKey = new Map();
+        for (const note of notes) {
+            byKey.set(normalizeNoteKey(note.title), note);
+            byKey.set(normalizeNoteKey(note.id), note);
+            byKey.set(normalizeNoteKey(note.name), note);
+        }
+
+        const backlinks = new Map(notes.map(note => [note.name, []]));
+        const outgoingResolved = new Map(notes.map(note => [note.name, []]));
+
+        for (const note of notes) {
+            for (const target of note.outgoing) {
+                const targetNote = byKey.get(normalizeNoteKey(target));
+                const link = {
+                    label: target,
+                    resolved: !!targetNote,
+                    name: targetNote?.name || null,
+                    title: targetNote?.title || target
+                };
+                outgoingResolved.get(note.name).push(link);
+                if (targetNote) {
+                    backlinks.get(targetNote.name).push({
+                        name: note.name,
+                        title: note.title,
+                        label: target
+                    });
                 }
             }
+        }
+
+        const mentionSuggestions = new Map(notes.map(note => [note.name, []]));
+        for (const note of notes) {
+            const bodyKey = normalizeNoteKey(note.body);
+            const linkedKeys = new Set(note.outgoing.map(normalizeNoteKey));
+            for (const candidate of notes) {
+                if (candidate.name === note.name) continue;
+                const candidateKey = normalizeNoteKey(candidate.title);
+                if (!candidateKey || candidateKey.length < 4 || linkedKeys.has(candidateKey)) continue;
+                if (bodyKey.includes(candidateKey)) {
+                    mentionSuggestions.get(note.name).push({
+                        name: candidate.name,
+                        title: candidate.title,
+                        phrase: candidate.title
+                    });
+                }
+            }
+        }
+
+        return { notes, byName, backlinks, outgoingResolved, mentionSuggestions };
+    };
+
+    app.get('/api/reflections/search', async (req, res) => {
+        try {
+            const q = (req.query.q || '').trim();
+            if (!q || q.length < 2) return res.json({ success: true, results: [] });
+            
+            const results = await semanticVault.search(q, 5, 0.4);
             res.json({ success: true, results });
+        } catch (error) { res.status(500).json({ success: false, error: error.message }); }
+    });
+
+    app.get('/api/reflections/links/:name', async (req, res) => {
+        try {
+            const safeName = path.basename(req.params.name);
+            const index = await buildReflectionsIndex();
+            const note = index.byName.get(safeName);
+            if (!note) return res.status(404).json({ success: false, error: 'Note not found' });
+
+            res.json({
+                success: true,
+                note: {
+                    name: note.name,
+                    title: note.title,
+                    tags: note.tags,
+                    headings: note.headings,
+                    wordCount: note.wordCount,
+                    frontmatter: note.frontmatter
+                },
+                outgoing: index.outgoingResolved.get(note.name) || [],
+                backlinks: index.backlinks.get(note.name) || [],
+                mentions: index.mentionSuggestions.get(note.name) || []
+            });
+        } catch (error) { res.status(500).json({ success: false, error: error.message }); }
+    });
+
+    app.get('/api/reflections/related/:name', async (req, res) => {
+        try {
+            const safeName = path.basename(req.params.name);
+            const filePath = path.resolve(reflectionsVaultPath, safeName);
+            if (!filePath.startsWith(reflectionsVaultPath)) return res.status(403).json({ error: 'Forbidden' });
+            const content = await fs.readFile(filePath, 'utf8');
+            const query = stripFrontmatter(content).slice(0, 1500);
+            if (!query) return res.json({ success: true, results: [] });
+            const results = (await semanticVault.search(query, 8, 0.25)).filter(result => result.name !== safeName);
+            res.json({ success: true, results: results.slice(0, 5) });
         } catch (error) { res.status(500).json({ success: false, error: error.message }); }
     });
 
@@ -1140,15 +1649,23 @@ Return ONLY valid JSON (no markdown, no explanation):
         try {
             if (!req.file) return res.status(400).json({ error: 'No file provided' });
             const extractor = new ContentExtractor();
-            const content = await extractor.extract(req.file.path);
-            await fs.unlink(req.file.path).catch(() => {});
-            if (!content) return res.status(422).json({ error: 'Could not extract text from file' });
             const originalName = req.file.originalname;
+            const content = await extractor.extract(req.file.path, {
+                originalName,
+                mimeType: req.file.mimetype
+            });
+            await fs.unlink(req.file.path).catch(() => {});
+            if (!content) {
+                return res.status(422).json({
+                    success: false,
+                    error: 'Could not extract readable text from this file. Reflections supports PDF, DOCX, TXT, MD, JSON, CSV, JS, TS, and PY.'
+                });
+            }
             const ext = path.extname(originalName).toLowerCase();
             const noteTitle = path.basename(originalName, ext).replace(/[^a-zA-Z0-9_\-. ]/g, '_');
             const tags = [ext.slice(1) || 'file', 'upload'];
             const date = new Date().toISOString();
-            const mdContent = `---\ntitle: ${originalName}\nsource: upload\ningested: ${date}\ntags: [${tags.join(', ')}]\n---\n\n# ${originalName}\n\n${content}\n\n---\n*Ingested via Project Reflections*\n`;
+            const mdContent = `---\ntitle: ${JSON.stringify(originalName)}\nsource: upload\ningested: ${date}\nstatus: raw\nmimeType: ${JSON.stringify(req.file.mimetype || 'unknown')}\nextractor: ContentExtractor\nextractionStatus: clean\nextractedChars: ${content.length}\ntags: [${tags.join(', ')}]\n---\n\n# ${originalName}\n\n## Ingestion Receipt\n\n- Source file: ${originalName}\n- MIME type: ${req.file.mimetype || 'unknown'}\n- Extractor: ContentExtractor\n- Extracted characters: ${content.length}\n- Status: raw\n\n## Extracted Text\n\n${content}\n\n---\n*Ingested via Project Reflections*\n`;
             const vaultPath = path.resolve(process.cwd(), 'data', 'vault', 'reflections');
             await fs.mkdir(vaultPath, { recursive: true });
             const filename = `${noteTitle}_${Date.now()}.md`;
@@ -1458,7 +1975,50 @@ Return ONLY valid JSON (no markdown, no explanation):
         catch (e) { console.error(`[Routes] Failed to mount ${path}:`, e.message); }
     };
 
+    app.get('/api/soma/medical-discovery/stats', (req, res) => {
+        const discovery = system.medicalDiscovery;
+        if (!discovery) return res.json({ success: false, error: 'DiscoveryGradeMedicalCortex not loaded' });
+        res.json({ 
+            success: true, 
+            active: true,
+            capabilities: discovery.capabilities,
+            engines: discovery.engines
+        });
+    });
+
+    app.post('/api/soma/medical-discovery/deduce', async (req, res) => {
+        const discovery = system.medicalDiscovery;
+        if (!discovery) return res.status(503).json({ success: false, error: 'DiscoveryGradeMedicalCortex not loaded' });
+        
+        try {
+            // Trigger in background, don't wait for completion of the full mission
+            discovery.runAutonomousDeduction().catch(e => console.error('[Deduction] Failed:', e.message));
+            res.json({ success: true, message: 'Autonomous deduction cycle initiated' });
+        } catch (e) {
+            res.status(500).json({ success: false, error: e.message });
+        }
+    });
+
     safeMount('/api/soma', checkReady, somaRoutes(system));
+    
+    // Self-Modification & Nemesis Dashboard Wiring
+    app.get('/api/soma/selfmod/status', (req, res) => {
+        const sm = system.selfModificationArbiter || system.selfMod;
+        if (!sm) return res.json({ success: false, error: 'SelfModificationArbiter not loaded' });
+        res.json({ success: true, ...sm.getStatus() });
+    });
+
+    app.get('/api/soma/nemesis/status', (req, res) => {
+        const sm = system.selfModificationArbiter || system.selfMod;
+        const nemesis = sm?.nemesis;
+        if (!nemesis) return res.json({ success: false, error: 'NEMESIS system not loaded' });
+        res.json({ 
+            success: true, 
+            ready: true,
+            maxSteps: nemesis.config?.maxSteps || 5,
+            tools: nemesis.config?.tools || []
+        });
+    });
     safeMount('/api/knowledge', checkReady, knowledgeRoutes(system));
     safeMount('/api/research', checkReady, researchRoutes(system));
     safeMount('/api/kevin', kevinRoutes);
@@ -1588,7 +2148,50 @@ Return ONLY valid JSON (no markdown, no explanation):
         const insights = raw.recentInsights || [];
         res.json({ success: true, recentInsights: insights, narrative: system.dreamArbiter?.getNarrative?.() || null });
     });
-    app.get('/api/muse/sparks', (req, res) => res.json({ success: true, sparks: system.museArbiter?.getSparks?.() || [] }));
+    app.get('/api/muse/sparks', (req, res) => {
+        const muse = system.museEngine || system.museArbiter || system.muse;
+        res.json({ success: true, sparks: muse?.getSparks?.() || [] });
+    });
+
+    app.get('/api/muse/status', (req, res) => {
+        const muse = system.museEngine || system.museArbiter || system.muse;
+        const persona = system.expertiseRegistry?.get?.('creative/muse') || null;
+        res.json({
+            success: true,
+            museEngine: !!muse,
+            persona,
+            stats: muse?.getStats?.() || null
+        });
+    });
+
+    app.post('/api/muse/persona', async (req, res) => {
+        try {
+            const registry = system.expertiseRegistry;
+            if (!registry) return res.status(503).json({ success: false, error: 'ExpertiseRegistry offline' });
+
+            const { prompt, query, text, mode, history, domain, constraints } = req.body || {};
+            const effectivePrompt = prompt || query || text;
+            if (!effectivePrompt) return res.status(400).json({ success: false, error: 'prompt is required' });
+
+            const execution = await registry.run('creative/muse', {
+                prompt: effectivePrompt,
+                mode: mode || 'full',
+                history,
+                domain,
+                constraints
+            }, { level: 'hot' });
+
+            res.json({
+                success: true,
+                expertise: execution.manifest || null,
+                status: execution.status || null,
+                ...execution.result
+            });
+        } catch (error) {
+            const status = error.code === 'EXPERTISE_NOT_FOUND' ? 404 : 500;
+            res.status(status).json({ success: false, error: error.message });
+        }
+    });
     app.get('/api/theory-of-mind/insights', (req, res) => {
         const userId = req.query.userId || 'default_user';
         const tom = system.theoryOfMind;
@@ -1907,6 +2510,11 @@ Return ONLY valid JSON (no markdown, no explanation):
             res.json({ success: true, messages: [] });
         }
     });
+
+    safeMount('/api/axis', createAxisRoutes(system));
+    safeMount('/api/social', createSocialRoutes(system));
+    safeMount('/api/maintenance', createMaintenanceRoutes(system));
+    safeMount('/api/workspace',  createWorkspaceRoutes(system));
 
     const kevin = system.kevinArbiter || system.kevinManager;
     if (kevin) app.locals.kevinArbiter = kevin;

@@ -54,6 +54,11 @@ export class LimbicArbiter extends BaseArbiterV4 {
             this.messageBroker.subscribe('security_alert', this.handleThreat.bind(this));
             this.messageBroker.subscribe('user_message', this.handleSocial.bind(this));
             this.messageBroker.subscribe('system_error', this.handleError.bind(this));
+            
+            // 🔱 RESONANCE FEEDBACK: Sync neurochemistry with the cognitive pulse
+            this.messageBroker.subscribe('system.resonance.pulse', (pulse) => {
+                this.handleResonance(pulse.payload || pulse);
+            });
         }
 
         // Start metabolism (Decay back to baseline)

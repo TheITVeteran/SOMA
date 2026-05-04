@@ -53,6 +53,7 @@ export class SocialAutonomyArbiter extends BaseArbiterV4 {
         this.engagedPosts = new Set(); // Posts already interacted with
         this.lastBrowse = 0;
         this.lastPost = 0;
+        this.socialUrge = 0; // Accumulates based on resonance pulse
 
         this.isActive = false;
         this.browseTimer = null;
@@ -65,8 +66,34 @@ export class SocialAutonomyArbiter extends BaseArbiterV4 {
             return false;
         }
 
+        // 🔱 RESONANCE SYNC: Align social drive with metabolic rhythm
+        if (this.messageBroker) {
+            this.messageBroker.subscribe('system.resonance.pulse', (pulse) => {
+                this.handleResonance(pulse.payload || pulse);
+            });
+        }
+
         this.log('success', '🌐 Social Autonomy initialized - SOMA is free to explore!');
         return true;
+    }
+
+    /**
+     * Handle the 400ms resonance pulse.
+     * Accumulates social urge based on cognitive density.
+     */
+    handleResonance(pulse) {
+        if (!this.isActive) return;
+
+        // High resonance score (activity) increases urge to share
+        const score = pulse.score || 0.5;
+        this.socialUrge += (score * 0.01);
+
+        // If urge is high, potentially trigger an early spontaneous post
+        if (this.socialUrge > 100) {
+            this.log('info', `🔥 High Social Urge (${this.socialUrge.toFixed(1)}) - Triggering impulse browse`);
+            this.socialUrge = 0;
+            this.browseFeed();
+        }
     }
 
     /**

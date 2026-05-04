@@ -1,0 +1,719 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Finance Tab</title>
+    <style>
+        /* Add your CSS styles here */
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+            background: linear-gradient(135deg, #000 0%, #1a0033 50%, #000 100%);
+            color: #e0e0e0;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+        }
+        
+        header {
+            background: linear-gradient(135deg, rgba(0, 212, 255, 0.1), rgba(123, 44, 191, 0.1));
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(0, 212, 255, 0.3);
+            border-radius: 20px;
+            padding: 30px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        
+        .demo-badge {
+            display: inline-block;
+            background: rgba(255, 0, 110, 0.2);
+            border: 1px solid #ff006e;
+            color: #ff006e;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.7em;
+            font-weight: 700;
+            letter-spacing: 1px;
+            margin-bottom: 10px;
+        }
+        
+        .brand h1 {
+            font-size: 3em;
+            background: linear-gradient(45deg, #00d4ff, #7b2cbf, #ff006e);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            font-weight: 900;
+            margin-bottom: 10px;
+        }
+        
+        .brand .subtitle {
+            color: #888;
+            font-size: 0.9em;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin-bottom: 20px;
+        }
+        
+        .info-btn {
+            background: rgba(0, 212, 255, 0.2);
+            border: 2px solid #00d4ff;
+            color: #00d4ff;
+            padding: 12px 24px;
+            border-radius: 12px;
+            cursor: pointer;
+            font-size: 1em;
+            font-weight: 600;
+            transition: all 0.3s;
+        }
+        
+        .info-btn:hover {
+            background: rgba(0, 212, 255, 0.3);
+            transform: translateY(-3px);
+        }
+        
+        .main-grid {
+            display: grid;
+            grid-template-columns: 300px 1fr;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        
+        @media (max-width: 1024px) {
+            .main-grid { grid-template-columns: 1fr; }
+        }
+        
+        .arbiters-panel {
+            background: rgba(26, 26, 26, 0.6);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(0, 212, 255, 0.3);
+            border-radius: 20px;
+            padding: 20px;
+            max-height: 600px;
+            overflow-y: auto;
+        }
+        
+        .panel-title {
+            font-size: 1.2em;
+            font-weight: 700;
+            color: #00d4ff;
+            margin-bottom: 5px;
+            text-align: center;
+        }
+        
+        .panel-subtitle {
+            font-size: 0.85em;
+            color: #888;
+            text-align: center;
+            margin-bottom: 15px;
+        }
+        
+        .arbiter-item {
+            background: rgba(0, 0, 0, 0.4);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            padding: 15px;
+            margin-bottom: 10px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .arbiter-item:hover {
+            border-color: #00d4ff;
+            transform: translateX(5px);
+        }
+        
+        .arbiter-item.deployed {
+            border-color: #00ff88;
+            background: rgba(0, 255, 136, 0.1);
+        }
+        
+        .arbiter-name {
+            font-weight: 700;
+            color: #00d4ff;
+            margin-bottom: 5px;
+        }
+        
+        .arbiter-desc {
+            font-size: 0.85em;
+            color: #888;
+            line-height: 1.4;
+        }
+        
+        .arbiter-status {
+            margin-top: 8px;
+            font-size: 0.75em;
+            color: #00ff88;
+            font-weight: 600;
+        }
+        
+        .demos-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .demo-card {
+            background: linear-gradient(135deg, rgba(0, 212, 255, 0.1), rgba(123, 44, 191, 0.1));
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(0, 212, 255, 0.3);
+            border-radius: 20px;
+            padding: 25px;
+            cursor: pointer;
+            transition: all 0.3s;
+            position: relative;
+        }
+        
+        .demo-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 40px rgba(0, 212, 255, 0.4);
+            border-color: #00d4ff;
+        }
+        
+        .demo-card.expanded {
+            grid-column: 1 / -1;
+            background: linear-gradient(135deg, rgba(0, 212, 255, 0.15), rgba(123, 44, 191, 0.15));
+        }
+        
+        .demo-card h3 {
+            color: #00d4ff;
+            font-size: 1.3em;
+            margin-bottom: 10px;
+        }
+        
+        .demo-card p {
+            color: #aaa;
+            line-height: 1.6;
+            font-size: 0.9em;
+        }
+        
+        .demo-only-badge {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(255, 165, 0, 0.2);
+            border: 1px solid rgba(255, 165, 0, 0.5);
+            color: #ffa500;
+            padding: 3px 8px;
+            border-radius: 8px;
+            font-size: 0.7em;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+        }
+        
+        .expandable-content {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.5s ease;
+        }
+        
+        .expandable-content.active {
+            max-height: 2000px;
+            margin-top: 20px;
+        }
+        
+        .module-input-section {
+            background: rgba(0, 0, 0, 0.4);
+            border: 1px solid rgba(0, 212, 255, 0.2);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+            position: relative;
+        }
+        
+        .api-settings-btn {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(123, 44, 191, 0.2);
+            border: 1px solid rgba(123, 44, 191, 0.4);
+            color: #7b2cbf;
+            padding: 4px 8px;
+            border-radius: 6px;
+            font-size: 0.7em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .api-settings-btn:hover {
+            background: rgba(123, 44, 191, 0.3);
+            transform: scale(1.05);
+        }
+        
+        .api-config-modal {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(10, 10, 10, 0.95);
+            border: 2px solid rgba(123, 44, 191, 0.5);
+            border-radius: 15px;
+            padding: 30px;
+            z-index: 10000;
+            min-width: 400px;
+            max-width: 90%;
+        }
+        
+        .api-config-modal.active {
+            display: block;
+        }
+        
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            z-index: 9999;
+        }
+        
+        .modal-overlay.active {
+            display: block;
+        }
+        
+        .api-config-title {
+            color: #7b2cbf;
+            font-size: 1.3em;
+            font-weight: 700;
+            margin-bottom: 20px;
+        }
+        
+        .input-group {
+            margin-bottom: 15px;
+        }
+        
+        .input-group label {
+            display: block;
+            color: #00d4ff;
+            font-size: 0.9em;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+        
+        .input-group input, .input-group select {
+            width: 100%;
+            background: rgba(0, 0, 0, 0.6);
+            border: 1px solid rgba(0, 212, 255, 0.3);
+            border-radius: 8px;
+            padding: 12px;
+            color: #fff;
+            font-size: 0.95em;
+        }
+        
+        .input-group input:focus, .input-group select:focus {
+            outline: none;
+            border-color: #00d4ff;
+        }
+        
+        .btn-primary {
+            background: rgba(0, 212, 255, 0.2);
+            border: 2px solid #00d4ff;
+            color: #00d4ff;
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.95em;
+            font-weight: 600;
+            transition: all 0.3s;
+        }
+        
+        .btn-primary:hover {
+            background: rgba(0, 212, 255, 0.3);
+            transform: translateY(-2px);
+        }
+        
+        .btn-secondary {
+            background: rgba(123, 44, 191, 0.2);
+            border: 2px solid #7b2cbf;
+            color: #7b2cbf;
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.95em;
+            font-weight: 600;
+            transition: all 0.3s;
+            margin-left: 10px;
+        }
+        
+        .btn-secondary:hover {
+            background: rgba(123, 44, 191, 0.3);
+        }
+        
+        .clone-visualization {
+            background: rgba(0, 0, 0, 0.4);
+            border: 1px solid rgba(0, 212, 255, 0.2);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .clone-title {
+            color: #00d4ff;
+            font-size: 1em;
+            font-weight: 600;
+            margin-bottom: 15px;
+        }
+        
+        .clone-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+            gap: 10px;
+        }
+        
+        .clone-node {
+            background: rgba(0, 212, 255, 0.1);
+            border: 1px solid rgba(0, 212, 255, 0.3);
+            border-radius: 8px;
+            padding: 10px;
+            text-align: center;
+            font-size: 0.8em;
+            animation: fadeIn 0.5s ease;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: scale(0.8); }
+            to { opacity: 1; transform: scale(1); }
+        }
+        
+        .clone-node.active {
+            border-color: #00ff88;
+            background: rgba(0, 255, 136, 0.1);
+            box-shadow: 0 0 15px rgba(0, 255, 136, 0.3);
+        }
+        
+        .analytics-dashboard {
+            background: rgba(0, 0, 0, 0.4);
+            border: 1px solid rgba(0, 212, 255, 0.2);
+            border-radius: 12px;
+            padding: 20px;
+        }
+        
+        .analytics-header {
+            color: #00d4ff;
+            font-size: 1em;
+            font-weight: 600;
+            margin-bottom: 15px;
+        }
+        
+        .stat-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .stat-card {
+            background: rgba(0, 0, 0, 0.6);
+            border: 1px solid rgba(0, 212, 255, 0.2);
+            border-radius: 8px;
+            padding: 15px;
+        }
+        
+        .stat-label {
+            color: #888;
+            font-size: 0.85em;
+            margin-bottom: 5px;
+        }
+        
+        .stat-value {
+            color: #00ff88;
+            font-size: 1.5em;
+            font-weight: 700;
+        }
+        
+        .recommendation-box {
+            background: rgba(0, 255, 136, 0.1);
+            border: 1px solid rgba(0, 255, 136, 0.3);
+            border-radius: 8px;
+            padding: 15px;
+            margin-top: 15px;
+        }
+        
+        .recommendation-box.warning {
+            background: rgba(255, 189, 46, 0.1);
+            border-color: rgba(255, 189, 46, 0.3);
+        }
+        
+        .recommendation-box.danger {
+            background: rgba(255, 95, 86, 0.1);
+            border-color: rgba(255, 95, 86, 0.3);
+        }
+        
+        /* Add more CSS styles here */
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Finance Tab</h1>
+        </header>
+
+        <!-- Mercury (Stock Intelligence) -->
+        <div class="demo-card" id="mercuryCard" onclick="toggleModule('mercury')">
+            <h3>Stock Intelligence</h3>
+            <p>Real-time market analysis with AI signals</p>
+            <div class="expandable-content" id="mercuryContent">
+                <div class="module-input-section">
+                    <button class="api-settings-btn" onclick="openApiConfig('mercury', event)">API</button>
+                    <div class="input-group">
+                        <label>Stock Symbol</label>
+                        <input type="text" id="mercurySymbol" placeholder="AAPL, TSLA, NVDA..." value="AAPL" onclick="event.stopPropagation()">
+                    </div>
+                    <div class="input-group">
+                        <label>API Source</label>
+                        <select id="mercurySource" onclick="event.stopPropagation()" onchange="event.stopPropagation()">
+                            <option value="yahoo">Yahoo Finance (Free)</option>
+                            <option value="alphavantage">Alpha Vantage (API Key)</option>
+                            <option value="finnhub">Finnhub (API Key)</option>
+                        </select>
+                    </div>
+                    <button class="btn-primary" onclick="startMercury(event)">Analyze Market</button>
+                </div>
+
+                <div class="clone-visualization" id="mercuryClones" style="display:none;">
+                    <div class="clone-title">Polymorphic Clones Active</div>
+                    <div class="clone-grid" id="mercuryCloneGrid"></div>
+                </div>
+
+                <div class="analytics-dashboard" id="mercuryDashboard" style="display:none;">
+                    <div class="analytics-header">Market Intelligence</div>
+                    <div class="stat-grid" id="mercuryStats"></div>
+                    <div id="mercuryRecommendation"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- API Configuration Modal -->
+    <div class="modal-overlay" id="apiModalOverlay" onclick="closeApiConfig()"></div>
+    <div class="api-config-modal" id="apiConfigModal">
+        <div class="api-config-title" id="apiConfigTitle">Configure API Keys</div>
+        <div id="apiConfigContent"></div>
+        <div style="margin-top: 20px;">
+            <button class="btn-primary" onclick="saveApiConfig()">Save Configuration</button>
+            <button class="btn-secondary" onclick="closeApiConfig()">Cancel</button>
+        </div>
+    </div>
+
+    <script>
+        // GLOBAL STATE
+        let expandedModules = {};
+        let currentApiModule = null;
+
+        // API Configuration Storage
+        let apiConfig = {
+            mercury: {
+                alphavantage: localStorage.getItem('mercury_alphavantage') || '',
+                finnhub: localStorage.getItem('mercury_finnhub') || ''
+            }
+        };
+
+        function openApiConfig(module, event) {
+            event.stopPropagation();
+            currentApiModule = module;
+
+            const modal = document.getElementById('apiConfigModal');
+            const overlay = document.getElementById('apiModalOverlay');
+            const title = document.getElementById('apiConfigTitle');
+            const content = document.getElementById('apiConfigContent');
+
+            title.textContent = module === 'mercury' ? 'Stock API Configuration' : 'Fantasy Football API Configuration';
+
+            if (module === 'mercury') {
+                content.innerHTML = `
+                    <div class="input-group">
+                        <label>Alpha Vantage API Key</label>
+                        <input type="text" id="apiAlphaVantage" placeholder="your-api-key-here" value="${apiConfig.mercury.alphavantage}">
+                    </div>
+                    <div class="input-group">
+                        <label>Finnhub API Key</label>
+                        <input type="text" id="apiFinnhub" placeholder="your-api-key-here" value="${apiConfig.mercury.finnhub}">
+                    </div>
+                    <p style="color: #888; font-size: 0.85em; margin-top: 10px;">
+                        Get free API keys at:<br>
+                        • Alpha Vantage: alphavantage.co<br>
+                        • Finnhub: finnhub.io
+                    </p>
+                `;
+            } else {
+                content.innerHTML = `
+                    <div class="input-group">
+                        <label>Sleeper API Token (Optional)</label>
+                        <input type="text" id="apiSleeper" placeholder="token-here" value="${apiConfig.atlas.sleeper}">
+                    </div>
+                    <div class="input-group">
+                        <label>ESPN API Key (Optional)</label>
+                        <input type="text" id="apiEspn" placeholder="your-api-key-here" value="${apiConfig.atlas.espn}">
+                    </div>
+                    <p style="color: #888; font-size: 0.85em; margin-top: 10px;">
+                        Sleeper API is public and doesn't require authentication.<br>
+                        ESPN requires private league cookies.
+                    </p>
+                `;
+            }
+
+            modal.classList.add('active');
+            overlay.classList.add('active');
+        }
+
+        function closeApiConfig() {
+            document.getElementById('apiConfigModal').classList.remove('active');
+            document.getElementById('apiModalOverlay').classList.remove('active');
+        }
+
+        function saveApiConfig() {
+            if (currentApiModule === 'mercury') {
+                apiConfig.mercury.alphavantage = document.getElementById('apiAlphaVantage').value;
+                apiConfig.mercury.finnhub = document.getElementById('apiFinnhub').value;
+                localStorage.setItem('mercury_alphavantage', apiConfig.mercury.alphavantage);
+                localStorage.setItem('mercury_finnhub', apiConfig.mercury.finnhub);
+                alert('Mercury API keys saved successfully');
+            } else {
+                apiConfig.atlas.sleeper = document.getElementById('apiSleeper').value;
+                apiConfig.atlas.espn = document.getElementById('apiEspn').value;
+                localStorage.setItem('atlas_sleeper', apiConfig.atlas.sleeper);
+                localStorage.setItem('atlas_espn', apiConfig.atlas.espn);
+                alert('Atlas API keys saved successfully');
+            }
+
+            closeApiConfig();
+        }
+
+        function toggleModule(moduleName) {
+            event.stopPropagation();
+
+            const card = document.getElementById(`${moduleName}Card`);
+            const content = document.getElementById(`${moduleName}Content`);
+
+            if (expandedModules[moduleName]) {
+                content.classList.remove('active');
+                card.classList.remove('expanded');
+                expandedModules[moduleName] = false;
+            } else {
+                // Close other modules
+                Object.keys(expandedModules).forEach(key => {
+                    if (key !== moduleName && expandedModules[key]) {
+                        document.getElementById(`${key}Content`).classList.remove('active');
+                        document.getElementById(`${key}Card`).classList.remove('expanded');
+                        expandedModules[key] = false;
+                    }
+                });
+
+                content.classList.add('active');
+                card.classList.add('expanded');
+                expandedModules[moduleName] = true;
+            }
+        }
+
+        async function startMercury(event) {
+            event.stopPropagation();
+
+            const symbol = document.getElementById('mercurySymbol').value.toUpperCase();
+            const source = document.getElementById('mercurySource').value;
+
+            if (!symbol) {
+                alert('Mercury: Please enter a stock symbol');
+                return;
+            }
+
+            alert('\n=== Mercury Arbiter Initializing ===');
+            alert(`Target: ${symbol} | Source: ${source}`);
+            await wait(500);
+
+            // Show clones spawning
+            document.getElementById('mercuryClones').style.display = 'block';
+            await spawnMercuryClones(symbol);
+
+            // Fetch and analyze data
+            await analyzeMercuryData(symbol);
+        }
+
+        async function spawnMercuryClones(symbol) {
+            const cloneGrid = document.getElementById('mercuryCloneGrid');
+            cloneGrid.innerHTML = '';
+
+            const cloneTypes = [
+                `Mercury.${symbol}`,
+                'Price Monitor',
+                'Volume Analyzer',
+                'Sentiment Scanner',
+                'Technical Signals'
+            ];
+
+            for (let i = 0; i < cloneTypes.length; i++) {
+                await wait(300);
+                const clone = document.createElement('div');
+                clone.className = 'clone-node active';
+                clone.textContent = cloneTypes[i];
+                cloneGrid.appendChild(clone);
+                alert(`Clone spawned: ${cloneTypes[i]}`);
+            }
+        }
+
+        async function analyzeMercuryData(symbol) {
+            alert('Aggregating market data...');
+            await wait(1200);
+
+            // Simulated market data (in production, fetch from APIs)
+            const mockData = {
+                price: (Math.random() * 200 + 50).toFixed(2),
+                change: (Math.random() * 10 - 5).toFixed(2),
+                volume: (Math.random() * 10000000).toFixed(0),
+                rsi: (Math.random() * 100).toFixed(1),
+                signal: ['BUY', 'HOLD', 'SELL'][Math.floor(Math.random() * 3)],
+                confidence: (Math.random() * 30 + 70).toFixed(1)
+            };
+
+            // Display dashboard
+            document.getElementById('mercuryDashboard').style.display = 'block';
+            const statsGrid = document.getElementById('mercuryStats');
+            statsGrid.innerHTML = `
+                <div class="stat-card">
+                    <div class="stat-label">Current Price</div>
+                    <div class="stat-value">$${mockData.price}</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Change (24h)</div>
+                    <div class="stat-value" style="color: ${mockData.change > 0 ? '#00ff88' : '#ff5f56'}">${mockData.change > 0 ? '+' : ''}${mockData.change}%</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Volume</div>
+                    <div class="stat-value">${(mockData.volume / 1000000).toFixed(1)}M</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">RSI (14)</div>
+                    <div class="stat-value">${mockData.rsi}</div>
+                </div>
+            `;
+
+            // Recommendation
+            const recBox = document.getElementById('mercuryRecommendation');
+            const signalClass = mockData.signal === 'BUY' ? '' : mockData.signal === 'HOLD' ? 'warning' : 'danger';
+            recBox.className = `recommendation-box ${signalClass}`;
+            recBox.innerHTML = `
+                <strong>Signal: ${mockData.signal}</strong><br>
+                Confidence: ${mockData.confidence}%<br><br>
+                <small>Analysis: Technical indicators suggest ${mockData.signal.toLowerCase()} position. RSI at ${mockData.rsi}, volume trending ${mockData.change > 0 ? 'up' : 'down'}. Risk assessment: ${mockData.signal === 'BUY' ? 'Moderate' : mockData.signal === 'HOLD' ? 'Low' : 'High'}.</small>
+            `;
+
+            alert(`\n✓ Analysis complete: ${mockData.signal} signal`);
+            alert(`Confidence: ${mockData.confidence}% | RSI: ${mockData.rsi}`);
+        }
+
+        function wait(ms) {
+            return new Promise(resolve => setTimeout(resolve, ms));
+        }
+    </script>
+</body>
+</html>

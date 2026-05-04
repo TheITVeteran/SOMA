@@ -115,7 +115,10 @@ function killPortOwner(port) {
 
             let cmdline = '';
             try {
-                cmdline = execSync(`wmic process where ProcessId=${pid} get CommandLine /value`, { encoding: 'utf8', timeout: 2000 });
+                cmdline = execSync(
+                    `powershell -NoProfile -Command "(Get-CimInstance Win32_Process -Filter 'ProcessId=${pid}' -ErrorAction SilentlyContinue).CommandLine"`,
+                    { encoding: 'utf8', timeout: 2000 }
+                );
             } catch (e) { /* wmic may fail on zombie; proceed */ }
 
             const lower = cmdline.toLowerCase();
@@ -229,6 +232,15 @@ async function main() {
         const bootstrap = new SomaBootstrap();
         await bootstrap.initialize(app, server, wss);
         global.__SOMA_SYSTEM = bootstrap.system;
+
+        // React SPA fallback: direct browser navigation to UI paths should
+        // return the Command Bridge instead of Express' 404 handler.
+        const frontendIndex = join(__dirname, 'frontend', 'dist', 'index.html');
+        app.get(/^\/(?!api\/|health$|socket\.io|ws).*/, (req, res, next) => {
+            if (req.method !== 'GET') return next();
+            if (!fs.existsSync(frontendIndex)) return next();
+            res.sendFile(frontendIndex);
+        });
 
         // 🧠 MEMORY MANAGEMENT: Periodic GC if available
         if (global.gc) {

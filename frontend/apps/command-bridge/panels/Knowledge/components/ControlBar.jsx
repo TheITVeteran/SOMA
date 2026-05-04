@@ -8,7 +8,12 @@ import {
     Zap,
     Waves,
     Sparkles,
+    Brain,
 } from 'lucide-react';
+
+const VIEW_CYCLE = ['nodes', 'personas', 'mind'];
+const VIEW_LABELS = { nodes: 'Nodes', personas: 'Personas', mind: 'Mind' };
+const nextView = (current) => VIEW_CYCLE[(VIEW_CYCLE.indexOf(current) + 1) % VIEW_CYCLE.length];
 
 export const ControlBar = ({ onAction, systemStatus, fragmentCount = 0, personaCount = 0, viewMode = 'nodes', onToggleView }) => {
     const actions = [
@@ -30,17 +35,21 @@ export const ControlBar = ({ onAction, systemStatus, fragmentCount = 0, personaC
                     <span className="text-[10px] text-zinc-500 uppercase tracking-widest display-font font-bold">Neural Mesh</span>
                     <div className="flex items-center space-x-2">
                         <span className="text-sm font-bold text-zinc-200 tracking-wide font-mono">
-                            {(viewMode === 'personas' ? personaCount : fragmentCount).toLocaleString()}
-                            <span className="text-zinc-600 text-xs"> {viewMode === 'personas' ? 'PERSONAS' : 'NODES'}</span>
+                            {viewMode === 'mind' ? '—' : (viewMode === 'personas' ? personaCount : fragmentCount).toLocaleString()}
+                            <span className="text-zinc-600 text-xs"> {VIEW_LABELS[viewMode] || 'NODES'}</span>
                         </span>
                     </div>
                 </div>
                 <button
-                    onClick={() => onToggleView?.(viewMode === 'personas' ? 'nodes' : 'personas')}
-                    className="ml-2 px-3 py-1.5 text-[9px] uppercase tracking-widest border border-white/10 rounded-full text-zinc-400 hover:text-cyan-300 hover:border-cyan-400/40 transition-all"
-                    title="Toggle Nodes/Personas"
+                    onClick={() => onToggleView?.(nextView(viewMode))}
+                    className={`ml-2 px-3 py-1.5 text-[9px] uppercase tracking-widest border rounded-full transition-all flex items-center gap-1.5
+                        ${viewMode === 'mind'
+                            ? 'border-violet-500/40 text-violet-300 hover:text-violet-200 hover:border-violet-400/60'
+                            : 'border-white/10 text-zinc-400 hover:text-cyan-300 hover:border-cyan-400/40'}`}
+                    title={`Switch to ${VIEW_LABELS[nextView(viewMode)]}`}
                 >
-                    {viewMode === 'personas' ? 'Show Nodes' : 'Show Personas'}
+                    {viewMode === 'mind' && <Brain size={10} />}
+                    {VIEW_LABELS[nextView(viewMode)]}
                 </button>
             </div>
 

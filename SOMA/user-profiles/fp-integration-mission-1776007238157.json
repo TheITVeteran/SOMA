@@ -1,0 +1,22 @@
+{
+  "userId": "integration-mission-1776007238157",
+  "sessions": 1,
+  "totalMessages": 1,
+  "avgMsgLength": 24,
+  "questionRatio": 0,
+  "vocabRichness": 1,
+  "avgWordLength": 6.46,
+  "typicalStyle": "declarative-articulate",
+  "hourHistogram": {
+    "11": 1
+  },
+  "topicFreq": {
+    "architecture": 1
+  },
+  "recentTopics": [
+    "architecture"
+  ],
+  "lastSeen": 1776007238889,
+  "lastUpdated": 1776007238889,
+  "createdAt": 1776007238889
+}

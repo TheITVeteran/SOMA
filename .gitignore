@@ -132,7 +132,7 @@ boot_log.txt
 kevin_watcher_data/
 temp_agent_platform/
 _archive/
-_imports/
+
 tmpclaude-*
 
 # ── Temporary Files ───────────────────────────────────────────────────────────
@@ -152,7 +152,7 @@ asi/asi/
 backend/finance-database-repo/
 backend/prophet-engine/data/
 knowledge-feed/
-pulse-terminal/
+
 dashboard/
 src/
 SOMA/deployment-audit/
@@ -162,6 +162,16 @@ SOMA/training-data/
 # ── Runtime Artifacts ─────────────────────────────────────────────────────────
 PROBE_SUCCESS.txt
 *.persistance.bak
+
+# ── Runtime State / Session Data ─────────────────────────────────────────────
+limbic-state.json
+SOMA/kuze_memory.json
+SOMA/training-history.json
+SOMA/user-profiles/
+
+# ── Oversized Files (exceeds GitHub 100MB limit) ──────────────────────────────
+soul_fragments.json
+graphify-out/
 
 # ── Test Data & Scratch Files ─────────────────────────────────────────────────
 test_memory.json

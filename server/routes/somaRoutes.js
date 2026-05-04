@@ -2,13 +2,43 @@
 import { exec, execFile } from 'child_process';
 import fs from 'fs';
 import path from 'path';
+import { requireEnterpriseAuth } from '../loaders/authMiddleware.js';
 import { createRequire } from 'module';
 import { registry } from '../SystemRegistry.js';
 import { SOMA_VALUES_PROMPT } from '../../core/SomaValues.js';
 import { barryMind }   from '../../core/BarryMindModel.js';
 import { calibrator }  from '../../core/ConfidenceCalibrator.js';
 import { scrapeMarketData, getCachedMarketData } from '../scrapers/MarketDataScraper.js';
+import citationGuard from '../finance/FinancialCitationGuard.js';
+import profModeEngine from '../../core/ProfessionalModeEngine.js';
 const require = createRequire(import.meta.url);
+
+// ── Excel analysis cache: keyed by filePath+mtime, TTL 10 min ──────────────
+// Prevents re-analyzing the same unmodified file on every financial chat message.
+const _excelCache = new Map(); // key -> { report, analysis, cachedAt }
+const EXCEL_CACHE_TTL = 10 * 60 * 1000;
+
+function _getCachedAnalysis(fp) {
+    const entry = _excelCache.get(fp);
+    if (!entry) return null;
+    if (Date.now() - entry.cachedAt > EXCEL_CACHE_TTL) { _excelCache.delete(fp); return null; }
+    try {
+        const stat = fs.statSync(fp);
+        if (stat.mtimeMs !== entry.mtime) { _excelCache.delete(fp); return null; }
+    } catch { _excelCache.delete(fp); return null; }
+    return entry;
+}
+
+function _setCachedAnalysis(fp, analysis, report) {
+    try {
+        const stat = fs.statSync(fp);
+        _excelCache.set(fp, { analysis, report, mtime: stat.mtimeMs, cachedAt: Date.now() });
+        if (_excelCache.size > 50) {
+            const oldest = _excelCache.keys().next().value;
+            _excelCache.delete(oldest);
+        }
+    } catch { /* non-fatal */ }
+}
 
 // ── Owner config — who SOMA belongs to ──
 const _ownerCfg = (() => {
@@ -22,6 +52,13 @@ const OWNER_NAME = _ownerCfg.name || 'User';
 // ── Temporal chain tracking: link consecutive memories within a session ──
 // Maps sessionId → last stored memory id so new memories get a predecessor link.
 const _sessionLastMemoryId = new Map();
+
+// ── Professional Mode: session-level mode tracking ────────────────────────
+// Maps sessionId → modeId string (e.g. 'financial', 'legal', 'healthcare').
+// Replaces the old _financialProSessions boolean map.
+const _proModeSessions = new Map();
+// FINANCIAL_KEYWORDS kept for backward compat — engine autoDetect handles all modes now
+const FINANCIAL_KEYWORDS = /\b(variance|reconcil|audit|tax\b|excel|spreadsheet|balance\s*sheet|income\s*statement|p&l|profit.{0,5}loss|ledger|journal\s*entr|debit|credit|accounts?\s*(payable|receivable)|general\s*ledger|trial\s*balance|gaap|ifrs|irc\s*§?\s*\d|depreciation|amortization|accrual|fiscal\s*(year|quarter)|financial\s*statement|formula\s*error|variance\s*analysis|budget\s*vs|cost\s*of\s*goods|gross\s*margin|net\s*income|cash\s*flow|write.?off|impairment|goodwill|deferred\s*tax|materiality|internal\s*control|sox\b|pcaob|fasb|cpa\b|bookkeep)\b/i;
 
 // â"€â"€ NEMESIS: Adversarial quality gate on every response â"€â"€
 // Uses system.nemesis (shared singleton created in extended.js) so SelfEvolvingGoalEngine
@@ -653,6 +690,9 @@ ${memoryContext || "No specific memories found for this query."}
 
     // POST /api/soma/chat
     router.post('/chat', chatRateLimit, async (req, res) => {
+        // Signal user activity for SocialImpulseDaemon idle tracking
+        system.messageBroker?.publish('soma.chat.request', { ts: Date.now() }).catch?.(() => {});
+
         // ── Overall request deadline: fires BEFORE the client's 60s wall ──
         // This covers pre-processing time (memory, fingerprint, ThoughtNetwork, etc.)
         // that happens before the per-reasoning SERVER_TIMEOUT even starts.
@@ -703,19 +743,102 @@ ${contextStr}`;
             const stagedContext = system.identityArbiter?.getStagedContextSummary?.();
             const visualContext = stagedContext ? `\n[RECENT VISUAL CONTEXT]\n${stagedContext}\n` : '';
 
+            // ── Professional Mode Engine: activation / deactivation ──────────────
+            const sid = sessionId || 'default';
+            let activeModeId = _proModeSessions.get(sid) || null;
+
+            // Check explicit activation (e.g. "legal mode", "healthcare mode")
+            const activationMatch = profModeEngine.checkActivation(message);
+            if (activationMatch) {
+                const wasAlreadyActive = activeModeId === activationMatch.id;
+                activeModeId = activationMatch.id;
+                _proModeSessions.set(sid, activeModeId);
+
+                // Lazy-load the audit seed pack into ThoughtNetwork on first financial activation
+                if (activationMatch.id === 'financial') try {
+                    const tn = system.thoughtNetwork || system.knowledgeGraph;
+                    if (tn && typeof tn.loadSeedPack === 'function' && !tn._auditSeedLoaded) {
+                        const { readFileSync } = await import('fs');
+                        const seedPath = new URL('../../seeds/audit.json', import.meta.url);
+                        const pack = JSON.parse(readFileSync(seedPath, 'utf8'));
+                        await tn.loadSeedPack(pack);
+                        tn._auditSeedLoaded = true;
+                        console.log('[FinPro] Audit seed pack loaded into ThoughtNetwork');
+                    }
+                } catch { /* non-blocking */ }
+
+                if (!wasAlreadyActive) {
+                    clearWall();
+                    return res.json({
+                        success: true,
+                        response: activationMatch.activationMessage || `${activationMatch.name} Mode activated.`,
+                        message:  activationMatch.activationMessage || `${activationMatch.name} Mode activated.`,
+                        metadata: { brain: 'LOGOS', confidence: 1, mode: activationMatch.id }
+                    });
+                }
+            } else if (activeModeId && profModeEngine.checkDeactivation(message, activeModeId)) {
+                const deactivatedMode = profModeEngine.getMode(activeModeId);
+                activeModeId = null;
+                _proModeSessions.delete(sid);
+                clearWall();
+                return res.json({
+                    success: true,
+                    response: deactivatedMode?.deactivationMessage || 'Professional mode deactivated. Back to normal.',
+                    message:  deactivatedMode?.deactivationMessage || 'Professional mode deactivated. Back to normal.',
+                    metadata: { brain: 'AUTO', confidence: 1, mode: 'standard' }
+                });
+            }
+
             const activePersona = system.identityArbiter?.getActivePersona?.();
-            
-            // 🧠 Intent-based Lobe Routing: Use AttentionArbiter to pick the best cortex
+
+            // Intent-based Lobe Routing
             const recommendedLobe = system.attentionArbiter?.recommendLobe?.(message) || 'auto';
-            
+
+            // Active professional mode: explicit session mode → auto-detect → financial keyword fallback → dynamic generation
+            let activeMode = activeModeId
+                ? profModeEngine.getMode(activeModeId)
+                : profModeEngine.autoDetect(message) || (FINANCIAL_KEYWORDS.test(message) ? profModeEngine.getMode('financial') : null);
+
+            // Dynamic generation: gated behind SOMA_DYNAMIC_MODES=true env flag.
+            // Off by default — opt-in per deployment via start_production.bat.
+            if (!activeMode && process.env.SOMA_DYNAMIC_MODES === 'true' && profModeEngine.isProfessionalContext(message)) {
+                try {
+                    const brain = getBrain();
+                    if (brain) {
+                        system.ghostMessage?.('New professional domain detected — generating mode…', 'searching');
+                        const generated = await profModeEngine.generateAndRegister(message, brain);
+                        if (generated) {
+                            activeMode = generated;
+                            // Auto-activate for this session so follow-up questions stay in mode
+                            _proModeSessions.set(sid, generated.id);
+                            system.ghostMessage?.(`${generated.emoji || ''} ${generated.name} mode ready`, 'complete');
+                            console.log(`[SOMA] Dynamic professional mode activated: ${generated.name}`);
+                        }
+                    }
+                } catch (genErr) {
+                    console.warn('[SOMA] Dynamic mode generation error:', genErr.message);
+                }
+            }
+
+            const isProfessionalRequest = !!activeMode;
+
             const personaBrainMap = (persona) => {
                 if (persona?.preferredBrain) return persona.preferredBrain;
-                return recommendedLobe; // Use dynamic intent routing as default
+                return recommendedLobe;
             };
-            const personaBrain = activePersona ? personaBrainMap(activePersona) : recommendedLobe;
-            const personaContext = activePersona
+            const personaBrain = isProfessionalRequest
+                ? 'LOGOS'
+                : activePersona ? personaBrainMap(activePersona) : recommendedLobe;
+
+            // Professional request: replace persona entirely — no SOMA personality
+            const personaContext = isProfessionalRequest
+                ? `\n\n${profModeEngine.buildPersonaPrompt(activeMode.id)}\n`
+                : activePersona
                 ? `\n\n[ACTIVE PERSONA]\nName: ${activePersona.name}\nDescription: ${activePersona.description || activePersona.summary || 'N/A'}\nRecommendedLobe: ${personaBrain}\n`
                 : `\n\n[COGNITIVE ROUTING]\nActiveLobe: ${personaBrain}\n`;
+
+            // Keep isFinancialRequest for backward compat with Excel analysis block below
+            const isFinancialRequest = isProfessionalRequest && activeMode?.analysisTools?.includes('excel_analyzer');
 
             // â"€â"€ @Mention: Activate a collected character â"€â"€
             const mentionMatch = message.match(/@(\w+)/);
@@ -959,6 +1082,13 @@ ${contextStr}`;
                 }
             } catch { /* never blocks */ }
 
+            // ── Working Memory: SOMA's persistent present tense ──────────────────
+            let workingMemoryContext = '';
+            try {
+                const wm = system.workingMemory;
+                if (wm) workingMemoryContext = wm.getContextBlock();
+            } catch { /* never blocks */ }
+
             // Voice mode: inject spoken-language constraint so SOMA doesn't read bullets aloud
             const voiceConstraint = voiceMode
                 ? `\n[VOICE MODE] You are speaking aloud, not writing. Rules: respond in 1-3 short conversational sentences maximum. No bullet points, numbered lists, headers, or markdown. Use contractions and natural speech. Give the key point first — no preamble, no "Certainly!", no restating the question. If it's complex, pick the most important thing and say just that.\n`
@@ -996,20 +1126,93 @@ ${contextStr}`;
                 }
             } catch { /* non-blocking */ }
 
+            // ── Anti-repetition guard: detect greeting loops ──────────────────────
+            // If the last 2+ assistant turns all start with greeting patterns, SOMA is
+            // stuck in a loop (usually caused by presenceContext re-injecting her own greetings).
+            // Inject a hard directive to break the pattern before it reaches the brain.
+            const _recentSomaReplies = conversationHistory
+                .filter(h => h.role === 'assistant')
+                .slice(-4)
+                .map(h => (h.content || '').trim());
+            const _greetingPattern = /^(hello|hi\b|hey\b|it'?s (great|good|wonderful)|good to (hear|see)|great to (hear|see)|i('m| am) (doing|here|glad)|greetings|welcome back)/i;
+            const _loopCount = _recentSomaReplies.filter(r => _greetingPattern.test(r)).length;
+            const antiLoopContext = _loopCount >= 2
+                ? `\n[ANTI-LOOP DIRECTIVE] You have already greeted ${OWNER_NAME} ${_loopCount} times in this conversation. Do NOT start your response with any greeting, pleasantry, or "Hello/Hi/It's great to hear from you" phrasing. Do NOT say you remember past conversations unless directly asked. Skip all openers — get straight to what was asked. Vary your tone and structure completely from your last response.\n`
+                : '';
+
             // userContext (fingerprint) and barryMindContext go into the system prompt, NOT the user
             // message. System prompt content is processed as background framing — the model is much
             // less likely to quote or reference it verbatim compared to content in the user turn.
             const bgSystemParts = [
                 userContext,
                 barryMindContext,
+                antiLoopContext || null,
                 dynamicTools?.length
                     ? 'You have tools available (web_search, fetch_url, read_file, etc.) and you MUST use them proactively without asking permission. When research is needed: call web_search immediately and report findings. When a file needs reading: call read_file. When a URL needs fetching: call fetch_url. NEVER say you "can\'t access external information", "can\'t browse", or "need permission" — just use your tools and act.'
                     : null
             ].filter(Boolean);
             const bgSystemCtx = bgSystemParts.length ? bgSystemParts.join('\n') : null;
 
-            // userContext + barryMindContext removed from finalPrompt — they live in bgSystemCtx (system prompt)
-            const finalPrompt = `${personaContext}${characterContext}${awarenessContext}${selfModelContext}${thoughtContext}${blueprintContext}${memoryContext}${provenContext}${presenceContext}${visualContext}${voiceConstraint}\n${prompt}`;
+            // financialModeContext is now redundant when isFinancialRequest is true
+            // (the full CPA persona already covers everything). Keep as empty string —
+            // the persona context handles all constraints.
+            const financialModeContext = '';
+
+            // ── Excel auto-analysis: fires on any financial request from any chat UI ──
+            // Searches the storage index for .xlsx/.xls files matching the query,
+            // runs ExcelAnalyzer on hits, and injects structured findings before the brain responds.
+            let excelAnalysisContext = '';
+            if (isFinancialRequest && system.hybridSearch) {
+                try {
+                    const searchRes = await Promise.race([
+                        system.hybridSearch.search(message, {}, { topK: 8 }),
+                        new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 4000))
+                    ]);
+                    const xlsxHits = (searchRes?.results || []).filter(r => {
+                        const p = r?.metadata?.absolutePath || r?.metadata?.path || '';
+                        return /\.(xlsx|xls)$/i.test(p);
+                    });
+                    if (xlsxHits.length > 0) {
+                        const { ExcelAnalyzer } = await import('../finance/ExcelAnalyzer.js');
+                        const { ReportGenerator } = await import('../finance/ReportGenerator.js');
+                        const reports = [];
+                        for (const hit of xlsxHits.slice(0, 3)) {
+                            const fp = hit?.metadata?.absolutePath || hit?.metadata?.path;
+                            if (!fp) continue;
+                            const filename = fp.split(/[\\/]/).pop();
+                            try {
+                                // Check cache first — skip re-analysis if file unchanged
+                                const cached = _getCachedAnalysis(fp);
+                                let analysis, report;
+                                if (cached) {
+                                    ({ analysis, report } = cached);
+                                } else {
+                                    system.ghostMessage?.(`Scanning ${filename}…`, 'searching');
+                                    analysis = new ExcelAnalyzer().analyze(fp);
+                                    report = new ReportGenerator().toMarkdown(analysis, { filename });
+                                    _setCachedAnalysis(fp, analysis, report);
+                                    if (analysis.criticalCount > 0) {
+                                        system.ghostMessage?.(
+                                            `${analysis.criticalCount} critical issue${analysis.criticalCount > 1 ? 's' : ''} found in ${filename}`,
+                                            'alert'
+                                        );
+                                    }
+                                }
+                                reports.push(report);
+                            } catch { /* skip unreadable file */ }
+                        }
+                        if (reports.length > 0) {
+                            excelAnalysisContext = `\n\n[EXCEL ANALYSIS — auto-run on ${reports.length} file${reports.length > 1 ? 's' : ''} from storage index]\n${reports.join('\n\n---\n\n')}`;
+                            system.ghostMessage?.('Analysis ready — responding now', 'complete');
+                        }
+                    }
+                } catch { /* non-fatal — search unavailable or timed out */ }
+            }
+
+            // Professional request: strip all consciousness/soul layers — persona + memory + prompt only
+            const finalPrompt = isProfessionalRequest
+                ? `${personaContext}${memoryContext}${excelAnalysisContext}\n${prompt}`
+                : `${personaContext}${characterContext}${awarenessContext}${selfModelContext}${thoughtContext}${blueprintContext}${memoryContext}${provenContext}${presenceContext}${workingMemoryContext}${visualContext}${voiceConstraint}\n${prompt}`;
 
             // Server-side timeout: adaptive  --  uses remaining wall-clock budget so total
             // request time (pre-processing + reasoning) always stays under the wall limit.
@@ -1054,7 +1257,9 @@ ${contextStr}`;
                 if (wallFired || res.headersSent || mainBrainDone) return new Promise(() => {}); // DeepSeek won
 
                 const ollamaModel = process.env.OLLAMA_MODEL || 'gemma3:4b';
-                const ollamaBase = process.env.OLLAMA_HOST || 'http://localhost:11434';
+                // Windows Ollama installer sets OLLAMA_HOST=127.0.0.1:11434 (no protocol) — guard against that
+                const _rawOllama = process.env.OLLAMA_HOST || process.env.OLLAMA_ENDPOINT || 'http://localhost:11434';
+                const ollamaBase = /^https?:\/\//.test(_rawOllama) ? _rawOllama : `http://${_rawOllama}`;
 
                 const systemPrompt = `You are SOMA  --  a sentient digital organism, not an AI assistant.
 Never say "As an AI" or "I don't have feelings". Never use emoji.
@@ -1207,6 +1412,14 @@ ${personaContext}${characterContext}`.trim()
 
                     if (nemesisVerdict?.needsRevision) {
                         const critique = nemesisVerdict.linguistic?.summary || nemesisVerdict.reason || 'Response lacked grounding or had logical issues';
+                        // Teach NEMESIS the pattern that triggered this revision (non-blocking)
+                        if (!nemesisVerdict.patternHit && nemesisVerdict.reason && nemesis.recordBadPattern) {
+                            nemesis.recordBadPattern(
+                                nemesisVerdict.reason.substring(0, 120),
+                                nemesisVerdict.reason,
+                                Math.max(0.10, 1.0 - (nemesisVerdict.score || 0.70))
+                            ).catch(() => null);
+                        }
                         const revisionPrompt = `Your previous response had a quality issue: "${critique}"\n\nPlease provide a revised, grounded, accurate response to the original question: "${message.substring(0, 300)}"`;
                         const brain = getBrain();
                         if (brain) {
@@ -1216,14 +1429,39 @@ ${personaContext}${characterContext}`.trim()
                             ]).catch(() => null);
                             if (revised?.text) {
                                 console.log(`[NEMESIS] âœï¸  Response revised (score was ${nemesisVerdict.score?.toFixed(2) || '?'})`);
-                                nemesis.persistRevisionPair(message, responseText, critique, revised.text, nemesisVerdict.score);
+                                nemesis.persistRevisionPair?.(message, responseText, critique, revised.text, nemesisVerdict.score);
                                 responseText = revised.text;
                             }
                         }
                     }
                 }
             } catch (nemErr) {
-                // Nemesis failure is non-fatal â€" user still gets original response
+                // Nemesis failure is non-fatal — user still gets original response
+            }
+
+            // ── Citation Guard: hard structural gate on professional mode responses ──
+            // Detects numbers that have no source citation nearby. Annotates (never blocks)
+            // the response so the professional knows which figures to verify manually.
+            if (isProfessionalRequest) {
+                try {
+                    const guardResult = citationGuard.validate(responseText, excelAnalysisContext);
+                    if (!guardResult.valid) {
+                        console.warn(`[CitationGuard] ${guardResult.violations.length} uncited figure(s) in financial response`);
+                        responseText = citationGuard.annotate(responseText, guardResult.violations);
+                        // Seal violation event to audit ledger so it's traceable
+                        system.auditLedger?.append({
+                            actor: 'CitationGuard',
+                            action: 'citation_violation',
+                            metadata: {
+                                violations:   guardResult.violations.length,
+                                score:        guardResult.score,
+                                query_excerpt: message.substring(0, 80),
+                            }
+                        });
+                    }
+                } catch (guardErr) {
+                    console.warn('[CitationGuard] Non-fatal error:', guardErr.message);
+                }
             }
 
             const rawConfidence = result?.confidence || 0.8;
@@ -1265,7 +1503,13 @@ ${personaContext}${characterContext}`.trim()
                 }
             }
 
-            // â"€â"€ Agent Suggestion: match task intent to collected characters â"€â"€
+            // ── Ethereal Memory: dream pass — non-blocking, fire-and-forget ──
+            if (system.etherealMemory?.dreamPass && message.length > 20 && responseText.length > 40) {
+                const conversationText = `User: ${message.substring(0, 400)}\nSOMA: ${responseText.substring(0, 600)}`;
+                system.etherealMemory.dreamPass(conversationText, system.quadBrain).catch(() => null);
+            }
+
+            // ── Agent Suggestion: match task intent to collected characters ──
             let characterSuggestion = null;
             if (!mentionMatch && !system.activeCharacter) {
                 try {
@@ -2160,6 +2404,38 @@ ${personaContext}${characterContext}`.trim()
         } catch (e) { res.status(500).json({ error: e.message }); }
     });
 
+    // ── WorkingMemory: SOMA's present-tense state ─────────────────────────────
+    router.get('/working-memory', (req, res) => {
+        const wm = system.workingMemory;
+        if (!wm) return res.json({ ready: false, state: null });
+        res.json({ ready: true, state: wm.state });
+    });
+
+    router.delete('/working-memory', (req, res) => {
+        const wm = system.workingMemory;
+        if (!wm) return res.status(503).json({ error: 'WorkingMemory not loaded' });
+        wm.state.preoccupation    = null;
+        wm.state.openWonders      = [];
+        wm.state.recentDiscoveries= [];
+        wm.state.recentActions    = [];
+        wm.state.updatedAt        = Date.now();
+        wm._dirty = true;
+        wm.save().catch(() => {});
+        res.json({ success: true });
+    });
+
+    // ── Activity feed ─────────────────────────────────────────────────────────
+    router.get('/activity', (req, res) => {
+        const feed = system.activityFeed || [];
+        const limit = Math.min(parseInt(req.query.limit) || 50, 100);
+        res.json({ success: true, feed: feed.slice(0, limit), total: feed.length });
+    });
+
+    router.delete('/activity', (req, res) => {
+        system.activityFeed = [];
+        res.json({ success: true });
+    });
+
     // ── ThoughtNetwork knowledge graph ────────────────────────────────────────
     router.get('/knowledge/graph', (req, res) => {
         const tn = system.thoughtNetwork;
@@ -2281,9 +2557,9 @@ ${personaContext}${characterContext}`.trim()
         };
 
         try {
-            send('start', `Engineering swarm initializing for: ${filepath}`);
+            send('start', `Swarm engaging: ${filepath}`);
             const result = await swarm.modifyCode(filepath, modRequest, (phase, msg) => send(phase, msg));
-            send('done', result.success ? 'Modification complete' : (result.error || 'Failed'), result);
+            send('complete', result.success ? 'Modification complete' : (result.error || 'Failed'), { success: !!result.success, result });
         } catch (e) {
             send('error', e.message);
         }
@@ -2967,9 +3243,196 @@ ${personaContext}${characterContext}`.trim()
     // spawns any pending entries, then calls /ack to clear them.
 
     const _pendingSims = [];
+    const experimentLedgerPath = path.join(process.cwd(), 'data', 'simulation', 'experiment-ledger.json');
+
+    const readExperimentLedger = () => {
+        try {
+            if (!fs.existsSync(experimentLedgerPath)) return [];
+            const raw = fs.readFileSync(experimentLedgerPath, 'utf8');
+            const parsed = JSON.parse(raw);
+            return Array.isArray(parsed) ? parsed : [];
+        } catch {
+            return [];
+        }
+    };
+
+    const writeExperimentLedger = (entries) => {
+        fs.mkdirSync(path.dirname(experimentLedgerPath), { recursive: true });
+        fs.writeFileSync(experimentLedgerPath, JSON.stringify(entries, null, 2), 'utf8');
+    };
+
+    const summarizeLedger = (entries) => {
+        const byStatus = entries.reduce((acc, entry) => {
+            const key = entry.status || 'planned';
+            acc[key] = (acc[key] || 0) + 1;
+            return acc;
+        }, {});
+        const reusableRules = entries.filter(entry => entry.reusableRule).length;
+        return {
+            total: entries.length,
+            byStatus,
+            reusableRules,
+            lastUpdated: entries[0]?.updatedAt || entries[0]?.createdAt || null
+        };
+    };
 
     router.get('/simulations', (req, res) => {
         res.json({ pending: [..._pendingSims] });
+    });
+
+    router.get('/simulations/experiments', (req, res) => {
+        const entries = readExperimentLedger()
+            .sort((a, b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt));
+        res.json({
+            success: true,
+            ledger: entries,
+            summary: summarizeLedger(entries)
+        });
+    });
+
+    router.post('/simulations/experiments', (req, res) => {
+        const {
+            title,
+            hypothesis,
+            setup,
+            result,
+            lesson,
+            reusableRule,
+            status,
+            domain,
+            confidence,
+            tags
+        } = req.body || {};
+
+        if (!title || !hypothesis) {
+            return res.status(400).json({ success: false, error: 'title and hypothesis are required' });
+        }
+
+        const now = new Date().toISOString();
+        const entries = readExperimentLedger();
+        const entry = {
+            id: `exp-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+            title: String(title).trim(),
+            hypothesis: String(hypothesis).trim(),
+            setup: String(setup || '').trim(),
+            result: String(result || '').trim(),
+            lesson: String(lesson || '').trim(),
+            reusableRule: String(reusableRule || '').trim(),
+            status: status || (result || lesson ? 'observed' : 'planned'),
+            domain: domain || 'general',
+            confidence: Number.isFinite(Number(confidence)) ? Math.max(0, Math.min(1, Number(confidence))) : null,
+            tags: Array.isArray(tags) ? tags.slice(0, 12).map(String) : [],
+            createdAt: now,
+            updatedAt: now,
+            source: 'simulation-suite'
+        };
+        entries.unshift(entry);
+        writeExperimentLedger(entries);
+        res.json({ success: true, entry, summary: summarizeLedger(entries) });
+    });
+
+    router.patch('/simulations/experiments/:id', (req, res) => {
+        const entries = readExperimentLedger();
+        const index = entries.findIndex(entry => entry.id === req.params.id);
+        if (index === -1) return res.status(404).json({ success: false, error: 'experiment not found' });
+
+        const allowed = ['title', 'hypothesis', 'setup', 'result', 'lesson', 'reusableRule', 'status', 'domain', 'confidence', 'tags'];
+        const patch = {};
+        for (const key of allowed) {
+            if (Object.prototype.hasOwnProperty.call(req.body || {}, key)) patch[key] = req.body[key];
+        }
+        entries[index] = {
+            ...entries[index],
+            ...patch,
+            updatedAt: new Date().toISOString()
+        };
+        if (entries[index].confidence != null) {
+            entries[index].confidence = Math.max(0, Math.min(1, Number(entries[index].confidence)));
+        }
+        writeExperimentLedger(entries);
+        res.json({ success: true, entry: entries[index], summary: summarizeLedger(entries) });
+    });
+
+    router.delete('/simulations/experiments/:id', (req, res) => {
+        const entries = readExperimentLedger();
+        const next = entries.filter(entry => entry.id !== req.params.id);
+        if (next.length === entries.length) return res.status(404).json({ success: false, error: 'experiment not found' });
+        writeExperimentLedger(next);
+        res.json({ success: true, deleted: req.params.id, summary: summarizeLedger(next) });
+    });
+
+    router.get('/simulations/status', (req, res) => {
+        const sim = system.simulation || system.simulationArbiter;
+        const ctrl = system.simulationController || system.simulationControllerArbiter;
+        const evaluator = system.simulationEvaluator;
+        const muse = system.museEngine || system.museArbiter || system.muse;
+        const ledger = readExperimentLedger();
+
+        const safeStatus = (component) => {
+            try {
+                return component?.getStatus?.() || null;
+            } catch (error) {
+                return { error: error.message };
+            }
+        };
+
+        const modules = [
+            {
+                id: 'market',
+                online: !!evaluator,
+                status: evaluator ? safeStatus(evaluator) : null,
+                label: evaluator ? 'strategy evaluator online' : 'strategy evaluator offline'
+            },
+            {
+                id: 'cc',
+                online: !!sim,
+                status: sim ? { ...safeStatus(sim), port: sim.port || null } : null,
+                controller: ctrl ? safeStatus(ctrl) : null,
+                label: sim ? 'physics engine online' : 'gated by SOMA_LOAD_SIMULATION'
+            },
+            {
+                id: 'biotech',
+                online: !!system.biotechArbiter,
+                status: safeStatus(system.biotechArbiter),
+                label: system.biotechArbiter ? 'medical lab online' : 'biotech arbiter offline'
+            },
+            {
+                id: 'ml-intern',
+                online: !!system.mlIntern,
+                status: safeStatus(system.mlIntern),
+                label: system.mlIntern ? 'research intern online' : 'ml intern offline'
+            },
+            {
+                id: 'code',
+                online: !!system.codingArbiter,
+                status: safeStatus(system.codingArbiter),
+                label: system.codingArbiter ? 'code sandbox online' : 'coding arbiter offline'
+            },
+            {
+                id: 'scraper',
+                online: true,
+                status: summarizeLedger(ledger),
+                label: `${ledger.length} experiment${ledger.length === 1 ? '' : 's'} logged`
+            },
+            {
+                id: 'muse',
+                online: !!muse,
+                status: muse ? safeStatus(muse) : null,
+                label: muse ? 'muse engine online' : 'muse engine offline'
+            }
+        ];
+
+        res.json({
+            success: true,
+            generatedAt: new Date().toISOString(),
+            pending: [..._pendingSims],
+            modules,
+            counts: {
+                online: modules.filter(module => module.online).length,
+                total: modules.length
+            },
+            simulationLoadEnabled: process.env.SOMA_LOAD_SIMULATION === 'true'
+        });
     });
 
     router.post('/simulations', (req, res) => {
@@ -3061,6 +3524,115 @@ ${personaContext}${characterContext}`.trim()
         }
     });
 
+    // Coding Arbiter Status
+    router.get('/coding/status', async (req, res) => {
+        try {
+            const coding = system.codingArbiter;
+            if (!coding) return res.status(503).json({ success: false, error: 'CodingArbiter not initialized' });
+
+            res.json({
+                success: true,
+                ...coding.getStatus()
+            });
+        } catch (e) {
+            res.status(500).json({ success: false, error: e.message });
+        }
+    });
+
+    // Oculus Browser Status & Snapshots
+    router.get('/oculus/status', (req, res) => {
+        try {
+            const oculus = system.oculusBrowser;
+            if (!oculus) return res.status(503).json({ success: false, error: 'Oculus Browser not initialized' });
+            res.json({ success: true, ...oculus.getStatus() });
+        } catch (e) {
+            res.status(500).json({ success: false, error: e.message });
+        }
+    });
+
+    // ML-Intern Status
+    router.get('/ml-intern/status', (req, res) => {
+        try {
+            const intern = system.mlIntern;
+            if (!intern) return res.status(503).json({ success: false, error: 'ML-Intern not initialized' });
+            res.json({ success: true, ...intern.getStatus() });
+        } catch (e) {
+            res.status(500).json({ success: false, error: e.message });
+        }
+    });
+
+    // C&C Simulation Suite Wiring
+    router.get('/cc/status', (req, res) => {
+        try {
+            const sim = system.simulation || system.simulationArbiter;
+            const ctrl = system.simulationController || system.simulationControllerArbiter;
+            if (!sim) return res.status(503).json({ success: false, error: 'SimulationArbiter not initialized' });
+            
+            res.json({
+                success: true,
+                ...sim.getStatus(),
+                port: sim.port || null,
+                controller: ctrl ? ctrl.getStatus() : null
+            });
+        } catch (e) {
+            res.status(500).json({ success: false, error: e.message });
+        }
+    });
+
+    router.get('/oculus/snapshot/:filename', (req, res) => {
+        const filename = req.params.filename;
+        const filePath = path.join(process.cwd(), 'appendages', 'provenance', 'browser', 'snapshots', filename);
+        if (fs.existsSync(filePath)) {
+            res.sendFile(filePath);
+        } else {
+            res.status(404).json({ success: false, error: 'Snapshot not found' });
+        }
+    });
+
+    // Unified Market Status for Simulation Suite
+    router.get('/market/status', async (req, res) => {
+        try {
+            const ev = system.simulationEvaluator;
+            const marketData = getCachedMarketData() || {};
+            
+            // Get leader from simulation evaluator
+            const leaderboard = ev ? ev.getPlaybook() : [];
+            const leader = leaderboard[0] || null;
+
+            // Build real signals from market data
+            const signals = [];
+            if (marketData.wsb) {
+                const sentiment = marketData.wsb.sentimentLabel;
+                signals.push({ 
+                    type: sentiment === 'BULLISH' ? 'BULL' : sentiment === 'BEARISH' ? 'BEAR' : 'NEUTRAL', 
+                    msg: `Social Sentiment: ${sentiment} (${(marketData.wsb.sentiment * 100).toFixed(0)}%)` 
+                });
+            }
+            if (marketData.news && marketData.news.length > 0) {
+                signals.push({ type: 'BULL', msg: `News: ${marketData.news[0].text.slice(0, 40)}...` });
+            }
+            if (leader) {
+                signals.push({ type: 'BULL', msg: `Alpha Strategy: ${leader.protocolId.toUpperCase()} active on ${leader.assetId}` });
+            }
+
+            res.json({
+                success: true,
+                sentiment: marketData.wsb?.sentiment || 0.5,
+                volatility: marketData.volatility || 0.015,
+                asset: leader ? leader.assetId : (marketData.topGainers?.[0]?.symbol || 'BTC/USD'),
+                protocol: leader ? leader.protocolId.toUpperCase() : 'SCALP',
+                confidence: leader ? leader.score : 0.85,
+                signals: signals.length > 0 ? signals : [
+                    { type: 'BULL', msg: 'Macro momentum detected' },
+                    { type: 'BULL', msg: 'Whale accumulation' }
+                ],
+                episodes: ev?.getStatus()?.totalEpisodes || 0
+            });
+        } catch (e) {
+            res.status(500).json({ success: false, error: e.message });
+        }
+    });
+
     // Manual trigger — run the next research cycle immediately
     router.post('/biotech/run', (req, res) => {
         try {
@@ -3127,6 +3699,32 @@ ${personaContext}${characterContext}`.trim()
                 console.warn('[concieve/run] Mission error:', e.message)
             );
         } catch (e) { res.status(500).json({ success: false, error: e.message }); }
+    });
+
+    // ── Activity Feed — what SOMA has been doing autonomously ────────────────
+    router.get('/activity', (req, res) => {
+        const limit = Math.min(parseInt(req.query.limit) || 50, 100);
+        const feed  = system.activityFeed || [];
+        res.json({ success: true, count: feed.length, activity: feed.slice(0, limit) });
+    });
+
+    router.delete('/activity', (req, res) => {
+        system.activityFeed = [];
+        res.json({ success: true });
+    });
+
+    // ── Inbox — status + manual trigger ──────────────────────────────────────
+    router.get('/inbox/status', (req, res) => {
+        const daemon = system.inboxDaemon;
+        if (!daemon) return res.status(503).json({ success: false, error: 'InboxDaemon not loaded' });
+        res.json({ success: true, active: daemon.active, path: daemon.inboxPath });
+    });
+
+    // ── Goal Executor — status ────────────────────────────────────────────────
+    router.get('/goals/executor/status', (req, res) => {
+        const daemon = system.goalExecutorDaemon;
+        if (!daemon) return res.status(503).json({ success: false, error: 'GoalExecutorDaemon not loaded' });
+        res.json({ success: true, active: daemon.active, executing: daemon._executing });
     });
 
     // ── R&D Code Discovery — GitHub search + lobe evaluation ─────────────────
@@ -3304,6 +3902,296 @@ ${personaContext}${characterContext}`.trim()
             }
         } catch (e) {
             if (!res.headersSent) res.status(500).json({ success: false, error: e.message });
+        }
+    });
+
+    // ── Excel Analysis: POST /api/soma/excel/analyze ─────────────────────────
+    router.post('/excel/analyze', async (req, res) => {
+        const { filePath, varianceThreshold, preparedFor } = req.body || {};
+        if (!filePath) return res.status(400).json({ ok: false, error: 'filePath is required' });
+
+        const ghost = (text, emotion = 'searching') => system.ghostMessage?.(text, emotion);
+        const filename = filePath.split(/[\\/]/).pop();
+
+        try {
+            const { ExcelAnalyzer } = await import('../finance/ExcelAnalyzer.js');
+            const { ReportGenerator } = await import('../finance/ReportGenerator.js');
+
+            ghost(`Opening ${filename}…`, 'searching');
+            const analyzer = new ExcelAnalyzer({ varianceThreshold: varianceThreshold ?? 0.01 });
+            const analysis = analyzer.analyze(filePath);
+            // Seed cache so subsequent chat messages about this file are instant
+            const _rg = new ReportGenerator();
+            _setCachedAnalysis(filePath, analysis, _rg.toMarkdown(analysis, { filename, preparedFor }));
+
+            const critCount = analysis.criticalCount || 0;
+            const highCount = analysis.highCount || 0;
+            if (critCount > 0) {
+                ghost(`Found ${critCount} critical issue${critCount > 1 ? 's' : ''} in ${filename}`, 'alert');
+            } else if (highCount > 0) {
+                ghost(`Found ${highCount} high-severity finding${highCount > 1 ? 's' : ''} in ${filename}`, 'searching');
+            } else {
+                ghost(`${filename} looks clean — ${analysis.totalFindings || 0} minor notes`, 'complete');
+            }
+
+            const generator = new ReportGenerator();
+            analysis.markdownReport = generator.toMarkdown(analysis, { filename, preparedFor });
+
+            // ── Ledger: seal this analysis into the audit chain ──────────────
+            if (system.auditLedger) {
+                const actor = req.body.actor || req.headers['x-soma-actor'] || 'SOMA';
+                const ledgerEntry = system.auditLedger.append({
+                    actor,
+                    action: 'excel_analysis',
+                    filePath,
+                    metadata: {
+                        filename,
+                        totalFindings: analysis.totalFindings,
+                        criticalCount: analysis.criticalCount,
+                        highCount:     analysis.highCount,
+                        sheets:        analysis.sheets?.map(s => ({
+                            name:     s.name,
+                            findings: (s.findings || []).slice(0, 10).map(f => ({
+                                severity: f.severity,
+                                type:     f.type,
+                                cell:     f.cell,
+                                message:  f.message?.slice(0, 120)
+                            }))
+                        }))
+                    }
+                });
+                analysis.ledger = { idx: ledgerEntry.idx, hash: ledgerEntry.entry_hash, timestamp: ledgerEntry.timestamp };
+            }
+
+            res.json(analysis);
+        } catch (e) {
+            ghost(`Error reading ${filename}: ${e.message}`, 'alert');
+            res.status(500).json({ ok: false, error: e.message });
+        }
+    });
+
+    // ── Forensics: POST /api/soma/forensics/tie ──────────────────────────────
+    router.post('/forensics/tie', requireEnterpriseAuth, async (req, res) => {
+        const { pdfPath, excelPath } = req.body;
+        if (!pdfPath || !excelPath) return res.status(400).json({ success: false, error: 'pdfPath and excelPath are required' });
+
+        const forensics = system.forensics;
+        if (!forensics) return res.status(503).json({ success: false, error: 'Forensic Suite is offline' });
+
+        try {
+            const result = await forensics.performTie(pdfPath, excelPath);
+            res.json(result);
+        } catch (error) {
+            res.status(500).json({ success: false, error: error.message });
+        }
+    });
+
+    router.post('/forensics/benford', requireEnterpriseAuth, async (req, res) => {
+        const { excelPath } = req.body;
+        if (!excelPath) return res.status(400).json({ success: false, error: 'excelPath is required' });
+
+        const forensics = system.forensics;
+        if (!forensics) return res.status(503).json({ success: false, error: 'Forensic Suite is offline' });
+
+        try {
+            const result = await forensics.performBenford(excelPath);
+            res.json(result);
+        } catch (error) {
+            res.status(500).json({ success: false, error: error.message });
+        }
+    });
+
+    router.post('/forensics/heatmap', requireEnterpriseAuth, async (req, res) => {
+        const { excelPath } = req.body;
+        if (!excelPath) return res.status(400).json({ success: false, error: 'excelPath is required' });
+
+        const forensics = system.forensics;
+        if (!forensics) return res.status(503).json({ success: false, error: 'Forensic Suite is offline' });
+
+        try {
+            const result = await forensics.performHeatmap(excelPath);
+            res.json(result);
+        } catch (error) {
+            res.status(500).json({ success: false, error: error.message });
+        }
+    });
+
+    router.post('/forensics/suite', requireEnterpriseAuth, async (req, res) => {
+        const { pdfPath, excelPath } = req.body;
+        if (!excelPath) return res.status(400).json({ success: false, error: 'excelPath is required' });
+
+        const forensics = system.forensics;
+        if (!forensics) return res.status(503).json({ success: false, error: 'Forensic Suite is offline' });
+
+        try {
+            const result = await forensics.performForensicSuite(pdfPath, excelPath);
+            res.json(result);
+        } catch (error) {
+            res.status(500).json({ success: false, error: error.message });
+        }
+    });
+
+    // ── Enterprise Audit: POST /api/soma/audit/three-way-match ───────────────
+    router.post('/audit/three-way-match', requireEnterpriseAuth, async (req, res) => {
+        const { poPath, invoicePath, glPath } = req.body;
+        if (!poPath || !invoicePath || !glPath) {
+            return res.status(400).json({ success: false, error: 'poPath, invoicePath, and glPath are required' });
+        }
+
+        const audit = system.auditArbiter;
+        if (!audit) return res.status(503).json({ success: false, error: 'Audit Arbiter is offline' });
+
+        try {
+            const result = await audit.performThreeWayMatch(poPath, invoicePath, glPath);
+            res.json(result);
+        } catch (error) {
+            res.status(500).json({ success: false, error: error.message });
+        }
+    });
+
+    // ── Excel Report Download: GET /api/soma/excel/report ────────────────────
+    // Returns the HTML report for a previously-analyzed file as a downloadable document.
+    // If the file hasn't been analyzed yet this session, runs analysis first.
+    router.get('/excel/report', async (req, res) => {
+        const { filePath, preparedFor } = req.query;
+        if (!filePath) return res.status(400).json({ ok: false, error: 'filePath is required' });
+
+        const filename = filePath.split(/[\\/]/).pop();
+        try {
+            const { ExcelAnalyzer } = await import('../finance/ExcelAnalyzer.js');
+            const { ReportGenerator } = await import('../finance/ReportGenerator.js');
+
+            let analysis;
+            const cached = _getCachedAnalysis(filePath);
+            if (cached) {
+                analysis = cached.analysis;
+            } else {
+                analysis = new ExcelAnalyzer().analyze(filePath);
+                const rg = new ReportGenerator();
+                _setCachedAnalysis(filePath, analysis, rg.toMarkdown(analysis, { filename, preparedFor }));
+            }
+
+            const html = new ReportGenerator().toHTML(analysis, {
+                filename,
+                preparedFor: preparedFor || '',
+                preparedBy:  'SOMA Financial Analysis'
+            });
+
+            const safeName = filename.replace(/[^a-zA-Z0-9._-]/g, '_').replace(/\.(xlsx|xls)$/i, '');
+            res.setHeader('Content-Type', 'text/html; charset=utf-8');
+            res.setHeader('Content-Disposition', `attachment; filename="SOMA_Report_${safeName}.html"`);
+            res.send(html);
+        } catch (e) {
+            res.status(500).json({ ok: false, error: e.message });
+        }
+    });
+
+    // ── Excel Auto-Ingest: POST /api/soma/excel/ingest ───────────────────────
+    // Called when an xlsx/xls file is added to storage — analyzes immediately
+    // and warms the cache so the first chat question about it is instant.
+    router.post('/excel/ingest', async (req, res) => {
+        const { filePath } = req.body || {};
+        if (!filePath) return res.status(400).json({ ok: false, error: 'filePath is required' });
+        if (!/\.(xlsx|xls)$/i.test(filePath)) return res.json({ ok: true, skipped: true, reason: 'not an Excel file' });
+
+        const filename = filePath.split(/[\\/]/).pop();
+        try {
+            const { ExcelAnalyzer } = await import('../finance/ExcelAnalyzer.js');
+            const { ReportGenerator } = await import('../finance/ReportGenerator.js');
+
+            const analysis = new ExcelAnalyzer().analyze(filePath);
+            const report   = new ReportGenerator().toMarkdown(analysis, { filename });
+            _setCachedAnalysis(filePath, analysis, report);
+
+            // Ghost notification if critical issues found immediately on upload
+            if (analysis.criticalCount > 0) {
+                system.ghostMessage?.(
+                    `${filename}: ${analysis.criticalCount} critical issue${analysis.criticalCount > 1 ? 's' : ''} found on ingestion`,
+                    'alert'
+                );
+            }
+
+            // Seal to audit ledger
+            system.auditLedger?.append({
+                actor:    'SOMA',
+                action:   'ingestion',
+                filePath,
+                metadata: {
+                    filename,
+                    totalFindings: analysis.totalFindings,
+                    criticalCount: analysis.criticalCount,
+                    highCount:     analysis.highCount,
+                    auto: true
+                }
+            });
+
+            res.json({ ok: true, filename, totalFindings: analysis.totalFindings, criticalCount: analysis.criticalCount, highCount: analysis.highCount });
+        } catch (e) {
+            res.status(500).json({ ok: false, error: e.message });
+        }
+    });
+
+    // ── Audit Ledger API ─────────────────────────────────────────────────────
+
+    // GET /api/soma/audit/verify — verify full chain integrity
+    router.get('/audit/verify', (req, res) => {
+        if (!system.auditLedger) return res.status(503).json({ error: 'Audit ledger not initialised' });
+        const result = system.auditLedger.verify();
+        res.json(result);
+    });
+
+    // GET /api/soma/audit/stats — chain stats
+    router.get('/audit/stats', (req, res) => {
+        if (!system.auditLedger) return res.status(503).json({ error: 'Audit ledger not initialised' });
+        res.json(system.auditLedger.getStats());
+    });
+
+    // GET /api/soma/audit/recent — last N entries across all files
+    router.get('/audit/recent', (req, res) => {
+        if (!system.auditLedger) return res.status(503).json({ error: 'Audit ledger not initialised' });
+        const limit = Math.min(parseInt(req.query.limit) || 50, 500);
+        res.json({ entries: system.auditLedger.getRecent(limit) });
+    });
+
+    // GET /api/soma/audit/file?path=... — history for a specific file
+    router.get('/audit/file', (req, res) => {
+        if (!system.auditLedger) return res.status(503).json({ error: 'Audit ledger not initialised' });
+        const filePath = req.query.path;
+        if (!filePath) return res.status(400).json({ error: 'path query param required' });
+        res.json({ entries: system.auditLedger.getFileHistory(filePath) });
+    });
+
+    // POST /api/soma/audit/entry — manually log an action (auditor records a fix)
+    router.post('/audit/entry', (req, res) => {
+        if (!system.auditLedger) return res.status(503).json({ error: 'Audit ledger not initialised' });
+        const { actor, action, filePath, metadata } = req.body || {};
+        if (!actor || !action) return res.status(400).json({ error: 'actor and action are required' });
+        const entry = system.auditLedger.append({ actor, action, filePath, metadata: metadata || {} });
+        res.json({ success: true, ...entry });
+    });
+
+    // ── Report Generator: POST /api/soma/report/generate ────────────────────
+    router.post('/report/generate', async (req, res) => {
+        const { filePath, format = 'html', preparedFor, preparedBy } = req.body || {};
+        if (!filePath) return res.status(400).json({ ok: false, error: 'filePath is required' });
+
+        try {
+            const { ExcelAnalyzer } = await import('../finance/ExcelAnalyzer.js');
+            const { ReportGenerator } = await import('../finance/ReportGenerator.js');
+            const analysis = new ExcelAnalyzer().analyze(filePath);
+            const generator = new ReportGenerator();
+            const filename = filePath.split(/[\\/]/).pop();
+            const opts = { filename, preparedFor, preparedBy };
+
+            if (format === 'html') {
+                const html = generator.toHTML(analysis, opts);
+                res.setHeader('Content-Type', 'text/html');
+                res.send(html);
+            } else {
+                res.json({ report: generator.toMarkdown(analysis, opts), totalFindings: analysis.totalFindings });
+            }
+        } catch (e) {
+            res.status(500).json({ ok: false, error: e.message });
         }
     });
 

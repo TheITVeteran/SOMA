@@ -1,0 +1,1996 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Synapse Neural Platform</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+            background: linear-gradient(135deg, #000 0%, #1a0033 50%, #000 100%);
+            color: #e0e0e0;
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+        }
+        
+        header {
+            background: linear-gradient(135deg, rgba(0, 212, 255, 0.1), rgba(123, 44, 191, 0.1));
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(0, 212, 255, 0.3);
+            border-radius: 20px;
+            padding: 30px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        
+        .demo-badge {
+            display: inline-block;
+            background: rgba(255, 0, 110, 0.2);
+            border: 1px solid #ff006e;
+            color: #ff006e;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.7em;
+            font-weight: 700;
+            letter-spacing: 1px;
+            margin-bottom: 10px;
+        }
+        
+        .brand h1 {
+            font-size: 3em;
+            background: linear-gradient(45deg, #00d4ff, #7b2cbf, #ff006e);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            font-weight: 900;
+            margin-bottom: 10px;
+        }
+        
+        .brand .subtitle {
+            color: #888;
+            font-size: 0.9em;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin-bottom: 20px;
+        }
+        
+        .info-btn {
+            background: rgba(0, 212, 255, 0.2);
+            border: 2px solid #00d4ff;
+            color: #00d4ff;
+            padding: 12px 24px;
+            border-radius: 12px;
+            cursor: pointer;
+            font-size: 1em;
+            font-weight: 600;
+            transition: all 0.3s;
+        }
+        
+        .info-btn:hover {
+            background: rgba(0, 212, 255, 0.3);
+            transform: translateY(-3px);
+        }
+        
+        .main-grid {
+            display: grid;
+            grid-template-columns: 300px 1fr;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        
+        @media (max-width: 1024px) {
+            .main-grid { grid-template-columns: 1fr; }
+        }
+        
+        .arbiters-panel {
+            background: rgba(26, 26, 26, 0.6);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(0, 212, 255, 0.3);
+            border-radius: 20px;
+            padding: 20px;
+            max-height: 600px;
+            overflow-y: auto;
+        }
+        
+        .panel-title {
+            font-size: 1.2em;
+            font-weight: 700;
+            color: #00d4ff;
+            margin-bottom: 5px;
+            text-align: center;
+        }
+        
+        .panel-subtitle {
+            font-size: 0.85em;
+            color: #888;
+            text-align: center;
+            margin-bottom: 15px;
+        }
+        
+        .arbiter-item {
+            background: rgba(0, 0, 0, 0.4);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 12px;
+            padding: 15px;
+            margin-bottom: 10px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .arbiter-item:hover {
+            border-color: #00d4ff;
+            transform: translateX(5px);
+        }
+        
+        .arbiter-item.deployed {
+            border-color: #00ff88;
+            background: rgba(0, 255, 136, 0.1);
+        }
+        
+        .arbiter-name {
+            font-weight: 700;
+            color: #00d4ff;
+            margin-bottom: 5px;
+        }
+        
+        .arbiter-desc {
+            font-size: 0.85em;
+            color: #888;
+            line-height: 1.4;
+        }
+        
+        .arbiter-status {
+            margin-top: 8px;
+            font-size: 0.75em;
+            color: #00ff88;
+            font-weight: 600;
+        }
+        
+        .demos-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .demo-card {
+            background: linear-gradient(135deg, rgba(0, 212, 255, 0.1), rgba(123, 44, 191, 0.1));
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(0, 212, 255, 0.3);
+            border-radius: 20px;
+            padding: 25px;
+            cursor: pointer;
+            transition: all 0.3s;
+            position: relative;
+        }
+        
+        .demo-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 40px rgba(0, 212, 255, 0.4);
+            border-color: #00d4ff;
+        }
+        
+        .demo-card.expanded {
+            grid-column: 1 / -1;
+            background: linear-gradient(135deg, rgba(0, 212, 255, 0.15), rgba(123, 44, 191, 0.15));
+        }
+        
+        .demo-card h3 {
+            color: #00d4ff;
+            font-size: 1.3em;
+            margin-bottom: 10px;
+        }
+        
+        .demo-card p {
+            color: #aaa;
+            line-height: 1.6;
+            font-size: 0.9em;
+        }
+        
+        .demo-only-badge {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(255, 165, 0, 0.2);
+            border: 1px solid rgba(255, 165, 0, 0.5);
+            color: #ffa500;
+            padding: 3px 8px;
+            border-radius: 8px;
+            font-size: 0.7em;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+        }
+        
+        .expandable-content {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.5s ease;
+        }
+        
+        .expandable-content.active {
+            max-height: 2000px;
+            margin-top: 20px;
+        }
+        
+        .module-input-section {
+            background: rgba(0, 0, 0, 0.4);
+            border: 1px solid rgba(0, 212, 255, 0.2);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+            position: relative;
+        }
+        
+        .api-settings-btn {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(123, 44, 191, 0.2);
+            border: 1px solid rgba(123, 44, 191, 0.4);
+            color: #7b2cbf;
+            padding: 4px 8px;
+            border-radius: 6px;
+            font-size: 0.7em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .api-settings-btn:hover {
+            background: rgba(123, 44, 191, 0.3);
+            transform: scale(1.05);
+        }
+        
+        .api-config-modal {
+            display: none;
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(10, 10, 10, 0.95);
+            border: 2px solid rgba(123, 44, 191, 0.5);
+            border-radius: 15px;
+            padding: 30px;
+            z-index: 10000;
+            min-width: 400px;
+            max-width: 90%;
+        }
+        
+        .api-config-modal.active {
+            display: block;
+        }
+        
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            z-index: 9999;
+        }
+        
+        .modal-overlay.active {
+            display: block;
+        }
+        
+        .api-config-title {
+            color: #7b2cbf;
+            font-size: 1.3em;
+            font-weight: 700;
+            margin-bottom: 20px;
+        }
+        
+        .input-group {
+            margin-bottom: 15px;
+        }
+        
+        .input-group label {
+            display: block;
+            color: #00d4ff;
+            font-size: 0.9em;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+        
+        .input-group input, .input-group select {
+            width: 100%;
+            background: rgba(0, 0, 0, 0.6);
+            border: 1px solid rgba(0, 212, 255, 0.3);
+            border-radius: 8px;
+            padding: 12px;
+            color: #fff;
+            font-size: 0.95em;
+        }
+        
+        .input-group input:focus, .input-group select:focus {
+            outline: none;
+            border-color: #00d4ff;
+        }
+        
+        .btn-primary {
+            background: rgba(0, 212, 255, 0.2);
+            border: 2px solid #00d4ff;
+            color: #00d4ff;
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.95em;
+            font-weight: 600;
+            transition: all 0.3s;
+        }
+        
+        .btn-primary:hover {
+            background: rgba(0, 212, 255, 0.3);
+            transform: translateY(-2px);
+        }
+        
+        .btn-secondary {
+            background: rgba(123, 44, 191, 0.2);
+            border: 2px solid #7b2cbf;
+            color: #7b2cbf;
+            padding: 10px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 0.95em;
+            font-weight: 600;
+            transition: all 0.3s;
+            margin-left: 10px;
+        }
+        
+        .btn-secondary:hover {
+            background: rgba(123, 44, 191, 0.3);
+        }
+        
+        .clone-visualization {
+            background: rgba(0, 0, 0, 0.4);
+            border: 1px solid rgba(0, 212, 255, 0.2);
+            border-radius: 12px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .clone-title {
+            color: #00d4ff;
+            font-size: 1em;
+            font-weight: 600;
+            margin-bottom: 15px;
+        }
+        
+        .clone-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+            gap: 10px;
+        }
+        
+        .clone-node {
+            background: rgba(0, 212, 255, 0.1);
+            border: 1px solid rgba(0, 212, 255, 0.3);
+            border-radius: 8px;
+            padding: 10px;
+            text-align: center;
+            font-size: 0.8em;
+            animation: fadeIn 0.5s ease;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: scale(0.8); }
+            to { opacity: 1; transform: scale(1); }
+        }
+        
+        .clone-node.active {
+            border-color: #00ff88;
+            background: rgba(0, 255, 136, 0.1);
+            box-shadow: 0 0 15px rgba(0, 255, 136, 0.3);
+        }
+        
+        .analytics-dashboard {
+            background: rgba(0, 0, 0, 0.4);
+            border: 1px solid rgba(0, 212, 255, 0.2);
+            border-radius: 12px;
+            padding: 20px;
+        }
+        
+        .analytics-header {
+            color: #00d4ff;
+            font-size: 1em;
+            font-weight: 600;
+            margin-bottom: 15px;
+        }
+        
+        .stat-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .stat-card {
+            background: rgba(0, 0, 0, 0.6);
+            border: 1px solid rgba(0, 212, 255, 0.2);
+            border-radius: 8px;
+            padding: 15px;
+        }
+        
+        .stat-label {
+            color: #888;
+            font-size: 0.85em;
+            margin-bottom: 5px;
+        }
+        
+        .stat-value {
+            color: #00ff88;
+            font-size: 1.5em;
+            font-weight: 700;
+        }
+        
+        .recommendation-box {
+            background: rgba(0, 255, 136, 0.1);
+            border: 1px solid rgba(0, 255, 136, 0.3);
+            border-radius: 8px;
+            padding: 15px;
+            margin-top: 15px;
+        }
+        
+        .recommendation-box.warning {
+            background: rgba(255, 189, 46, 0.1);
+            border-color: rgba(255, 189, 46, 0.3);
+        }
+        
+        .recommendation-box.danger {
+            background: rgba(255, 95, 86, 0.1);
+            border-color: rgba(255, 95, 86, 0.3);
+        }
+        
+        .terminal {
+            background: rgba(10, 10, 10, 0.8);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(0, 212, 255, 0.3);
+            border-radius: 20px;
+            overflow: hidden;
+        }
+        
+        .terminal-header {
+            background: rgba(26, 26, 26, 0.8);
+            padding: 15px 20px;
+            border-bottom: 1px solid rgba(0, 212, 255, 0.3);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .terminal-title {
+            color: #00d4ff;
+            font-weight: 700;
+        }
+        
+        .connection-status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.85em;
+        }
+        
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #ff5f56;
+        }
+        
+        .status-dot.connected {
+            background: #00ff88;
+            box-shadow: 0 0 10px rgba(0, 255, 136, 0.5);
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        
+        .terminal-output {
+            padding: 20px;
+            height: 400px;
+            overflow-y: auto;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+            line-height: 1.8;
+        }
+        
+        .terminal-line {
+            margin-bottom: 5px;
+        }
+        
+        .log-info { color: #00d4ff; }
+        .log-success { color: #00ff88; }
+        .log-warning { color: #ffbd2e; }
+        .log-error { color: #ff5f56; }
+        
+        .terminal-input-area {
+            background: rgba(13, 13, 13, 0.9);
+            padding: 15px 20px;
+            border-top: 1px solid rgba(0, 212, 255, 0.3);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .terminal-prompt {
+            color: #00ff88;
+            font-family: 'Courier New', monospace;
+            font-weight: 700;
+        }
+        
+        .terminal-input {
+            flex: 1;
+            background: none;
+            border: none;
+            color: #fff;
+            font-family: 'Courier New', monospace;
+            font-size: 1em;
+            outline: none;
+        }
+        
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.95);
+            z-index: 9999;
+            padding: 20px;
+            overflow-y: auto;
+        }
+        
+        .modal.active { display: block; }
+        
+        .modal-content {
+            background: linear-gradient(135deg, #0a0a0a 0%, #1a0033 50%, #0a0a0a 100%);
+            border: 2px solid rgba(0, 212, 255, 0.5);
+            border-radius: 25px;
+            padding: 40px;
+            max-width: 1600px;
+            margin: 0 auto;
+            position: relative;
+        }
+        
+        .modal-close {
+            position: absolute;
+            top: 20px;
+            right: 30px;
+            font-size: 2em;
+            color: #666;
+            cursor: pointer;
+            z-index: 10000;
+        }
+        
+        .modal-close:hover { color: #00d4ff; }
+        
+        .modal-content h2 {
+            font-size: 4em;
+            background: linear-gradient(45deg, #00d4ff, #7b2cbf, #ff006e);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 10px;
+            text-align: center;
+            font-weight: 900;
+        }
+        
+        .acronym {
+            text-align: center;
+            color: #888;
+            font-size: 1.2em;
+            margin-bottom: 40px;
+            font-style: italic;
+        }
+        
+        .arch-diagram {
+            background: rgba(0, 0, 0, 0.6);
+            border: 1px solid rgba(0, 212, 255, 0.3);
+            border-radius: 15px;
+            padding: 25px;
+            font-family: 'Courier New', monospace;
+            font-size: 0.75em;
+            line-height: 1.5;
+            white-space: pre;
+            overflow-x: auto;
+            color: #00d4ff;
+            margin: 30px 0;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+        }
+        
+        .pas-section {
+            margin: 40px 0;
+        }
+        
+        .pas-header {
+            background: rgba(123, 44, 191, 0.2);
+            border: 1px solid rgba(123, 44, 191, 0.4);
+            padding: 15px 25px;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .pas-header:hover {
+            background: rgba(123, 44, 191, 0.3);
+            transform: translateY(-2px);
+        }
+        
+        .pas-title {
+            font-size: 1.5em;
+            color: #7b2cbf;
+            font-weight: 600;
+            margin: 0;
+        }
+        
+        .pas-subtitle {
+            font-size: 0.85em;
+            color: #888;
+            margin-top: 5px;
+        }
+        
+        .pas-content {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.5s ease;
+        }
+        
+        .pas-content.expanded {
+            max-height: 10000px;
+        }
+        
+        .pas-philosophy {
+            margin: 20px 0;
+        }
+        
+        .philosophy-header {
+            background: rgba(0, 0, 0, 0.4);
+            border: 1px solid rgba(123, 44, 191, 0.3);
+            padding: 15px 20px;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .philosophy-header:hover {
+            background: rgba(123, 44, 191, 0.1);
+        }
+        
+        .philosophy-title {
+            color: #7b2cbf;
+            font-weight: 600;
+            font-size: 1.1em;
+        }
+        
+        .philosophy-content {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease;
+        }
+        
+        .philosophy-content.expanded {
+            max-height: 500px;
+        }
+        
+        .philosophy-text {
+            background: rgba(123, 44, 191, 0.05);
+            border: 1px solid rgba(123, 44, 191, 0.2);
+            border-radius: 10px;
+            padding: 20px;
+            margin-top: 10px;
+            color: #aaa;
+            line-height: 1.8;
+            font-size: 0.95em;
+        }
+        
+        .arbiter-accordion {
+            margin: 10px 0;
+        }
+        
+        .arbiter-header {
+            background: rgba(0, 0, 0, 0.4);
+            border: 1px solid rgba(0, 212, 255, 0.3);
+            padding: 15px;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        
+        .arbiter-header:hover {
+            background: rgba(0, 212, 255, 0.1);
+            border-color: #00d4ff;
+        }
+        
+        .arbiter-header-title {
+            color: #00d4ff;
+            font-weight: 700;
+            font-size: 1.05em;
+        }
+        
+        .arbiter-content {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease;
+            padding: 0 15px;
+        }
+        
+        .arbiter-content.expanded {
+            max-height: 500px;
+            padding: 15px;
+        }
+        
+        .arbiter-content p {
+            color: #aaa;
+            line-height: 1.7;
+            margin-bottom: 10px;
+        }
+        
+        .highlight {
+            color: #00ff88;
+            font-weight: 600;
+        }
+        
+        .mission-section {
+            margin-top: 60px;
+        }
+        
+        .mission-header {
+            background: linear-gradient(135deg, rgba(123, 44, 191, 0.3), rgba(123, 44, 191, 0.2));
+            border: 2px solid rgba(123, 44, 191, 0.5);
+            border-radius: 10px;
+            padding: 12px 30px;
+            cursor: pointer;
+            text-align: center;
+            transition: all 0.3s;
+        }
+        
+        .mission-header:hover {
+            background: linear-gradient(135deg, rgba(123, 44, 191, 0.4), rgba(123, 44, 191, 0.3));
+            transform: translateY(-2px);
+            box-shadow: 0 5px 20px rgba(123, 44, 191, 0.4);
+        }
+        
+        .mission-title {
+            color: #7b2cbf;
+            font-weight: 600;
+            font-size: 1.1em;
+            letter-spacing: 1px;
+        }
+        
+        .mission-content {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.5s ease;
+        }
+        
+        .mission-content.expanded {
+            max-height: 500px;
+            margin-top: 20px;
+        }
+        
+        .mission-statement-box {
+            background: linear-gradient(135deg, rgba(0, 0, 0, 0.8), rgba(26, 0, 51, 0.8));
+            border: 2px solid rgba(123, 44, 191, 0.6);
+            border-radius: 15px;
+            padding: 30px 40px;
+            box-shadow: 0 10px 40px rgba(123, 44, 191, 0.3);
+            backdrop-filter: blur(10px);
+            position: relative;
+        }
+        
+        .mission-statement-box::before {
+            content: '"';
+            font-size: 4em;
+            color: rgba(123, 44, 191, 0.3);
+            position: absolute;
+            top: -10px;
+            left: 20px;
+            line-height: 1;
+        }
+        
+        .mission-statement-box::after {
+            content: '"';
+            font-size: 4em;
+            color: rgba(123, 44, 191, 0.3);
+            position: absolute;
+            bottom: -30px;
+            right: 20px;
+            line-height: 1;
+        }
+        
+        .mission-statement-box p {
+            color: #e0e0e0;
+            font-size: 1.1em;
+            line-height: 1.8;
+            text-align: center;
+            font-style: italic;
+            margin: 0;
+            padding: 0 20px;
+        }
+        
+        @media (max-width: 768px) {
+            .mission-statement-box {
+                padding: 20px 25px;
+            }
+            
+            .mission-statement-box p {
+                font-size: 0.95em;
+                padding: 0 10px;
+            }
+        }
+        
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        
+        ::-webkit-scrollbar-track {
+            background: rgba(0, 0, 0, 0.3);
+        }
+        
+        ::-webkit-scrollbar-thumb {
+            background: rgba(0, 212, 255, 0.5);
+            border-radius: 4px;
+        }
+        /* Guardian Drawer (slide-in) */
+        .drawer-overlay {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.8);
+            z-index: 100000;
+        }
+        .drawer-overlay.active { display: block; }
+
+        .drawer {
+            position: fixed;
+            top: 0;
+            right: 0;
+            height: 100vh;
+            width: min(900px, 95vw);
+            background: linear-gradient(135deg, #0a0a0a 0%, #1a0033 50%, #0a0a0a 100%);
+            border-left: 2px solid rgba(0, 212, 255, 0.4);
+            box-shadow: -10px 0 40px rgba(0, 0, 0, 0.6);
+            transform: translateX(100%);
+            transition: transform 0.35s ease;
+            z-index: 100001;
+            display: flex;
+            flex-direction: column;
+        }
+        .drawer.active { transform: translateX(0); }
+        .drawer-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 16px 20px;
+            background: rgba(26, 26, 26, 0.85);
+            border-bottom: 1px solid rgba(0, 212, 255, 0.3);
+        }
+        .drawer-title { color: #00d4ff; font-weight: 800; letter-spacing: 0.5px; }
+        .drawer-close { background: transparent; border: none; color: #888; font-size: 1.8em; cursor: pointer; line-height: 1; }
+        .drawer-close:hover { color: #00d4ff; }
+        .drawer-body { flex: 1; display: flex; }
+        .drawer-body iframe { flex: 1; width: 100%; height: 100%; border: none; background: #0a0a0a; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="brand">
+                <div class="demo-badge">DEMO</div>
+                <h1>🧠 Synapse</h1>
+                <div class="subtitle">Neural Orchestration Platform</div>
+            </div>
+            <button class="info-btn" onclick="showInfo()">System Information</button>
+        </header>
+
+        <div class="main-grid">
+            <div class="arbiters-panel">
+                <div class="panel-title">Deployable Arbiters</div>
+                <div class="panel-subtitle">Click to Deploy</div>
+                <div id="arbiterList"></div>
+            </div>
+            
+            <div class="demos-grid" id="demosGrid">
+                <div class="demo-card" onclick="openGuardianDrawer()">
+                    <h3>Threat Detection</h3>
+                    <p>Guardian blocks SQL injection in real-time</p>
+                </div>
+                <div class="demo-card" onclick="runDemo('intelligence')">
+                    <h3>Duality Brain</h3>
+                    <p>LOGOS and AURORA synthesize solutions</p>
+                </div>
+                <div class="demo-card" onclick="runDemo('scaling')">
+                    <h3>Auto-Scaling</h3>
+                    <p>Handle 1000+ requests with clone spawning</p>
+                </div>
+                
+                <!-- Mercury (Stock Intelligence) -->
+                <div class="demo-card" id="mercuryCard" onclick="toggleModule('mercury')">
+                    <div class="demo-only-badge">DEMO ONLY</div>
+                    <h3>Stock Intelligence</h3>
+                    <p>Real-time market analysis with AI signals</p>
+                    <div class="expandable-content" id="mercuryContent">
+                        <div class="module-input-section">
+                            <button class="api-settings-btn" onclick="openApiConfig('mercury', event)">API</button>
+                            <div class="input-group">
+                                <label>Stock Symbol</label>
+                                <input type="text" id="mercurySymbol" placeholder="AAPL, TSLA, NVDA..." value="AAPL" onclick="event.stopPropagation()">
+                            </div>
+                            <div class="input-group">
+                                <label>API Source</label>
+                                <select id="mercurySource" onclick="event.stopPropagation()" onchange="event.stopPropagation()">
+                                    <option value="yahoo">Yahoo Finance (Free)</option>
+                                    <option value="alphavantage">Alpha Vantage (API Key)</option>
+                                    <option value="finnhub">Finnhub (API Key)</option>
+                                </select>
+                            </div>
+                            <button class="btn-primary" onclick="startMercury(event)">Analyze Market</button>
+                        </div>
+                        
+                        <div class="clone-visualization" id="mercuryClones" style="display:none;">
+                            <div class="clone-title">Polymorphic Clones Active</div>
+                            <div class="clone-grid" id="mercuryCloneGrid"></div>
+                        </div>
+                        
+                        <div class="analytics-dashboard" id="mercuryDashboard" style="display:none;">
+                            <div class="analytics-header">Market Intelligence</div>
+                            <div class="stat-grid" id="mercuryStats"></div>
+                            <div id="mercuryRecommendation"></div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Atlas (Fantasy Football) -->
+                <div class="demo-card" id="atlasCard" onclick="toggleModule('atlas')">
+                    <div class="demo-only-badge">DEMO ONLY</div>
+                    <h3>Fantasy Football</h3>
+                    <p>Connect Sleeper for lineup optimization</p>
+                    <div class="expandable-content" id="atlasContent">
+                        <div class="module-input-section">
+                            <button class="api-settings-btn" onclick="openApiConfig('atlas', event)">API</button>
+                            <div class="input-group">
+                                <label>Sleeper Username</label>
+                                <input type="text" id="atlasUsername" placeholder="your_username" onclick="event.stopPropagation()">
+                            </div>
+                            <div class="input-group">
+                                <label>Analysis Type</label>
+                                <select id="atlasAnalysisType" onclick="event.stopPropagation()" onchange="event.stopPropagation()">
+                                    <option value="lineup">Lineup Optimization</option>
+                                    <option value="matchup">Matchup Analysis</option>
+                                    <option value="trade">Trade Suggestions</option>
+                                    <option value="waiver">Waiver Wire Targets</option>
+                                </select>
+                            </div>
+                            <button class="btn-primary" onclick="startAtlas(event)">Analyze Team</button>
+                        </div>
+                        
+                        <div class="clone-visualization" id="atlasClones" style="display:none;">
+                            <div class="clone-title">Polymorphic Clones Active</div>
+                            <div class="clone-grid" id="atlasCloneGrid"></div>
+                        </div>
+                        
+                        <div class="analytics-dashboard" id="atlasDashboard" style="display:none;">
+                            <div class="analytics-header">Team Intelligence</div>
+                            <div class="stat-grid" id="atlasStats"></div>
+                            <div id="atlasRecommendation"></div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Archivus (Multi-mode FS Analysis) - separate module container -->
+                <div class="demo-card" id="archivusCard" onclick="toggleModule('archivus')">
+                    <h3>File Organization</h3>
+                    <p>Multi-mode file system analysis</p>
+                    <div class="expandable-content" id="archivusContent">
+                        <div class="module-input-section">
+                            <p style="color: #aaa; margin-bottom: 15px;">One arbiter with multiple operational modes: scan, classify, secure, backup</p>
+                            <button class="btn-primary" onclick="startArchivus(event)">Select Folder</button>
+                        </div>
+                        
+                        <div class="analytics-dashboard" id="archivusDashboard" style="display:none;">
+                            <div class="analytics-header">File System Analysis</div>
+                            <div class="stat-grid" id="archivusStats"></div>
+                            <div id="archivusRecommendation"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="terminal">
+            <div class="terminal-header">
+                <div class="terminal-title">SOMA Terminal</div>
+                <div class="connection-status">
+                    <div class="status-dot" id="statusDot"></div>
+                    <span id="statusText">Demo Mode</span>
+                </div>
+            </div>
+            <div class="terminal-output" id="terminalOutput">
+                <div class="terminal-line log-info">System initialized. Type 'help' for commands.</div>
+                <div class="terminal-line log-warning">To connect to real SOMA server: connect &lt;server-ip&gt;</div>
+            </div>
+            <div class="terminal-input-area">
+                <span class="terminal-prompt">soma></span>
+                <input type="text" class="terminal-input" id="terminalInput" placeholder="Enter command..." onkeypress="if(event.key==='Enter')executeCommand()">
+            </div>
+        </div>
+    </div>
+
+    <!-- API Configuration Modal -->
+    <div class="modal-overlay" id="apiModalOverlay" onclick="closeApiConfig()"></div>
+    <div class="api-config-modal" id="apiConfigModal">
+        <div class="api-config-title" id="apiConfigTitle">Configure API Keys</div>
+        <div id="apiConfigContent"></div>
+        <div style="margin-top: 20px;">
+            <button class="btn-primary" onclick="saveApiConfig()">Save Configuration</button>
+            <button class="btn-secondary" onclick="closeApiConfig()">Cancel</button>
+        </div>
+    </div>
+
+    <!-- Guardian Drawer: loads guardian.html as an embedded experience -->
+    <div class="drawer-overlay" id="guardianDrawerOverlay" onclick="closeGuardianDrawer()"></div>
+    <div class="drawer" id="guardianDrawer" aria-hidden="true">
+        <div class="drawer-header">
+            <div class="drawer-title">🛡️ Guardian Arbiter</div>
+            <button class="drawer-close" onclick="closeGuardianDrawer()" aria-label="Close Guardian">&times;</button>
+        </div>
+        <div class="drawer-body">
+            <iframe id="guardianFrame" src="guardian.html" title="Guardian Arbiter"></iframe>
+        </div>
+    </div>
+
+    <div class="modal" id="infoModal">
+        <div class="modal-content">
+            <span class="modal-close" onclick="closeInfo()">&times;</span>
+            <h2>SOMA</h2>
+            <div class="acronym">Self-Organizing Multi-Agent Arbiter</div>
+            
+            <h3 style="text-align: center; color: #00d4ff; font-size: 2em; margin: 30px 0 20px;">Complete System Architecture</h3>
+            
+            <div class="arch-diagram">┌──────────────────────────────────────────────────────────────────────────────────┐
+│                           MCP CORTEX SERVER (Core)                               │
+│                      Model Context Protocol Integration                          │
+│                                                                                   │
+│  ┌────────────────────────────────────────────────────────────────────────────┐  │
+│  │                          SOMA COORDINATOR                                   │  │
+│  │  • Message Broker (orchestration & routing)                                │  │
+│  │  • Cognitive Bridge (learning & pattern recognition)                       │  │
+│  │  • Emotional Engine (personality & adaptation)                             │  │
+│  │  • Hippocampus (distributed memory system)                                 │  │
+│  │  • Distribution System (automatic updates)                                 │  │
+│  │  • Relay Protocol (MCP ↔ Arbiter communication)                           │  │
+│  └────────────────────────────────────────────────────────────────────────────┘  │
+└───────────────────────────┬──────────────────────────────────────────────────────┘
+                            │
+      ┌───────────────────┼───────────────────┐
+      ▼                   ▼                   ▼
+┌──────────────────┐ ┌──────────────────┐ ┌──────────────────┐
+│  DUALITY BRAIN   │ │  ARBITER SWARM   │ │  GRAYMATTER      │
+│                  │ │  (Polymorphic)   │ │  NETWORK         │
+│  LOGOS (Left)    │ │                  │ │                  │
+│  • Analytical    │ │  14+ Arbiters    │ │  Distributed     │
+│  • Logical       │ │  with:           │ │  Nodes:          │
+│  • Llama 3.3     │ │  • Auto-cloning  │ │  • Peer-to-peer  │
+│                  │ │  • Load balance  │ │  • Redundancy    │
+│  AURORA (Right)  │ │  • Self-healing  │ │  • Consensus     │
+│  • Creative      │ │  • Dynamic gen   │ │  • Replication   │
+│  • Intuitive     │ │                  │ │                  │
+│  • Gemini/Claude │ │  Timekeeper      │ │  P2P Pathways:   │
+│                  │ │  GatewayMonitor  │ │  • WebRTC        │
+│  Synthesis:      │ │  StorageAdjuster │ │  • Encrypted     │
+│  Optimal blend   │ │  Archivist       │ │  • Decentralized │
+│  of logic +      │ │  Orchestrator    │ │  • Resilient     │
+│  creativity      │ │  Impulser        │ │                  │
+└──────────────────┘ │  Guardian        │ └──────────────────┘
+                     │  Watchdog        │
+                     │  Dendrite        │
+                     │  EdgeWorker      │
+                     │  DeploymentUnit  │
+                     │  MessageBroker   │
+                     │  Atlas           │
+                     │  Mercury         │
+                     │  Conductor       │
+                     │  Indexer         │
+                     └──────────────────┘
+                            │
+      ┌───────────────────┼───────────────────┐
+      ▼                   ▼                   ▼
+┌──────────────────┐ ┌──────────────────┐ ┌──────────────────┐
+│  SYNAPSE CLIENT  │ │  WEB CRAWLERS    │ │  INTEGRATIONS    │
+│                  │ │  (Dendrites)     │ │                  │
+│  • HTML/Browser  │ │                  │ │  • Sleeper API   │
+│  • Offline-first │ │  • Intelligent   │ │  • Stock APIs    │
+│  • Single file   │ │  • Respectful    │ │  • File System   │
+│  • P2P ready     │ │  • Distributed   │ │  • MCP Servers   │
+│  • Encrypted     │ │  • Semantic      │ │  • Custom APIs   │
+└──────────────────┘ └──────────────────┘ └──────────────────┘</div>
+
+            <div class="pas-section">
+                <div class="pas-header" onclick="togglePAS()">
+                    <div class="pas-title">Polymorphic Arbitration System (PAS)</div>
+                    <div class="pas-subtitle">Click to expand</div>
+                </div>
+                <div class="pas-content" id="pasContent">
+                    <div class="pas-philosophy">
+                        <div class="philosophy-header" onclick="togglePhilosophy(event)">
+                            <div class="philosophy-title">What is PAS?</div>
+                        </div>
+                        <div class="philosophy-content" id="philosophyContent">
+                            <div class="philosophy-text">
+                                PAS is a new form of digital life. This system is a society of 14 (and growing) specialized Polymorphic AI Arbiters that possess the ability to clone themselves under pressure and gracefully merge back when the work is done. When a new challenge arises, they don't wait for a developer; the Conductor generates a new specialist among themselves to solve it. This society is protected by a Guardian—a self-healing intelligence that finds its own bugs, reasons about its own flaws, and writes its own fixes, testing them in isolated realities before healing the collective. This is not just automation; it is autonomic resilience. The PAS is a system that scales infinitely because it doesn't just scale—it evolves.
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="arbiter-accordion">
+                        <div class="arbiter-header" onclick="toggleArbiterInfo(this)">
+                            <span class="arbiter-header-title">Timekeeper</span>
+                        </div>
+                        <div class="arbiter-content">
+                            <p>Schedules and coordinates all time-based operations across the arbiter swarm. Manages cron-like scheduling, task prioritization, and temporal coordination between distributed arbiters. Ensures no task is ever missed or duplicated.</p>
+                        </div>
+                    </div>
+                    
+                    <div class="arbiter-accordion">
+                        <div class="arbiter-header" onclick="toggleArbiterInfo(this)">
+                            <span class="arbiter-header-title">GatewayMonitor</span>
+                        </div>
+                        <div class="arbiter-content">
+                            <p>HTTP/REST API gateway with authentication, rate limiting, and load balancing. Provides secure entry points for external systems. Scales automatically under traffic spikes.</p>
+                        </div>
+                    </div>
+                    
+                    <div class="arbiter-accordion">
+                        <div class="arbiter-header" onclick="toggleArbiterInfo(this)">
+                            <span class="arbiter-header-title">StorageAdjuster</span>
+                        </div>
+                        <div class="arbiter-content">
+                            <p>Distributed key-value storage with Redis integration. Handles data persistence, replication, and intelligent caching. Zero data loss with automatic failover.</p>
+                        </div>
+                    </div>
+                    
+                    <div class="arbiter-accordion">
+                        <div class="arbiter-header" onclick="toggleArbiterInfo(this)">
+                            <span class="arbiter-header-title">Archivist</span>
+                        </div>
+                        <div class="arbiter-content">
+                            <p>Data compression and archival specialist. Supports gzip, brotli, LZMA2, deduplication, and long-term retention. Reduces storage costs by up to 90%.</p>
+                        </div>
+                    </div>
+                    
+                    <div class="arbiter-accordion">
+                        <div class="arbiter-header" onclick="toggleArbiterInfo(this)">
+                            <span class="arbiter-header-title">Orchestrator</span>
+                        </div>
+                        <div class="arbiter-content">
+                            <p>Master coordinator for the arbiter swarm. Manages load balancing, spawns clones when needed (load >90%), merges idle arbiters (load <20%). The brain of the operation.</p>
+                        </div>
+                    </div>
+                    
+                    <div class="arbiter-accordion">
+                        <div class="arbiter-header" onclick="toggleArbiterInfo(this)">
+                            <span class="arbiter-header-title">Impulser</span>
+                        </div>
+                        <div class="arbiter-content">
+                            <p>Intelligent indexing and search engine. Creates semantic indexes of all data, enables sub-second retrieval, maintains relationships between nodes. Makes finding anything instant.</p>
+                        </div>
+                    </div>
+                    
+                    <div class="arbiter-accordion">
+                        <div class="arbiter-header" onclick="toggleArbiterInfo(this)">
+                            <span class="arbiter-header-title">Guardian</span>
+                        </div>
+                        <div class="arbiter-content">
+                            <p>Real-time threat detection and code self-healing system. Provides impenetrable cyber defense with sub-2-second response. Blocks SQL injection, XSS, DDoS. When code breaks, analyzes failures, generates AI-powered fixes via LOGOS, tests in sandbox, auto-deploys patches without human intervention.</p>
+                        </div>
+                    </div>
+                    
+                    <div class="arbiter-accordion">
+                        <div class="arbiter-header" onclick="toggleArbiterInfo(this)">
+                            <span class="arbiter-header-title">Watchdog</span>
+                        </div>
+                        <div class="arbiter-content">
+                            <p>System health monitoring and auto-recovery. Continuously monitors every arbiter's health and auto-restarts crashed components before users notice. Detects memory leaks, performance degradation, failures. When it detects recurring failures (3+ crashes), triggers Guardian for permanent fixes.</p>
+                        </div>
+                    </div>
+                    
+                    <div class="arbiter-accordion">
+                        <div class="arbiter-header" onclick="toggleArbiterInfo(this)">
+                            <span class="arbiter-header-title">Dendrite</span>
+                        </div>
+                        <div class="arbiter-content">
+                            <p>Intelligent web crawler and data gatherer. Extracts structured data from websites, follows links intelligently, respects robots.txt, aggregates from multiple sources. Feeds the entire system.</p>
+                        </div>
+                    </div>
+                    
+                    <div class="arbiter-accordion">
+                        <div class="arbiter-header" onclick="toggleArbiterInfo(this)">
+                            <span class="arbiter-header-title">EdgeWorker</span>
+                        </div>
+                        <div class="arbiter-content">
+                            <p>Data fetching and processing specialist. Handles HTTP requests, caching, retry logic, data transformation. Works with Dendrites for comprehensive data acquisition.</p>
+                        </div>
+                    </div>
+                    
+                    <div class="arbiter-accordion">
+                        <div class="arbiter-header" onclick="toggleArbiterInfo(this)">
+                            <span class="arbiter-header-title">DeploymentUnit</span>
+                        </div>
+                        <div class="arbiter-content">
+                            <p>Dynamic arbiter generation and deployment. Creates new arbiters on-demand based on requirements. Conductor analyzes tasks and generates custom arbiters with specialized capabilities. Manages lifecycle and versioning.</p>
+                        </div>
+                    </div>
+                    
+                    <div class="arbiter-accordion">
+                        <div class="arbiter-header" onclick="toggleArbiterInfo(this)">
+                            <span class="arbiter-header-title">MessageBroker</span>
+                        </div>
+                        <div class="arbiter-content">
+                            <p>Core communication backbone. Routes messages between arbiters, handles pub/sub patterns, ensures delivery guarantees, maintains queues for async operations. The nervous system of SOMA.</p>
+                        </div>
+                    </div>
+                    
+                    <div class="arbiter-accordion">
+                        <div class="arbiter-header" onclick="toggleArbiterInfo(this)">
+                            <span class="arbiter-header-title">Atlas</span>
+                        </div>
+                        <div class="arbiter-content">
+                            <p><strong>Fantasy Football Optimization Engine.</strong> Production-ready Sleeper API integration. Connect your account, fetch real team data, analyze matchups, weather, injuries, bye weeks. Generates lineup recommendations with win probability calculations using ML models trained on historical NFL data.</p>
+                        </div>
+                    </div>
+                    
+                    <div class="arbiter-accordion">
+                        <div class="arbiter-header" onclick="toggleArbiterInfo(this)">
+                            <span class="arbiter-header-title">Mercury</span>
+                        </div>
+                        <div class="arbiter-content">
+                            <p><strong>Stock Market Intelligence System.</strong> Production-ready with live market data APIs. Monitors real-time stock data, calculates technical indicators (RSI, MACD, Bollinger Bands, Volume), generates BUY/SELL/HOLD signals with confidence scores. Portfolio tracking and alert notifications.</p>
+                        </div>
+                    </div>
+
+                    <div class="arbiter-accordion">
+                        <div class="arbiter-header" onclick="toggleArbiterInfo(this)">
+                            <span class="arbiter-header-title">Conductor</span>
+                        </div>
+                        <div class="arbiter-content">
+                            <p>Dynamic arbiter generation and deployment. Describe what you need in natural language, Conductor generates a custom arbiter with specialized capabilities, validates security, and deploys it instantly. The system evolves itself.</p>
+                        </div>
+                    </div>
+
+                    <div class="arbiter-accordion">
+                        <div class="arbiter-header" onclick="toggleArbiterInfo(this)">
+                            <span class="arbiter-header-title">Indexer</span>
+                        </div>
+                        <div class="arbiter-content">
+                            <p>Intelligent indexing and search engine. Creates semantic indexes of all data, enables sub-second retrieval with vector embeddings, maintains relationships between nodes, and performs similarity searches. Makes finding anything instant.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="mission-section">
+                <div class="mission-header" onclick="toggleMission()">
+                    <div class="mission-title">Mission Statement</div>
+                </div>
+                <div class="mission-content" id="missionContent">
+                    <div class="mission-statement-box">
+                        <p>Our mission is to revolutionize AI orchestration with polymorphic, self-evolving agents. We don't just build AI that adapts, heals, and scales—we build AI that builds itself, delivering a new standard of intelligence, reliability, and efficiency for distributed systems.</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ═══════════════════════════════════════════════════════════
+        // GLOBAL STATE
+        // ═══════════════════════════════════════════════════════════
+        
+        let somaWebSocket = null;
+        let isConnected = false;
+        let serverMode = false;
+        let deployed = {};
+        let expandedModules = {};
+        let currentApiModule = null;
+        
+        // API Configuration Storage
+        let apiConfig = {
+            mercury: {
+                alphavantage: localStorage.getItem('mercury_alphavantage') || '',
+                finnhub: localStorage.getItem('mercury_finnhub') || ''
+            },
+            atlas: {
+                sleeper: localStorage.getItem('atlas_sleeper') || '',
+                espn: localStorage.getItem('atlas_espn') || ''
+            }
+        };
+        
+        // ═══════════════════════════════════════════════════════════
+        // DEPLOYABLE ARBITERS
+        // ═══════════════════════════════════════════════════════════
+        
+        const DEPLOY_ARBITERS = {
+            guardian: { name: 'Guardian', desc: 'Threat detection & self-healing' },
+            watchdog: { name: 'Watchdog', desc: 'System health monitoring' },
+            atlas: { name: 'Atlas', desc: 'Fantasy football optimization' },
+            mercury: { name: 'Mercury', desc: 'Stock market intelligence' },
+            fileorg: { name: 'FileOrganizer', desc: 'AI file categorization' }
+        };
+        
+        // ═══════════════════════════════════════════════════════════
+        // API CONFIGURATION
+        // ═══════════════════════════════════════════════════════════
+        
+        function openApiConfig(module, event) {
+            event.stopPropagation();
+            currentApiModule = module;
+            
+            const modal = document.getElementById('apiConfigModal');
+            const overlay = document.getElementById('apiModalOverlay');
+            const title = document.getElementById('apiConfigTitle');
+            const content = document.getElementById('apiConfigContent');
+            
+            title.textContent = module === 'mercury' ? 'Stock API Configuration' : 'Fantasy Football API Configuration';
+            
+            if (module === 'mercury') {
+                content.innerHTML = `
+                    <div class="input-group">
+                        <label>Alpha Vantage API Key</label>
+                        <input type="text" id="apiAlphaVantage" placeholder="your-api-key-here" value="${apiConfig.mercury.alphavantage}">
+                    </div>
+                    <div class="input-group">
+                        <label>Finnhub API Key</label>
+                        <input type="text" id="apiFinnhub" placeholder="your-api-key-here" value="${apiConfig.mercury.finnhub}">
+                    </div>
+                    <p style="color: #888; font-size: 0.85em; margin-top: 10px;">
+                        Get free API keys at:<br>
+                        • Alpha Vantage: alphavantage.co<br>
+                        • Finnhub: finnhub.io
+                    </p>
+                `;
+            } else {
+                content.innerHTML = `
+                    <div class="input-group">
+                        <label>Sleeper API Token (Optional)</label>
+                        <input type="text" id="apiSleeper" placeholder="token-here" value="${apiConfig.atlas.sleeper}">
+                    </div>
+                    <div class="input-group">
+                        <label>ESPN API Key (Optional)</label>
+                        <input type="text" id="apiEspn" placeholder="your-api-key-here" value="${apiConfig.atlas.espn}">
+                    </div>
+                    <p style="color: #888; font-size: 0.85em; margin-top: 10px;">
+                        Sleeper API is public and doesn't require authentication.<br>
+                        ESPN requires private league cookies.
+                    </p>
+                `;
+            }
+            
+            modal.classList.add('active');
+            overlay.classList.add('active');
+        }
+        
+        function closeApiConfig() {
+            document.getElementById('apiConfigModal').classList.remove('active');
+            document.getElementById('apiModalOverlay').classList.remove('active');
+        }
+        
+        function saveApiConfig() {
+            if (currentApiModule === 'mercury') {
+                apiConfig.mercury.alphavantage = document.getElementById('apiAlphaVantage').value;
+                apiConfig.mercury.finnhub = document.getElementById('apiFinnhub').value;
+                localStorage.setItem('mercury_alphavantage', apiConfig.mercury.alphavantage);
+                localStorage.setItem('mercury_finnhub', apiConfig.mercury.finnhub);
+                log('Mercury API keys saved successfully', 'success');
+            } else {
+                apiConfig.atlas.sleeper = document.getElementById('apiSleeper').value;
+                apiConfig.atlas.espn = document.getElementById('apiEspn').value;
+                localStorage.setItem('atlas_sleeper', apiConfig.atlas.sleeper);
+                localStorage.setItem('atlas_espn', apiConfig.atlas.espn);
+                log('Atlas API keys saved successfully', 'success');
+            }
+            
+            closeApiConfig();
+        }
+        
+        // ═══════════════════════════════════════════════════════════
+        // MODULE EXPANSION
+        // ═══════════════════════════════════════════════════════════
+        
+        function toggleModule(moduleName) {
+            event.stopPropagation();
+            
+            const card = document.getElementById(`${moduleName}Card`);
+            const content = document.getElementById(`${moduleName}Content`);
+            
+            if (expandedModules[moduleName]) {
+                content.classList.remove('active');
+                card.classList.remove('expanded');
+                expandedModules[moduleName] = false;
+            } else {
+                // Close other modules
+                Object.keys(expandedModules).forEach(key => {
+                    if (key !== moduleName && expandedModules[key]) {
+                        document.getElementById(`${key}Content`).classList.remove('active');
+                        document.getElementById(`${key}Card`).classList.remove('expanded');
+                        expandedModules[key] = false;
+                    }
+                });
+                
+                content.classList.add('active');
+                card.classList.add('expanded');
+                expandedModules[moduleName] = true;
+            }
+        }
+        
+        // ═══════════════════════════════════════════════════════════
+        // GUARDIAN DRAWER CONTROLS
+        function openGuardianDrawer() {
+            const overlay = document.getElementById('guardianDrawerOverlay');
+            const drawer = document.getElementById('guardianDrawer');
+            if (!overlay || !drawer) return;
+            overlay.classList.add('active');
+            drawer.classList.add('active');
+            drawer.setAttribute('aria-hidden', 'false');
+            window.addEventListener('keydown', escCloseHandler);
+        }
+        function closeGuardianDrawer() {
+            const overlay = document.getElementById('guardianDrawerOverlay');
+            const drawer = document.getElementById('guardianDrawer');
+            if (!overlay || !drawer) return;
+            drawer.classList.remove('active');
+            overlay.classList.remove('active');
+            drawer.setAttribute('aria-hidden', 'true');
+            window.removeEventListener('keydown', escCloseHandler);
+        }
+        function escCloseHandler(e) { if (e.key === 'Escape') closeGuardianDrawer(); }
+
+        // MERCURY (STOCK INTELLIGENCE)
+        // ═══════════════════════════════════════════════════════════
+        
+        async function startMercury(event) {
+            event.stopPropagation();
+            
+            const symbol = document.getElementById('mercurySymbol').value.toUpperCase();
+            const source = document.getElementById('mercurySource').value;
+            
+            if (!symbol) {
+                log('Mercury: Please enter a stock symbol', 'error');
+                return;
+            }
+            
+            log(`\n=== Mercury Arbiter Initializing ===`, 'info');
+            log(`Target: ${symbol} | Source: ${source}`, 'info');
+            await wait(500);
+            
+            // Show clones spawning
+            document.getElementById('mercuryClones').style.display = 'block';
+            await spawnMercuryClones(symbol);
+            
+            // Fetch and analyze data
+            await analyzeMercuryData(symbol);
+        }
+        
+        async function spawnMercuryClones(symbol) {
+            const cloneGrid = document.getElementById('mercuryCloneGrid');
+            cloneGrid.innerHTML = '';
+            
+            const cloneTypes = [
+                `Mercury.${symbol}`,
+                'Price Monitor',
+                'Volume Analyzer',
+                'Sentiment Scanner',
+                'Technical Signals'
+            ];
+            
+            for (let i = 0; i < cloneTypes.length; i++) {
+                await wait(300);
+                const clone = document.createElement('div');
+                clone.className = 'clone-node active';
+                clone.textContent = cloneTypes[i];
+                cloneGrid.appendChild(clone);
+                log(`Clone spawned: ${cloneTypes[i]}`, 'success');
+            }
+        }
+        
+        async function analyzeMercuryData(symbol) {
+            log('Aggregating market data...', 'info');
+            await wait(1200);
+            
+            // Simulated market data (in production, fetch from APIs)
+            const mockData = {
+                price: (Math.random() * 200 + 50).toFixed(2),
+                change: (Math.random() * 10 - 5).toFixed(2),
+                volume: (Math.random() * 10000000).toFixed(0),
+                rsi: (Math.random() * 100).toFixed(1),
+                signal: ['BUY', 'HOLD', 'SELL'][Math.floor(Math.random() * 3)],
+                confidence: (Math.random() * 30 + 70).toFixed(1)
+            };
+            
+            // Display dashboard
+            document.getElementById('mercuryDashboard').style.display = 'block';
+            const statsGrid = document.getElementById('mercuryStats');
+            statsGrid.innerHTML = `
+                <div class="stat-card">
+                    <div class="stat-label">Current Price</div>
+                    <div class="stat-value">$${mockData.price}</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Change (24h)</div>
+                    <div class="stat-value" style="color: ${mockData.change > 0 ? '#00ff88' : '#ff5f56'}">${mockData.change > 0 ? '+' : ''}${mockData.change}%</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Volume</div>
+                    <div class="stat-value">${(mockData.volume / 1000000).toFixed(1)}M</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">RSI (14)</div>
+                    <div class="stat-value">${mockData.rsi}</div>
+                </div>
+            `;
+            
+            // Recommendation
+            const recBox = document.getElementById('mercuryRecommendation');
+            const signalClass = mockData.signal === 'BUY' ? '' : mockData.signal === 'HOLD' ? 'warning' : 'danger';
+            recBox.className = `recommendation-box ${signalClass}`;
+            recBox.innerHTML = `
+                <strong>Signal: ${mockData.signal}</strong><br>
+                Confidence: ${mockData.confidence}%<br><br>
+                <small>Analysis: Technical indicators suggest ${mockData.signal.toLowerCase()} position. RSI at ${mockData.rsi}, volume trending ${mockData.change > 0 ? 'up' : 'down'}. Risk assessment: ${mockData.signal === 'BUY' ? 'Moderate' : mockData.signal === 'HOLD' ? 'Low' : 'High'}.</small>
+            `;
+            
+            log(`\n✓ Analysis complete: ${mockData.signal} signal`, 'success');
+            log(`Confidence: ${mockData.confidence}% | RSI: ${mockData.rsi}`, 'info');
+        }
+        
+        // ═══════════════════════════════════════════════════════════
+        // ATLAS (FANTASY FOOTBALL)
+        // ═══════════════════════════════════════════════════════════
+        
+        async function startAtlas(event) {
+            event.stopPropagation();
+            
+            const username = document.getElementById('atlasUsername').value.trim();
+            const analysisType = document.getElementById('atlasAnalysisType').value;
+            
+            if (!username) {
+                log('Atlas: Please enter a Sleeper username', 'error');
+                return;
+            }
+            
+            log(`\n=== Atlas Arbiter Initializing ===`, 'info');
+            log(`User: ${username} | Analysis: ${analysisType}`, 'info');
+            await wait(500);
+            
+            // Show clones spawning
+            document.getElementById('atlasClones').style.display = 'block';
+            await spawnAtlasClones(analysisType);
+            
+            // Fetch and analyze data
+            await analyzeAtlasData(username, analysisType);
+        }
+        
+        async function spawnAtlasClones(analysisType) {
+            const cloneGrid = document.getElementById('atlasCloneGrid');
+            cloneGrid.innerHTML = '';
+            
+            const cloneTypes = [
+                'Sleeper Connector',
+                'Player Stats',
+                'Matchup Analyzer',
+                'Injury Monitor',
+                'Weather Scout',
+                'Win Probability'
+            ];
+            
+            for (let i = 0; i < cloneTypes.length; i++) {
+                await wait(300);
+                const clone = document.createElement('div');
+                clone.className = 'clone-node active';
+                clone.textContent = cloneTypes[i];
+                cloneGrid.appendChild(clone);
+                log(`Clone spawned: ${cloneTypes[i]}`, 'success');
+            }
+        }
+        
+        async function analyzeAtlasData(username, analysisType) {
+            log('Connecting to Sleeper API...', 'info');
+            await wait(800);
+            log('Fetching league data...', 'info');
+            await wait(1000);
+            log('Analyzing player matchups...', 'info');
+            await wait(1200);
+            
+            // Simulated fantasy data
+            const mockData = {
+                teamName: `${username}'s Squad`,
+                record: `${Math.floor(Math.random() * 8)}-${Math.floor(Math.random() * 8)}`,
+                projectedPoints: (Math.random() * 50 + 100).toFixed(1),
+                winProbability: (Math.random() * 40 + 40).toFixed(1),
+                topPlayer: ['Josh Allen', 'Christian McCaffrey', 'Tyreek Hill'][Math.floor(Math.random() * 3)],
+                recommendation: 'Start recommended lineup for 73% win probability'
+            };
+            
+            // Display dashboard
+            document.getElementById('atlasDashboard').style.display = 'block';
+            const statsGrid = document.getElementById('atlasStats');
+            statsGrid.innerHTML = `
+                <div class="stat-card">
+                    <div class="stat-label">Team Record</div>
+                    <div class="stat-value">${mockData.record}</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Projected Points</div>
+                    <div class="stat-value">${mockData.projectedPoints}</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Win Probability</div>
+                    <div class="stat-value">${mockData.winProbability}%</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Top Performer</div>
+                    <div class="stat-value" style="font-size: 0.9em;">${mockData.topPlayer}</div>
+                </div>
+            `;
+            
+            // Recommendation
+            const recBox = document.getElementById('atlasRecommendation');
+            recBox.className = 'recommendation-box';
+            recBox.innerHTML = `
+                <strong>Lineup Optimization</strong><br><br>
+                <small>${mockData.recommendation}<br><br>
+                Key Insights:<br>
+                • ${mockData.topPlayer} has favorable matchup (85% start confidence)<br>
+                • Weather conditions optimal for passing game<br>
+                • Opponent weak against RB2 position<br>
+                • Consider benching low-floor players this week</small>
+            `;
+            
+            log(`\n✓ Analysis complete: ${mockData.winProbability}% win probability`, 'success');
+            log(`Top performer: ${mockData.topPlayer}`, 'info');
+        }
+        
+        // ═══════════════════════════════════════════════════════════
+        // WEBSOCKET CONNECTION
+        // ═══════════════════════════════════════════════════════════
+        
+        function connectToSoma(serverIp) {
+            try {
+                log(`Connecting to SOMA server at ${serverIp}...`, 'info');
+                somaWebSocket = new WebSocket(`ws://${serverIp}:8080`);
+                
+                somaWebSocket.onopen = () => {
+                    isConnected = true;
+                    serverMode = true;
+                    document.getElementById('statusDot').classList.add('connected');
+                    document.getElementById('statusText').textContent = `Connected to ${serverIp}`;
+                    log('✓ Connected to real SOMA server!', 'success');
+                };
+                
+                somaWebSocket.onmessage = (event) => {
+                    const response = JSON.parse(event.data);
+                    log(response.message, response.level || 'info');
+                };
+                
+                somaWebSocket.onerror = () => {
+                    log('Connection failed. Running in demo mode.', 'error');
+                };
+                
+                somaWebSocket.onclose = () => {
+                    isConnected = false;
+                    serverMode = false;
+                    document.getElementById('statusDot').classList.remove('connected');
+                    document.getElementById('statusText').textContent = 'Demo Mode';
+                    log('Disconnected from SOMA server', 'warning');
+                };
+            } catch (error) {
+                log(`Error: ${error.message}`, 'error');
+            }
+        }
+        
+        // ═══════════════════════════════════════════════════════════
+        // LOGGING SYSTEM
+        // ═══════════════════════════════════════════════════════════
+        
+        function log(message, level = 'info') {
+            const output = document.getElementById('terminalOutput');
+            const line = document.createElement('div');
+            line.className = `terminal-line log-${level}`;
+            line.textContent = message;
+            output.appendChild(line);
+            output.scrollTop = output.scrollHeight;
+        }
+        
+        function wait(ms) {
+            return new Promise(resolve => setTimeout(resolve, ms));
+        }
+        
+        // ═══════════════════════════════════════════════════════════
+        // ARBITER RENDERING
+        // ═══════════════════════════════════════════════════════════
+        
+        function renderArbiters() {
+            const list = document.getElementById('arbiterList');
+            list.innerHTML = '';
+            
+            Object.entries(DEPLOY_ARBITERS).forEach(([key, arbiter]) => {
+                const item = document.createElement('div');
+                item.className = 'arbiter-item' + (deployed[key] ? ' deployed' : '');
+                item.onclick = () => deployArbiter(key);
+                item.innerHTML = `
+                    <div class="arbiter-name">${arbiter.name}</div>
+                    <div class="arbiter-desc">${arbiter.desc}</div>
+                    ${deployed[key] ? '<div class="arbiter-status">● DEPLOYED</div>' : ''}
+                `;
+                list.appendChild(item);
+            });
+        }
+        
+        async function deployArbiter(key) {
+            const arbiter = DEPLOY_ARBITERS[key];
+            
+            if (deployed[key]) {
+                log(`Terminating ${arbiter.name}...`, 'warning');
+                await wait(500);
+                deployed[key] = false;
+                log(`${arbiter.name} terminated`, 'info');
+            } else {
+                log(`Deploying ${arbiter.name}...`, 'info');
+                await wait(800);
+                deployed[key] = true;
+                log(`${arbiter.name} operational`, 'success');
+            }
+            
+            renderArbiters();
+        }
+        
+        // ═══════════════════════════════════════════════════════════
+        // DEMO RUNNERS
+        // ═══════════════════════════════════════════════════════════
+        
+        async function runDemo(type) {
+            log(`\n=== Running ${type.toUpperCase()} Demo ===`, 'info');
+            
+            if (type === 'security') {
+                log('Simulating SQL injection...', 'info');
+                await wait(1000);
+                log('🛡️ Guardian: SQL INJECTION BLOCKED!', 'error');
+                await wait(500);
+                log('✓ Threat neutralized', 'success');
+            } else if (type === 'intelligence') {
+                log('LOGOS (Llama): Analyzing logically...', 'info');
+                await wait(1200);
+                log('AURORA (Gemini): Exploring creatively...', 'info');
+                await wait(1200);
+                log('Synthesis: Optimal solution generated', 'success');
+            } else if (type === 'scaling') {
+                log('Simulating load: 1000 requests...', 'info');
+                await wait(500);
+                log('Load: 95% - spawning clones...', 'warning');
+                for (let i = 0; i < 3; i++) {
+                    await wait(400);
+                    log(`Clone ${i + 1}: operational`, 'success');
+                }
+                await wait(800);
+                log('Load normalized: 95% → 28%', 'success');
+            } else if (type === 'files') {
+                log('FileOrganizer: Use "fileorg scan"', 'info');
+            }
+        }
+        
+        // ═══════════════════════════════════════════════════════════
+        // ARCHIVUS (FILE ORGANIZATION MODULE) - self-contained
+        async function startArchivus(e) {
+            e.stopPropagation();
+            if (!('showDirectoryPicker' in window)) {
+                return log('File System API not supported (Chrome/Edge required)', 'error');
+            }
+            try {
+                log('\nArchivus: Initializing', 'info');
+                const dirHandle = await window.showDirectoryPicker({ mode: 'read' });
+                log(`Connected: ${dirHandle.name}`, 'success');
+
+                // Mode 1: SCAN
+                log('Mode SCAN: Analyzing files...', 'info');
+                const files = [];
+                let totalSize = 0;
+                for await (const entry of dirHandle.values()) {
+                    if (entry.kind === 'file') {
+                        const file = await entry.getFile();
+                        files.push({
+                            name: entry.name,
+                            size: file.size,
+                            type: getFileType(entry.name)
+                        });
+                        totalSize += file.size;
+                    }
+                }
+                log(`Scanned ${files.length} files (${formatBytes(files.reduce((a,b)=>a+b.size,0))})`, 'success');
+
+                // Mode 2: CLASSIFY
+                log('Mode CLASSIFY: Categorizing...', 'info');
+                const categories = {};
+                files.forEach(f => { categories[f.type] = (categories[f.type] || 0) + 1; });
+                Object.entries(categories).forEach(([type, count]) => { log(`  ${type}: ${count} files`, 'info'); });
+
+                // Mode 3: SECURE
+                log('Mode SECURE: Threat detection...', 'info');
+                const sensitive = files.filter(f => f.name.toLowerCase().includes('password') || f.name.toLowerCase().includes('secret'));
+                log(`${sensitive.length} sensitive files detected`, sensitive.length ? 'warning' : 'success');
+
+                // Mode 4: BACKUP
+                log('Mode BACKUP: Assessment...', 'info');
+                const large = files.filter(f => f.size > 1000000);
+                log(`${large.length} files recommended for backup`, 'success');
+
+                // Display results
+                document.getElementById('archivusDashboard').style.display = 'block';
+                document.getElementById('archivusStats').innerHTML = `
+                    <div class="stat-card">
+                        <div class="stat-label">Files</div>
+                        <div class="stat-value">${files.length}</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Size</div>
+                        <div class="stat-value" style="font-size: 1.1em;">${formatBytes(totalSize)}</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Categories</div>
+                        <div class="stat-value">${Object.keys(categories).length}</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Sensitive</div>
+                        <div class="stat-value" style="color: ${sensitive.length > 0 ? '#ffbd2e' : '#00ff88'}">${sensitive.length}</div>
+                    </div>
+                `;
+                document.getElementById('archivusRecommendation').innerHTML = `
+                    <div class="recommendation-box">
+                        <strong>Multi-Mode Analysis Complete</strong><br>
+                        Folder: ${dirHandle.name}<br>
+                        Modes: SCAN, CLASSIFY, SECURE, BACKUP<br>
+                        One intelligent arbiter, 4 operational modes
+                    </div>
+                `;
+            } catch (err) {
+                if (err.name === 'AbortError') {
+                    log('Folder selection cancelled', 'warning');
+                } else {
+                    log(`Error: ${err.message}`, 'error');
+                }
+            }
+        }
+        function getFileType(filename) {
+            const ext = filename.split('.').pop().toLowerCase();
+            const types = {
+                document: ['pdf', 'doc', 'docx', 'txt'],
+                image: ['jpg', 'jpeg', 'png', 'gif'],
+                video: ['mp4', 'avi', 'mov'],
+                code: ['js', 'py', 'html', 'css']
+            };
+            for (const [type, exts] of Object.entries(types)) {
+                if (exts.includes(ext)) return type;
+            }
+            return 'other';
+        }
+        function formatBytes(bytes) {
+            if (bytes === 0) return '0 B';
+            const k = 1024;
+            const sizes = ['B', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        // TERMINAL COMMANDS
+        // ═══════════════════════════════════════════════════════════
+        
+        function executeCommand() {
+            const input = document.getElementById('terminalInput');
+            const cmd = input.value.trim();
+            
+            if (!cmd) return;
+            
+            log(`> ${cmd}`, 'info');
+            input.value = '';
+            
+            const [command, ...args] = cmd.split(' ');
+            
+            if (command === 'connect' && args.length >= 1) {
+                connectToSoma(args[0]);
+            } else if (command === 'help') {
+                log('\nAvailable Commands:', 'success');
+                log('  connect <ip>        - Connect to SOMA server', 'info');
+                log('  deploy <arbiter>    - Deploy arbiter', 'info');
+                log('  list                - List arbiters', 'info');
+                log('  status              - System status', 'info');
+                log('  test <demo>         - Run demo', 'info');
+                log('  clear               - Clear terminal\n', 'info');
+            } else if (command === 'list') {
+                log('\nDeployable Arbiters:', 'success');
+                Object.entries(DEPLOY_ARBITERS).forEach(([key, arbiter]) => {
+                    const status = deployed[key] ? '● DEPLOYED' : '○ Available';
+                    log(`  ${key.padEnd(12)} - ${arbiter.name} ${status}`, 'info');
+                });
+            } else if (command === 'status') {
+                const memory = performance.memory ? (performance.memory.usedJSHeapSize / 1048576).toFixed(2) : 'N/A';
+                log('\nSystem Status:', 'success');
+                log(`  Mode: ${serverMode ? 'CONNECTED' : 'Demo Mode'}`, 'info');
+                log(`  Arbiters: ${Object.values(deployed).filter(d => d).length}`, 'info');
+                log(`  Memory: ${memory} MB`, 'info');
+            } else if (command === 'deploy' && args[0]) {
+                if (DEPLOY_ARBITERS[args[0]]) {
+                    deployArbiter(args[0]);
+                } else {
+                    log('Arbiter not found', 'error');
+                }
+            } else if (command === 'test' && args[0]) {
+                runDemo(args[0]);
+            } else if (command === 'clear') {
+                document.getElementById('terminalOutput').innerHTML = '';
+            } else {
+                log(`Unknown command: ${command}`, 'error');
+                log('Type "help" for commands', 'info');
+            }
+        }
+        
+        // ═══════════════════════════════════════════════════════════
+        // MODAL CONTROLS
+        // ═══════════════════════════════════════════════════════════
+        
+        function showInfo() {
+            document.getElementById('infoModal').classList.add('active');
+        }
+        
+        function closeInfo() {
+            document.getElementById('infoModal').classList.remove('active');
+        }
+        
+        function togglePAS() {
+            const content = document.getElementById('pasContent');
+            content.classList.toggle('expanded');
+        }
+        
+        function togglePhilosophy(event) {
+            event.stopPropagation();
+            const content = document.getElementById('philosophyContent');
+            content.classList.toggle('expanded');
+        }
+        
+        function toggleArbiterInfo(header) {
+            const content = header.nextElementSibling;
+            const isExpanded = content.classList.contains('expanded');
+            
+            document.querySelectorAll('.arbiter-content').forEach(c => c.classList.remove('expanded'));
+            
+            if (!isExpanded) {
+                content.classList.add('expanded');
+            }
+        }
+        
+        function toggleMission() {
+            const content = document.getElementById('missionContent');
+            content.classList.toggle('expanded');
+        }
+        
+        // ═══════════════════════════════════════════════════════════
+        // INITIALIZATION
+        // ═══════════════════════════════════════════════════════════
+        
+        renderArbiters();
+        log('SOMA Neural Coordinator initialized', 'success');
+        log('Type "help" for commands or click demo cards\n', 'info');
+    </script>
+</body>
+</html>

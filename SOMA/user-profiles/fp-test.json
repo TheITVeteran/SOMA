@@ -1,19 +1,21 @@
 {
   "userId": "test",
-  "sessions": 2,
-  "totalMessages": 2,
+  "sessions": 4,
+  "totalMessages": 7,
   "avgMsgLength": 1,
   "questionRatio": 0,
   "vocabRichness": 1,
-  "avgWordLength": 5,
+  "avgWordLength": 3.72,
   "typicalStyle": "declarative-articulate",
   "hourHistogram": {
     "12": 1,
-    "13": 1
+    "13": 1,
+    "19": 4,
+    "23": 1
   },
   "topicFreq": {},
   "recentTopics": [],
-  "lastSeen": 1773421952515,
-  "lastUpdated": 1773421952515,
+  "lastSeen": 1777000627706,
+  "lastUpdated": 1777000627706,
   "createdAt": 1773331397949
 }

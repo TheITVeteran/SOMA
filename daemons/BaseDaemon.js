@@ -52,15 +52,21 @@ export class BaseDaemon extends EventEmitter {
     }
 
     /**
-     * Main daemon loop
-     * Calls tick() repeatedly while active
+     * Main daemon loop.
+     * Supports two override patterns:
+     *   onTick() — preferred (matches most daemon implementations)
+     *   tick()   — legacy fallback (HealthDaemon etc.)
      */
     async _startLoop() {
         const run = async () => {
             if (!this.active) return;
 
             try {
-                await this.tick();
+                if (typeof this.onTick === 'function') {
+                    await this.onTick();
+                } else {
+                    await this.tick();
+                }
             } catch (err) {
                 this.logger.error(`[Daemon Error] ${this.name}`, err);
             }
@@ -72,11 +78,10 @@ export class BaseDaemon extends EventEmitter {
     }
 
     /**
-     * Child daemons override this method
-     * to perform their observation logic
+     * Legacy tick override point — prefer onTick() in new daemons
      */
     async tick() {
-        // override in child classes
+        // override in child classes (or use onTick)
     }
 
     /**

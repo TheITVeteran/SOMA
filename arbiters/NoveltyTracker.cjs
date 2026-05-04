@@ -457,6 +457,11 @@ class NoveltyTracker extends BaseArbiter {
   }
 
   _hashSolution(solution) {
+    // 🛡️ Safety Check: Prevent crash on undefined/null
+    if (solution === undefined || solution === null) {
+        return crypto.createHash('md5').update('null_state').digest('hex');
+    }
+
     const normalized = typeof solution === 'string'
       ? solution.replace(/\s+/g, '').toLowerCase()
       : JSON.stringify(solution);

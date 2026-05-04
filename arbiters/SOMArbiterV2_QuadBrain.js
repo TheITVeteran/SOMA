@@ -71,7 +71,7 @@ export class SOMArbiterV2_QuadBrain extends BaseArbiterV4 {
     this.apiKey = process.env.GEMINI_API_KEY;
     this.deepseekApiKey = process.env.DEEPSEEK_API_KEY;
     this.ollamaEndpoint = process.env.OLLAMA_ENDPOINT || 'http://localhost:11434';
-    this.ollamaModel = process.env.OLLAMA_MODEL || 'gemma3:4b';
+    this.ollamaModel = process.env.OLLAMA_MODEL || 'llama3.2:latest';
 
     // Per-lobe specialist models — populated when a LoRA finishes training.
     // OLLAMA_MODEL_LOGOS=soma-logos:v1 etc. in config/api-keys.env activates a lobe model.

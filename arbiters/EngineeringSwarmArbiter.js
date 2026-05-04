@@ -6,6 +6,7 @@ import { SwarmPatchTransaction } from '../core/SwarmPatchTransaction.js';
 import { validateSchema } from '../core/SchemaValidator.js';
 import blackboard from '../core/Blackboard.js';
 import maintenanceBridge from '../core/MaintenanceBridge.js';
+import gitArbiter from '../core/GitArbiter.js';
 import path from 'path';
 import fs from 'fs/promises';
 import crypto from 'crypto';
@@ -101,6 +102,7 @@ export class EngineeringSwarmArbiter extends BaseArbiterV4 {
         ArbiterCapability.SECURITY_AUDIT
       ]
     });
+    this.tier = 'operational';
 
     this.quadBrain = opts.quadBrain || null;
     this.mnemonicArbiter = opts.mnemonicArbiter || null;
@@ -308,6 +310,13 @@ export class EngineeringSwarmArbiter extends BaseArbiterV4 {
 
                 if (this.optimizer) this.optimizer.record(experienceData);
                 await this._logToExperienceLedger(experienceData);
+
+                // Self-publish the improvement to GitHub
+                gitArbiter.setBroker(messageBroker);
+                gitArbiter.publishImprovement(
+                    `${request.slice(0, 72)} (${path.basename(filepath)})`,
+                    verdict.patch?.files?.map(f => f.path) || [filepath]
+                ).catch(e => this.auditLogger.warn(`[Swarm] GitArbiter publish failed: ${e.message}`));
 
                 // Success — wipe failure context so next call starts clean
                 this._persistentFailureLog.delete(normPath);

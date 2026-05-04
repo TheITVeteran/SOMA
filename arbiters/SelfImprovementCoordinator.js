@@ -31,6 +31,7 @@ export class SelfImprovementCoordinator extends BaseArbiterV4 {
             ],
             ...opts
         });
+        this.tier = 'strategic';
 
         // Configuration
         this.config = {
@@ -76,7 +77,8 @@ export class SelfImprovementCoordinator extends BaseArbiterV4 {
             this.messageBroker.registerArbiter(this.name, {
                 role: this.role,
                 capabilities: this.capabilities,
-                instance: this
+                instance: this,
+                lobe: 'PROMETHEUS'
             });
         }
 

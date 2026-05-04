@@ -1,0 +1,30 @@
+{
+  "userId": "morning-meeting",
+  "sessions": 1,
+  "totalMessages": 1,
+  "avgMsgLength": 33,
+  "questionRatio": 1,
+  "vocabRichness": 0.909,
+  "avgWordLength": 5.15,
+  "typicalStyle": "inquisitive-verbose",
+  "hourHistogram": {
+    "17": 1
+  },
+  "topicFreq": {
+    "architecture": 1,
+    "AI": 1,
+    "emotion": 1,
+    "identity": 1,
+    "creative": 1
+  },
+  "recentTopics": [
+    "architecture",
+    "AI",
+    "emotion",
+    "identity",
+    "creative"
+  ],
+  "lastSeen": 1773868325829,
+  "lastUpdated": 1773868325829,
+  "createdAt": 1773868325831
+}

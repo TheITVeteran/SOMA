@@ -20,6 +20,7 @@ class MessageBroker extends EventEmitter {
         global.__SOMA_CNS__ = {
             arbiters: new Map(),
             lobeIndex: new Map(),
+            tierIndex: new Map(),   // 'strategic' | 'cognitive' | 'operational'
             classificationIndex: new Map(),
             discoveryIndex: new Map(),
             subscriptions: new Map(),
@@ -37,6 +38,7 @@ class MessageBroker extends EventEmitter {
     const cns = global.__SOMA_CNS__;
     this.arbiters = cns.arbiters;
     this.lobeIndex = cns.lobeIndex;
+    this.tierIndex = cns.tierIndex;
     this.classificationIndex = cns.classificationIndex;
     this.discoveryIndex = cns.discoveryIndex;
     this.subscriptions = cns.subscriptions;
@@ -46,6 +48,20 @@ class MessageBroker extends EventEmitter {
 
     // CNS: Impulse Compression & Validation
     this.signalRegistry = SignalRegistry;
+    this.arbiterLoader = null; // Hook for on-the-fly expansion
+
+    // Circular Buffer State
+    this.maxHistorySize = 500;
+    this.historyWriteIndex = 0;
+    this.historyFull = false;
+  }
+
+  /**
+   * Set the ArbiterLoader instance for on-the-fly expansion.
+   */
+  setArbiterLoader(loader) {
+    this.arbiterLoader = loader;
+    console.log('[MessageBroker] 📚 ArbiterLoader integrated for on-the-fly expansion.');
   }
 
   // ===========================
@@ -67,20 +83,27 @@ class MessageBroker extends EventEmitter {
       if (!this.lobeIndex.has(metadata.lobe)) this.lobeIndex.set(metadata.lobe, new Set());
       this.lobeIndex.get(metadata.lobe).add(name);
     }
-    
+
+    if (metadata.tier) {
+      if (!this.tierIndex.has(metadata.tier)) this.tierIndex.set(metadata.tier, new Set());
+      this.tierIndex.get(metadata.tier).add(name);
+    }
+
     if (metadata.classification) {
       if (!this.classificationIndex.has(metadata.classification)) this.classificationIndex.set(metadata.classification, new Set());
       this.classificationIndex.get(metadata.classification).add(name);
     }
 
     this.emit('arbiter_registered', name, metadata);
-    console.log(`[MessageBroker] Arbiter registered: ${name} [Lobe: ${metadata.lobe || 'N/A'}]`);
+    const tierTag = metadata.tier ? ` | Tier: ${metadata.tier}` : '';
+    console.log(`[MessageBroker] Arbiter registered: ${name} [Lobe: ${metadata.lobe || 'N/A'}${tierTag}]`);
   }
 
   unregisterArbiter(name) {
     const arbiter = this.arbiters.get(name);
     if (arbiter) {
       if (arbiter.lobe) this.lobeIndex.get(arbiter.lobe)?.delete(name);
+      if (arbiter.tier) this.tierIndex.get(arbiter.tier)?.delete(name);
       if (arbiter.classification) this.classificationIndex.get(arbiter.classification)?.delete(name);
     }
     this.arbiters.delete(name);
@@ -91,6 +114,21 @@ class MessageBroker extends EventEmitter {
   getArbitersByLobe(lobe) {
     const names = this.lobeIndex.get(lobe) || new Set();
     return Array.from(names).map(name => this.arbiters.get(name));
+  }
+
+  getArbitersByTier(tier) {
+    const names = this.tierIndex.get(tier) || new Set();
+    return Array.from(names).map(name => this.arbiters.get(name));
+  }
+
+  getTierBreakdown() {
+    const breakdown = { strategic: 0, cognitive: 0, operational: 0, untiered: 0 };
+    for (const [, arbiter] of this.arbiters) {
+      const t = arbiter.tier;
+      if (t === 'strategic' || t === 'cognitive' || t === 'operational') breakdown[t]++;
+      else breakdown.untiered++;
+    }
+    return breakdown;
   }
 
   getArbitersByClassification(cls) {
@@ -264,7 +302,29 @@ class MessageBroker extends EventEmitter {
     }
 
     // Direct arbiter message - use fuzzy search with suggestions
-    const findResult = this.findArbiter(to, { exact: false, suggest: true });
+    let findResult = this.findArbiter(to, { exact: false, suggest: true });
+
+    // 🔱 ON-THE-FLY EXPANSION: If not found, try to load from disk
+    if (!findResult.found && this.arbiterLoader) {
+      console.log(`[MessageBroker] 🔌 Missing arbiter '${to}' — attempting on-the-fly expansion...`);
+      try {
+        const instance = await this.arbiterLoader.loadByFile(`${to}.js`);
+        if (instance) {
+          // Success! Broadcast activity
+          this.publish('soma.activity', {
+            type: 'expansion',
+            title: `Dynamic Materialization: ${to}`,
+            summary: `CNS intercepted request for missing capability and initialized ${to} from disk in real-time.`,
+            source: 'CNS'
+          });
+          
+          // Re-find the now-registered arbiter
+          findResult = this.findArbiter(to, { exact: true });
+        }
+      } catch (loadErr) {
+        console.warn(`[MessageBroker] ⚠️ Expansion failed for '${to}': ${loadErr.message}`);
+      }
+    }
 
     if (!findResult.found) {
       // Not found - provide helpful suggestions
@@ -315,9 +375,54 @@ class MessageBroker extends EventEmitter {
     const envelope = this._createEnvelope({ ...message, to: 'broadcast' }, topic);
     this._addToHistory(envelope);
 
-    const delivered = await this.publish(topic, envelope);
-    console.log(`[MessageBroker] Broadcast to ${topic}: ${delivered} recipients`);
+    let delivered = 0;
 
+    // 🔱 Strict Topic-Based Routing for 'system/all' or 'broadcast'
+    if (topic === 'system/all' || topic === 'broadcast') {
+        const targetCapability = message.payload?.targetCapability || message.targetCapability;
+        const targetTier = message.payload?.targetTier || message.targetTier;
+        const msgType = message.type || '';
+        
+        let targets = this.getArbiters();
+        
+        // Filter noise: Only route if it matches a capability, tier, or heuristic
+        if (targetCapability) {
+            targets = targets.filter(a => a.capabilities && a.capabilities.includes(targetCapability));
+        } else if (targetTier) {
+            targets = targets.filter(a => a.tier === targetTier);
+        } else {
+             // Heuristic routing to prevent exponential scaling noise
+             if (msgType.includes('audit') || msgType.includes('forensic')) {
+                 targets = targets.filter(a => a.tier === 'operational' || a.name.includes('Audit') || a.name.includes('Forensic'));
+             } else if (msgType.includes('impulser') || msgType.includes('task')) {
+                 targets = targets.filter(a => a.name === 'UniversalImpulser' || (a.capabilities && a.capabilities.includes('data_processing')));
+             } else if (msgType.includes('learning') || msgType.includes('dream')) {
+                 targets = targets.filter(a => a.tier === 'cognitive' || (a.capabilities && a.capabilities.includes('learning')));
+             } else if (msgType === 'system_metrics' || msgType === 'status_check') {
+                 targets = targets.filter(a => a.tier === 'strategic'); // Only strategic needs to process global status
+             }
+        }
+        
+        // Deliver directly via handleMessage to targeted arbiters
+        const results = await Promise.allSettled(
+            targets.map(async arbiter => {
+                if (arbiter.instance && typeof arbiter.instance.handleMessage === 'function') {
+                    return await arbiter.instance.handleMessage(envelope);
+                }
+            })
+        );
+        
+        delivered = results.filter(r => r.status === 'fulfilled' && r.value !== undefined).length;
+        
+        // Also fallback to publish for generic subscribers just in case
+        const publishedDelivered = await this.publish(topic, envelope);
+        delivered += publishedDelivered;
+    } else {
+        // Normal pub/sub topic
+        delivered = await this.publish(topic, envelope);
+    }
+
+    console.log(`[MessageBroker] Smart Broadcast to ${topic}: ${delivered} recipients (Type: ${message.type || 'unknown'})`);
     return delivered;
   }
 
@@ -443,7 +548,9 @@ class MessageBroker extends EventEmitter {
       uptime: Date.now() - this.metrics.startTime,
       registeredArbiters: this.arbiters.size,
       activeSubscriptions: this.subscriptions.size,
-      historySize: this.messageHistory.length
+      historySize: this.messageHistory.length,
+      tiers: this.getTierBreakdown(),
+      recentCount: this._recentPublishes.length,
     };
   }
 

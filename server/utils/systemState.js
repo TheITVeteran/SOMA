@@ -1,7 +1,66 @@
 import os from 'os';
+import { exec } from 'child_process';
 
 let lastCpuInfo = os.cpus();
 let lastNeuralLoad = { load1: 0, load5: 0, load15: 0 };
+
+// --- Hardware Telemetry Cache ---
+let gpuCache = null;
+let networkCache = { load: 0, lastTotalBytes: 0, lastTimestamp: 0 };
+
+/**
+ * Hardware Telemetry Poller
+ * Runs in background to keep buildSystemSnapshot fast and synchronous
+ */
+const pollHardware = () => {
+  // 1. GPU Telemetry (NVIDIA)
+  const gpuCmd = 'nvidia-smi --query-gpu=utilization.gpu,memory.used,memory.total --format=csv,noheader,nounits';
+  exec(gpuCmd, (err, stdout) => {
+    if (!err && stdout) {
+      const rows = stdout.trim().split(/\r?\n/).filter(Boolean);
+      const gpus = rows.map(row => {
+        const [util, memUsed, memTotal] = row.split(',').map(s => s.trim());
+        return {
+          utilization: Number(util || 0),
+          memoryUsedMB: Number(memUsed || 0),
+          memoryTotalMB: Number(memTotal || 0)
+        };
+      });
+      if (gpus.length > 0) {
+        gpuCache = gpus.reduce((sum, g) => sum + g.utilization, 0) / gpus.length;
+      }
+    }
+  });
+
+  // 2. Network Telemetry (Windows)
+  if (process.platform === 'win32') {
+    const netCmd = 'powershell -NoProfile -Command "Get-NetAdapterStatistics | Select-Object ReceivedBytes, SentBytes | ConvertTo-Json"';
+    exec(netCmd, (err, stdout) => {
+      if (!err && stdout) {
+        try {
+          const data = JSON.parse(stdout || '[]');
+          const list = Array.isArray(data) ? data : [data];
+          const totalBytes = list.reduce((sum, a) => sum + (Number(a.ReceivedBytes || 0)) + (Number(a.SentBytes || 0)), 0);
+          
+          const now = Date.now();
+          if (networkCache.lastTimestamp > 0) {
+            const deltaBytes = totalBytes - networkCache.lastTotalBytes;
+            const deltaSec = (now - networkCache.lastTimestamp) / 1000;
+            const bytesPerSec = deltaSec > 0 ? deltaBytes / deltaSec : 0;
+            // Estimate load relative to 100Mbps
+            networkCache.load = Math.min(100, Math.round((bytesPerSec / (100 * 1024 * 1024 / 8)) * 100));
+          }
+          networkCache.lastTotalBytes = totalBytes;
+          networkCache.lastTimestamp = now;
+        } catch (e) {}
+      }
+    });
+  }
+};
+
+// Start polling every 10 seconds
+setInterval(pollHardware, 10000);
+pollHardware();
 
 const calcCpuDelta = (prev, curr) => {
   let totalTick = 0;
@@ -127,8 +186,8 @@ export function buildSystemSnapshot(system = {}) {
     uptime: process.uptime(),
     cpu: cpuPercent,
     ram: ramPercent,
-    gpu: null,
-    network: null,
+    gpu: gpuCache,
+    network: networkCache.load,
     memory: {
       rss: Math.round(memUsage.rss / 1048576),
       heapUsed: Math.round(memUsage.heapUsed / 1048576),
@@ -153,6 +212,7 @@ export function buildSystemSnapshot(system = {}) {
         nodeHeapTotal: Math.round(memUsage.heapTotal / 1048576)
       },
       network: {
+        load: networkCache.load,
         interfaces: Object.entries(os.networkInterfaces()).map(([name, addrs]) => ({
           name,
           addresses: (addrs || []).filter(a => a.family === 'IPv4').map(a => a.address)
@@ -202,7 +262,10 @@ export function buildSystemSnapshot(system = {}) {
       drive: {
         tension:      system.drive?.tension      ?? null,
         satisfaction: system.drive?.satisfaction ?? null
-      }
+      },
+      dissonance: system.cronaArbiter?.stats || null,
+      dreams: system.dreamArbiter?.getInsights?.() || null,
+      selfModification: system.selfModificationArbiter?.metrics || null
     }
   };
 }

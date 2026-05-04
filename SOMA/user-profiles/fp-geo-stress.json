@@ -1,0 +1,24 @@
+{
+  "userId": "geo-stress",
+  "sessions": 1,
+  "totalMessages": 4,
+  "avgMsgLength": 10,
+  "questionRatio": 0.5,
+  "vocabRichness": 1,
+  "avgWordLength": 5.28,
+  "typicalStyle": "conversational",
+  "hourHistogram": {
+    "11": 4
+  },
+  "topicFreq": {
+    "memory": 2,
+    "finance": 1
+  },
+  "recentTopics": [
+    "memory",
+    "finance"
+  ],
+  "lastSeen": 1775834434427,
+  "lastUpdated": 1775834465608,
+  "createdAt": 1775834434427
+}

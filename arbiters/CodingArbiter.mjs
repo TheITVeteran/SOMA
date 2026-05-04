@@ -44,7 +44,7 @@ export class CodingArbiter extends EventEmitter {
     // Performance
     this.metrics = {
       tasksCompleted: 0,
-      tasksF ailed: 0,
+      tasksFailed: 0,
       agentsSpawned: 0,
       avgTaskTime: 0,
       clonesCreated: 0,
@@ -62,10 +62,24 @@ export class CodingArbiter extends EventEmitter {
     this.successfulSolutions = [];
     
     console.log(`[${this.name}] Initialized (Gen ${this.generation})`);
-  }
-  
-  // ========== MAIN EXECUTION ==========
-  
+    }
+
+    getStatus() {
+    return {
+      id: this.id,
+      name: this.name,
+      generation: this.generation,
+      busy: this.busy,
+      patterns: this.learnedPatterns.size,
+      errors: this.commonErrors.size,
+      solutions: this.successfulSolutions.length,
+      metrics: this.metrics,
+      lastOptimization: this.metrics.lastOptimization || null,
+      activeTasks: Array.from(this.microAgents.keys()).map(id => ({ id, type: 'refactor' }))
+    };
+    }
+
+    // ========== MAIN EXECUTION ==========  
   async execute(task) {
     const startTime = now();
     this.busy = true;

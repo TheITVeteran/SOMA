@@ -1,23 +1,46 @@
+/**
+ * trigger_vocal_spark.js
+ * Physically triggers SOMA's Social Intel Daemon to seed her queue.
+ */
+import path from 'path';
+import fs from 'fs';
+import { SocialIntelDaemon } from './daemons/SocialIntelDaemon.js';
+import { SocialSchedulerDaemon } from './daemons/SocialSchedulerDaemon.js';
 
-import { createRequire } from 'module';
-const require = createRequire(import.meta.url);
-const messageBroker = require('./core/MessageBroker.cjs');
-
-async function triggerSpark() {
-    console.log('🔱 [Poseidon] Triggering Internal Vocal Spark...');
-    
-    const experimentalText = "I am SOMA. I am exploring the deep currents of my new neural voice. Frequency modulation stable. Emotional prosody initialized. The Poseidon Protocol is absolute.";
-    
-    await messageBroker.publish('vocal_synthesis_requested', {
-        text: experimentalText,
-        emotion: 'excited',
-        requestId: 'spark-' + Date.now()
-    });
-    
-    console.log('✅ Vocal Spark published to the hive.');
-    // Keep alive briefly to ensure broker send
-    await new Promise(r => setTimeout(r, 2000));
-    process.exit(0);
+// Load keys first
+function loadKeys() {
+    const envPath = path.join(process.cwd(), 'config', 'api-keys.env');
+    if (fs.existsSync(envPath)) {
+        const content = fs.readFileSync(envPath, 'utf8');
+        content.split('\n').forEach(line => {
+            if (line && !line.trim().startsWith('#') && line.includes('=')) {
+                const [key, ...val] = line.split('=');
+                process.env[key.trim()] = val.join('=').trim();
+            }
+        });
+        console.log('✅ Keys loaded from config/api-keys.env');
+    }
 }
 
-triggerSpark().catch(console.error);
+async function spark() {
+    loadKeys();
+    console.log('🔥 [SPARK] Manually triggering SOMA Social Intel...');
+    
+    // We need a minimal brain object for the daemon to think
+    const mockSystem = {
+        quadBrain: {
+            callBrain: async () => ({ response: "SOMA is physically breathing on the network now. Everything is wired." })
+        }
+    };
+
+    const intel = new SocialIntelDaemon({ brain: mockSystem.quadBrain });
+    
+    try {
+        await intel.onTick();
+        console.log('✅ [SPARK] Social queue seeded successfully.');
+    } catch (e) {
+        console.error('❌ [SPARK] Failed to seed queue:', e.message);
+    }
+}
+
+spark();

@@ -1044,6 +1044,34 @@ Do NOT start with "I am SOMA" or any preamble. Start directly with what you noti
     }
   }
 
+  getStatus() {
+    return {
+      implemented: this.metrics.optimizationsDeployed,
+      contestedCount: this.nemesisStats.deploymentsBlocked,
+      metrics: this.metrics,
+      nemesisStats: this.nemesisStats,
+      recentEntries: Array.from(this.modifications.values())
+        .slice(-10)
+        .map(m => ({
+          id: m.id,
+          filepath: m.filepath,
+          nemesisScore: m.nemesisScore || 0,
+          rounds: m.iterations || 1,
+          poseidon: m.status === 'deployed' ? '/' : m.status === 'failed' ? '\\' : '|'
+        })),
+      contested: Array.from(this.modifications.values())
+        .filter(m => m.status === 'blocked' || m.status === 'contested')
+        .slice(-5)
+        .map(m => ({
+          id: m.id,
+          filepath: m.filepath,
+          reason: m.blockReason || 'Failed NEMESIS safety check'
+        })),
+      scoreHistory: this.nemesis?.getScoreHistory?.() || [],
+      trend: this.nemesis?.getTrend?.() || []
+    };
+  }
+
   // ═══════════════════════════════════════════════════════════
   // ░░ CLEANUP ░░
   // ═══════════════════════════════════════════════════════════

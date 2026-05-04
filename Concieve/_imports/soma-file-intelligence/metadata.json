@@ -1,0 +1,5 @@
+{
+  "name": "SOMA File Intelligence",
+  "description": "A local-first AI agent system that indexes files, builds a semantic knowledge base, and allows natural language queries over your data.",
+  "requestFramePermissions": []
+}

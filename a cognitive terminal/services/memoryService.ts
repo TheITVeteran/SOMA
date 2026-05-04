@@ -240,19 +240,85 @@ Return JSON: {
     }
     
     /**
+     * Helper for cosine similarity
+     */
+    private cosineSimilarity(vecA: number[], vecB: number[]): number {
+        let dotProduct = 0, normA = 0, normB = 0;
+        for (let i = 0; i < vecA.length; i++) {
+            dotProduct += vecA[i] * vecB[i];
+            normA += vecA[i] * vecA[i];
+            normB += vecB[i] * vecB[i];
+        }
+        if (normA === 0 || normB === 0) return 0;
+        return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
+    }
+
+    /**
      * Search through memories
      */
     public async searchMemories(query: string): Promise<string[]> {
-        // Simple keyword search for now
-        // TODO: Implement semantic search with embeddings
         const allTurns = this.currentSession.turns;
-        const matches = allTurns.filter(turn => 
-            turn.content.toLowerCase().includes(query.toLowerCase())
-        );
-        
-        return matches.slice(0, 5).map(m => 
-            `[${new Date(m.timestamp).toLocaleString()}] ${m.role}: ${m.content}`
-        );
+        if (allTurns.length === 0) return [];
+
+        try {
+            // 1. Get embedding for the query
+            const qRes = await fetch('http://localhost:11434/api/embeddings', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ model: 'llama3.2:latest', prompt: query })
+            });
+            const qData = await qRes.json();
+            const queryEmbedding = qData.embedding;
+
+            // 2. Score turns based on semantic similarity
+            // In a real app we'd cache turn embeddings, but for recent session memory
+            // we can calculate them on the fly or just fallback to keyword if too slow.
+            // For now, let's embed the turns that are long enough to matter.
+            const scoredTurns = await Promise.all(allTurns.map(async (turn) => {
+                if (turn.content.length < 10) return { turn, score: turn.content.toLowerCase().includes(query.toLowerCase()) ? 0.5 : 0 };
+                
+                try {
+                    const tRes = await fetch('http://localhost:11434/api/embeddings', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ model: 'llama3.2:latest', prompt: turn.content })
+                    });
+                    const tData = await tRes.json();
+                    const score = this.cosineSimilarity(queryEmbedding, tData.embedding);
+                    return { turn, score };
+                } catch {
+                    return { turn, score: turn.content.toLowerCase().includes(query.toLowerCase()) ? 0.5 : 0 };
+                }
+            }));
+
+            // 3. Sort and filter
+            const matches = scoredTurns
+                .filter(st => st.score > 0.4) // Minimum semantic threshold
+                .sort((a, b) => b.score - a.score)
+                .map(st => st.turn);
+
+            // Fallback to keyword if no semantic matches
+            if (matches.length === 0) {
+                 const keywordMatches = allTurns.filter(turn => 
+                     turn.content.toLowerCase().includes(query.toLowerCase())
+                 );
+                 return keywordMatches.slice(0, 5).map(m => 
+                     `[${new Date(m.timestamp).toLocaleString()}] ${m.role}: ${m.content}`
+                 );
+            }
+
+            return matches.slice(0, 5).map(m => 
+                `[${new Date(m.timestamp).toLocaleString()}] ${m.role}: ${m.content}`
+            );
+        } catch (error) {
+            console.warn('[Memory] Semantic search failed, falling back to keyword:', error);
+            const matches = allTurns.filter(turn => 
+                turn.content.toLowerCase().includes(query.toLowerCase())
+            );
+            return matches.slice(0, 5).map(m => 
+                `[${new Date(m.timestamp).toLocaleString()}] ${m.role}: ${m.content}`
+            );
+        }
     }
     
     /**

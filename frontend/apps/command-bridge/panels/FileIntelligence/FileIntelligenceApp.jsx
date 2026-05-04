@@ -1,6 +1,7 @@
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { HardDrive, Upload, Scan, Binary } from 'lucide-react';
+import { HardDrive, Upload, Scan, Binary, Shield } from 'lucide-react';
+import AuditRibbon from '../AuditRibbon/AuditRibbon.jsx';
 import { readDirectory, flattenNodes, processFileList } from './services/fileSystem.js';
 import {
     ingestFiles,
@@ -325,6 +326,21 @@ const FileIntelligenceApp = () => {
                 } catch (e) {
                     log(`Batch error: ${e.message}`, 'error');
                 }
+
+                // Auto-analyze any Excel files in this batch — warms cache immediately
+                const xlsxFiles = batch.filter(n => /\.(xlsx|xls)$/i.test(n.path || n.name || ''));
+                for (const xf of xlsxFiles) {
+                    const fp = xf.absolutePath || xf.path;
+                    if (!fp) continue;
+                    fetch('/api/soma/excel/ingest', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ filePath: fp })
+                    }).then(r => r.json()).then(r => {
+                        if (r.ok && r.totalFindings > 0) log(`${xf.name}: ${r.totalFindings} finding(s) — ask SOMA for details`, 'warning');
+                        else if (r.ok) log(`${xf.name}: pre-analyzed, no issues found`, 'success');
+                    }).catch(() => {});
+                }
             }
 
             // Update Progress
@@ -647,18 +663,45 @@ const FileIntelligenceApp = () => {
                 setSavedSearches(loadSavedSearches());
             }
 
+            // STEP 1.5: Show status if Excel files are in results — backend handles the analysis
+            const excelDocs = relevantDocs.filter(r => {
+                const p = r?.metadata?.absolutePath || r?.metadata?.path || r?.path || '';
+                return /\.(xlsx|xls)$/i.test(p);
+            });
+            if (excelDocs.length > 0) {
+                excelDocs.forEach(doc => {
+                    const fp = doc?.metadata?.absolutePath || doc?.metadata?.path || doc?.path || '';
+                    log(`Excel file queued for analysis: ${fp.split(/[\\/]/).pop()}`, 'info');
+                });
+                setChatHistory(prev => {
+                    const h = [...prev];
+                    h[h.length - 1].content = `Found ${excelDocs.length} Excel file${excelDocs.length > 1 ? 's' : ''} — SOMA analyzing…`;
+                    h[h.length - 1].retrievalStatus = { state: 'reading' };
+                    return h;
+                });
+            }
+
             // STEP 2: Feed Retrieval Results to the Brain (RAG Generation)
-            
+            // Note: Excel analysis is injected server-side by the chat route for all financial requests.
+
             setChatHistory(prev => {
                 const h = [...prev];
                 h[h.length - 1].retrievalStatus = { state: 'reading' };
                 return h;
             });
 
-            const fileContext = relevantDocs.map(r => ({
-                name: r.path || r.name || r.metadata?.path || r.metadata?.name || 'document',
-                content: r.content || r.metadata?.summary || r.metadata?.content || 'No content'
-            }));
+            // Non-Excel docs passed as context (Excel analysis handled server-side)
+            const regularContext = relevantDocs
+                .filter(r => {
+                    const p = r?.metadata?.absolutePath || r?.metadata?.path || r?.path || '';
+                    return !/\.(xlsx|xls)$/i.test(p);
+                })
+                .map(r => ({
+                    name: r.path || r.name || r.metadata?.path || r.metadata?.name || 'document',
+                    content: r.content || r.metadata?.summary || r.metadata?.content || 'No content'
+                }));
+
+            const fileContext = regularContext;
 
             const historyForBrain = chatHistory
                 .slice(-6)
@@ -1178,6 +1221,9 @@ const FileIntelligenceApp = () => {
                                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h10M4 18h7" />
                                             </svg>
                                         </button>
+                                        <button onClick={() => setActiveTab('audit')} className={`p-2 rounded-md transition-all ${activeTab === 'audit' ? 'bg-white/5 text-emerald-400 shadow-sm' : 'text-text-muted hover:text-text-secondary'}`} title="Audit Ledger">
+                                            <Shield className="w-4 h-4" />
+                                        </button>
                                     </div>
 
                                     {/* File Search (Moved to Header) */}
@@ -1363,6 +1409,8 @@ const FileIntelligenceApp = () => {
                                     </div>
                                 ) : activeTab === 'graph' ? (
                                     <EvidenceGraph investigation={activeInvestigation} onOpenFile={openEvidenceResult} />
+                                ) : activeTab === 'audit' ? (
+                                    <AuditRibbon />
                                 ) : (
                                     <EvidenceCascade investigation={activeInvestigation} onOpenFile={openEvidenceResult} />
                                 )}

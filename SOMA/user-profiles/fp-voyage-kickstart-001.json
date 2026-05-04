@@ -1,0 +1,22 @@
+{
+  "userId": "voyage-kickstart-001",
+  "sessions": 2,
+  "totalMessages": 2,
+  "avgMsgLength": 27,
+  "questionRatio": 0,
+  "vocabRichness": 0.963,
+  "avgWordLength": 6.15,
+  "typicalStyle": "declarative-articulate",
+  "hourHistogram": {
+    "22": 2
+  },
+  "topicFreq": {
+    "architecture": 2
+  },
+  "recentTopics": [
+    "architecture"
+  ],
+  "lastSeen": 1775874380807,
+  "lastUpdated": 1775874380807,
+  "createdAt": 1775874093850
+}

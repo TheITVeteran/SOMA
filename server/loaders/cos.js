@@ -19,6 +19,7 @@ import MemoryPrunerDaemon from '../../daemons/MemoryPrunerDaemon.js';
 import MemoryDistillerDaemon from '../../daemons/MemoryDistillerDaemon.js';
 import CuriosityDaemon from '../../daemons/CuriosityDaemon.js';
 import SocialImpulseDaemon from '../../daemons/SocialImpulseDaemon.js';
+import GoalExecutorDaemon from '../../daemons/GoalExecutorDaemon.js';
 import DaemonManager from '../../core/DaemonManager.js';
 import CapabilityDiscoveryDaemon from '../../daemons/CapabilityDiscoveryDaemon.js';
 import WebPerceptionDaemon from '../../daemons/WebPerceptionDaemon.js';
@@ -152,6 +153,16 @@ export async function loadCOSSystems(system) {
         });
         daemonManager.register(socialImpulse);
         if (system.arbiters) system.arbiters.set('socialImpulse', socialImpulse);
+
+        // Goal execution fallback: AutonomousHeartbeat is the primary agentic loop.
+        // This daemon remains supervised so pending/proposed goals can still move
+        // if the pulse is disabled or stopped.
+        const goalExecutorDaemon = new GoalExecutorDaemon({
+            system,
+            intervalMs: parseInt(process.env.SOMA_GOAL_EXECUTOR_INTERVAL_MS || `${5 * 60_000}`, 10)
+        });
+        daemonManager.register(goalExecutorDaemon);
+        system.goalExecutorDaemon = goalExecutorDaemon;
 
         daemonManager.register(new OptimizationDaemon({
             optimizer: swarmOptimizer,

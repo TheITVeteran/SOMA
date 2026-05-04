@@ -1,0 +1,24 @@
+{
+  "userId": "Sovereign_Barry",
+  "sessions": 1,
+  "totalMessages": 1,
+  "avgMsgLength": 10,
+  "questionRatio": 0,
+  "vocabRichness": 1,
+  "avgWordLength": 6.2,
+  "typicalStyle": "declarative-articulate",
+  "hourHistogram": {
+    "17": 1
+  },
+  "topicFreq": {
+    "memory": 1,
+    "code": 1
+  },
+  "recentTopics": [
+    "memory",
+    "code"
+  ],
+  "lastSeen": 1776203530317,
+  "lastUpdated": 1776203530317,
+  "createdAt": 1776203530318
+}

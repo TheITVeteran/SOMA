@@ -34,7 +34,7 @@ export class VoyageArbiter extends BaseArbiterV4 {
             const { title, milestones, voyageId } = envelope.payload;
             
             // Physical Probe for Arbiter Reception
-            fs.appendFileSync('C:\\Users\\barry\\Desktop\\SOMA\\HANDS_RECEIVED.txt', `[${new Date().toISOString()}] Signal received: ${title}\n`);
+            fs.appendFileSync(path.join(process.cwd(), 'HANDS_RECEIVED.txt'), `[${new Date().toISOString()}] Signal received: ${title}\n`);
             
             this.auditLogger.info(`[VoyageArbiter] 🔱 Physically charting voyage: ${title}`);
             

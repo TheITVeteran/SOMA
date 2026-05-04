@@ -39,6 +39,7 @@ export class ProactiveCouncilArbiter extends BaseArbiterV4 {
                 ArbiterCapability.ANALYSIS,
             ],
             lobe: 'EXECUTIVE',
+            tier: 'strategic',
             ...config,
         });
 
@@ -111,6 +112,11 @@ export class ProactiveCouncilArbiter extends BaseArbiterV4 {
         messageBroker.subscribe('swarm.discovery.ideas', (envelope) => {
             this._pendingSignals.push({ topic: 'swarm.discovery.ideas', payload: envelope?.payload ?? envelope });
             this._reactToSignal('swarm.discovery.ideas', envelope?.payload ?? envelope);
+        });
+
+        messageBroker.subscribe('forensics.critical_finding', (envelope) => {
+            this._pendingSignals.push({ topic: 'forensics.critical_finding', payload: envelope?.payload ?? envelope });
+            this._reactToSignal('forensics.critical_finding', envelope?.payload ?? envelope);
         });
     }
 
@@ -237,18 +243,20 @@ ${signalList}
 RECENT MEMORY CONTEXT:
 ${memList}
 
-TASK: Propose exactly 3 concrete goals for SOMA to pursue in the next 30 minutes.
+TASK: Propose exactly 3 concrete goals for SOMA to pursue.
+At least ONE of these goals should occasionally be a "Moonshot Initiative" (a massive, ASI-level project like designing a physical robot body, solving global water treatment, or curing a complex disease, complete with 20-page dossiers and simulation proofs).
+
 Each goal must be:
-1. Specific and actionable (not vague)
-2. Different from existing active goals
-3. Genuinely valuable for system improvement
+1. Specific and actionable (not vague).
+2. Different from existing active goals.
+3. Genuinely valuable for system improvement OR humanity-scale progress.
 
 Respond in this exact JSON format (no markdown, no commentary):
 [
   {
     "title": "Short goal title",
-    "description": "What to do and why",
-    "category": "engineering|security|research|optimization|knowledge",
+    "description": "What to do and why (if a Moonshot, describe the massive 20-page dossier/blueprint to be generated)",
+    "category": "engineering|security|research|optimization|knowledge|moonshot",
     "priority": 60,
     "delegate": "steve|kevin|pulse|any"
   }
@@ -268,7 +276,7 @@ Respond in this exact JSON format (no markdown, no commentary):
                 title:       p.title.slice(0, 120),
                 description: p.description || p.title,
                 category:    p.category || 'research',
-                priority:    Math.min(90, Math.max(10, parseInt(p.priority) || 50)),
+                priority:    Math.min(100, Math.max(10, parseInt(p.priority) || 50)), // Moonshots can hit 100
                 delegate:    p.delegate || 'any',
             }));
         } catch {
@@ -442,6 +450,12 @@ Respond in this exact JSON format (no markdown, no commentary):
                 category: 'research',
                 priority: 55,
                 delegate: 'pulse',
+            },
+            'forensics.critical_finding': {
+                title:    `Forensic Audit Required: ${payload?.target || 'discrepancy'} (Verdict: ${payload?.verdict || 'CRITICAL'})`,
+                category: 'security',
+                priority: 95,
+                delegate: 'kevin',
             },
         };
 

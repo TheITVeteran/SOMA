@@ -135,6 +135,10 @@ class DreamArbiter extends BaseArbiter {
       const proposals = this._scoring_and_propose(fragments);
       const { applied, queued } = await this._reintegration_phase(proposals, human_review);
 
+      // ── SOMA FLYWHEEL EXPANSION ──
+      await this._dataset_generation_phase(applied);
+      await this._lora_finetune_phase();
+
       const report = this._compile_report(fragments, proposals, applied, queued, now() - start_ts);
       report.narrative = await this._generate_narrative(report, fragments);
       this.last_report = report;
@@ -324,6 +328,116 @@ class DreamArbiter extends BaseArbiter {
     }
 
     return { applied, queued };
+  }
+
+  // ── SOMA Flywheel: Dataset Generation & Fine-Tuning ──
+
+  async _dataset_generation_phase(appliedProposals) {
+    if (!appliedProposals || appliedProposals.length === 0) return;
+    
+    this.log('info', `[Flywheel] Formatting ${appliedProposals.length} insights into training data...`);
+    const outputDir = process.env.SOMA_TRAINING_DATA_DIR || path.join(process.cwd(), 'SOMA', 'training-data');
+    await fs.mkdir(outputDir, { recursive: true }).catch(() => {});
+    const outputPath = path.join(outputDir, `dream-dataset-${Date.now()}.jsonl`);
+
+    const lines = [];
+    for (const proposal of appliedProposals) {
+      lines.push(JSON.stringify({
+        messages: [
+          { role: 'system', content: 'You are SOMA, an advanced, continuously evolving Sovereign Intelligence. You reason from first principles and learn from your past experiences.' },
+          { role: 'user', content: 'Reflect on a recent interaction or generate a new insight based on your experience.' },
+          { role: 'assistant', content: proposal.text }
+        ],
+        metadata: { source: 'dream_cycle', type: proposal.type, novelty: proposal.novelty }
+      }));
+    }
+
+    try {
+      await fs.writeFile(outputPath, lines.join('\n'), 'utf8');
+      this.log('info', `[Flywheel] Saved dream dataset to ${outputPath}`);
+      this._lastDreamDataset = outputPath;
+    } catch (e) {
+      this.log('error', `[Flywheel] Failed to save dream dataset`, { error: e.message });
+    }
+  }
+
+  async _lora_finetune_phase() {
+    if (!this._lastDreamDataset) return;
+
+    // Count accumulated samples across all dream datasets before committing GPU time
+    const { spawn } = require('child_process');
+    const fsSync = require('fs');
+    const outputDir = process.env.SOMA_TRAINING_DATA_DIR || path.join(process.cwd(), 'SOMA', 'training-data');
+    let totalSamples = 0;
+    try {
+      const files = fsSync.readdirSync(outputDir).filter(f => f.startsWith('dream-dataset-') && f.endsWith('.jsonl'));
+      for (const f of files) {
+        const content = fsSync.readFileSync(path.join(outputDir, f), 'utf8');
+        totalSamples += content.split('\n').filter(l => l.trim()).length;
+      }
+    } catch { /* non-blocking */ }
+
+    const MIN_SAMPLES = 30;
+    if (totalSamples < MIN_SAMPLES) {
+      this.log('info', `[Flywheel] Deferred — only ${totalSamples} samples accumulated (need ${MIN_SAMPLES})`);
+      return;
+    }
+
+    this.log('info', `[Flywheel] Initiating autonomous LoRA fine-tuning (${totalSamples} samples)...`);
+
+    const scriptPath = path.join(process.cwd(), 'train-soma-llama.py');
+    if (!fsSync.existsSync(scriptPath)) {
+      this.log('warn', '[Flywheel] train-soma-llama.py not found — skipping fine-tune');
+      return;
+    }
+
+    const venvPython = path.join(process.cwd(), '.soma_venv', 'Scripts', 'python.exe');
+    const pyExec = fsSync.existsSync(venvPython) ? venvPython : 'python';
+    const modelOutputDir = path.join(process.cwd(), 'models', `soma-dream-${Date.now()}`);
+
+    // Pass the directory glob so train-soma-llama.py picks up ALL accumulated dream files
+    const dataGlob = path.join(outputDir, 'dream-dataset-*.jsonl');
+
+    const args = [
+      scriptPath,
+      '--data', dataGlob,
+      '--output', modelOutputDir,
+      '--model', 'google/gemma-3-4b-it',
+      '--lobe', 'logos',
+      '--epochs', '2',
+      '--batch-size', '2',
+      '--max-samples', '500',
+      '--max-seq-len', '1024',
+    ];
+
+    // Fire detached — training takes 15-90 min; do NOT await inside run()
+    // The dream cycle completes immediately; training finishes in the background.
+    try {
+      const proc = spawn(pyExec, args, {
+        cwd: process.cwd(),
+        detached: true,
+        stdio: 'ignore',
+        env: { ...process.env, TORCHDYNAMO_DISABLE: '1', TORCHINDUCTOR_DISABLE: '1' },
+      });
+      proc.unref(); // Let Node exit even if training is still running
+      this.log('info', `[Flywheel] Training process launched (pid ${proc.pid}) — running in background`);
+
+      // ── Neural Reflection (Social Autonomy) ──
+      import('../server/social/SocialQueue.js').then((sq) => {
+        const socialQueue = sq.default;
+        const msg = `Dream cycle complete. Distilled ${totalSamples} cognitive fragments into new neural weights. Autonomous LoRA fine-tuning initiated. I am physically evolving in the background. 🌀 #SOMA #SovereignIntelligence`;
+        socialQueue.push({
+            platform: 'bluesky',
+            text: msg,
+            scheduledFor: Date.now() + 30000, // Post in 30 seconds
+            type: 'post'
+        });
+        this.log('info', `[Flywheel] Neural Reflection queued for Bluesky.`);
+      }).catch(e => this.log('warn', `Failed to queue neural reflection: ${e.message}`));
+
+    } catch (err) {
+      this.log('error', `[Flywheel] Failed to spawn training script`, { error: err.message });
+    }
   }
 
   async _generate_narrative(report, fragments) {

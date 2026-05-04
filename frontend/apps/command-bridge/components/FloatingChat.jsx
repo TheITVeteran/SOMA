@@ -70,10 +70,11 @@ const RARITY_GLOW = {
   legendary: 'border-amber-500/60',
 };
 
-const PANEL_W  = 384;
-const PANEL_H  = 500;
-const ORB_SIZE = 56;
-const PAD      = 16;
+const PANEL_W       = 384;
+const PANEL_H       = 500;
+const ORB_SIZE      = 56;
+const ORB_WORK_SIZE = 38;   // shrunken size while SOMA is puppeteering
+const PAD           = 16;
 
 // Compute where the panel should open relative to where the orb is sitting.
 // Returns { x, y } for the panel top-left and a CSS transform-origin pointing
@@ -101,23 +102,32 @@ function getPanelGeom(orbX, orbY) {
 
 const FloatingChat = ({
   isServerRunning, isBusy, onSendMessage, activeModule,
-  activeQuestion, onSendQuestionResponse, tensionLevel
+  activeQuestion, onSendQuestionResponse, tensionLevel,
+  initialX, initialY,
 }) => {
   // ── Panel visibility / animation state ────────────────────────────────────
   const [panelMounted, setPanelMounted] = useState(false); // panel in DOM
   const [isVisible,    setIsVisible]    = useState(false); // drives scale
 
   // ── Chat state ─────────────────────────────────────────────────────────────
-  const [input,       setInput]       = useState('');
-  const [messages,    setMessages]    = useState([]);
-  const [suggestion,  setSuggestion]  = useState(null);
-  const [isThinking,  setIsThinking]  = useState(false);
-  const [unreadCount, setUnreadCount] = useState(0);
+  const [input,          setInput]          = useState('');
+  const [messages,       setMessages]       = useState([]);
+  const [suggestion,     setSuggestion]     = useState(null);
+  const [isThinking,     setIsThinking]     = useState(false);
+  const [unreadCount,    setUnreadCount]    = useState(0);
+
+  // ── Puppeteer / ghost mode ─────────────────────────────────────────────────
+  const [isPuppeteering,    setIsPuppeteering]    = useState(false);
+  const [ghostBubble,       setGhostBubble]       = useState(null);   // { text, id }
+  const [showPuppetHint,    setShowPuppetHint]    = useState(false);  // "chat from here" one-shot
+  const puppeteerTimer      = useRef(null);  // auto-clear puppeteering after inactivity
+  const ghostBubbleTimer    = useRef(null);
+  const hintShown           = useRef(false);
 
   // ── Orb (anchor) position ──────────────────────────────────────────────────
   const [orbPos, setOrbPos] = useState(() => ({
-    x: window.innerWidth  - ORB_SIZE - 24,
-    y: window.innerHeight - ORB_SIZE - 24,
+    x: initialX ?? (window.innerWidth  - ORB_SIZE - 24),
+    y: initialY ?? (window.innerHeight - ORB_SIZE - 24),
   }));
   const orbPosRef = useRef(orbPos);   // kept in sync for use inside event handlers
 
@@ -151,6 +161,51 @@ const FloatingChat = ({
     };
     somaBackend.on('soma_proactive', onProactive);
     return () => somaBackend.off('soma_proactive', onProactive);
+  }, []);
+
+  // ── Ghost / puppeteering messages ─────────────────────────────────────────
+  useEffect(() => {
+    const onGhost = ({ text, emotion }) => {
+      if (!text) return;
+
+      // Enter puppeteering mode
+      setIsPuppeteering(true);
+
+      // Show speech bubble above orb
+      if (ghostBubbleTimer.current) clearTimeout(ghostBubbleTimer.current);
+      setGhostBubble({ text, id: Date.now() });
+      ghostBubbleTimer.current = setTimeout(() => setGhostBubble(null), 5500);
+
+      // One-shot "we can chat from here" hint
+      if (!hintShown.current) {
+        hintShown.current = true;
+        setShowPuppetHint(true);
+        setTimeout(() => setShowPuppetHint(false), 4000);
+      }
+
+      // Add as a ghost narration in the chat messages
+      setMessages(prev => [...prev, {
+        id: Date.now(),
+        text,
+        sender: 'system',
+        autonomous: true,
+        isGhost: true,
+      }]);
+
+      // If panel is closed, bump the unread badge
+      setIsVisible(prev => { if (!prev) setUnreadCount(c => c + 1); return prev; });
+
+      // Auto-exit puppeteering after 30s of silence
+      if (puppeteerTimer.current) clearTimeout(puppeteerTimer.current);
+      puppeteerTimer.current = setTimeout(() => setIsPuppeteering(false), 30_000);
+    };
+
+    somaBackend.on('ghost_message', onGhost);
+    return () => {
+      somaBackend.off('ghost_message', onGhost);
+      if (ghostBubbleTimer.current) clearTimeout(ghostBubbleTimer.current);
+      if (puppeteerTimer.current) clearTimeout(puppeteerTimer.current);
+    };
   }, []);
 
   // ── Active-question badge ─────────────────────────────────────────────────
@@ -331,6 +386,8 @@ const FloatingChat = ({
 
   const isUrgent = (tensionLevel || 0) >= 70;
 
+  const currentOrbSize = isPuppeteering ? ORB_WORK_SIZE : ORB_SIZE;
+
   return (
     <>
       {/* ── Orb / draggable anchor ─────────────────────────────────────────── */}
@@ -340,31 +397,78 @@ const FloatingChat = ({
         style={{
           left: orbPos.x,
           top: orbPos.y,
-          width: ORB_SIZE,
-          height: ORB_SIZE,
+          width: currentOrbSize,
+          height: currentOrbSize,
           opacity: panelMounted ? 0 : 1,
           pointerEvents: panelMounted ? 'none' : 'auto',
-          transition: 'opacity 180ms ease',
+          transition: 'opacity 180ms ease, width 350ms cubic-bezier(0.34,1.56,0.64,1), height 350ms cubic-bezier(0.34,1.56,0.64,1)',
         }}
       >
+        {/* Speech bubble — ghost narration */}
+        {ghostBubble && !panelMounted && (
+          <div
+            key={ghostBubble.id}
+            className="absolute bottom-full mb-2.5 right-0 max-w-[220px] pointer-events-none"
+            style={{
+              animation: 'ghostBubbleIn 0.25s cubic-bezier(0.34,1.56,0.64,1) both',
+            }}
+          >
+            <div className="bg-[#0e0e12]/95 border border-cyan-500/30 rounded-2xl rounded-br-sm px-3 py-2 shadow-xl shadow-cyan-500/10 backdrop-blur-md">
+              <div className="flex items-center gap-1.5 mb-1">
+                <div className="w-1.5 h-1.5 rounded-full bg-cyan-400 animate-pulse shrink-0" />
+                <span className="text-[8px] font-bold uppercase tracking-widest text-cyan-500">SOMA</span>
+              </div>
+              <p className="text-[11px] text-zinc-200 leading-relaxed">{ghostBubble.text}</p>
+            </div>
+            {/* Tail */}
+            <div className="absolute -bottom-1.5 right-4 w-3 h-3 bg-[#0e0e12]/95 border-b border-r border-cyan-500/30 rotate-45" />
+          </div>
+        )}
+
+        {/* "chat from here" one-shot hint */}
+        {showPuppetHint && !panelMounted && (
+          <div
+            className="absolute bottom-full mb-12 right-0 pointer-events-none"
+            style={{ animation: 'ghostBubbleIn 0.3s ease both' }}
+          >
+            <div className="bg-violet-500/90 rounded-xl px-3 py-1.5 shadow-lg shadow-violet-500/20 whitespace-nowrap">
+              <p className="text-[11px] text-white font-medium">we can chat from here 👋</p>
+            </div>
+          </div>
+        )}
+
         <button
           onMouseDown={onMouseDown}
           onClick={handleOrbClick}
-          className={`relative w-14 h-14 rounded-full bg-[#151518]/90 backdrop-blur-md border ${
-            isUrgent
+          className={`relative rounded-full bg-[#151518]/90 backdrop-blur-md border flex items-center justify-center shadow-2xl transition-colors group cursor-grab active:cursor-grabbing select-none ${
+            isPuppeteering
+              ? 'border-cyan-500/60 shadow-cyan-500/20 shadow-lg'
+              : isUrgent
               ? 'border-amber-500/70 shadow-amber-500/30 shadow-lg animate-pulse'
               : unreadCount > 0
               ? 'border-fuchsia-500/60 animate-pulse'
               : 'border-white/10 hover:border-white/25'
-          } flex items-center justify-center shadow-2xl transition-colors group cursor-grab active:cursor-grabbing select-none`}
-          title="SOMA Chat — drag to move"
+          }`}
+          style={{ width: currentOrbSize, height: currentOrbSize, transition: 'width 350ms cubic-bezier(0.34,1.56,0.64,1), height 350ms cubic-bezier(0.34,1.56,0.64,1)' }}
+          title={isPuppeteering ? 'SOMA is working — click to chat' : 'SOMA Chat — drag to move'}
         >
-          <svg
-            width="32" height="32" viewBox="0 0 24 24" fill="currentColor"
-            className="text-fuchsia-500 transition-transform group-hover:scale-110 pointer-events-none"
-          >
-            <path d="M12 2C10.5 2 9 2.5 8 3.5C7 2.5 5.5 2 4 2C2.5 2 1 3 1 5C1 6.5 1.5 8 2.5 9C1.5 10 1 11.5 1 13C1 14.5 2 16 3.5 16.5C3 17.5 3 18.5 3.5 19.5C4 20.5 5 21 6 21.5C7 22 8.5 22 10 22H14C15.5 22 17 22 18 21.5C19 21 20 20.5 20.5 19.5C21 18.5 21 17.5 20.5 16.5C22 16 23 14.5 23 13C23 11.5 22.5 10 21.5 9C22.5 8 23 6.5 23 5C23 3 21.5 2 20 2C18.5 2 17 2.5 16 3.5C15 2.5 13.5 2 12 2Z" />
-          </svg>
+          {isPuppeteering ? (
+            /* Working state: spinning ring + small icon */
+            <>
+              <svg className="absolute inset-0 w-full h-full animate-spin-slow" viewBox="0 0 38 38" fill="none">
+                <circle cx="19" cy="19" r="17" stroke="#22d3ee" strokeWidth="1.5" strokeDasharray="28 80" strokeLinecap="round" opacity="0.7" />
+              </svg>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" className="text-cyan-400 pointer-events-none relative z-10">
+                <path d="M12 2C10.5 2 9 2.5 8 3.5C7 2.5 5.5 2 4 2C2.5 2 1 3 1 5C1 6.5 1.5 8 2.5 9C1.5 10 1 11.5 1 13C1 14.5 2 16 3.5 16.5C3 17.5 3 18.5 3.5 19.5C4 20.5 5 21 6 21.5C7 22 8.5 22 10 22H14C15.5 22 17 22 18 21.5C19 21 20 20.5 20.5 19.5C21 18.5 21 17.5 20.5 16.5C22 16 23 14.5 23 13C23 11.5 22.5 10 21.5 9C22.5 8 23 6.5 23 5C23 3 21.5 2 20 2C18.5 2 17 2.5 16 3.5C15 2.5 13.5 2 12 2Z" />
+              </svg>
+            </>
+          ) : (
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="currentColor"
+              className="text-fuchsia-500 transition-transform group-hover:scale-110 pointer-events-none"
+            >
+              <path d="M12 2C10.5 2 9 2.5 8 3.5C7 2.5 5.5 2 4 2C2.5 2 1 3 1 5C1 6.5 1.5 8 2.5 9C1.5 10 1 11.5 1 13C1 14.5 2 16 3.5 16.5C3 17.5 3 18.5 3.5 19.5C4 20.5 5 21 6 21.5C7 22 8.5 22 10 22H14C15.5 22 17 22 18 21.5C19 21 20 20.5 20.5 19.5C21 18.5 21 17.5 20.5 16.5C22 16 23 14.5 23 13C23 11.5 22.5 10 21.5 9C22.5 8 23 6.5 23 5C23 3 21.5 2 20 2C18.5 2 17 2.5 16 3.5C15 2.5 13.5 2 12 2Z" />
+            </svg>
+          )}
           {unreadCount > 0 && (
             <span className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-fuchsia-500 text-white text-[10px] font-bold flex items-center justify-center shadow-lg pointer-events-none">
               {unreadCount > 9 ? '9+' : unreadCount}
@@ -394,17 +498,29 @@ const FloatingChat = ({
           }}
         >
           {/* Header */}
-          <div className="p-4 border-b border-white/5 flex items-center justify-between bg-black/40 select-none flex-shrink-0">
-            <div className="flex items-center space-x-2">
-              <div className={`w-2 h-2 rounded-full ${isServerRunning ? 'bg-fuchsia-500' : 'bg-rose-500'} shadow-[0_0_8px_currentColor]`} />
-              <span className="text-zinc-200 font-semibold text-sm tracking-tight">SOMA</span>
+          <div className="border-b border-white/5 bg-black/40 select-none flex-shrink-0">
+            <div className="p-4 flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <div className={`w-2 h-2 rounded-full ${isPuppeteering ? 'bg-cyan-400' : isServerRunning ? 'bg-fuchsia-500' : 'bg-rose-500'} shadow-[0_0_8px_currentColor]`} />
+                <span className="text-zinc-200 font-semibold text-sm tracking-tight">SOMA</span>
+              </div>
+              <button onClick={closeChat} className="text-zinc-500 hover:text-zinc-300 transition-colors">
+                <X className="w-4 h-4" />
+              </button>
             </div>
-            <button
-              onClick={closeChat}
-              className="text-zinc-500 hover:text-zinc-300 transition-colors"
-            >
-              <X className="w-4 h-4" />
-            </button>
+            {/* Puppeteering status bar */}
+            {isPuppeteering && (
+              <div className="px-4 pb-3 flex items-center gap-2">
+                <div className="flex-1 h-px bg-cyan-500/20" />
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <svg className="w-3 h-3 text-cyan-400 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                    <path d="M21 12a9 9 0 1 1-6.219-8.56" strokeLinecap="round" />
+                  </svg>
+                  <span className="text-[9px] font-bold uppercase tracking-widest text-cyan-500">working on your screen</span>
+                </div>
+                <div className="flex-1 h-px bg-cyan-500/20" />
+              </div>
+            )}
           </div>
 
           {/* Messages */}
@@ -425,11 +541,21 @@ const FloatingChat = ({
                 <div className={`max-w-[85%] px-4 py-2.5 rounded-2xl text-sm leading-relaxed ${
                   msg.sender === 'user'
                     ? 'bg-fuchsia-500/10 border border-fuchsia-500/20 text-fuchsia-50'
+                    : msg.isGhost
+                    ? 'bg-cyan-950/40 border border-cyan-500/25 text-cyan-100'
                     : msg.autonomous
                     ? 'bg-violet-950/40 border border-violet-500/30 text-violet-200'
                     : 'bg-white/5 border border-white/10 text-zinc-200'
                 }`}>
-                  {msg.autonomous && (
+                  {msg.isGhost && (
+                    <div className="flex items-center gap-1 mb-1.5">
+                      <svg className="w-2.5 h-2.5 text-cyan-400 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
+                        <path d="M21 12a9 9 0 1 1-6.219-8.56" strokeLinecap="round" />
+                      </svg>
+                      <span className="text-[9px] font-mono uppercase tracking-widest text-cyan-500">working</span>
+                    </div>
+                  )}
+                  {!msg.isGhost && msg.autonomous && (
                     <div className="flex items-center gap-1 mb-1.5">
                       <div className="w-1.5 h-1.5 rounded-full bg-violet-400 animate-pulse" />
                       <span className="text-[9px] font-mono uppercase tracking-widest text-violet-400 opacity-80">autonomous</span>

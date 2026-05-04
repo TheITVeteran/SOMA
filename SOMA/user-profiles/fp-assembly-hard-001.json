@@ -1,0 +1,22 @@
+{
+  "userId": "assembly-hard-001",
+  "sessions": 1,
+  "totalMessages": 1,
+  "avgMsgLength": 25,
+  "questionRatio": 0,
+  "vocabRichness": 0.92,
+  "avgWordLength": 5.92,
+  "typicalStyle": "declarative-articulate",
+  "hourHistogram": {
+    "11": 1
+  },
+  "topicFreq": {
+    "architecture": 1
+  },
+  "recentTopics": [
+    "architecture"
+  ],
+  "lastSeen": 1776007346851,
+  "lastUpdated": 1776007346851,
+  "createdAt": 1776007346851
+}

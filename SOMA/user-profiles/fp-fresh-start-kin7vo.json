@@ -1,0 +1,22 @@
+{
+  "userId": "fresh-start-kin7vo",
+  "sessions": 1,
+  "totalMessages": 1,
+  "avgMsgLength": 17,
+  "questionRatio": 0,
+  "vocabRichness": 1,
+  "avgWordLength": 5.59,
+  "typicalStyle": "declarative-articulate",
+  "hourHistogram": {
+    "15": 1
+  },
+  "topicFreq": {
+    "architecture": 1
+  },
+  "recentTopics": [
+    "architecture"
+  ],
+  "lastSeen": 1775934747969,
+  "lastUpdated": 1775934747969,
+  "createdAt": 1775934747969
+}

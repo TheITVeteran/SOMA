@@ -1,0 +1,15 @@
+{
+  "event": "arbiter_register",
+  "ts": 1771441681528,
+  "data": {
+    "name": "ConceiveControl",
+    "meta": {
+      "type": "computer_control",
+      "capabilities": [
+        "file_search_os",
+        "gui_automation",
+        "system_tasks"
+      ]
+    }
+  }
+}

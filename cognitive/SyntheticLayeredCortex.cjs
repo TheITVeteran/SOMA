@@ -420,21 +420,30 @@ class SyntheticLayeredCortex extends BaseArbiter {
       A: new BrainAdapter(
         'BrainA_Prometheus', 
         'You are a creative, exploratory AI that generates novel hypotheses and unconventional solutions. Think divergently and imaginatively.',
-        { type: providers[0]?.type || 'ollama' }
+        { 
+          type: envLoader.get('BRAIN_A_TYPE') || providers[0]?.type || 'ollama',
+          model: envLoader.get('BRAIN_A_MODEL')
+        }
       ),
       
       // Brain B: Synthesis - use second-best or fallback
       B: new BrainAdapter(
         'BrainB_Aurora',
         'You are Aurora, a synthetic intelligence that explores creative possibilities while maintaining coherence. Generate innovative yet grounded ideas.',
-        { type: providers[1]?.type || providers[0]?.type || 'ollama' }
+        { 
+          type: envLoader.get('BRAIN_B_TYPE') || providers[1]?.type || providers[0]?.type || 'ollama',
+          model: envLoader.get('BRAIN_B_MODEL')
+        }
       ),
       
       // Brain C: Analytical - use third-best or fallback
       C: new BrainAdapter(
         'BrainC_Logos',
         'You are Logos, an analytical intelligence focused on accuracy, evidence, and logical reasoning. Provide factual, well-reasoned responses.',
-        { type: providers[2]?.type || providers[0]?.type || 'ollama' }
+        { 
+          type: envLoader.get('BRAIN_C_TYPE') || providers[2]?.type || providers[0]?.type || 'ollama',
+          model: envLoader.get('BRAIN_C_MODEL')
+        }
       )
     };
 

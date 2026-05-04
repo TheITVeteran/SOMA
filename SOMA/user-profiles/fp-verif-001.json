@@ -1,0 +1,22 @@
+{
+  "userId": "verif-001",
+  "sessions": 1,
+  "totalMessages": 1,
+  "avgMsgLength": 10,
+  "questionRatio": 0,
+  "vocabRichness": 1,
+  "avgWordLength": 7.4,
+  "typicalStyle": "declarative-articulate",
+  "hourHistogram": {
+    "14": 1
+  },
+  "topicFreq": {
+    "architecture": 1
+  },
+  "recentTopics": [
+    "architecture"
+  ],
+  "lastSeen": 1775931611923,
+  "lastUpdated": 1775931611923,
+  "createdAt": 1775931611925
+}

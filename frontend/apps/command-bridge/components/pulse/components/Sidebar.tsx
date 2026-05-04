@@ -7,6 +7,9 @@ import {
   ChevronLeft, ChevronRight, Download, Zap, RefreshCw, Plus, Files, PenTool, Clipboard
 } from 'lucide-react';
 
+import SidebarItem from './SidebarItem';
+import ResonanceMonitor from './ResonanceMonitor';
+
 interface Props {
   state: ProjectState;
   onTabChange: (tab: WorkspaceTab) => void;
@@ -48,6 +51,8 @@ const Sidebar: React.FC<Props> = ({ state, onTabChange, onServiceAction, onDownl
           </ul>
         </div>
       </nav>
+
+      <ResonanceMonitor isCollapsed={isCollapsed} />
 
       <div className={`p-4 mt-auto border-t border-zinc-900/50 flex items-center ${isCollapsed ? 'justify-center' : 'justify-between'} text-[9px] font-bold text-zinc-700 uppercase tracking-widest overflow-hidden shrink-0`}>
         {!isCollapsed && <span className="animate-in fade-in whitespace-nowrap">SOMA Online</span>}

@@ -16,7 +16,7 @@ if %ERRORLEVEL% NEQ 0 (
     echo   WARNING: SOMA backend not detected at http://localhost:3001
     echo   Please start the SOMA backend first:
     echo.
-    echo   cd C:\Users\barry\Desktop\soma\cognitive-terminal\server
+    echo   cd ..\a cognitive terminal\server
     echo   node index.cjs
     echo.
     pause
@@ -29,7 +29,7 @@ echo   [2/4] Starting Whisper voice server...
 powershell -Command "$response = try { Invoke-WebRequest -Uri 'http://localhost:5002/health' -UseBasicParsing -TimeoutSec 2 } catch { $null }; if ($response) { exit 0 } else { exit 1 }"
 if %ERRORLEVEL% NEQ 0 (
     echo   Starting Whisper on port 5002...
-    start /B "" "C:\Users\barry\Desktop\SOMA\.soma_venv\Scripts\python.exe" "C:\Users\barry\Desktop\SOMA\a cognitive terminal\services\whisper_flask_server.py" >nul 2>&1
+    start /B "" "..\.soma_venv\Scripts\python.exe" "..\a cognitive terminal\services\whisper_flask_server.py" >nul 2>&1
     :: Wait for Whisper to load model and start
     echo   Waiting for Whisper model to load...
     timeout /t 10 /nobreak >nul

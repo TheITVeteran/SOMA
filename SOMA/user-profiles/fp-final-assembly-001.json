@@ -1,0 +1,24 @@
+{
+  "userId": "final-assembly-001",
+  "sessions": 1,
+  "totalMessages": 1,
+  "avgMsgLength": 29,
+  "questionRatio": 0,
+  "vocabRichness": 0.862,
+  "avgWordLength": 5.9,
+  "typicalStyle": "declarative-articulate",
+  "hourHistogram": {
+    "11": 1
+  },
+  "topicFreq": {
+    "architecture": 1,
+    "creative": 1
+  },
+  "recentTopics": [
+    "architecture",
+    "creative"
+  ],
+  "lastSeen": 1776007558564,
+  "lastUpdated": 1776007558564,
+  "createdAt": 1776007558564
+}

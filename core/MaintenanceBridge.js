@@ -15,7 +15,7 @@ import { MaxAgentBridge } from './MaxAgentBridge.js';
 
 export class MaintenanceBridge {
     constructor(config = {}) {
-        this.maxPath  = config.maxPath  || 'C:\\Users\\barry\\Desktop\\MAX';
+        this.maxPath  = config.maxPath  || process.env.MAX_PATH || 'C:\\Users\\barry\\Desktop\\MAX';
         this.somaPath = config.somaPath || process.cwd();
         this.logger   = config.logger   || console;
         this._bridge  = new MaxAgentBridge({ maxUrl: config.maxUrl, logger: this.logger });

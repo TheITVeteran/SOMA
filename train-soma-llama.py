@@ -264,17 +264,50 @@ def main():
     # ── Format dataset ─────────────────────────────────────────────────────────
     raw_samples = load_jsonl(args.data, args.max_samples)
     texts = []
-    for msgs in raw_samples:
+    
+    # Ensure pad token is set for chat template
+    if tokenizer.pad_token is None:
+        tokenizer.pad_token = tokenizer.eos_token
+        
+    # Default chat template if none is provided (e.g. for Base models)
+    if tokenizer.chat_template is None:
+        print("[SOMA Train] No chat template found in tokenizer. Using default Gemma/Llama-3 template.")
+        tokenizer.chat_template = (
+            "{% for message in messages %}"
+            "{% if message['role'] == 'system' %}"
+            "{{ '<|system|>\\n' + message['content'] + '<|end|>\\n' }}"
+            "{% elif message['role'] == 'user' %}"
+            "{{ '<|user|>\\n' + message['content'] + '<|end|>\\n' }}"
+            "{% elif message['role'] == 'assistant' %}"
+            "{{ '<|assistant|>\\n' + message['content'] + '<|end|>\\n' }}"
+            "{% endif %}"
+            "{% endfor %}"
+            "{% if add_generation_prompt %}"
+            "{{ '<|assistant|>\\n' }}"
+            "{% endif %}"
+        )
+        
+    for i, msgs in enumerate(raw_samples):
         try:
-            if msgs and msgs[0].get("role") != "system":
+            # Ensure system prompt is present
+            has_system = any(m.get("role") == "system" for m in msgs)
+            if not has_system:
                 msgs = [{"role": "system", "content": lobe_system_prompt}] + msgs
-            text = tokenizer.apply_chat_template(msgs, tokenize=False, add_generation_prompt=False)
+            
+            # Apply chat template
+            text = tokenizer.apply_chat_template(
+                msgs, 
+                tokenize=False, 
+                add_generation_prompt=False
+            )
             texts.append(text)
-        except Exception:
+        except Exception as e:
+            if i < 5: # Log first few errors
+                print(f"[SOMA Train] Formatting error on sample {i}: {e}")
             continue
 
     if not texts:
-        print("[SOMA Train] ERROR: No samples could be formatted")
+        print("[SOMA Train] ERROR: No samples could be formatted. Check if the model's chat template is compatible.")
         sys.exit(1)
 
     print(f"[SOMA Train] Formatted {len(texts)} samples")

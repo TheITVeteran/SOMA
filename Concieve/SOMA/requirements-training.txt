@@ -1,0 +1,36 @@
+# SOMA Training Requirements - Gemma 3 Fine-Tuning
+# Optimized for GTX 1650 Ti (4GB VRAM)
+
+# Core ML Framework
+torch>=2.1.0
+torchvision>=0.16.0
+torchaudio>=2.1.0
+
+# Transformers & Model Hub
+transformers>=4.36.0
+accelerate>=0.25.0
+peft>=0.7.0  # LoRA/QLoRA support
+bitsandbytes>=0.41.0  # 4-bit quantization
+
+# Dataset Processing
+datasets>=2.15.0
+sentencepiece>=0.1.99  # Gemma tokenizer
+protobuf>=3.20.0
+
+# Training Utilities
+wandb>=0.16.0  # Optional: experiment tracking
+tensorboard>=2.15.0
+tqdm>=4.66.0
+scipy>=1.11.0
+
+# Memory Optimization
+safetensors>=0.4.0
+xformers>=0.0.23  # Flash Attention (optional but recommended)
+
+# Data Processing
+pandas>=2.1.0
+numpy>=1.24.0
+jsonlines>=4.0.0
+
+# GPU Utilities
+nvidia-ml-py3>=7.352.0  # GPU monitoring

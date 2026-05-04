@@ -47,6 +47,13 @@ export default defineConfig({
   base: './',
   build: {
     outDir: 'dist',
-    emptyOutDir: true
+    emptyOutDir: true,
+    rollupOptions: {
+      input: {
+        main:  path.resolve(__dirname, 'index.html'),
+        nexus: path.resolve(__dirname, 'nexus.html'),
+        tie:   path.resolve(__dirname, 'tie.html'),
+      }
+    }
   }
 })

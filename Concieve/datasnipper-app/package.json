@@ -1,0 +1,62 @@
+{
+  "name": "conceive-audit-platform",
+  "version": "1.0.0",
+  "description": "A collaborative audit platform combining file management, chat, AI assistance, and Excel integration",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node server/index.js",
+    "start:all": "concurrently \"npm run server\" \"npm run client\"",
+    "file-intel": "npm --prefix \"..\\_imports\\soma-file-intelligence\" run dev",
+    "dev": "concurrently \"npm run server\" \"npm run client\"",
+    "server": "nodemon server/index.js",
+    "client": "cd client && npm start",
+    "build": "cd client && npm run build",
+    "install-all": "npm install && cd client && npm install",
+    "test": "jest"
+  },
+  "keywords": [
+    "audit",
+    "collaboration",
+    "accounting",
+    "excel",
+    "ai",
+    "chat"
+  ],
+  "author": "Conceive Team",
+  "license": "MIT",
+  "dependencies": {
+    "axios": "^1.12.2",
+    "bcryptjs": "^2.4.3",
+    "compression": "^1.7.4",
+    "cors": "^2.8.5",
+    "csv-parser": "^3.2.0",
+    "dotenv": "^16.3.1",
+    "exceljs": "^4.4.0",
+    "express": "^4.18.2",
+    "express-rate-limit": "^6.10.0",
+    "helmet": "^7.0.0",
+    "jsonwebtoken": "^9.0.2",
+    "lucide-react": "^0.546.0",
+    "mongoose": "^7.5.0",
+    "multer": "^1.4.5-lts.1",
+    "mammoth": "^1.6.0",
+    "node-cron": "^3.0.3",
+    "node-fetch": "^2.7.0",
+    "passport": "^0.6.0",
+    "passport-google-oauth20": "^2.0.0",
+    "passport-local": "^1.0.0",
+    "passport-microsoft": "^1.0.0",
+    "pdf-parse": "^1.1.1",
+    "sharp": "^0.32.5",
+    "socket.io": "^4.7.2",
+    "sqlite3": "^5.1.7",
+    "winston": "^3.10.0"
+  },
+  "devDependencies": {
+    "@types/node": "^20.5.0",
+    "concurrently": "^8.2.0",
+    "jest": "^29.6.2",
+    "nodemon": "^3.0.1",
+    "supertest": "^6.3.3"
+  }
+}

@@ -1,0 +1,13 @@
+@echo off
+echo Starting backend server...
+start "Backend Server" cmd /k "cd server && node index.js"
+
+echo Waiting 5 seconds...
+timeout /t 5 /nobreak >nul
+
+echo Starting frontend client...
+start "Frontend Client" cmd /k "cd client && npm start"
+
+echo Both servers starting...
+echo Backend: http://localhost:5000
+echo Frontend: http://localhost:3000

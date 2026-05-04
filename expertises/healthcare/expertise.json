@@ -1,0 +1,22 @@
+{
+  "id": "healthcare",
+  "name": "Healthcare Expertise",
+  "version": "0.1.0",
+  "description": "Clinical and healthcare reasoning package for medical context, evidence review, safety checks, and specialist routing.",
+  "domains": ["healthcare", "medicine", "clinical", "medical"],
+  "aliases": ["medical", "clinician", "health"],
+  "triggers": ["diagnosis", "symptoms", "patient", "clinical", "treatment", "medical record", "healthcare"],
+  "keywords": ["differential", "contraindication", "guideline", "standard of care", "evidence"],
+  "capabilities": [
+    "clinical_context_routing",
+    "evidence_review",
+    "safety_screening",
+    "specialty_selection",
+    "citation_required_response"
+  ],
+  "standards": ["HIPAA", "ICD-10", "CPT", "HL7", "FHIR"],
+  "loadPolicy": {
+    "mode": "lazy",
+    "defaultLevel": "warm"
+  }
+}

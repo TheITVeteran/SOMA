@@ -23,15 +23,18 @@ export class BiotechArbiter extends EventEmitter {
         this.experiments = new Map();
         this.targets = [
             { id: 'TP53', category: 'Oncology', priority: 1 },
-            { id: 'APP', category: 'Neurology (Alzheimer\'s)', priority: 2 },
-            { id: 'PCSK9', category: 'Cardiology', priority: 3 },
-            { id: 'TNF', category: 'Autoimmune', priority: 4 }
+            { id: 'COGNITIVE_SYNERGY_STACK', category: 'Pharmacology (Combinatorial)', priority: 2 },
+            { id: 'URAT1', category: 'Rheumatology (Gout/Metabolic)', priority: 3 },
+            { id: 'PSILOCYBIN', category: 'Neurology (Neurogenesis/Psychiatry)', priority: 4 },
+            { id: 'SNAKE_VENOM_ENZYME', category: 'Oncology (T-cell Interaction)', priority: 5 }
         ];
         this.currentTargetIndex = 0;
         this.strands = {
             'KRAS': ['G12D', 'G12V', 'G12C'],
             'TP53': ['R175H', 'R248Q', 'Y220C'],
-            'APP': ['Swedish', 'London', 'Arctic']
+            'COGNITIVE_SYNERGY_STACK': ['Creatine+NAD+_Synergy', 'Ginkgo_Cerebral_Flow', 'Reishi_Immune_Modulation'],
+            'URAT1': ['Inhibition', 'Uricosuric_Pathways'],
+            'PSILOCYBIN': ['Neuroplasticity', 'Serotonin_2A_Agonism', 'Neurogenesis']
         };
 
         this.odin = new OdinOrchestrator({ system: config.system });
@@ -47,20 +50,24 @@ export class BiotechArbiter extends EventEmitter {
     }
 
     async initialize() {
-        if (!this.system?.braveSearch || !this.system?.quadBrain) {
-            console.warn(`🧬 [${this.name}] System tools not ready. Retrying in 10s...`);
+        // More resilient tool detection
+        const brave = this.system?.braveSearch || this.system?.webScraperDendrite;
+        const brain = this.system?.quadBrain || this.system?.brain;
+
+        if (!brave || !brain) {
+            console.warn(`🧬 [${this.name}] System tools (Brave/Brain) not ready. Retrying in 10s...`);
             setTimeout(() => this.initialize(), 10000);
             return;
         }
         this.active = true;
-        this.brave = this.system.braveSearch;
+        this.brave = brave;
         this.memory = this.system.mnemonicArbiter || this.system.mnemonic;
         this.thalamus = this.system.thalamusArbiter || this.system.thalamus;
         console.log(`🧬 [${this.name}] Phased Industrial Lab online.`);
     }
 
     /**
-     * The Master Mission Controller (Stateful Assembly Line)
+     * The Master Mission Controller (Recursive AGI Testing Loop)
      */
     async conductRealWorldResearch(targetObj, strand = null) {
         if (!this.brave || !this.active) return;
@@ -84,37 +91,49 @@ export class BiotechArbiter extends EventEmitter {
             }
 
             const bioPersona = await this._getPersona('Medical Research Specialist');
-            const discovery = await this.odin.reasonRecurrent(`${bioPersona}\nIdentify confluences in: ${results.map(s => s.snippet).join('\n')}`, 'logos', 'high');
+            const discovery = await this.odin.reasonRecurrent(`${bioPersona}\nIdentify molecular scaffolds and mechanistic confluences in: ${results.map(s => s.snippet).join('\n')}`, 'logos', 'high');
             this._phaseResults.discovery = discovery.response;
-            this._phaseResults.integrity = 0.90; // Start at Exploratory
+            this._phaseResults.integrity = 0.90; 
             await this._metabolicPause();
 
             // PHASE 2: STATISTICAL AUDIT (SOMA-STATS)
             this._currentPhase = 'STATS';
             console.log(`🧬 [${this.name}] [2/7] Phase: STATS`);
             const statsPersona = await this._getPersona('Biostatistician');
-            // 'standard' — analytical audit doesn't need full recurrence
-            const statsAudit = await this.odin.reasonRecurrent(`${statsPersona}\nAudit significance for: ${this._phaseResults.discovery.substring(0, 1500)}`, 'logos', 'standard');
+            const statsAudit = await this.odin.reasonRecurrent(`${statsPersona}\nAudit significance and p-values for: ${this._phaseResults.discovery.substring(0, 1500)}`, 'logos', 'standard');
             this._phaseResults.stats = statsAudit.response;
-            this._phaseResults.integrity = 0.94; // Advance to Preclinical
+            this._phaseResults.integrity = 0.94; 
             await this._metabolicPause();
 
-            // PHASE 3: PHYSICS SIMULATION (BIO-PHYSICS)
-            // Extract a candidate molecule name/formula from the discovery text.
-            // Look for SMILES-like tokens, known drug name patterns, or fall back to
-            // the target + strand as the probe identifier.
+            // PHASE 3: RECURSIVE PHYSICS SIMULATION (BIO-PHYSICS EVOLUTION)
             this._currentPhase = 'PHYSICS';
-            console.log(`🧬 [${this.name}] [3/7] Phase: PHYSICS`);
+            console.log(`🧬 [${this.name}] [3/7] Phase: PHYSICS (Recursive Testing Loop)`);
             const pocketData = TargetLibrary[target] || { name: target };
-            const moleculeProbe = this._extractMoleculeProbe(this._phaseResults.discovery, target, currentStrand);
-            const physicsResult = await this.physics.simulateDocking(moleculeProbe, pocketData);
+            let moleculeProbe = this._extractMoleculeProbe(this._phaseResults.discovery, target, currentStrand);
+            let physicsResult = null;
+            let attempts = 0;
+            const MAX_EVOLUTION_ROUNDS = 3;
+
+            while (attempts < MAX_EVOLUTION_ROUNDS) {
+                attempts++;
+                physicsResult = await this.physics.simulateDocking(moleculeProbe, pocketData);
+                
+                if (physicsResult.passed) {
+                    console.log(`🧬 [${this.name}]    ✅ SUCCESS: Affinity ${physicsResult.affinity} kcal/mol achieved on round ${attempts}.`);
+                    break;
+                }
+
+                console.log(`🧬 [${this.name}]    ⚠️ WEAK BINDING (${physicsResult.affinity}). Evolving molecule...`);
+                moleculeProbe = await this._evolveMolecularProbe(moleculeProbe, pocketData, physicsResult);
+                await this._metabolicPause();
+            }
+
             if (!physicsResult.passed) {
-                console.warn(`🧬 [${this.name}] ❌ VETO: Physics failure (affinity ${physicsResult.affinity} kcal/mol < threshold).`);
+                console.warn(`🧬 [${this.name}] ❌ VETO: Molecular evolution failed to meet binding threshold.`);
                 this._resetMission();
                 return;
             }
             this._phaseResults.physics = physicsResult;
-            console.log(`🧬 [${this.name}]    Physics: ${physicsResult.affinity} kcal/mol, confidence ${physicsResult.confidence}`);
             await this._metabolicPause();
 
             // PHASE 4: PHARMACOLOGY (SOMA-PHARM)
@@ -194,6 +213,29 @@ export class BiotechArbiter extends EventEmitter {
         }
     }
 
+    /**
+     * Recursive Molecular Evolution Helper
+     */
+    async _evolveMolecularProbe(moleculeProbe, targetPocket, lastResult) {
+        const prompt = `[MOLECULAR EVOLUTION PROTOCOL]
+Current Molecule: ${moleculeProbe}
+Target Pocket: ${targetPocket.name} (Preferred Donors: ${targetPocket.preferredDonors}, Acceptors: ${targetPocket.preferredAcceptors})
+Last Docking Affinity: ${lastResult.affinity} kcal/mol
+
+TASK: Propose a slightly modified molecular structure (SMILES or nomenclature) to IMPROVE binding affinity.
+Focus on:
+1. Optimizing Hydrogen Bond donors/acceptors.
+2. Adjusting Hydrophobic groups for the ${targetPocket.name} pocket.
+3. Reducing steric hindrance if affinity was < -4.0.
+
+Respond with ONLY the new molecular string or name.`;
+
+        const res = await this.odin.reasonRecurrent(prompt, 'prometheus', 'standard');
+        const evolved = res.response.trim().split('\n')[0]; // Get first line/word
+        console.log(`🧬 [${this.name}]    🧬 Evolution: ${moleculeProbe} ➔ ${evolved}`);
+        return evolved;
+    }
+
     async _metabolicPause() {
         await new Promise(r => setTimeout(r, 2000));
     }
@@ -247,8 +289,10 @@ export class BiotechArbiter extends EventEmitter {
             mission:      this._currentMission,
             target:       this._currentMission?.target || this.targets[this.currentTargetIndex]?.id,
             progress,
+            testingRound: this._phaseResults.attempts || 1,
             physics:      this._phaseResults.physics || null,
             completedPhases: PHASE_ORDER.slice(1, phaseIndex + 1),
+            latestFindings: Array.from(this.experiments.values()).reverse().slice(0, 5)
         };
     }
 

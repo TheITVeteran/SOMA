@@ -1,0 +1,18 @@
+{
+  "userId": "debug-check",
+  "sessions": 1,
+  "totalMessages": 1,
+  "avgMsgLength": 1,
+  "questionRatio": 0,
+  "vocabRichness": 1,
+  "avgWordLength": 4,
+  "typicalStyle": "declarative-articulate",
+  "hourHistogram": {
+    "21": 1
+  },
+  "topicFreq": {},
+  "recentTopics": [],
+  "lastSeen": 1777251708858,
+  "lastUpdated": 1777251708858,
+  "createdAt": 1777251708858
+}

@@ -1,0 +1,24 @@
+{
+  "userId": "direct-assembly-trigger-1776007774041",
+  "sessions": 1,
+  "totalMessages": 1,
+  "avgMsgLength": 33,
+  "questionRatio": 0,
+  "vocabRichness": 0.939,
+  "avgWordLength": 6.85,
+  "typicalStyle": "declarative-articulate",
+  "hourHistogram": {
+    "11": 1
+  },
+  "topicFreq": {
+    "architecture": 1,
+    "goals": 1
+  },
+  "recentTopics": [
+    "architecture",
+    "goals"
+  ],
+  "lastSeen": 1776007777001,
+  "lastUpdated": 1776007777001,
+  "createdAt": 1776007777001
+}

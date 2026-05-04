@@ -1,0 +1,24 @@
+{
+  "userId": "morning-handshake-001",
+  "sessions": 1,
+  "totalMessages": 1,
+  "avgMsgLength": 22,
+  "questionRatio": 1,
+  "vocabRichness": 0.909,
+  "avgWordLength": 6.09,
+  "typicalStyle": "inquisitive-verbose",
+  "hourHistogram": {
+    "11": 1
+  },
+  "topicFreq": {
+    "architecture": 1,
+    "AI": 1
+  },
+  "recentTopics": [
+    "architecture",
+    "AI"
+  ],
+  "lastSeen": 1776007100526,
+  "lastUpdated": 1776007100526,
+  "createdAt": 1776007100527
+}

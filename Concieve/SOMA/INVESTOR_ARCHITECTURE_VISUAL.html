@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SOMA Architecture - Investor Overview</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 40px;
+            min-height: 100vh;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            padding: 50px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+        }
+        
+        h1 {
+            text-align: center;
+            color: #2d3748;
+            font-size: 48px;
+            margin-bottom: 10px;
+            font-weight: 700;
+        }
+        
+        .subtitle {
+            text-align: center;
+            color: #667eea;
+            font-size: 24px;
+            margin-bottom: 40px;
+            font-weight: 600;
+        }
+        
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 20px;
+            margin-bottom: 40px;
+        }
+        
+        .stat-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 25px;
+            border-radius: 15px;
+            text-align: center;
+            box-shadow: 0 8px 20px rgba(102, 126, 234, 0.3);
+        }
+        
+        .stat-value {
+            font-size: 36px;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+        
+        .stat-label {
+            font-size: 14px;
+            opacity: 0.9;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        .architecture-flow {
+            background: #f7fafc;
+            border-radius: 15px;
+            padding: 30px;
+            margin-bottom: 40px;
+            border: 3px solid #667eea;
+        }
+        
+        .flow-title {
+            font-size: 24px;
+            color: #2d3748;
+            margin-bottom: 20px;
+            text-align: center;
+            font-weight: 600;
+        }
+        
+        .flow-step {
+            background: white;
+            border-left: 5px solid #667eea;
+            padding: 20px;
+            margin-bottom: 15px;
+            border-radius: 10px;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.1);
+            position: relative;
+        }
+        
+        .flow-step::before {
+            content: '→';
+            position: absolute;
+            left: -35px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 30px;
+            color: #667eea;
+            font-weight: bold;
+        }
+        
+        .flow-step:first-child::before {
+            content: '▶';
+        }
+        
+        .flow-step:last-child {
+            border-left-color: #48bb78;
+            background: linear-gradient(to right, #f0fff4, white);
+        }
+        
+        .flow-step-title {
+            font-size: 18px;
+            font-weight: 700;
+            color: #2d3748;
+            margin-bottom: 8px;
+        }
+        
+        .flow-step-desc {
+            font-size: 14px;
+            color: #4a5568;
+            line-height: 1.6;
+        }
+        
+        .capabilities-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 20px;
+            margin-bottom: 40px;
+        }
+        
+        .capability-card {
+            background: #f7fafc;
+            border-radius: 15px;
+            padding: 25px;
+            border: 2px solid #e2e8f0;
+            transition: all 0.3s;
+        }
+        
+        .capability-card:hover {
+            border-color: #667eea;
+            transform: translateY(-5px);
+            box-shadow: 0 10px 25px rgba(102, 126, 234, 0.2);
+        }
+        
+        .capability-icon {
+            font-size: 36px;
+            margin-bottom: 15px;
+        }
+        
+        .capability-title {
+            font-size: 18px;
+            font-weight: 700;
+            color: #2d3748;
+            margin-bottom: 10px;
+        }
+        
+        .capability-desc {
+            font-size: 14px;
+            color: #4a5568;
+            line-height: 1.6;
+        }
+        
+        .safety-section {
+            background: linear-gradient(135deg, #fc8181 0%, #f56565 100%);
+            color: white;
+            padding: 30px;
+            border-radius: 15px;
+            margin-bottom: 40px;
+        }
+        
+        .safety-title {
+            font-size: 28px;
+            margin-bottom: 15px;
+            font-weight: 700;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .safety-gates {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
+            margin-top: 20px;
+        }
+        
+        .safety-gate {
+            background: rgba(255,255,255,0.2);
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+            backdrop-filter: blur(10px);
+        }
+        
+        .safety-gate-title {
+            font-size: 16px;
+            font-weight: 700;
+            margin-bottom: 8px;
+        }
+        
+        .safety-gate-desc {
+            font-size: 13px;
+            opacity: 0.9;
+        }
+        
+        .footer {
+            text-align: center;
+            color: #4a5568;
+            font-size: 14px;
+            margin-top: 30px;
+            padding-top: 30px;
+            border-top: 2px solid #e2e8f0;
+        }
+        
+        .highlight {
+            color: #667eea;
+            font-weight: 700;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🧠 SOMA</h1>
+        <div class="subtitle">Self-Organizing Meta-Intelligence Architecture</div>
+        
+        <!-- Stats Grid -->
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-value">368 MB</div>
+                <div class="stat-label">Production Codebase</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">141</div>
+                <div class="stat-label">AI Arbiters</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">2.0x</div>
+                <div class="stat-label">Learning Velocity</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value">&lt;500ms</div>
+                <div class="stat-label">Response Time</div>
+            </div>
+        </div>
+        
+        <!-- Architecture Flow -->
+        <div class="architecture-flow">
+            <div class="flow-title">🚀 Natural Language → Autonomous Execution</div>
+            
+            <div class="flow-step">
+                <div class="flow-step-title">1. Natural Language Input</div>
+                <div class="flow-step-desc">User: "SOMA, learn about quantum computing"</div>
+            </div>
+            
+            <div class="flow-step">
+                <div class="flow-step-title">2. QuadBrain Intent Detection</div>
+                <div class="flow-step-desc">4 specialized cognitive modules parse intent (LOGOS, AURORA, PROMETHEUS, THALAMUS)</div>
+            </div>
+            
+            <div class="flow-step">
+                <div class="flow-step-title">3. Goal Creation</div>
+                <div class="flow-step-desc">GoalPlannerArbiter creates structured goal with priority, metrics, and assigned arbiters</div>
+            </div>
+            
+            <div class="flow-step">
+                <div class="flow-step-title">4. Resource Allocation</div>
+                <div class="flow-step-desc">EdgeWorkerOrchestrator spawns 4-6 parallel workers based on CPU cores</div>
+            </div>
+            
+            <div class="flow-step">
+                <div class="flow-step-title">5. Autonomous Web Scraping</div>
+                <div class="flow-step-desc">Workers scrape arXiv, Wikipedia, research papers, academic databases</div>
+            </div>
+            
+            <div class="flow-step">
+                <div class="flow-step-title">6. Knowledge Processing</div>
+                <div class="flow-step-desc">UniversalImpulser processes raw data → KnowledgeGraphFusion integrates concepts</div>
+            </div>
+            
+            <div class="flow-step">
+                <div class="flow-step-title">7. Memory Consolidation</div>
+                <div class="flow-step-desc">4-tier metabolic system: Emergent → Promoted → Graveyard → NEMESIS Filter</div>
+            </div>
+            
+            <div class="flow-step">
+                <div class="flow-step-title">8. ✅ Learning Complete</div>
+                <div class="flow-step-desc">LearningVelocityTracker confirms 2.0x acceleration target achieved</div>
+            </div>
+        </div>
+        
+        <!-- Capabilities Grid -->
+        <div class="capabilities-grid">
+            <div class="capability-card">
+                <div class="capability-icon">🧠</div>
+                <div class="capability-title">QuadBrain Reasoning</div>
+                <div class="capability-desc">4 specialized cognitive modules for logic, creativity, strategy, and safety</div>
+            </div>
+            
+            <div class="capability-card">
+                <div class="capability-icon">🎯</div>
+                <div class="capability-title">Autonomous Goals</div>
+                <div class="capability-desc">Self-generates goals from system observations and natural language commands</div>
+            </div>
+            
+            <div class="capability-card">
+                <div class="capability-icon">🌐</div>
+                <div class="capability-title">Distributed Learning</div>
+                <div class="capability-desc">Parallel worker orchestration with fault tolerance and retry logic</div>
+            </div>
+            
+            <div class="capability-card">
+                <div class="capability-icon">💾</div>
+                <div class="capability-title">Metabolic Memory</div>
+                <div class="capability-desc">4-tier knowledge consolidation from raw events to semantic wisdom</div>
+            </div>
+            
+            <div class="capability-card">
+                <div class="capability-icon">🔧</div>
+                <div class="capability-title">Self-Modification</div>
+                <div class="capability-desc">Generates and deploys own code improvements with safety review</div>
+            </div>
+            
+            <div class="capability-card">
+                <div class="capability-icon">📈</div>
+                <div class="capability-title">Learning Velocity</div>
+                <div class="capability-desc">Active drive system targeting 2.0x acceleration with burst mode</div>
+            </div>
+        </div>
+        
+        <!-- Safety Section -->
+        <div class="safety-section">
+            <div class="safety-title">
+                <span>🔴</span>
+                <span>NEMESIS Safety System (Phase 1 Complete)</span>
+            </div>
+            <p style="opacity: 0.9; margin-bottom: 15px;">Two-stage adversarial review prevents deployment of bad code, low-quality training data, and poor user responses</p>
+            
+            <div class="safety-gates">
+                <div class="safety-gate">
+                    <div class="safety-gate-title">Gate 1: Code Review</div>
+                    <div class="safety-gate-desc">SelfModificationArbiter reviews all generated code before deployment</div>
+                </div>
+                <div class="safety-gate">
+                    <div class="safety-gate-title">Gate 2: Training Filter</div>
+                    <div class="safety-gate-desc">TrainingDataExporter filters low-quality examples to Graveyard</div>
+                </div>
+                <div class="safety-gate">
+                    <div class="safety-gate-title">Gate 3: API Validation</div>
+                    <div class="safety-gate-desc">QuadBrain reviews responses before sending to users</div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Footer -->
+        <div class="footer">
+            <p><strong>SOMA is not a research project.</strong> It's a functional Level 7 AGI system with:</p>
+            <p style="margin-top: 10px;">
+                Natural language understanding • Autonomous goal execution • Self-code review<br>
+                2.0x learning acceleration • Multi-brain consensus reasoning • Production-grade safety
+            </p>
+            <p style="margin-top: 20px; color: #667eea; font-weight: 700; font-size: 18px;">
+                This is AGI—today, not tomorrow.
+            </p>
+        </div>
+    </div>
+</body>
+</html>

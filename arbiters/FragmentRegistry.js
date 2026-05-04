@@ -81,10 +81,24 @@ export class FragmentRegistry extends EventEmitter {
         this.stats.totalFragments++;
         if (fragment.active) this.stats.activeFragments++;
       } catch (e) {
-        console.warn(`[${this.name}] Corrupted fragment: ${filepath}`);
+        await this._quarantineCorruptedFragment(filepath, e);
       }
     }
     return { count: this.stats.totalFragments };
+  }
+
+  async _quarantineCorruptedFragment(filepath, error) {
+    try {
+      const fragmentsDir = path.join(process.cwd(), '.soma', 'fragments');
+      const quarantineDir = path.join(fragmentsDir, '_corrupt');
+      await fs.mkdir(quarantineDir, { recursive: true });
+      const base = path.basename(filepath);
+      const target = path.join(quarantineDir, `${Date.now()}_${base}`);
+      await fs.rename(filepath, target);
+      console.warn(`[${this.name}] Quarantined corrupted fragment: ${filepath} (${error.message})`);
+    } catch (moveError) {
+      console.warn(`[${this.name}] Corrupted fragment: ${filepath} (${error.message}); quarantine failed: ${moveError.message}`);
+    }
   }
 
   async saveFragments() {
@@ -390,7 +404,11 @@ export class FragmentRegistry extends EventEmitter {
 
   // ── Serialization ──────────────────────────
 
-  _serializeFragment(f) {
+    listFragments() {
+    return Array.from(this.fragments.values());
+  }
+
+_serializeFragment(f) {
     const { ...rest } = f;
     return rest;
   }

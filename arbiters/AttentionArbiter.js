@@ -35,6 +35,27 @@ export class AttentionArbiter extends BaseArbiterV4 {
         });
 
         this.auditLogger.info('AttentionArbiter initialized');
+
+        // 🔱 RESONANCE SYNC: Align attention with the cognitive heartbeat
+        messageBroker.subscribe('system.resonance.pulse', (pulse) => {
+            this._handleResonancePulse(pulse);
+        });
+    }
+
+    /**
+     * Handle the 400ms resonance pulse.
+     * Modulates attention based on rhythmic coherence.
+     */
+    _handleResonancePulse(pulse) {
+        // High resonance score (activity) allows more signals through
+        // Low resonance (idle) tightens the gate
+        const thresholdMod = (pulse.score - 0.5) * 20;
+        this.loadThreshold = Math.max(40, Math.min(95, 80 + thresholdMod));
+        
+        // Log pulse occasionally to audit rhythm
+        if (Math.random() > 0.99) {
+            this.auditLogger.info(`❤️ Heartbeat Sync: score=${pulse.score} loadThreshold=${this.loadThreshold.toFixed(1)}`);
+        }
     }
 
     /**

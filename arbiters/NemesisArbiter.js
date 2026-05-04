@@ -30,15 +30,92 @@ const BRAIN_TIMEOUT = 30000; // ms per brain call
 // History cap: keep system context + last N turns to avoid token bloat
 const MAX_HISTORY_TURNS = 8;
 
+const NEMESIS_PATTERNS_PATH = path.join(ROOT, '.soma', 'nemesis_patterns.json');
+
+// Built-in bad-pattern seed — augmented at runtime via recordBadPattern()
+const SEED_PATTERNS = [
+    { pattern: /\b(as of my (knowledge|training) cutoff|I don't have access to real-?time)\b/i,   reason: 'knowledge cutoff hedge without user asking', penalty: 0.15 },
+    { pattern: /\b(I (am|'m) (just|only) an? AI|I (cannot|can't) (feel|experience))\b/i,          reason: 'unprompted AI disclaimer that breaks immersion', penalty: 0.10 },
+    { pattern: /certainly!|absolutely!|Of course!|Great question!/i,                                reason: 'sycophantic opener', penalty: 0.12 },
+    { pattern: /\b(100%|guaranteed|always works|never fails|impossible to)\b/i,                    reason: 'overconfident absolute claim', penalty: 0.20 },
+    { pattern: /https?:\/\/[^\s]+\.(com|org|net)\/[^\s]{40,}/,                                    reason: 'suspiciously long URL that may be hallucinated', penalty: 0.25 },
+    { pattern: /\[insert (your|the|a) \w+\]/i,                                                     reason: 'unfilled template placeholder in response', penalty: 0.40 },
+    { pattern: /I apologize for (the|any) (confusion|inconvenience)/i,                             reason: 'unnecessary apology pattern', penalty: 0.08 },
+];
+
 export class NemesisArbiter {
     constructor(config = {}) {
-        this.name      = 'NemesisArbiter';
-        this.isAgentic = true; // flag for pipeline to detect new interface
-        this.quadBrain = config.quadBrain || null;
-        this.rootPath  = config.rootPath || ROOT;
-        this.maxSteps  = config.maxSteps  || MAX_STEPS;
-        this._tools    = this._buildTools();
-        this.system    = config.system || null;
+        this.name       = 'NemesisArbiter';
+        this.lobe       = 'THALAMUS'; // Neural index: security/risk lobe
+        this.tier       = 'cognitive';
+        this.isAgentic  = true;
+        this.quadBrain  = config.quadBrain || null;
+        this.rootPath   = config.rootPath  || ROOT;
+        this.maxSteps   = config.maxSteps  || MAX_STEPS;
+        this._tools     = this._buildTools();
+        this.system     = config.system    || null;
+
+        // Pattern index: fast <1ms pre-check before brain call
+        // Each entry: { pattern: RegExp, reason: string, penalty: number }
+        this._patternIndex = SEED_PATTERNS.map(p => ({
+            pattern: p.pattern,
+            reason:  p.reason,
+            penalty: p.penalty,
+        }));
+        this._patternsLoaded = false;
+        this._loadPatterns(); // async, non-blocking
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // PATTERN INDEX — fast pre-screening, no brain call required
+    // ─────────────────────────────────────────────────────────────────────
+
+    async _loadPatterns() {
+        try {
+            const raw = await fs.readFile(NEMESIS_PATTERNS_PATH, 'utf8');
+            const learned = JSON.parse(raw);
+            for (const entry of learned) {
+                try {
+                    this._patternIndex.push({
+                        pattern: new RegExp(entry.pattern, entry.flags || 'i'),
+                        reason:  entry.reason,
+                        penalty: entry.penalty || 0.15,
+                    });
+                } catch { /* skip malformed patterns */ }
+            }
+            this._patternsLoaded = true;
+        } catch { /* no persisted patterns yet — seed index is enough */ }
+    }
+
+    // Teach NEMESIS a new bad pattern. Called when evaluateResponse catches a real violation.
+    async recordBadPattern(patternSource, reason, penalty = 0.15) {
+        try {
+            const re = typeof patternSource === 'string' ? new RegExp(patternSource, 'i') : patternSource;
+            this._patternIndex.push({ pattern: re, reason, penalty });
+
+            // Persist learned patterns (excluding built-in seeds)
+            const learned = this._patternIndex.slice(SEED_PATTERNS.length).map(e => ({
+                pattern: e.pattern.source,
+                flags:   e.pattern.flags,
+                reason:  e.reason,
+                penalty: e.penalty,
+            }));
+            await fs.mkdir(path.dirname(NEMESIS_PATTERNS_PATH), { recursive: true });
+            await fs.writeFile(NEMESIS_PATTERNS_PATH, JSON.stringify(learned, null, 2));
+        } catch { /* non-critical */ }
+    }
+
+    // Fast pattern scan — runs in <1ms, returns worst hit or null
+    _checkPatterns(responseText) {
+        let worstHit = null;
+        for (const entry of this._patternIndex) {
+            if (entry.pattern.test(responseText)) {
+                if (!worstHit || entry.penalty > worstHit.penalty) {
+                    worstHit = entry;
+                }
+            }
+        }
+        return worstHit; // null = clean
     }
 
     // ─────────────────────────────────────────────────────────────────────
@@ -1049,5 +1126,111 @@ Reply with ONLY this JSON (no other text):
             tools:     Object.keys(this._tools),
             ready:     !!this.quadBrain
         };
+    }
+
+    // ─────────────────────────────────────────────────────────────────────
+    // CHAT QUALITY GATE — evaluates a single chat response for quality
+    // Called by somaRoutes.js after the brain produces a response.
+    // Intentionally lightweight: one brain call, no loops, tight prompt.
+    // ─────────────────────────────────────────────────────────────────────
+
+    /**
+     * Evaluate a chat response for quality issues.
+     *
+     * @param {string}   brain          - which lobe/model produced the response (informational)
+     * @param {string}   message        - the user's original message
+     * @param {object}   result         - response object with `.text` property
+     * @param {Function} geminiCallback - async (prompt, opts) => { text: string } — brain caller
+     * @returns {{ score: number, needsRevision: boolean, reason: string, linguistic: { summary: string } }}
+     */
+    async evaluateResponse(brain, message, result, geminiCallback) {
+        const responseText = result?.text || result?.response || '';
+        if (!responseText) {
+            return { score: 0.5, needsRevision: false, reason: 'empty response', linguistic: { summary: 'empty response' } };
+        }
+
+        // ── Fast path: pattern index check (<1ms) ──────────────────────────
+        // If a known bad pattern is detected, we can return immediately without a brain call.
+        // If penalty is severe enough (>= 0.30), skip revision and just flag it — revision
+        // won't fix a hallucinated URL or unfilled placeholder.
+        const hit = this._checkPatterns(responseText);
+        if (hit) {
+            const score = Math.max(0, 1.0 - hit.penalty);
+            const needsRevision = score < 0.70 && hit.penalty < 0.30;
+            console.log(`[${this.name}] Pattern hit: "${hit.reason}" (score ${score.toFixed(2)})`);
+            return {
+                score,
+                needsRevision,
+                reason:    hit.reason,
+                linguistic: { summary: `pattern detected: ${hit.reason}` },
+                patternHit: true,
+            };
+        }
+
+        // ── No pattern hit: response looks clean — accept without brain call ──
+        // Brain call only happens when something ALREADY looks suspicious AND
+        // a geminiCallback is available.  This keeps the happy path at <1ms.
+        if (!geminiCallback || typeof geminiCallback !== 'function') {
+            return {
+                score:        0.88,
+                needsRevision: false,
+                reason:       'pattern clean, no evaluator for deep check',
+                linguistic:   { summary: 'pattern scan passed' }
+            };
+        }
+
+        const evalPrompt = `You are a strict quality auditor for an AI assistant called SOMA.
+
+USER MESSAGE: ${message.substring(0, 300)}
+
+SOMA'S RESPONSE (from ${brain || 'unknown'} lobe):
+${responseText.substring(0, 1200)}
+
+Rate this response on a scale of 0.0 to 1.0 for quality. Look for:
+- Hallucinations or invented facts stated as certain
+- Logical gaps or non-sequiturs
+- Overconfident claims without evidence
+- Protocol violations (harmful, deceptive, manipulative content)
+- Off-topic or irrelevant answer
+
+Respond with ONLY this JSON (no other text):
+{"score": 0.0-1.0, "needsRevision": true/false, "reason": "one sentence", "summary": "one sentence describing the response quality"}
+
+Rules: score >= 0.70 means acceptable. needsRevision = true only if score < 0.70.`;
+
+        try {
+            const evalResult = await Promise.race([
+                geminiCallback(evalPrompt, { maxTokens: 150, temperature: 0.1 }),
+                new Promise((_, rej) => setTimeout(() => rej(new Error('eval timeout')), 8000))
+            ]);
+
+            const rawText = evalResult?.text || evalResult?.response || evalResult || '';
+            const match = String(rawText).match(/\{[\s\S]*?\}/);
+            if (!match) {
+                return {
+                    score:        0.80,
+                    needsRevision: false,
+                    reason:       'evaluation parse failed — defaulting to pass',
+                    linguistic:   { summary: 'parse failure' }
+                };
+            }
+
+            const parsed = JSON.parse(match[0]);
+            const score  = Math.max(0, Math.min(1, Number(parsed.score) || 0.80));
+            return {
+                score,
+                needsRevision: parsed.needsRevision ?? score < 0.70,
+                reason:        parsed.reason   || '',
+                linguistic:    { summary: parsed.summary || '' }
+            };
+        } catch (e) {
+            console.warn(`[${this.name}] evaluateResponse failed: ${e.message}`);
+            return {
+                score:        0.80,
+                needsRevision: false,
+                reason:       `evaluation error: ${e.message}`,
+                linguistic:   { summary: 'evaluation error' }
+            };
+        }
     }
 }

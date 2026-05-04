@@ -40,8 +40,75 @@ class IdeaCaptureArbiter extends EventEmitter {
 
     // In-memory index for quick resonance lookups
     this.embeddingIndex = new Map(); // id -> embedding
+    this.resonanceBuffer = [];       // Recent nodes for resonance scanning
+    this.heartbeatInterval = 400;    // 🔱 THE OMEGA PULSE: 400ms Resonance Rhythm
+    this._heartbeatTimer = null;
+    this._lastPulseAt = Date.now();
+  }
 
-    // Resonance configuration
+  /**
+   * Initialize and start the Resonance Heartbeat
+   */
+  async initialize() {
+    console.info(`[${this.name}] 🔱 Resonance Heartbeat ACTIVE (400ms precise downbeat)`);
+    
+    // Start high-precision pulse loop
+    this._precisePulseLoop();
+    
+    return true;
+  }
+
+  /**
+   * Precise self-correcting pulse loop to eliminate drift
+   */
+  _precisePulseLoop() {
+    const nextPulseIn = Math.max(0, this.heartbeatInterval - (Date.now() - this._lastPulseAt));
+    
+    this._heartbeatTimer = setTimeout(() => {
+        if (this._lastPulseAt !== 0) { // Skip first calculation
+            this._emitResonancePulse();
+        } else {
+            this._lastPulseAt = Date.now();
+        }
+        this._precisePulseLoop();
+    }, nextPulseIn);
+  }
+
+  /**
+   * The "Downbeat" of SOMA's heartbeat.
+   * Periodically emits resonance data to the CNS.
+   */
+  _emitResonancePulse() {
+    const now = Date.now();
+    const drift = now - this._lastPulseAt - this.heartbeatInterval;
+    this._lastPulseAt = now;
+
+    // Calculate Resonance Score (0.0 to 1.0)
+    // Based on buffer density and system activity
+    const density = Math.min(1.0, this.resonanceBuffer.length / 10);
+    const resonanceScore = 0.5 + (density * 0.5); // Baseline 0.5
+
+    const pulse = {
+      timestamp: now,
+      score: parseFloat(resonanceScore.toFixed(4)),
+      driftMs: drift,
+      bufferSize: this.resonanceBuffer.length,
+      focus: 'general'
+    };
+
+    // Broadcast to the Graymatter Network / MessageBroker
+    if (this.broker && typeof this.broker.publish === 'function') {
+      this.broker.publish('system.resonance.pulse', pulse);
+    }
+
+    // Decay resonance buffer slowly to maintain rhythm
+    if (this.resonanceBuffer.length > 0 && Math.random() > 0.7) {
+        this.resonanceBuffer.shift();
+    }
+  }
+
+  /**
+   * Main entry point - accept raw input and process
     this.resonanceConfig = {
       topK: 6,
       similarityThreshold: 0.65

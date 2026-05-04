@@ -420,6 +420,9 @@ export class NighttimeLearningOrchestrator extends EventEmitter {
       case 'deep_memory_cleanup':
         return await this.deepMemoryCleanup(params);
 
+      case 'medical_mission':
+        return await this.medicalMission(params);
+
       default:
         throw new Error(`Unknown task type: ${type}`);
     }
@@ -428,6 +431,50 @@ export class NighttimeLearningOrchestrator extends EventEmitter {
   // ═══════════════════════════════════════════════════════════
   // TASK IMPLEMENTATIONS
   // ═══════════════════════════════════════════════════════════
+
+  /**
+   * MEDICAL MISSION: Trigger BiotechArbiter and MedicalDiscoveryCortex.
+   */
+  async medicalMission(params = {}) {
+    const biotech = this.system?.biotechArbiter || this.system?.biotech;
+    const discovery = this.system?.medicalDiscovery;
+    
+    if (!biotech && !discovery) {
+      return { success: false, reason: 'Medical arbiters not available' };
+    }
+
+    console.log(`[${this.name}] 🧬 Initiating Deep Medical Research Session...`);
+    
+    try {
+        const results = [];
+        
+        // 1. Technical Simulation
+        if (biotech) {
+            biotech._runNext();
+            results.push('Simulation assembly line triggered.');
+        }
+
+        // 2. Multi-Source Discovery (Discovery-Grade Fall-through)
+        if (discovery) {
+            const target = biotech?.getStatus().target || 'oncology breakthroughs';
+            
+            // 🔱 THE GLASSES OF SIGHT: Trigger autonomous deduction in addition to the targeted mission
+            discovery.runAutonomousDeduction(); 
+            
+            discovery.runDiscoveryMission(target); // Autonomous async
+            results.push(`Discovery-Grade Cortex running mission and autonomous deduction: ${target}`);
+        }
+        
+        return { 
+          success: true, 
+          status: 'mission_started',
+          actions: results
+        };
+    } catch (err) {
+        console.error(`[${this.name}] ❌ Medical mission failed: ${err.message}`);
+        return { success: false, error: err.message };
+    }
+  }
 
   /**
    * DEEP MEMORY CLEANUP: Purge massive memories and state dumps.

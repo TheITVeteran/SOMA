@@ -18,6 +18,13 @@ import { loadEssentialSystems, loadExtendedSystems } from '../server/loaders/ext
 import { loadCOSSystems } from '../server/loaders/cos.js';
 import { BrainBridge } from '../server/BrainBridge.js';
 import { registry } from '../server/SystemRegistry.js';
+import { SomaAgenticExecutor } from './SomaAgenticExecutor.js';
+import { ExpertiseRegistry } from './ExpertiseRegistry.js';
+import { ComputerControlArbiter } from '../arbiters/ComputerControlArbiter.js';
+import { createRequire } from 'module';
+
+const require = createRequire(import.meta.url);
+const AutonomousHeartbeat = require('../server/services/AutonomousHeartbeat.cjs');
 
 export class SomaBootstrapV2 {
     constructor() {
@@ -30,7 +37,9 @@ export class SomaBootstrapV2 {
         try {
             // PHASE 0: Core Safety & Security
             const core = await loadCoreSystems();
-            this.system = { ...this.system, ...core };
+            Object.assign(this.system, core);
+
+            await this._wireComputerControlRuntime(this.system);
 
             // Start Neural Discovery Scan (Non-blocking)
             if (this.system.messageBroker) {
@@ -44,7 +53,10 @@ export class SomaBootstrapV2 {
             // PHASE 2: Cognitive Engine (Brain & Memory) - now with toolRegistry
             registry.markLoading('QuadBrain');
             const cognitive = await loadCognitiveSystems(toolRegistry);
-            this.system = { ...this.system, ...cognitive };
+            Object.assign(this.system, cognitive);
+            if (this.system.executiveCortex && this.system.computerControl && !this.system.executiveCortex.computerControl) {
+                this.system.executiveCortex.computerControl = this.system.computerControl;
+            }
             if (this.system.quadBrain) registry.markReady('QuadBrain');
             if (this.system.mnemonicArbiter) registry.markReady('Memory');
             if (this.system.knowledgeGraph) registry.markReady('KnowledgeGraph');
@@ -70,27 +82,30 @@ export class SomaBootstrapV2 {
 
             // PHASE 2.3: Cognitive Operating System (COS) - CNS & Perception
             const cos = await loadCOSSystems(this.system);
-            this.system = { ...this.system, ...cos };
+            Object.assign(this.system, cos);
 
             // PHASE 2.5: Limbic System (Body & Soul)
             const limbic = await loadLimbicSystem(this.system);
-            this.system = { ...this.system, ...limbic };
+            Object.assign(this.system, limbic);
 
             // PHASE 3: Specialized Agents
             const agents = await loadAgents(this.system);
-            this.system = { ...this.system, ...agents };
+            Object.assign(this.system, agents);
 
             // PHASE 4: Plugins (Finance, Social, Swarm)
             const plugins = await loadPlugins(this.system);
-            this.system = { ...this.system, ...plugins };
+            Object.assign(this.system, plugins);
 
             // PHASE 4.5: Trading Safety (RiskManager, Guardrails, PositionGuardian)
             const tradingSafety = await loadTradingSafety(this.system);
-            this.system = { ...this.system, ...tradingSafety };
+            Object.assign(this.system, tradingSafety);
 
             // PHASE 5: WebSocket & Telemetry (MOVED UP - needed for dashboard)
             const wsSystem = setupWebSocket(server, wss, this.system);
             this.system.ws = wsSystem;
+
+            await this._wireAutonomyRuntime(this.system);
+            await this._wireExpertiseRuntime(this.system);
 
             // Wire dashboard WebSocket clients into the Guardian (now that WS is ready)
             if (tradingSafety.guardian && wsSystem.dashboardClients) {
@@ -125,6 +140,40 @@ export class SomaBootstrapV2 {
         }
     }
 
+    async _wireComputerControlRuntime(system) {
+        if (system.computerControl) return;
+
+        if (!(system.arbiters instanceof Map)) {
+            system.arbiters = new Map();
+        }
+
+        const computerControl = new ComputerControlArbiter({
+            name: 'ComputerControlArbiter',
+            messageBroker: system.messageBroker,
+            safetyEnabled: true
+        });
+
+        if (typeof computerControl.initialize === 'function') {
+            await computerControl.initialize();
+        }
+
+        system.computerControl = computerControl;
+        system.arbiters.set('ComputerControlArbiter', computerControl);
+        system.arbiters.set('computerControl', computerControl);
+
+        if (system.messageBroker?.registerArbiter) {
+            system.messageBroker.registerArbiter('ComputerControlArbiter', {
+                instance: computerControl,
+                role: 'implementer',
+                lobe: 'motor_cortex',
+                classification: 'computer_control',
+                capabilities: ComputerControlArbiter.capabilities
+            });
+        }
+
+        console.log('[SOMA V2] ✅ ComputerControlArbiter wired — Puppeteer, screen capture, mouse and keyboard tools available');
+    }
+
     /**
      * ASI Hardening: Multi-Tier Awakening
      * Backgrounded to prevent blocking port binding and dashboard responsiveness.
@@ -157,6 +206,50 @@ export class SomaBootstrapV2 {
             }
         })();
     }
+
+    async _wireAutonomyRuntime(system) {
+        if (!system.agenticExecutor) {
+            const maxIterations = parseInt(process.env.SOMA_AGENTIC_MAX_ITERATIONS || '15', 10);
+            const executor = new SomaAgenticExecutor({
+                maxIterations: Number.isFinite(maxIterations) ? maxIterations : 15
+            });
+            executor.initialize({
+                brain: system.quadBrain,
+                memory: system.mnemonicArbiter || system.mnemonic,
+                goalPlanner: system.goalPlanner,
+                system
+            });
+            system.agenticExecutor = executor;
+            console.log('[SOMA V2] ✅ SomaAgenticExecutor wired — goals can use real tools');
+        }
+
+        if (!system.autonomousHeartbeat) {
+            const intervalMs = parseInt(process.env.SOMA_HEARTBEAT_INTERVAL_MS || `${2 * 60 * 1000}`, 10);
+            const heartbeat = new AutonomousHeartbeat(system, {
+                intervalMs: Number.isFinite(intervalMs) ? intervalMs : 2 * 60 * 1000,
+                enabled: process.env.SOMA_AUTOPILOT !== 'false',
+                logger: console
+            });
+            await heartbeat.initialize();
+            system.autonomousHeartbeat = heartbeat;
+            system.drive = heartbeat.drive;
+            console.log(`[SOMA V2] ✅ AutonomousHeartbeat wired — autopilot ${heartbeat.isRunning ? 'running' : 'ready'}`);
+        }
+    }
+
+    async _wireExpertiseRuntime(system) {
+        if (system.expertiseRegistry) return;
+
+        const expertiseRegistry = new ExpertiseRegistry({
+            system,
+            rootPath: process.cwd(),
+            logger: console
+        });
+        await expertiseRegistry.initialize();
+        system.expertiseRegistry = expertiseRegistry;
+        console.log(`[SOMA V2] ✅ ExpertiseRegistry wired — ${expertiseRegistry.list().length} manifest(s), lazy-load enabled`);
+    }
+
     async _loadEssentialBackground(system) {
         try {
             console.log('[SOMA V2] 🧠 Loading essential ASI arbiters (Tier 1)...');

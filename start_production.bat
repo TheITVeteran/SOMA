@@ -5,7 +5,7 @@ echo ===========================================================================
 echo.
 echo   [1] Setting Environment to PRODUCTION...
 set NODE_ENV=production
-set SOMA_MODE=cluster
+set SOMA_MODE=standalone
 set SOMA_GPU=true
 set SOMA_LOAD_HEAVY=true
 set SOMA_LOAD_TRADING=true

@@ -86,6 +86,7 @@ import GoalsPanel from './components/GoalsPanel';
 import CharacterCard from './components/CharacterCard';
 import CharacterGacha from './components/CharacterGacha';
 import SimulationSuite from './components/SimulationSuite';
+import SomaSpinePanel from './components/SomaSpinePanel';
 
 // ==========================================
 // Command Center Panel (Steve + Perception + Status)
@@ -2044,6 +2045,7 @@ const SomaCommandBridge = () => {
           {[
             { id: 'core', label: 'Core System', icon: Cpu, color: 'blue' },
             { id: 'command', label: 'Command Center', icon: Activity, color: 'fuchsia' },
+            { id: 'spine', label: 'Spine', icon: Network, color: 'cyan' },
             { id: 'terminal', label: 'SOMA CT', icon: Terminal, color: 'amber' },
             { id: 'orb', label: 'SOMA Orb', icon: Circle, color: 'purple' },
             { id: 'kevin', label: 'K.E.V.I.N.', icon: Mail, color: 'red' },
@@ -2984,6 +2986,9 @@ const SomaCommandBridge = () => {
         {activeModule === 'knowledge' && <KnowledgeApp brainStats={brainStats} />}
         {activeModule === 'reflections' && <ReflectionsTab />}
 
+        {/* SOMA SPINE MODULE */}
+        {activeModule === 'spine' && <SomaSpinePanel isConnected={isConnected} />}
+
 
         {/* WORKFLOW MODULE - removed, non-functional */}
         {false && (
@@ -3161,7 +3166,7 @@ const SomaCommandBridge = () => {
         )}
 
         {/* DEFAULT FALLBACK */}
-        {!['terminal', 'orb', 'kevin', 'simulation', 'core', 'arbiters', 'knowledge', 'reflections', 'storage', 'command', 'settings', 'mission_control', 'forecaster', 'marketplace', 'finance', 'arbiterium'].includes(activeModule) && (
+        {!['terminal', 'orb', 'kevin', 'simulation', 'core', 'arbiters', 'knowledge', 'reflections', 'storage', 'command', 'spine', 'settings', 'mission_control', 'forecaster', 'marketplace', 'finance', 'arbiterium'].includes(activeModule) && (
           <div className="flex items-center justify-center h-full text-zinc-600 italic">
             Integration for Module "{activeModule}" is ongoing...
           </div>

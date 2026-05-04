@@ -1,0 +1,179 @@
+{
+  "name": "Audit & Tax Professional",
+  "description": "CPA and audit knowledge: financial statements, GAAP/IFRS, IRC sections, Excel audit patterns, variance analysis, internal controls.",
+  "nodes": [
+    {
+      "id": "seed_audit_001", "type": "concept",
+      "content": "variance analysis: the process of identifying the difference between planned (budgeted) and actual financial figures; root causes include timing differences, allocation errors, data entry mistakes, and excluded rows in Excel SUM formulas",
+      "embedding": null, "parent": null, "children": [],
+      "connections": [
+        { "id": "seed_audit_002", "weight": 0.90, "type": "related" },
+        { "id": "seed_audit_010", "weight": 0.85, "type": "related" },
+        { "id": "seed_audit_015", "weight": 0.80, "type": "related" }
+      ],
+      "accessCount": 0, "strength": 0.92, "source": "seed", "confidence": 0.95,
+      "tags": ["audit", "variance", "excel", "seed"]
+    },
+    {
+      "id": "seed_audit_002", "type": "concept",
+      "content": "Excel audit gotcha — inserted row outside SUM range: when a row is inserted between the last row of a SUM range and the SUM formula cell, Excel does NOT automatically expand the range; the new row's values are excluded from the total, creating a variance equal to the sum of all excluded rows",
+      "embedding": null, "parent": null, "children": [],
+      "connections": [
+        { "id": "seed_audit_001", "weight": 0.90, "type": "related" },
+        { "id": "seed_audit_003", "weight": 0.85, "type": "related" }
+      ],
+      "accessCount": 0, "strength": 0.93, "source": "seed", "confidence": 0.97,
+      "tags": ["audit", "excel", "sum", "variance", "seed"]
+    },
+    {
+      "id": "seed_audit_003", "type": "concept",
+      "content": "Excel formula errors in financial workbooks: #REF! indicates a deleted or moved cell reference; #VALUE! indicates wrong data type in formula; #DIV/0! indicates division by zero (often from blank denominators in ratio calculations); all require manual investigation before relying on adjacent totals",
+      "embedding": null, "parent": null, "children": [],
+      "connections": [
+        { "id": "seed_audit_002", "weight": 0.85, "type": "related" },
+        { "id": "seed_audit_001", "weight": 0.75, "type": "related" }
+      ],
+      "accessCount": 0, "strength": 0.91, "source": "seed", "confidence": 0.96,
+      "tags": ["audit", "excel", "errors", "seed"]
+    },
+    {
+      "id": "seed_audit_004", "type": "concept",
+      "content": "GAAP (Generally Accepted Accounting Principles): the standard framework for financial accounting in the United States, governed by FASB; key principles include revenue recognition (ASC 606), lease accounting (ASC 842), and fair value measurement (ASC 820)",
+      "embedding": null, "parent": null, "children": [],
+      "connections": [
+        { "id": "seed_audit_005", "weight": 0.85, "type": "related" },
+        { "id": "seed_audit_006", "weight": 0.80, "type": "related" },
+        { "id": "seed_audit_007", "weight": 0.75, "type": "related" }
+      ],
+      "accessCount": 0, "strength": 0.90, "source": "seed", "confidence": 0.94,
+      "tags": ["audit", "GAAP", "FASB", "accounting", "seed"]
+    },
+    {
+      "id": "seed_audit_005", "type": "concept",
+      "content": "revenue recognition under ASC 606: five-step model — (1) identify the contract, (2) identify performance obligations, (3) determine transaction price, (4) allocate price to obligations, (5) recognize revenue when/as obligations satisfied; common audit risk: premature recognition before delivery",
+      "embedding": null, "parent": null, "children": [],
+      "connections": [
+        { "id": "seed_audit_004", "weight": 0.85, "type": "related" }
+      ],
+      "accessCount": 0, "strength": 0.88, "source": "seed", "confidence": 0.93,
+      "tags": ["audit", "revenue", "ASC606", "GAAP", "seed"]
+    },
+    {
+      "id": "seed_audit_006", "type": "concept",
+      "content": "lease accounting under ASC 842: operating leases now appear on the balance sheet as right-of-use (ROU) assets and lease liabilities; audit focus: completeness of lease inventory, discount rate used, lease term classification, short-term lease practical expedient",
+      "embedding": null, "parent": null, "children": [],
+      "connections": [
+        { "id": "seed_audit_004", "weight": 0.80, "type": "related" }
+      ],
+      "accessCount": 0, "strength": 0.86, "source": "seed", "confidence": 0.92,
+      "tags": ["audit", "leases", "ASC842", "GAAP", "seed"]
+    },
+    {
+      "id": "seed_audit_007", "type": "concept",
+      "content": "internal controls: policies and procedures that safeguard assets and ensure reliability of financial reporting; COSO framework defines five components — control environment, risk assessment, control activities, information & communication, monitoring; SOX Section 404 requires management and auditor assessment of internal controls for public companies",
+      "embedding": null, "parent": null, "children": [],
+      "connections": [
+        { "id": "seed_audit_004", "weight": 0.75, "type": "related" },
+        { "id": "seed_audit_008", "weight": 0.85, "type": "related" }
+      ],
+      "accessCount": 0, "strength": 0.89, "source": "seed", "confidence": 0.93,
+      "tags": ["audit", "internal-controls", "COSO", "SOX", "seed"]
+    },
+    {
+      "id": "seed_audit_008", "type": "concept",
+      "content": "audit materiality: the threshold above which misstatements could influence user decisions; typically calculated as a percentage of a benchmark (e.g., 5% of pre-tax income, 0.5% of total assets, 1% of revenue); performance materiality is set lower (often 50–75% of overall materiality) to provide a buffer",
+      "embedding": null, "parent": null, "children": [],
+      "connections": [
+        { "id": "seed_audit_007", "weight": 0.85, "type": "related" },
+        { "id": "seed_audit_001", "weight": 0.70, "type": "related" }
+      ],
+      "accessCount": 0, "strength": 0.87, "source": "seed", "confidence": 0.92,
+      "tags": ["audit", "materiality", "PCAOB", "seed"]
+    },
+    {
+      "id": "seed_audit_009", "type": "concept",
+      "content": "IRC Section 179: allows businesses to deduct the full cost of qualifying equipment and software in the year placed in service rather than depreciating over multiple years; 2024 limit is $1,220,000; phases out dollar-for-dollar when property placed in service exceeds $3,050,000",
+      "embedding": null, "parent": null, "children": [],
+      "connections": [
+        { "id": "seed_audit_010", "weight": 0.80, "type": "related" },
+        { "id": "seed_audit_011", "weight": 0.75, "type": "related" }
+      ],
+      "accessCount": 0, "strength": 0.86, "source": "seed", "confidence": 0.91,
+      "tags": ["tax", "IRC", "depreciation", "Section179", "seed"]
+    },
+    {
+      "id": "seed_audit_010", "type": "concept",
+      "content": "depreciation methods for tax vs. book: MACRS (Modified Accelerated Cost Recovery System) is required for federal tax; straight-line, declining balance, and units-of-production are common for book (GAAP); the difference creates deferred tax assets or liabilities on the balance sheet",
+      "embedding": null, "parent": null, "children": [],
+      "connections": [
+        { "id": "seed_audit_009", "weight": 0.80, "type": "related" },
+        { "id": "seed_audit_001", "weight": 0.80, "type": "related" }
+      ],
+      "accessCount": 0, "strength": 0.87, "source": "seed", "confidence": 0.92,
+      "tags": ["tax", "depreciation", "MACRS", "deferred-tax", "seed"]
+    },
+    {
+      "id": "seed_audit_011", "type": "concept",
+      "content": "accrual accounting vs. cash basis: GAAP requires accrual — revenue recognized when earned, expenses when incurred, regardless of cash flow; cash basis records transactions only when cash changes hands; most small businesses use cash basis for tax (IRC §446); audit focus on accruals at period-end",
+      "embedding": null, "parent": null, "children": [],
+      "connections": [
+        { "id": "seed_audit_004", "weight": 0.75, "type": "related" },
+        { "id": "seed_audit_010", "weight": 0.75, "type": "related" }
+      ],
+      "accessCount": 0, "strength": 0.88, "source": "seed", "confidence": 0.93,
+      "tags": ["audit", "accrual", "cash-basis", "GAAP", "seed"]
+    },
+    {
+      "id": "seed_audit_012", "type": "concept",
+      "content": "accounts receivable aging: categorizes outstanding receivables by how long they have been unpaid (0-30, 31-60, 61-90, 90+ days); audit procedures include confirmation letters to debtors, testing subsequent cash collections, and evaluating adequacy of the allowance for doubtful accounts",
+      "embedding": null, "parent": null, "children": [],
+      "connections": [
+        { "id": "seed_audit_008", "weight": 0.70, "type": "related" }
+      ],
+      "accessCount": 0, "strength": 0.85, "source": "seed", "confidence": 0.91,
+      "tags": ["audit", "accounts-receivable", "aging", "seed"]
+    },
+    {
+      "id": "seed_audit_013", "type": "concept",
+      "content": "journal entry testing: high-risk audit area; auditors look for manual JEs posted by unusual users, at unusual times (late night, weekends), with round numbers, or to unusual accounts; Benford's Law analysis flags anomalies in leading digits of large transaction populations",
+      "embedding": null, "parent": null, "children": [],
+      "connections": [
+        { "id": "seed_audit_007", "weight": 0.80, "type": "related" },
+        { "id": "seed_audit_008", "weight": 0.75, "type": "related" }
+      ],
+      "accessCount": 0, "strength": 0.87, "source": "seed", "confidence": 0.92,
+      "tags": ["audit", "journal-entries", "fraud", "Benfords-law", "seed"]
+    },
+    {
+      "id": "seed_audit_014", "type": "concept",
+      "content": "IFRS vs. GAAP key differences: IFRS allows revaluation of PP&E to fair value; GAAP uses historical cost; IFRS prohibits LIFO inventory method; GAAP permits LIFO; IFRS uses single-step impairment test; GAAP uses two-step; IFRS financial statements prepared on going concern basis unless management intends to liquidate",
+      "embedding": null, "parent": null, "children": [],
+      "connections": [
+        { "id": "seed_audit_004", "weight": 0.85, "type": "related" }
+      ],
+      "accessCount": 0, "strength": 0.86, "source": "seed", "confidence": 0.90,
+      "tags": ["audit", "IFRS", "GAAP", "international", "seed"]
+    },
+    {
+      "id": "seed_audit_015", "type": "concept",
+      "content": "trial balance reconciliation: the process of ensuring debits equal credits after all entries; common reconciling items include unrecorded accruals, intercompany eliminations, timing differences between subsidiary ledgers and the general ledger, and bank reconciliation items (outstanding checks, deposits in transit)",
+      "embedding": null, "parent": null, "children": [],
+      "connections": [
+        { "id": "seed_audit_001", "weight": 0.80, "type": "related" },
+        { "id": "seed_audit_011", "weight": 0.75, "type": "related" }
+      ],
+      "accessCount": 0, "strength": 0.89, "source": "seed", "confidence": 0.93,
+      "tags": ["audit", "trial-balance", "reconciliation", "seed"]
+    },
+    {
+      "id": "seed_audit_016", "type": "concept",
+      "content": "goodwill impairment testing under ASC 350: goodwill is no longer amortized under GAAP (private companies may elect to amortize over 10 years); annual impairment test compares fair value of reporting unit to its carrying amount; qualitative assessment ('step zero') may bypass quantitative test if impairment is unlikely",
+      "embedding": null, "parent": null, "children": [],
+      "connections": [
+        { "id": "seed_audit_004", "weight": 0.78, "type": "related" }
+      ],
+      "accessCount": 0, "strength": 0.85, "source": "seed", "confidence": 0.90,
+      "tags": ["audit", "goodwill", "impairment", "ASC350", "seed"]
+    }
+  ]
+}

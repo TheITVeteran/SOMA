@@ -357,7 +357,12 @@ class AutonomousHeartbeat extends EventEmitter {
                 `COMPLETE: ${progressVal === 100 ? 'yes' : 'no'}`,
                 `INSIGHT: ${(execResult.result || 'none').substring(0, 150)}`
               ].join('\n') + verificationNote,
-              brain: 'AgenticExecutor'
+              brain: 'AgenticExecutor',
+              evidence: {
+                toolBacked: toolsUsedCount > 0,
+                toolsUsed: execResult.toolsUsed || [],
+                observations: execResult.observations || []
+              }
             };
           }
         }
@@ -755,20 +760,28 @@ INSIGHT: <one key insight worth remembering, or "none">`,
 
               // Parse structured output
               const progressMatch = text.match(/PROGRESS:\s*(\d+)/i);
-              const newProgress = progressMatch
+              let newProgress = progressMatch
                 ? Math.min(100, Math.max(currentProgress + 5, parseInt(progressMatch[1])))
                 : Math.min(currentProgress + 15, 95);
               const isComplete = /COMPLETE:\s*yes/i.test(text);
               const actionTaken = (text.match(/ACTION:\s*(.+)/i)?.[1] || '').substring(0, 100);
               const insight = (text.match(/INSIGHT:\s*(.+)/i)?.[1] || '').trim();
+              const evidence = this._assessTaskEvidence(res);
+
+              if (!evidence.hasConcreteEvidence) {
+                newProgress = Math.min(currentProgress + 3, 60);
+              } else if (!evidence.toolBacked && newProgress > currentProgress + 8) {
+                newProgress = Math.min(currentProgress + 8, newProgress);
+              }
 
               // Update progress
               await this.system.goalPlanner.updateGoalProgress(goal.id, newProgress, {
-                note: `Autonomous: ${actionTaken}`
+                note: `Autonomous: ${actionTaken}`,
+                evidence: evidence.summary
               }).catch(() => {});
 
               // Complete goal when done
-              if (isComplete && newProgress >= 80) {
+              if (isComplete && newProgress >= 80 && evidence.hasConcreteEvidence) {
                 const resultText = (text.match(/RESULT:\s*([\s\S]+?)(?=\nPROGRESS:|$)/i)?.[1] || '').substring(0, 300);
                 await this.system.goalPlanner.completeGoal(goal.id, { result: resultText }).catch(() => {});
                 this._goalAttempts.delete(goal.id); // Reset stall counter on natural completion
@@ -780,6 +793,8 @@ INSIGHT: <one key insight worth remembering, or "none">`,
                   output: resultText,
                   status: 'ok'
                 });
+              } else if (isComplete && !evidence.hasConcreteEvidence) {
+                this.logger.warn(`[AutonomousHeartbeat] Completion claim held for "${goal.title}" — no concrete evidence`);
               }
 
               // Store insight to long-term memory
@@ -1120,6 +1135,37 @@ Your context:
   // After SOMA claims a goal is done, check that
   // concrete artifacts actually exist on disk.
   // ═══════════════════════════════════════════
+
+  _assessTaskEvidence(result = {}) {
+    const evidence = result.evidence || {};
+    const tools = Array.isArray(evidence.toolsUsed) ? evidence.toolsUsed : [];
+    const observations = Array.isArray(evidence.observations) ? evidence.observations : [];
+    const concreteTools = new Set([
+      'web_fetch', 'github_search', 'read_file', 'write_file', 'search_code',
+      'list_files', 'memory_recall', 'memory_store', 'browser', 'browse_objective',
+      'shell_exec', 'run_tests', 'verify_syntax', 'modify_code', 'save_progress'
+    ]);
+
+    const concreteToolHits = tools.filter(t => concreteTools.has(t));
+    const successfulObservations = observations.filter(obs =>
+      obs?.result?.success ||
+      obs?.result?.content ||
+      obs?.result?.repos ||
+      obs?.result?.files ||
+      obs?.result?.stdout
+    );
+
+    const toolBacked = concreteToolHits.length > 0;
+    const hasConcreteEvidence = toolBacked || successfulObservations.length > 0;
+
+    return {
+      toolBacked,
+      hasConcreteEvidence,
+      summary: hasConcreteEvidence
+        ? `tools=${concreteToolHits.join(',') || 'observations'}; observations=${successfulObservations.length}`
+        : 'no concrete tool/file/memory evidence'
+    };
+  }
 
   async _verifyGoalCompletion(goal, execResult) {
     const checks = [];

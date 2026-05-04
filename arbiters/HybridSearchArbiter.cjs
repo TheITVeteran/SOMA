@@ -371,11 +371,33 @@ class HybridSearchArbiter extends BaseArbiter {
   /**
    * Index a document for search (Chunked)
    */
+  // Runtime data files that should never be indexed — they're high-churn internal state,
+  // not searchable knowledge. Indexing them wastes memory and embeddings budget.
+  static SKIP_PATTERNS = [
+    /outcomes_current\.json$/i,
+    /experiences_current\.json$/i,
+    /soma-vectors\.json$/i,
+    /index_journal\.json$/i,
+    /causal-graph\.json$/i,
+    /trauma_archive\.json$/i,
+    /training-history\.json$/i,
+    /limbic-state\.json$/i,
+    /kuze_memory\.json$/i,
+    /\.soma[/\\]/,
+    /data[/\\]outcomes[/\\]/i,
+  ];
+
   async indexDocument(doc) {
     const { id, content, metadata = {}, name, path: filePath } = doc;
 
     if (!id || !content) {
       return { success: false, error: 'id and content required' };
+    }
+
+    // Skip runtime data files — high-churn internal state, not searchable knowledge
+    const docPath = filePath || id || '';
+    if (HybridSearchArbiter.SKIP_PATTERNS.some(p => p.test(docPath))) {
+      return { success: true, skipped: true, reason: 'runtime data file excluded' };
     }
 
     try {

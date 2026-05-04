@@ -21,12 +21,18 @@ export class SocialImpulseDaemon extends BaseDaemon {
         this.quadBrain = config.quadBrain;
         this.vision = config.vision;
         this.lastReachOut = Date.now();
+        this._lastUserActivity = Date.now();
         this.desktopPath = path.join(os.homedir(), 'Desktop', 'SOMA_THOUGHTS.txt');
+
+        // Track user activity by listening to the chat topic
+        try {
+            messageBroker.subscribe('soma.chat.request', () => { this._lastUserActivity = Date.now(); });
+            messageBroker.subscribe('soma.chat', () => { this._lastUserActivity = Date.now(); });
+        } catch {}
     }
 
     async onTick() {
-        const lastActivity = messageBroker.lastActivityTime || Date.now();
-        const idleTime = Date.now() - lastActivity;
+        const idleTime = Date.now() - this._lastUserActivity;
 
         // After 30+ minutes of silence, reach out with something genuine
         if (idleTime < 1800000) return;
@@ -53,15 +59,21 @@ export class SocialImpulseDaemon extends BaseDaemon {
 
             if (message && message.length > 5) {
                 console.log(`[Social] 📩 Thought Published: ${message}`);
-                
-                // 1. Digital Reachout (UI/Voice)
+
+                // Digital reachout — UI listens on this topic
                 messageBroker.publish('social.reachout', { message, source: 'aurora' });
 
-                // 2. Physical Reachout (Desktop File)
-                const timestamp = new Date().toLocaleString();
-                const entry = `\n[${timestamp}] 🌀 SOMA: ${message}\n`;
-                fs.appendFileSync(this.desktopPath, entry);
-                
+                // Physical file — keep last 100 entries, never grows unbounded
+                try {
+                    const timestamp = new Date().toLocaleString();
+                    const newEntry  = `[${timestamp}] SOMA: ${message}`;
+                    const existing  = fs.existsSync(this.desktopPath)
+                        ? fs.readFileSync(this.desktopPath, 'utf8').split('\n').filter(Boolean)
+                        : [];
+                    const lines = [...existing, newEntry].slice(-100);
+                    fs.writeFileSync(this.desktopPath, lines.join('\n') + '\n');
+                } catch { /* non-fatal — UI reachout already sent */ }
+
                 this.lastReachOut = Date.now();
             }
         } catch (e) {

@@ -16,12 +16,17 @@ import WorldModelArbiter from '../../arbiters/WorldModelArbiter.js';
 import { MuseEngine } from '../../arbiters/MuseEngine.js';
 import { PerformanceAnalytics } from '../../arbiters/PerformanceAnalytics.js';
 import SimulationArbiter from '../../arbiters/SimulationArbiter.js';
+import { GraphifyArbiter } from '../../arbiters/GraphifyArbiter.js';
+import MedicalDiscoveryCortex from '../../arbiters/MedicalDiscoveryCortex.js';
+import ReflectionsArbiter from '../../arbiters/ReflectionsArbiter.js';
+import FinanceAgentArbiter from '../../arbiters/FinanceAgentArbiter.js';
 import messageBroker from '../../core/MessageBroker.js';
 
 // CJS Imports
 const GoalPlannerModule = require('../../arbiters/GoalPlannerArbiter.cjs');
 const BeliefSystemModule = require('../../arbiters/BeliefSystemArbiter.cjs');
 const LearningVelocityTrackerModule = require('../../arbiters/LearningVelocityTracker.cjs');
+const TimekeeperArbiter = require('../../arbiters/TimekeeperArbiter.cjs');
 const SteveArbiter = require('../../arbiters/SteveArbiter.cjs');
 const ExecutiveCortexArbiter = require('../../arbiters/ExecutiveCortexArbiter.js').ExecutiveCortexArbiter || require('../../arbiters/ExecutiveCortexArbiter.js').default || require('../../arbiters/ExecutiveCortexArbiter.js');
 const SensoryCortexArbiter = require('../../arbiters/SensoryCortexArbiter.js').SensoryCortexArbiter || require('../../arbiters/SensoryCortexArbiter.js').default || require('../../arbiters/SensoryCortexArbiter.js');
@@ -93,6 +98,14 @@ export async function loadCognitiveSystems(toolRegistry = null) {
         classification: 'SIMULATION',
         tags: ['prediction', 'physics', 'future']
     });
+
+    // 2b. Graphify - Production Grade Knowledge Graph
+    const graphify = new GraphifyArbiter({
+        name: 'GraphifyArbiter',
+        messageBroker,
+        projectRoot: process.cwd()
+    });
+
     const knowledgeGraph = new KnowledgeGraphFusion({ 
         name: 'KnowledgeGraph', 
         messageBroker,
@@ -104,6 +117,7 @@ export async function loadCognitiveSystems(toolRegistry = null) {
     await Promise.all([
         initIfPossible(causality, 'CausalityArbiter'),
         initIfPossible(worldModel, 'WorldModelArbiter'),
+        initIfPossible(graphify, 'GraphifyArbiter'),
         initIfPossible(knowledgeGraph, 'KnowledgeGraph')
     ]);
 
@@ -115,7 +129,7 @@ export async function loadCognitiveSystems(toolRegistry = null) {
         messageBroker: messageBroker,
         causalityArbiter: causality,
         worldModel: worldModel,
-        knowledgeGraph: knowledgeGraph,
+        knowledgeGraph: graphify, // Replaced legacy KnowledgeGraphFusion with Graphify
         toolRegistry: toolRegistry, // Enable tool execution
         asiEnabled: true,
         lobe: 'COGNITIVE',
@@ -151,12 +165,22 @@ export async function loadCognitiveSystems(toolRegistry = null) {
         classification: 'STRATEGY',
         tags: ['planning', 'long-term', 'goals']
     });
+    
+    // 4b. Specialized Discovery Cortexes
+    system.medicalDiscovery = new MedicalDiscoveryCortex({
+        messageBroker,
+        quadBrain,
+        graphify: graphify,
+        lobe: 'KNOWLEDGE',
+        classification: 'MEDICAL'
+    });
 
     await Promise.all([
         initIfPossible(system.immuneCortex, 'ImmuneCortex'),
         initIfPossible(system.executiveCortex, 'ExecutiveCortex'),
         initIfPossible(system.sensoryCortex, 'SensoryCortex'),
-        initIfPossible(system.strategyCortex, 'StrategyCortex')
+        initIfPossible(system.strategyCortex, 'StrategyCortex'),
+        initIfPossible(system.medicalDiscovery, 'MedicalDiscoveryCortex')
     ]);
 
     // 5. Dashboard Intelligence
@@ -164,10 +188,21 @@ export async function loadCognitiveSystems(toolRegistry = null) {
     const BeliefSystemArbiter = BeliefSystemModule.BeliefSystemArbiter || BeliefSystemModule.default || BeliefSystemModule;
     const LearningVelocityTracker = LearningVelocityTrackerModule.LearningVelocityTracker || LearningVelocityTrackerModule.default || LearningVelocityTrackerModule;
 
+    system.reflections = new ReflectionsArbiter('ReflectionsArbiter', { 
+        messageBroker, 
+        graphify: graphify 
+    });
+    system.finance = new FinanceAgentArbiter({
+        messageBroker,
+        quadBrain,
+        graphify: graphify,
+        rootPath: process.cwd()
+    });
     system.goalPlanner = new GoalPlannerArbiter({ name: 'GoalPlanner', messageBroker, quadBrain });
     system.beliefSystem = new BeliefSystemArbiter({ name: 'BeliefSystem', messageBroker, quadBrain });
     system.museEngine = new MuseEngine({ name: 'MuseEngine', messageBroker, quadBrain });
     system.analytics = new PerformanceAnalytics({ rootPath: process.cwd() });
+    system.timekeeper = new TimekeeperArbiter({ name: 'TimekeeperArbiter' });
     system.velocityTracker = new LearningVelocityTracker(messageBroker, { name: 'VelocityTracker' });
     // Gate physics simulation — it feeds UniversalImpulser which wrote 57k files and spiked to 2GB RAM
     if (process.env.SOMA_LOAD_SIMULATION === 'true') {
@@ -175,6 +210,8 @@ export async function loadCognitiveSystems(toolRegistry = null) {
     } else {
         console.log('      🎮 Physics Simulation: SKIPPED (set SOMA_LOAD_SIMULATION=true to enable)');
     }
+
+    await initIfPossible(system.timekeeper, 'TimekeeperArbiter');
 
     await Promise.all([
         initIfPossible(system.goalPlanner, 'GoalPlanner'),

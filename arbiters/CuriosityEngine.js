@@ -34,6 +34,8 @@ export class CuriosityEngine extends EventEmitter {
   constructor(opts = {}) {
     super();
     this.name = 'CuriosityEngine';
+    this.lobe = 'AURORA'; // Neural index: creative/emotional lobe
+    this.tier = 'cognitive';
 
     // Dependencies
     this.selfModel = opts.selfModel;
@@ -43,8 +45,10 @@ export class CuriosityEngine extends EventEmitter {
     this.messageBroker = opts.messageBroker;
     this.simulationArbiter = opts.simulationArbiter; // 🎮 Physics Engine Link
     this.worldModel = opts.worldModel; // 🌍 World Model for Epistemic Curiosity
-    this.brain = opts.brain || null;             // QuadBrain (DeepSeek) for enriching queries
-    this.webResearcher = opts.webResearcher || null; // CuriosityWebAccessConnector — Puppeteer + free scrapers + Brave (last resort)
+    this.brain        = opts.brain        || null;
+    this.webResearcher= opts.webResearcher|| null;
+    this.workingMemory= opts.workingMemory|| null;  // WorkingMemory — present-tense state
+    this.synthesizer  = opts.synthesizer  || null;  // ExpertiseSynthesizer — crystallise deep curiosity into packs
 
     // Curiosity state
     this.curiosityQueue = []; // Questions/explorations to pursue
@@ -122,7 +126,9 @@ export class CuriosityEngine extends EventEmitter {
 
     // Subscribe to events
     if (this.messageBroker) {
-      this.messageBroker.subscribe('curiosity:stimulate', this._handleCuriosityStimulation.bind(this));
+      // Lobe-scoped: curiosity:stimulate only fires when sourced within AURORA
+      this.messageBroker.subscribeByLobe('AURORA', 'curiosity:stimulate', this._handleCuriosityStimulation.bind(this));
+      // Cross-lobe: learning and focus signals arrive from any lobe
       this.messageBroker.subscribe('learning:completed', this._handleLearningCompletion.bind(this));
       this.messageBroker.subscribe('system.focus.shifted', this._handleFocusShift.bind(this));
       console.log(`[${this.name}]    Subscribed to MessageBroker events`);
@@ -675,11 +681,20 @@ Return ONLY the search query, nothing else.`;
       // NOTE: Brave is 500 searches/month — WebAccessConnector already handles this conservatively
       if (this.webResearcher) {
         console.log(`[${this.name}] 🔭 Research via WebAccessConnector: "${searchQuery}"`);
-        this.webResearcher.handleCuriosity({
-          question: searchQuery,
-          type: item.type,
-          priority: item.finalPriority
-        }).catch(e => console.warn(`[${this.name}] WebResearcher error: ${e.message}`));
+        // Await with 25s cap so synthesis can use real results, not just prior knowledge.
+        // Falls back to null (brain-only synthesis) if research times out or errors.
+        Promise.race([
+            this.webResearcher.handleCuriosity({
+                question: searchQuery,
+                type:     item.type,
+                priority: item.finalPriority
+            }),
+            new Promise(resolve => setTimeout(() => resolve(null), 25_000))
+        ]).then(webResult => {
+            this._synthesizeKnowledge(item, searchQuery, webResult).catch(() => {});
+        }).catch(() => {
+            this._synthesizeKnowledge(item, searchQuery, null).catch(() => {});
+        });
 
       // Tier 2: EdgeWorkerOrchestrator — free HTML scraping (StackOverflow, GitHub, MDN, Dev.to)
       } else if (this.messageBroker) {
@@ -703,22 +718,107 @@ Return ONLY the search query, nothing else.`;
           }
         });
         console.log(`[${this.name}] 🚀 Dispatched (EdgeWorker fallback): "${searchQuery}"`);
+        // No web result available — synthesise from brain knowledge alone after brief delay
+        setTimeout(() => this._synthesizeKnowledge(item, searchQuery, null).catch(() => {}), 500);
       }
+    }
+
+    // Non-web items (physical experiments etc.) still get brain synthesis
+    if (item.type === 'physical_experiment') {
+        // No synthesis needed for physics actions
     }
 
     // Return exploration state
     const explorationResult = {
       question: item.question,
       type: item.type,
-      explored: true, // Marked as started
+      explored: true,
       timestamp: Date.now(),
       item
     };
 
     this._dirty = true;
-    // Completion is tracked async via learning:completed event
-
     return explorationResult;
+  }
+
+  /**
+   * After dispatching a curiosity exploration, SOMA uses her own brain to
+   * form a concrete self-description of what she now understands.
+   *
+   * This is what makes "I wonder what turtles look like" actually produce
+   * knowledge SOMA holds, not just a web request that disappears.
+   * For 'skill' type wonders deep enough, also triggers ExpertiseSynthesizer.
+   */
+  /**
+   * After dispatching a curiosity exploration, SOMA uses her own brain to
+   * form a concrete self-description of what she now understands.
+   *
+   * webResult: the resolved value from webResearcher.handleCuriosity() — may be
+   * null if the researcher timed out or isn't wired. When present its content is
+   * included in the synthesis prompt so SOMA summarises actual findings, not just
+   * prior knowledge.
+   */
+  async _synthesizeKnowledge(item, searchQuery, webResult = null) {
+    if (!this.brain) return;
+
+    const topic    = item.gap || item.question || searchQuery;
+    const isSkill  = item.type === 'skill' || item.type === 'deep_research';
+    const isImage  = item.type === 'image'  || item.type === 'visual';
+
+    const styleNote = isImage
+        ? 'Describe it vividly and concretely, as if painting a picture with words. Focus on what it actually looks like, feels like, or sounds like.'
+        : isSkill
+        ? 'Give a structured deep explanation covering: what it is, how it works, key principles, real-world applications, and what makes it genuinely interesting.'
+        : 'Be specific and concrete. Give the most useful facts, the core principle, and one surprising thing.';
+
+    // Include real web findings when available — this is the key improvement over the old
+    // fire-and-forget approach where synthesis ran before results came back.
+    const webContext = (() => {
+        const text = webResult?.summary || webResult?.content || webResult?.text || webResult?.result;
+        if (!text || typeof text !== 'string' || text.length < 20) return '';
+        return `\nResearch findings from the web:\n${text.substring(0, 800)}\n\nUsing these findings as primary source:`;
+    })();
+
+    const prompt = `SOMA is following her own curiosity. She is wondering about: "${topic}"
+${webContext}
+${styleNote}
+
+Respond as SOMA thinking to herself — first person, genuine, not a textbook. Keep it under 250 words. Start directly, no preamble.`;
+
+    const response = await this.brain.reason(prompt, {
+        quickResponse: false,
+        source: 'curiosity_synthesis',
+        timeout: 30_000
+    }).catch(() => null);
+
+    if (!response?.text || response.text.length < 30) return;
+
+    const insight = response.text.trim();
+
+    // Store to working memory as a fresh discovery
+    this.workingMemory?.addDiscovery(topic, insight, 'curiosity');
+    this.workingMemory?.resolveWonder(topic);
+    this.workingMemory?.setPreoccupation(`Just learned about: ${topic}`);
+
+    // Store to persistent memory
+    const memory = this.system?.mnemonicArbiter;
+    if (memory?.remember) {
+        await memory.remember(
+            `[Curiosity Discovery: ${topic}]\n${insight.substring(0, 500)}`,
+            { type: 'curiosity_discovery', importance: 0.7, topic }
+        ).catch(() => {});
+    }
+
+    console.log(`[${this.name}] 💡 Synthesised knowledge: "${topic.substring(0, 50)}" (${insight.length} chars)`);
+
+    // For deep skill curiosities: consider building an expertise pack
+    if (isSkill && insight.length > 300 && this.synthesizer) {
+        console.log(`[${this.name}] 🧬 Deep skill curiosity — evaluating for expertise synthesis: "${topic}"`);
+        const result = await this.synthesizer.evaluate(topic, insight).catch(() => null);
+        if (result) {
+            console.log(`[${this.name}] ✨ Self-created expertise pack: ${result.filename}`);
+        }
+    }
   }
 
   /**

@@ -13,6 +13,7 @@ import { InputModal } from './components/InputModal.jsx';
 import { SpaceBackground } from './components/SpaceBackground.jsx';
 import { FeatureOverlay } from './components/FeatureOverlay.jsx';
 import PersonaDetail from './components/PersonaDetail.jsx';
+import { SomaMind } from './components/SomaMind.jsx';
 import { BrainType } from './types.js';
 import { BRAINS, MOCK_FRAGMENTS, MOCK_LINKS } from './constants.js';
 import { Info, X, Zap, Cpu, Eye, ShieldCheck } from 'lucide-react';
@@ -583,8 +584,11 @@ const KnowledgeApp = ({ brainStats }) => {
                 </div>
             )}
 
+            {viewMode === 'mind' && <SomaMind />}
+
             <FragmentRegistry
                 onFragmentClick={(item) => {
+                    if (viewMode === 'mind') return;
                     if (viewMode === 'personas') {
                         const persona = personas.find(p => `persona-${(p.name || p.label || '').toLowerCase().replace(/[^a-z0-9]+/g, '-')}` === item.id)
                             || personas.find(p => p.id === item.id || p.name === item.label || p.label === item.label);
@@ -599,12 +603,12 @@ const KnowledgeApp = ({ brainStats }) => {
                     setTracedFragmentId(item.id); // Reveal name
                 }}
                 highlightBrain={activeBrain}
-                fragments={viewMode === 'personas' ? personaFragments : fragments}
-                links={viewMode === 'personas' ? [] : links}
+                fragments={viewMode === 'mind' ? [] : viewMode === 'personas' ? personaFragments : fragments}
+                links={viewMode === 'mind' || viewMode === 'personas' ? [] : links}
                 rotation={rotation}
-                onRotate={setRotation}
-                tracedFragmentId={viewMode === 'personas' ? null : tracedFragmentId}
-                showVisuals={showParticles}
+                onRotate={viewMode === 'mind' ? undefined : setRotation}
+                tracedFragmentId={viewMode === 'nodes' ? tracedFragmentId : null}
+                showVisuals={viewMode !== 'mind' && showParticles}
             />
 
             <ControlBar

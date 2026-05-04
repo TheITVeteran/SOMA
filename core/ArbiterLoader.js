@@ -28,10 +28,10 @@ import { fileURLToPath }  from 'url';
 
 const __dirname       = path.dirname(fileURLToPath(import.meta.url));
 const ARBITERS_DIR    = path.join(__dirname, '..', 'arbiters');
-const MANIFEST_FILE   = path.join(__dirname, '..', 'server', '.soma', 'arbiter-manifest.json');
+const MANIFEST_FILE   = path.join(__dirname, '..', 'SOMA', 'arbiter-manifest.json');
 
 // Standard deps injected into every lazily-loaded arbiter
-const STD_DEPS = ['quadBrain', 'mnemonicArbiter', 'messageBroker', 'rootPath', 'goalPlanner', 'system'];
+const STD_DEPS = ['quadBrain', 'mnemonicArbiter', 'messageBroker', 'rootPath', 'goalPlanner', 'system', 'learningPipeline', 'knowledgeGraph'];
 
 export class ArbiterLoader {
     constructor({ system, messageBroker } = {}) {
@@ -41,6 +41,22 @@ export class ArbiterLoader {
         this._loading      = new Map();    // file → Promise (dedupe concurrent loads)
         this._require      = createRequire(import.meta.url);
         this._isBuilding   = false;        // Re-entrancy guard
+        
+        // 🔱 Dependency Overrides: Maps specialist arbiters to their non-standard dependencies.
+        // This allows ArbiterLoader to handle complex wiring that was previously hardcoded.
+        this._dependencyMap = {
+            'MultiTimeframeAnalyzer': ['regimeDetector'],
+            'TradeLearningEngine': ['outcomeTracker'],
+            'BacktestEngine': ['mtfAnalyzer', 'regimeDetector'],
+            'HindsightReplayArbiter': ['experienceReplay', 'outcomeTracker'],
+            'FragmentCommunicationHub': ['fragmentRegistry'],
+            'PersonalityForgeArbiter': ['quadBrain', 'messageBroker'],
+            'MnemonicIndexerArbiter': ['mnemonicArbiter', 'storageArbiter'],
+            'IdeaCaptureArbiter': ['knowledgeGraph', 'messageBroker'],
+            'ConversationHistoryArbiter': ['mnemonicArbiter', 'personalityForge'],
+            'CuriosityEngine': ['knowledgeGraph', 'simulationArbiter', 'worldModel', 'fragmentRegistry'],
+            'UniversalLearningPipeline': ['outcomeTracker', 'experienceBuffer']
+        };
     }
 
     // ── Lifecycle ────────────────────────────────────────────────────────
@@ -48,15 +64,21 @@ export class ArbiterLoader {
     async initialize() {
         await this._loadManifest();
         const total = Object.keys(this._manifest).length;
-        console.log(`[ArbiterLoader] 📚 Arbiter inventory: ${total} capabilities mapped (manifest rebuild deferred 90s)`);
-        // Defer manifest rebuild until 90s after boot — the manifest is only needed
-        // for on-demand lazy loading, not for serving requests. Building it at boot
-        // floods the I/O queue with 169 file reads and starves the event loop.
-        setTimeout(() => {
-            this._buildManifest().catch(err =>
-                console.warn('[ArbiterLoader] Manifest build error:', err.message)
+        console.log(`[ArbiterLoader] 📚 Arbiter inventory: ${total} capabilities mapped.`);
+        
+        // If manifest is empty, build it immediately
+        if (total === 0) {
+            await this._buildManifest().catch(err =>
+                console.warn('[ArbiterLoader] Initial manifest build error:', err.message)
             );
-        }, 90_000);
+        } else {
+            // Otherwise, defer the re-scan to avoid boot-time I/O spikes
+            setTimeout(() => {
+                this._buildManifest().catch(err =>
+                    console.warn('[ArbiterLoader] Manifest rebuild error:', err.message)
+                );
+            }, 60_000);
+        }
         return this;
     }
 
@@ -78,7 +100,9 @@ export class ArbiterLoader {
 
         // 2. Find manifest entry
         const entries = this._manifest[capability] || [];
-        const entry   = entries.find(e => e.status !== 'failed');
+        // Prioritize 'verified' over null, skip 'failed'
+        const entry   = entries.find(e => e.status === 'verified') || entries.find(e => !e.status);
+        
         if (!entry) {
             console.warn(`[ArbiterLoader] No arbiter found for capability: ${capability}`);
             return null;
@@ -92,20 +116,21 @@ export class ArbiterLoader {
      * Useful when you know exactly what you want.
      */
     async loadByFile(filename, extraDeps = {}) {
+        const baseName = filename.replace(/\.(js|cjs)$/, '');
+        
         if (this.messageBroker) {
-            const name = filename.replace(/\.(js|cjs)$/, '');
-            const existing = this.messageBroker.getArbiter?.(name);
+            const existing = this.messageBroker.getArbiter?.(baseName);
             if (existing?.instance) return existing.instance;
         }
 
         // Find any entry for this file
         for (const entries of Object.values(this._manifest)) {
-            const entry = entries.find(e => e.file === filename);
+            const entry = entries.find(e => e.file === filename || e.file === `${baseName}.js` || e.file === `${baseName}.cjs`);
             if (entry) return this._loadEntry(entry, extraDeps);
         }
 
         // File not in manifest yet — try to load directly
-        const entry = await this._scanFile(filename);
+        const entry = await this._scanFile(filename.endsWith('.js') || filename.endsWith('.cjs') ? filename : `${baseName}.js`);
         if (entry) return this._loadEntry(entry, extraDeps);
 
         return null;
@@ -129,11 +154,17 @@ export class ArbiterLoader {
     }
 
     /**
-     * Force a manifest rebuild — useful after adding new arbiter files.
+     * Load multiple arbiters in parallel (phased loading).
      */
-    async rebuildManifest() {
-        await this._buildManifest();
-        return Object.keys(this._manifest).length;
+    async batchLoad(filenames, extraDeps = {}) {
+        console.log(`[ArbiterLoader] 📦 Batch loading ${filenames.length} arbiters...`);
+        const results = await Promise.allSettled(
+            filenames.map(f => this.loadByFile(f, extraDeps))
+        );
+        
+        const succeeded = results.filter(r => r.status === 'fulfilled' && r.value).length;
+        console.log(`[ArbiterLoader] ✅ Batch complete: ${succeeded}/${filenames.length} succeeded.`);
+        return results.map(r => r.status === 'fulfilled' ? r.value : null);
     }
 
     // ── Internal: Loading ────────────────────────────────────────────────
@@ -162,7 +193,7 @@ export class ArbiterLoader {
                 const mod = this._require(filePath);
                 Cls = mod[entry.cls] || mod.default || mod;
             } else {
-                const mod = await import(filePath + `?t=${Date.now()}`); // cache-bust
+                const mod = await import(`file://${filePath}?t=${Date.now()}`); // cache-bust + file:// for Windows
                 Cls = mod[entry.cls] || mod.default;
             }
 
@@ -170,30 +201,38 @@ export class ArbiterLoader {
                 throw new Error(`Could not find class "${entry.cls}" in ${entry.file}`);
             }
 
-            // Build deps from system + extras
-            const deps = this._buildDeps(extraDeps);
+            // Build deps from system + extras + dependency overrides
+            const deps = this._buildDeps(entry.cls, extraDeps);
 
             // Instantiate
             const instance = new Cls({ name: entry.cls, ...deps });
 
-            // Initialize (try both patterns)
+            // Initialize (try multiple patterns)
             if (typeof instance.initialize === 'function') {
-                await instance.initialize();
+                if (instance.initialize.length > 0) {
+                    await instance.initialize(this.system);
+                } else {
+                    await instance.initialize();
+                }
             } else if (typeof instance.onInitialize === 'function') {
                 await instance.onInitialize();
+            } else if (typeof instance.onActivate === 'function') {
+                await instance.onActivate();
             }
 
             // Register with MessageBroker so future getArbitersByCapability() finds it
             if (this.messageBroker?.registerArbiter) {
+                const allEntries = Object.values(this._manifest).flat();
+                const myCaps = allEntries
+                    .filter(e => e.file === entry.file)
+                    .reduce((caps, e) => {
+                        if (e.capabilities) caps.push(...e.capabilities);
+                        return caps;
+                    }, []);
+
                 this.messageBroker.registerArbiter(instance.name || entry.cls, {
                     instance,
-                    capabilities: Object.values(this._manifest)
-                        .flat()
-                        .filter(e => e.file === entry.file)
-                        .reduce((caps, e) => {
-                            if (e.capabilities) caps.push(...e.capabilities);
-                            return caps;
-                        }, []),
+                    capabilities: [...new Set(myCaps)],
                     lobe: entry.lobe || null,
                     role: entry.role || null,
                     loadedBy: 'ArbiterLoader',
@@ -217,15 +256,32 @@ export class ArbiterLoader {
         }
     }
 
-    _buildDeps(extras = {}) {
+    _buildDeps(clsName, extras = {}) {
         const deps = {};
+        
+        // 1. Standard Dependencies from system
         for (const key of STD_DEPS) {
             if (this.system[key] !== undefined) deps[key] = this.system[key];
         }
-        // system itself
-        deps.system       = this.system;
+        
+        // 2. Specialized Dependency Overrides
+        const overrides = this._dependencyMap[clsName] || [];
+        for (const key of overrides) {
+            if (this.system[key] !== undefined) {
+                deps[key] = this.system[key];
+            } else {
+                const lowerKey = key.charAt(0).toLowerCase() + key.slice(1);
+                if (this.system[lowerKey] !== undefined) {
+                    deps[key] = this.system[lowerKey];
+                }
+            }
+        }
+
+        // 3. Infrastructure singletons (CRITICAL: ensure these are always present)
+        deps.system        = this.system;
         deps.messageBroker = this.messageBroker || this.system.messageBroker;
-        deps.rootPath     = this.system.rootPath || process.cwd();
+        deps.rootPath      = this.system.rootPath || process.cwd();
+        
         return { ...deps, ...extras };
     }
 

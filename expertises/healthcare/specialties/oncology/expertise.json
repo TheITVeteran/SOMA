@@ -1,0 +1,24 @@
+{
+  "id": "healthcare/oncology",
+  "parent": "healthcare",
+  "name": "Oncology Expertise",
+  "specialty": "oncology",
+  "version": "0.1.0",
+  "description": "Cancer-focused healthcare package for oncology questions, treatment evidence review, staging context, and specialist routing.",
+  "domains": ["oncology", "cancer", "tumor", "chemotherapy", "radiation oncology", "immunotherapy"],
+  "aliases": ["cancer care", "oncology specialist", "tumor board"],
+  "triggers": ["cancer", "tumor", "oncology", "chemo", "chemotherapy", "metastasis", "staging", "biopsy", "immunotherapy"],
+  "keywords": ["TNM", "NCCN", "ASCO", "pathology", "biomarker", "mutation", "survival", "adjuvant", "neoadjuvant"],
+  "capabilities": [
+    "oncology_context_routing",
+    "guideline_evidence_review",
+    "treatment_option_summary",
+    "clinical_trial_context",
+    "safety_red_flag_detection"
+  ],
+  "standards": ["NCCN", "ASCO", "ICD-10", "FHIR"],
+  "loadPolicy": {
+    "mode": "lazy",
+    "defaultLevel": "warm"
+  }
+}
