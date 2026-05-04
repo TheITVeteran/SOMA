@@ -2,12 +2,41 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Sparkles, Search, Plus, Send, Trash2,
   Edit3, X, Eye, Lightbulb, Zap, Home, Upload, Brain, Save, Pencil,
-  CheckCircle, HelpCircle, Target
+  CheckCircle, HelpCircle, Target, Calendar, GitBranch, Shield,
+  Link, FileText, Cpu, Star, AlertTriangle, ArrowUpRight, RefreshCw,
+  Tag, ChevronDown
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import './ReflectionsTab.css';
 
-// ── Inline markdown renderer ──────────────────────────────────────────────────
+// ── Constants ─────────────────────────────────────────────────────────────────
+const STATUSES = [
+  { value: 'inbox',    label: 'Inbox',    color: 'text-blue-400',    bg: 'bg-blue-500/10',    border: 'border-blue-500/20' },
+  { value: 'raw',      label: 'Raw',      color: 'text-amber-400',   bg: 'bg-amber-500/10',   border: 'border-amber-500/20' },
+  { value: 'refined',  label: 'Refined',  color: 'text-green-400',   bg: 'bg-green-500/10',   border: 'border-green-500/20' },
+  { value: 'linked',   label: 'Linked',   color: 'text-purple-400',  bg: 'bg-purple-500/10',  border: 'border-purple-500/20' },
+  { value: 'archived', label: 'Archived', color: 'text-zinc-500',    bg: 'bg-zinc-500/10',    border: 'border-zinc-500/20' },
+  { value: 'promoted', label: 'Promoted', color: 'text-fuchsia-400', bg: 'bg-fuchsia-500/10', border: 'border-fuchsia-500/20' },
+];
+const statusMeta = Object.fromEntries(STATUSES.map(s => [s.value, s]));
+
+const SOMA_ACTIONS = [
+  { id: 'summarize',      label: 'Summarize',        Icon: FileText,      color: 'text-cyan-400',    desc: 'Distill to 2-3 sentences' },
+  { id: 'contradictions', label: 'Contradictions',   Icon: AlertTriangle, color: 'text-red-400',     desc: 'Find logic gaps' },
+  { id: 'tasks',          label: 'Extract Tasks',    Icon: CheckCircle,   color: 'text-green-400',   desc: 'Pull action items' },
+  { id: 'suggest-links',  label: 'Suggest Links',    Icon: Link,          color: 'text-purple-400',  desc: 'Find related concepts' },
+  { id: 'promote',        label: 'Promote Memory',   Icon: Star,          color: 'text-amber-400',   desc: 'Send to SOMA memory' },
+  { id: 'expertise-seed', label: 'Expertise Seed',   Icon: Cpu,           color: 'text-fuchsia-400', desc: 'Structured knowledge export' },
+];
+
+const TEMPLATES = [
+  { label: 'Idea',     Icon: Lightbulb,  color: 'text-amber-400',   title: 'Idea: ',     body: '## The Idea\n\n\n## Why it matters\n\n' },
+  { label: 'Task',     Icon: Target,     color: 'text-violet-400',  title: 'Task: ',     body: '## What needs doing\n\n\n## Done when\n\n' },
+  { label: 'Question', Icon: HelpCircle, color: 'text-blue-400',    title: 'Question: ', body: '## The Question\n\n\n## Why I\'m asking\n\n' },
+  { label: 'Insight',  Icon: Zap,        color: 'text-fuchsia-400', title: 'Insight: ',  body: '## The Insight\n\n\n## What changes because of this\n\n' },
+];
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
 const renderInline = (text) => {
   const parts = text.split(/(\*\*[^*]+\*\*|\*[^*]+\*|\[\[[^\]]+\]\]|`[^`]+`)/g);
   return parts.map((part, i) => {
@@ -25,17 +54,13 @@ const renderInline = (text) => {
 
 const MarkdownView = ({ content }) => {
   if (!content) return <p className="text-zinc-600 italic text-sm">(Empty note)</p>;
-  // Strip YAML frontmatter
   const stripped = content.replace(/^---[\s\S]*?---\s*\n?/, '').trim();
   return (
     <div className="space-y-0.5">
       {stripped.split('\n').map((line, i) => {
-        if (line.startsWith('# '))
-          return <h1 key={i} className="text-2xl font-bold text-white mt-8 mb-3 tracking-tight">{renderInline(line.slice(2))}</h1>;
-        if (line.startsWith('## '))
-          return <h2 key={i} className="text-xl font-semibold text-white mt-6 mb-2">{renderInline(line.slice(3))}</h2>;
-        if (line.startsWith('### '))
-          return <h3 key={i} className="text-base font-semibold text-zinc-200 mt-5 mb-1">{renderInline(line.slice(4))}</h3>;
+        if (line.startsWith('# '))   return <h1 key={i} className="text-2xl font-bold text-white mt-8 mb-3 tracking-tight">{renderInline(line.slice(2))}</h1>;
+        if (line.startsWith('## '))  return <h2 key={i} className="text-xl font-semibold text-white mt-6 mb-2">{renderInline(line.slice(3))}</h2>;
+        if (line.startsWith('### ')) return <h3 key={i} className="text-base font-semibold text-zinc-200 mt-5 mb-1">{renderInline(line.slice(4))}</h3>;
         if (line.startsWith('- ') || line.startsWith('* '))
           return (
             <div key={i} className="flex items-start gap-2 ml-2 my-0.5">
@@ -43,28 +68,28 @@ const MarkdownView = ({ content }) => {
               <span className="text-zinc-300 text-sm leading-relaxed">{renderInline(line.slice(2))}</span>
             </div>
           );
-        if (line.startsWith('> '))
-          return <blockquote key={i} className="border-l-2 border-purple-500/40 pl-4 my-2 text-zinc-400 italic text-sm">{renderInline(line.slice(2))}</blockquote>;
-        if (line === '---' || line === '***')
-          return <hr key={i} className="border-white/10 my-4" />;
-        if (line === '')
-          return <div key={i} className="h-2" />;
+        if (line.startsWith('> '))   return <blockquote key={i} className="border-l-2 border-purple-500/40 pl-4 my-2 text-zinc-400 italic text-sm">{renderInline(line.slice(2))}</blockquote>;
+        if (line === '---' || line === '***') return <hr key={i} className="border-white/10 my-4" />;
+        if (line === '') return <div key={i} className="h-2" />;
         return <p key={i} className="text-zinc-300 text-sm leading-relaxed">{renderInline(line)}</p>;
       })}
     </div>
   );
 };
 
-// ── Main component ─────────────────────────────────────────────────────────────
-const TEMPLATES = [
-  { label: 'Idea',     Icon: Lightbulb,    color: 'text-amber-400',   title: 'Idea: ',     body: '## The Idea\n\n\n## Why it matters\n\n' },
-  { label: 'Task',     Icon: Target,        color: 'text-violet-400',  title: 'Task: ',     body: '## What needs doing\n\n\n## Done when\n\n' },
-  { label: 'Question', Icon: HelpCircle,    color: 'text-blue-400',    title: 'Question: ', body: '## The Question\n\n\n## Why I\'m asking\n\n' },
-  { label: 'Insight',  Icon: Zap,           color: 'text-fuchsia-400', title: 'Insight: ',  body: '## The Insight\n\n\n## What changes because of this\n\n' },
-];
+const StatusBadge = ({ status }) => {
+  const m = statusMeta[status] || statusMeta.inbox;
+  return (
+    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-widest ${m.color} ${m.bg} border ${m.border}`}>
+      {m.label}
+    </span>
+  );
+};
 
+// ── Main component ─────────────────────────────────────────────────────────────
 const ReflectionsTab = ({ mode = 'full', onClose, context, onSendToSoma }) => {
   const [notes, setNotes] = useState([]);
+  const [statusFilter, setStatusFilter] = useState('all');
   const [selectedNote, setSelectedNote] = useState(null);
   const [noteContent, setNoteContent] = useState('');
   const [noteLoading, setNoteLoading] = useState(false);
@@ -76,24 +101,31 @@ const ReflectionsTab = ({ mode = 'full', onClose, context, onSendToSoma }) => {
   const [quickNoteName, setQuickNoteName] = useState(() => localStorage.getItem('soma_draft_name') || '');
   const [quickNoteError, setQuickNoteError] = useState('');
   const [quickNoteSaving, setQuickNoteSaving] = useState(false);
-
-  // Persist draft to localStorage as user types
-  useEffect(() => { localStorage.setItem('soma_draft_text', quickNoteText); }, [quickNoteText]);
-  useEffect(() => { localStorage.setItem('soma_draft_name', quickNoteName); }, [quickNoteName]);
-  const [uploadStatus, setUploadStatus] = useState(''); // '' | 'uploading' | 'done' | 'error'
+  const [uploadStatus, setUploadStatus] = useState('');
   const [uploadError, setUploadError] = useState('');
   const fileInputRef = useRef(null);
+
+  useEffect(() => { localStorage.setItem('soma_draft_text', quickNoteText); }, [quickNoteText]);
+  useEffect(() => { localStorage.setItem('soma_draft_name', quickNoteName); }, [quickNoteName]);
 
   // Edit mode
   const [isEditing, setIsEditing] = useState(false);
   const [editContent, setEditContent] = useState('');
   const [saving, setSaving] = useState(false);
 
+  // Status editing
+  const [statusDropdownOpen, setStatusDropdownOpen] = useState(false);
+  const [updatingStatus, setUpdatingStatus] = useState(false);
+
   // Content search
-  const [searchResults, setSearchResults] = useState(null); // null = not searched, [] = no results
+  const [searchResults, setSearchResults] = useState(null);
   const searchTimerRef = useRef(null);
 
-  // MUSE FLOW
+  // SOMA actions panel
+  const [actionResult, setActionResult] = useState(null); // { action, result, loading }
+  const [actionLoading, setActionLoading] = useState(false);
+
+  // Muse flow
   const [isBrainstorming, setIsBrainstorming] = useState(false);
   const [sessionLog, setSessionLog] = useState([]);
   const [inputMessage, setInputMessage] = useState('');
@@ -109,33 +141,41 @@ const ReflectionsTab = ({ mode = 'full', onClose, context, onSendToSoma }) => {
   const [archivistThinking, setArchivistThinking] = useState(false);
   const archivistEndRef = useRef(null);
 
-  // Insight engine
+  // Vault scan
   const [insights, setInsights] = useState(null);
   const [insightsLoading, setInsightsLoading] = useState(false);
+
+  // Graph surface
+  const [graphStats, setGraphStats] = useState(null);
+  const [graphLoading, setGraphLoading] = useState(false);
+
+  // Hygiene
+  const [hygieneView, setHygieneView] = useState(false);
+  const [hygieneData, setHygieneData] = useState(null);
+  const [hygieneLoading, setHygieneLoading] = useState(false);
 
   useEffect(() => {
     if (museEndRef.current) museEndRef.current.scrollIntoView({ behavior: 'smooth' });
   }, [sessionLog]);
-
   useEffect(() => {
     if (archivistEndRef.current) archivistEndRef.current.scrollIntoView({ behavior: 'smooth' });
   }, [archivistLog]);
 
-  useEffect(() => {
-    const fetchNotes = async () => {
-      try {
-        const res = await fetch('/api/reflections/list');
-        const data = await res.json();
-        if (data.success) setNotes(data.notes);
-      } catch (e) { console.error('Failed to fetch reflections', e); }
-    };
-    fetchNotes();
+  const refreshNotes = useCallback(async () => {
+    try {
+      const res = await fetch('/api/reflections/list');
+      const data = await res.json();
+      if (data.success) setNotes(data.notes);
+    } catch (e) { console.error('Failed to fetch reflections', e); }
   }, []);
 
+  useEffect(() => { refreshNotes(); }, [refreshNotes]);
+
   useEffect(() => {
-    if (!selectedNote) { setNoteContent(''); setNoteIntel(null); return; }
+    if (!selectedNote) { setNoteContent(''); setNoteIntel(null); setActionResult(null); return; }
     setIsEditing(false);
     setEditContent('');
+    setActionResult(null);
     setNoteLoading(true);
     setNoteIntelLoading(true);
     fetch(`/api/reflections/note/${encodeURIComponent(selectedNote.name)}`)
@@ -146,22 +186,14 @@ const ReflectionsTab = ({ mode = 'full', onClose, context, onSendToSoma }) => {
 
     Promise.all([
       fetch(`/api/reflections/links/${encodeURIComponent(selectedNote.name)}`).then(r => r.json()).catch(() => null),
-      fetch(`/api/reflections/related/${encodeURIComponent(selectedNote.name)}`).then(r => r.json()).catch(() => null)
-    ])
-      .then(([links, related]) => {
-        setNoteIntel({
-          links: links?.success ? links : null,
-          related: related?.success ? related.results || [] : []
-        });
-      })
-      .finally(() => setNoteIntelLoading(false));
+      fetch(`/api/reflections/related/${encodeURIComponent(selectedNote.name)}`).then(r => r.json()).catch(() => null),
+    ]).then(([links, related]) => {
+      setNoteIntel({
+        links: links?.success ? links : null,
+        related: related?.success ? related.results || [] : [],
+      });
+    }).finally(() => setNoteIntelLoading(false));
   }, [selectedNote]);
-
-  const refreshNotes = async () => {
-    const res = await fetch('/api/reflections/list');
-    const data = await res.json();
-    if (data.success) setNotes(data.notes);
-  };
 
   const goHome = () => {
     setSelectedNote(null);
@@ -169,8 +201,111 @@ const ReflectionsTab = ({ mode = 'full', onClose, context, onSendToSoma }) => {
     setIsBrainstorming(false);
     setSessionLog([]);
     setMuseResidue(null);
+    setHygieneView(false);
+    setActionResult(null);
   };
 
+  // ── Daily note ─────────────────────────────────────────────────────────────
+  const handleDailyNote = async () => {
+    try {
+      const res = await fetch('/api/reflections/daily', { method: 'POST' });
+      const data = await res.json();
+      if (data.success) {
+        await refreshNotes();
+        setSelectedNote({ name: data.filename, status: 'inbox' });
+      }
+    } catch (e) { console.error('Daily note failed', e); }
+  };
+
+  // ── Status update ──────────────────────────────────────────────────────────
+  const handleStatusChange = async (newStatus) => {
+    if (!selectedNote) return;
+    setUpdatingStatus(true);
+    setStatusDropdownOpen(false);
+    try {
+      const res = await fetch(`/api/reflections/note/${encodeURIComponent(selectedNote.name)}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setSelectedNote(prev => ({ ...prev, status: newStatus }));
+        setNotes(prev => prev.map(n => n.name === selectedNote.name ? { ...n, status: newStatus } : n));
+      }
+    } catch (e) { console.error('Status update failed', e); }
+    finally { setUpdatingStatus(false); }
+  };
+
+  // ── SOMA actions ───────────────────────────────────────────────────────────
+  const handleSomaAction = async (action) => {
+    if (!noteContent || actionLoading) return;
+    setActionLoading(true);
+    setActionResult({ action, result: null, loading: true });
+    try {
+      const res = await fetch('/api/reflections/action', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: selectedNote?.name, action, content: noteContent }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setActionResult({ action, result: data.result, loading: false });
+        if (action === 'promote') {
+          setSelectedNote(prev => ({ ...prev, status: 'promoted' }));
+          setNotes(prev => prev.map(n => n.name === selectedNote?.name ? { ...n, status: 'promoted' } : n));
+        }
+      } else {
+        setActionResult({ action, result: `Error: ${data.error}`, loading: false });
+      }
+    } catch (e) {
+      setActionResult({ action, result: 'Action failed — backend unreachable', loading: false });
+    } finally {
+      setActionLoading(false);
+    }
+  };
+
+  // ── Graph surface ──────────────────────────────────────────────────────────
+  const loadGraphStats = async () => {
+    setGraphLoading(true);
+    try {
+      const res = await fetch('/api/reflections/graph');
+      const data = await res.json();
+      if (data.success) {
+        const connected = new Set([...data.edges.map(e => e.source), ...data.edges.map(e => e.target)]);
+        setGraphStats({
+          nodes: data.nodes.length,
+          edges: data.edges.length,
+          isolated: data.nodes.filter(n => !connected.has(n.id)).length,
+        });
+      }
+    } catch (e) { console.error('Graph load failed', e); }
+    finally { setGraphLoading(false); }
+  };
+
+  useEffect(() => {
+    if (notes.length > 0 && !graphStats) loadGraphStats();
+  }, [notes.length]);
+
+  // ── Hygiene ────────────────────────────────────────────────────────────────
+  const loadHygiene = async () => {
+    setHygieneLoading(true);
+    try {
+      const res = await fetch('/api/reflections/hygiene');
+      const data = await res.json();
+      if (data.success) setHygieneData(data);
+    } catch (e) { console.error('Hygiene check failed', e); }
+    finally { setHygieneLoading(false); }
+  };
+
+  const handleOpenHygiene = () => {
+    setHygieneView(true);
+    setSelectedNote(null);
+    setIsBrainstorming(false);
+    if (!hygieneData) loadHygiene();
+  };
+
+  // ── Existing handlers ──────────────────────────────────────────────────────
   const handleSaveQuickNote = async () => {
     if (!quickNoteText.trim()) return;
     setQuickNoteError('');
@@ -179,7 +314,7 @@ const ReflectionsTab = ({ mode = 'full', onClose, context, onSendToSoma }) => {
       const res = await fetch('/api/reflections/quick-note', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: quickNoteText, title: quickNoteName.trim() || undefined, context })
+        body: JSON.stringify({ text: quickNoteText, title: quickNoteName.trim() || undefined, context }),
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok && data.success !== false) {
@@ -187,20 +322,13 @@ const ReflectionsTab = ({ mode = 'full', onClose, context, onSendToSoma }) => {
         setQuickNoteName('');
         localStorage.removeItem('soma_draft_text');
         localStorage.removeItem('soma_draft_name');
-        if (mode === 'quick-note-only') {
-          onClose();
-        } else {
-          setIsQuickNoteOpen(false);
-          refreshNotes();
-        }
+        if (mode === 'quick-note-only') { onClose(); }
+        else { setIsQuickNoteOpen(false); refreshNotes(); }
       } else {
         setQuickNoteError(data.error || `Server error ${res.status}`);
       }
-    } catch {
-      setQuickNoteError('Could not reach server');
-    } finally {
-      setQuickNoteSaving(false);
-    }
+    } catch { setQuickNoteError('Could not reach server'); }
+    finally { setQuickNoteSaving(false); }
   };
 
   const handleFileUpload = async (e) => {
@@ -230,15 +358,8 @@ const ReflectionsTab = ({ mode = 'full', onClose, context, onSendToSoma }) => {
     }
   };
 
-  const startEdit = () => {
-    setEditContent(noteContent);
-    setIsEditing(true);
-  };
-
-  const cancelEdit = () => {
-    setIsEditing(false);
-    setEditContent('');
-  };
+  const startEdit = () => { setEditContent(noteContent); setIsEditing(true); };
+  const cancelEdit = () => { setIsEditing(false); setEditContent(''); };
 
   const handleSaveEdit = async () => {
     if (!selectedNote) return;
@@ -247,14 +368,10 @@ const ReflectionsTab = ({ mode = 'full', onClose, context, onSendToSoma }) => {
       const res = await fetch('/api/reflections/note', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name: selectedNote.name, content: editContent })
+        body: JSON.stringify({ name: selectedNote.name, content: editContent }),
       });
       const data = await res.json();
-      if (data.success) {
-        setNoteContent(editContent);
-        setIsEditing(false);
-        setEditContent('');
-      }
+      if (data.success) { setNoteContent(editContent); setIsEditing(false); setEditContent(''); }
     } catch (e) { console.error('Save failed', e); }
     finally { setSaving(false); }
   };
@@ -275,6 +392,7 @@ const ReflectionsTab = ({ mode = 'full', onClose, context, onSendToSoma }) => {
   const startBrainstorm = () => {
     setIsBrainstorming(true);
     setMuseResidue(null);
+    setHygieneView(false);
     setSessionLog([{ role: 'soma', text: "The Muse is awake. What are we breaking open today?", timestamp: Date.now() }]);
   };
 
@@ -287,12 +405,7 @@ const ReflectionsTab = ({ mode = 'full', onClose, context, onSendToSoma }) => {
       const res = await fetch('/api/muse/persona', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          prompt: inputMessage,
-          mode: 'full',
-          history: sessionLog.slice(-8),
-          domain: 'reflections-brainstorm'
-        })
+        body: JSON.stringify({ prompt: inputMessage, mode: 'full', history: sessionLog.slice(-8), domain: 'reflections-brainstorm' }),
       });
       const data = await res.json();
       if (data.ok || data.success) {
@@ -301,16 +414,13 @@ const ReflectionsTab = ({ mode = 'full', onClose, context, onSendToSoma }) => {
           spark: data.structured?.spark || '',
           variant: data.structured?.variant || '',
           critique: data.structured?.critique || '',
-          crystallize: data.structured?.crystallize || ''
+          crystallize: data.structured?.crystallize || '',
         });
       }
     } catch (e) { console.error('Brainstorm message failed', e); }
   };
 
-  const finalizeBrainstorm = () => {
-    setCrystallizeName('');
-    setCrystallizeModalOpen(true);
-  };
+  const finalizeBrainstorm = () => { setCrystallizeName(''); setCrystallizeModalOpen(true); };
 
   const doFinalizeBrainstorm = async () => {
     if (!crystallizeName.trim()) return;
@@ -320,13 +430,7 @@ const ReflectionsTab = ({ mode = 'full', onClose, context, onSendToSoma }) => {
       const res = await fetch('/api/reflections/distill', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          chatLog,
-          title: crystallizeName,
-          mode: 'muse',
-          history: sessionLog,
-          metadata: { tags: ['muse-session', 'aurora'] }
-        })
+        body: JSON.stringify({ chatLog, title: crystallizeName, mode: 'muse', history: sessionLog, metadata: { tags: ['muse-session', 'aurora'] } }),
       });
       const data = await res.json();
       if (data.success || data.ok) {
@@ -336,9 +440,7 @@ const ReflectionsTab = ({ mode = 'full', onClose, context, onSendToSoma }) => {
         setSessionLog([]);
         setMuseResidue(null);
         await refreshNotes();
-        if (data.filename) {
-          setSelectedNote({ name: data.filename });
-        }
+        if (data.filename) setSelectedNote({ name: data.filename });
       }
     } catch (e) { console.error('Crystallization failed', e); }
     finally { setCrystallizing(false); }
@@ -380,82 +482,65 @@ const ReflectionsTab = ({ mode = 'full', onClose, context, onSendToSoma }) => {
     let citations = [];
 
     if (selectedNote && noteContent) {
-      // Deep context: currently open note
       noteCtx = `\n\nCurrently viewing: "${selectedNote.name.replace('.md', '')}":\n${noteContent.replace(/^---[\s\S]*?---\n?/, '').trim().slice(0, 2500)}`;
       citations.push(selectedNote.name);
     } else {
-      const semantic = await fetch(`/api/reflections/search?q=${encodeURIComponent(question)}`)
-        .then(r => r.json())
-        .catch(() => null);
+      const semantic = await fetch(`/api/reflections/search?q=${encodeURIComponent(question)}`).then(r => r.json()).catch(() => null);
       const semanticMatches = semantic?.success ? semantic.results || [] : [];
       const qWords = new Set((question.toLowerCase().match(/\b\w{4,}\b/g) || []));
-      const filenameMatches = notes
-        .filter(n => [...qWords].some(w => n.name.toLowerCase().includes(w)))
-        .map(n => ({ name: n.name }));
+      const filenameMatches = notes.filter(n => [...qWords].some(w => n.name.toLowerCase().includes(w))).map(n => ({ name: n.name }));
       const seen = new Set();
-      const matches = [...semanticMatches, ...filenameMatches]
-        .filter(item => item?.name && !seen.has(item.name) && seen.add(item.name))
-        .slice(0, 4);
+      const matches = [...semanticMatches, ...filenameMatches].filter(item => item?.name && !seen.has(item.name) && seen.add(item.name)).slice(0, 4);
       if (matches.length > 0) {
-        const fetched = await Promise.all(
-          matches.map(n =>
-            fetch(`/api/reflections/note/${encodeURIComponent(n.name)}`)
-              .then(r => r.json())
-              .then(d => d.success
-                ? `[${n.name.replace('.md', '')}]\n${(d.content || '').replace(/^---[\s\S]*?---\n?/, '').trim().slice(0, 800)}`
-                : null)
-              .catch(() => null)
-          )
-        );
+        const fetched = await Promise.all(matches.map(n =>
+          fetch(`/api/reflections/note/${encodeURIComponent(n.name)}`).then(r => r.json())
+            .then(d => d.success ? `[${n.name.replace('.md', '')}]\n${(d.content || '').replace(/^---[\s\S]*?---\n?/, '').trim().slice(0, 800)}` : null)
+            .catch(() => null)
+        ));
         const valid = fetched.filter(Boolean);
         if (valid.length) noteCtx = `\n\nRelevant notes found:\n${valid.join('\n\n')}`;
-        citations = matches.map(match => match.name);
+        citations = matches.map(m => m.name);
       }
     }
 
     const query = `[REFLECTIONS ARCHIVIST]\nThe user has ${notes.length} notes in their reflection vault: ${noteList}.${noteCtx}\n\nAnswer from the supplied notes when possible. Cite note filenames used under a short "Sources:" line.\n\nQuestion: ${question}`;
-
     try {
-      const res = await fetch('/api/soma/reason', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query, context: { mode: 'fast', brain: 'LOGOS' } })
-      });
+      const res = await fetch('/api/soma/reason', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ query, context: { mode: 'fast', brain: 'LOGOS' } }) });
       const data = await res.json();
       let reply = data.response?.text || data.text || 'No response from Archivist.';
-      if (citations.length && !/sources:/i.test(reply)) {
-        reply += `\n\nSources: ${citations.slice(0, 4).join(', ')}`;
-      }
+      if (citations.length && !/sources:/i.test(reply)) reply += `\n\nSources: ${citations.slice(0, 4).join(', ')}`;
       setArchivistLog(prev => [...prev, { role: 'soma', text: reply }]);
     } catch {
       setArchivistLog(prev => [...prev, { role: 'soma', text: 'Archivist unreachable. Check backend connection.' }]);
-    } finally {
-      setArchivistThinking(false);
-    }
+    } finally { setArchivistThinking(false); }
   };
 
-  const isAway = selectedNote !== null || isBrainstorming;
+  // ── Derived ────────────────────────────────────────────────────────────────
+  const currentStatus = selectedNote
+    ? (notes.find(n => n.name === selectedNote.name)?.status || selectedNote.status || 'inbox')
+    : null;
 
-  // ── QUICK NOTE MODE ──────────────────────────────────────────────────────────
+  const visibleNotes = notes.filter(n => {
+    const matchesStatus = statusFilter === 'all' || n.status === statusFilter;
+    const matchesSearch = !searchQuery || n.name.toLowerCase().includes(searchQuery.toLowerCase());
+    return matchesStatus && matchesSearch;
+  });
+
+  // ── QUICK NOTE MODE ────────────────────────────────────────────────────────
   if (mode === 'quick-note-only') {
     return (
       <div className="h-full w-full bg-[#0d0d0f]/95 backdrop-blur-3xl border-l border-white/10 shadow-2xl flex flex-col">
         <div className="px-6 py-4 flex items-center justify-between border-b border-white/5">
           <div className="flex items-center gap-3 flex-1 min-w-0">
             <Edit3 className="w-4 h-4 text-purple-400 flex-shrink-0" />
-            <input
-              value={quickNoteName}
-              onChange={e => setQuickNoteName(e.target.value)}
-              placeholder="Note title..."
-              className="flex-1 bg-transparent text-white font-semibold text-sm outline-none placeholder-zinc-600 min-w-0"
-            />
+            <input value={quickNoteName} onChange={e => setQuickNoteName(e.target.value)} placeholder="Note title..."
+              className="flex-1 bg-transparent text-white font-semibold text-sm outline-none placeholder-zinc-600 min-w-0" />
           </div>
           <button onClick={onClose} className="p-1.5 hover:bg-white/5 rounded-lg text-zinc-500 hover:text-white transition-all flex-shrink-0">
             <X className="w-4 h-4" />
           </button>
         </div>
         <div className="flex-1 p-5 flex flex-col gap-3 min-h-0">
-          {/* Templates */}
           <div className="flex gap-2">
             {TEMPLATES.map(t => (
               <button key={t.label} onClick={() => { setQuickNoteName(t.title); setQuickNoteText(t.body); }}
@@ -465,37 +550,22 @@ const ReflectionsTab = ({ mode = 'full', onClose, context, onSendToSoma }) => {
               </button>
             ))}
           </div>
-
-          <textarea
-            autoFocus
-            value={quickNoteText}
+          <textarea autoFocus value={quickNoteText}
             onChange={(e) => { setQuickNoteText(e.target.value); setQuickNoteError(''); }}
             onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) handleSaveQuickNote(); }}
             placeholder="Capture a thought..."
-            className="flex-1 bg-white/5 border border-white/5 rounded-xl p-4 text-sm text-zinc-200 outline-none focus:border-purple-500/30 transition-all resize-none leading-relaxed"
-          />
+            className="flex-1 bg-white/5 border border-white/5 rounded-xl p-4 text-sm text-zinc-200 outline-none focus:border-purple-500/30 transition-all resize-none leading-relaxed" />
           {quickNoteError && <p className="text-xs text-red-400 font-mono text-center">{quickNoteError}</p>}
           {context && <p className="text-[10px] text-zinc-700 font-mono text-center">context: {context}</p>}
-
           <div className="flex gap-2">
-            <button
-              onClick={handleSaveQuickNote}
-              disabled={quickNoteSaving || !quickNoteText.trim()}
-              className="flex-1 py-3 bg-zinc-800 hover:bg-zinc-700 disabled:opacity-40 disabled:cursor-not-allowed text-zinc-200 rounded-xl font-semibold text-sm transition-all border border-white/5 hover:border-purple-500/30 active:scale-[0.98] flex items-center justify-center gap-2"
-            >
-              {quickNoteSaving ? (
-                <><span className="w-3.5 h-3.5 border-2 border-zinc-500 border-t-purple-400 rounded-full animate-spin" /> Saving...</>
-              ) : (
-                <><Save className="w-3.5 h-3.5" /> Save</>
-              )}
+            <button onClick={handleSaveQuickNote} disabled={quickNoteSaving || !quickNoteText.trim()}
+              className="flex-1 py-3 bg-zinc-800 hover:bg-zinc-700 disabled:opacity-40 disabled:cursor-not-allowed text-zinc-200 rounded-xl font-semibold text-sm transition-all border border-white/5 hover:border-purple-500/30 active:scale-[0.98] flex items-center justify-center gap-2">
+              {quickNoteSaving ? <><span className="w-3.5 h-3.5 border-2 border-zinc-500 border-t-purple-400 rounded-full animate-spin" /> Saving...</> : <><Save className="w-3.5 h-3.5" /> Save</>}
             </button>
             {onSendToSoma && (
-              <button
-                onClick={() => { if (quickNoteText.trim()) { onSendToSoma(quickNoteText); handleSaveQuickNote(); } }}
+              <button onClick={() => { if (quickNoteText.trim()) { onSendToSoma(quickNoteText); handleSaveQuickNote(); } }}
                 disabled={quickNoteSaving || !quickNoteText.trim()}
-                title="Save & ask SOMA"
-                className="px-4 py-3 bg-fuchsia-600/20 hover:bg-fuchsia-600/30 disabled:opacity-40 disabled:cursor-not-allowed text-fuchsia-400 rounded-xl font-semibold text-sm transition-all border border-fuchsia-500/20 hover:border-fuchsia-500/40 active:scale-[0.98] flex items-center gap-2"
-              >
+                className="px-4 py-3 bg-fuchsia-600/20 hover:bg-fuchsia-600/30 disabled:opacity-40 text-fuchsia-400 rounded-xl font-semibold text-sm transition-all border border-fuchsia-500/20 hover:border-fuchsia-500/40 active:scale-[0.98] flex items-center gap-2">
                 <Zap className="w-3.5 h-3.5" /> SOMA
               </button>
             )}
@@ -505,120 +575,98 @@ const ReflectionsTab = ({ mode = 'full', onClose, context, onSendToSoma }) => {
     );
   }
 
-  // ── FULL MODE ────────────────────────────────────────────────────────────────
+  // ── FULL MODE ──────────────────────────────────────────────────────────────
   return (
     <div className="flex h-full w-full bg-[#0a0a0c] text-zinc-300 font-sans overflow-hidden rounded-xl border border-white/5 relative">
 
       {/* ── Sidebar ── */}
-      <div className="w-80 border-r border-white/5 bg-[#0d0d0f] flex flex-col">
-        <div className="p-6 border-b border-white/5">
-          <div className="flex flex-col gap-4 mb-4">
-            <h2 className="text-xl font-bold text-white tracking-tight flex items-center">
-              <Sparkles className="w-5 h-5 mr-2 text-purple-400" /> Reflections
+      <div className="w-72 border-r border-white/5 bg-[#0d0d0f] flex flex-col flex-shrink-0">
+        <div className="p-4 border-b border-white/5 space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-base font-bold text-white tracking-tight flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-purple-400" /> Reflections
             </h2>
-            <div className="reflections-action-row">
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                className={`reflections-glow-action reflections-glow-action-upload ${
-                  uploadStatus === 'uploading' ? 'reflections-glow-action-cyan' :
-                  uploadStatus === 'done' ? 'reflections-glow-action-green' :
-                  uploadStatus === 'error' ? 'reflections-glow-action-red' :
-                  ''
-                }`}
-                title="Upload Document"
-                aria-label="Upload Document"
-              >
-                <span className="reflections-glow-action-gradient-container">
-                  <span className="reflections-glow-action-gradient" />
-                </span>
-                <span className="reflections-glow-action-label">
-                  <Upload className="h-5 w-5" />
-                  <span>{uploadStatus === 'uploading' ? 'Uploading' : uploadStatus === 'done' ? 'Done' : uploadStatus === 'error' ? 'Error' : 'Upload'}</span>
-                </span>
+            <div className="flex gap-1">
+              <button onClick={handleDailyNote} title="Today's note"
+                className="p-1.5 hover:bg-white/8 rounded-lg text-zinc-500 hover:text-amber-400 transition-all">
+                <Calendar className="w-3.5 h-3.5" />
               </button>
-
-              {isBrainstorming || selectedNote ? (
-                <button
-                  type="button"
-                  onClick={goHome}
-                  className="reflections-glow-action reflections-glow-action-home"
-                  title="Home"
-                  aria-label="Home"
-                >
-                  <span className="reflections-glow-action-gradient-container">
-                    <span className="reflections-glow-action-gradient" />
-                  </span>
-                  <span className="reflections-glow-action-label">
-                    <Home className="h-5 w-5" />
-                    <span>Home</span>
-                  </span>
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={startBrainstorm}
-                  className="reflections-glow-action reflections-glow-action-muse"
-                  title="Muse"
-                  aria-label="Muse"
-                >
-                  <span className="reflections-glow-action-gradient-container">
-                    <span className="reflections-glow-action-gradient" />
-                  </span>
-                  <span className="reflections-glow-action-label">
-                    <Lightbulb className="h-5 w-5" />
-                    <span>Muse</span>
-                  </span>
-                </button>
-              )}
-
-              <button
-                type="button"
-                onClick={() => setIsQuickNoteOpen(true)}
-                className="reflections-glow-action reflections-glow-action-new"
-                title="New Note"
-                aria-label="New Note"
-              >
-                <span className="reflections-glow-action-gradient-container">
-                  <span className="reflections-glow-action-gradient" />
-                </span>
-                <span className="reflections-glow-action-label">
-                  <Plus className="h-5 w-5" />
-                  <span>New</span>
-                </span>
+              <button onClick={handleOpenHygiene} title="Vault hygiene"
+                className={`p-1.5 hover:bg-white/8 rounded-lg transition-all ${hygieneView ? 'text-orange-400 bg-orange-500/10' : 'text-zinc-500 hover:text-orange-400'}`}>
+                <Shield className="w-3.5 h-3.5" />
               </button>
             </div>
-            <input ref={fileInputRef} type="file"
-                accept=".pdf,.docx,.txt,.md,.json,.csv,.js,.ts,.py"
-                onChange={handleFileUpload} className="hidden" />
-            {uploadError && uploadStatus === 'error' && (
-              <p className="rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-[11px] leading-relaxed text-red-300">
-                {uploadError}
-              </p>
-            )}
           </div>
+
+          {/* Action row */}
+          <div className="reflections-action-row">
+            <button type="button" onClick={() => fileInputRef.current?.click()}
+              className={`reflections-glow-action reflections-glow-action-upload ${
+                uploadStatus === 'uploading' ? 'reflections-glow-action-cyan' :
+                uploadStatus === 'done' ? 'reflections-glow-action-green' :
+                uploadStatus === 'error' ? 'reflections-glow-action-red' : ''
+              }`} title="Upload Document">
+              <span className="reflections-glow-action-gradient-container"><span className="reflections-glow-action-gradient" /></span>
+              <span className="reflections-glow-action-label">
+                <Upload className="h-4 w-4" />
+                <span>{uploadStatus === 'uploading' ? 'Uploading' : uploadStatus === 'done' ? 'Done' : uploadStatus === 'error' ? 'Error' : 'Upload'}</span>
+              </span>
+            </button>
+
+            {isBrainstorming || selectedNote || hygieneView ? (
+              <button type="button" onClick={goHome} className="reflections-glow-action reflections-glow-action-home" title="Home">
+                <span className="reflections-glow-action-gradient-container"><span className="reflections-glow-action-gradient" /></span>
+                <span className="reflections-glow-action-label"><Home className="h-4 w-4" /><span>Home</span></span>
+              </button>
+            ) : (
+              <button type="button" onClick={startBrainstorm} className="reflections-glow-action reflections-glow-action-muse" title="Muse">
+                <span className="reflections-glow-action-gradient-container"><span className="reflections-glow-action-gradient" /></span>
+                <span className="reflections-glow-action-label"><Lightbulb className="h-4 w-4" /><span>Muse</span></span>
+              </button>
+            )}
+
+            <button type="button" onClick={() => setIsQuickNoteOpen(true)} className="reflections-glow-action reflections-glow-action-new" title="New Note">
+              <span className="reflections-glow-action-gradient-container"><span className="reflections-glow-action-gradient" /></span>
+              <span className="reflections-glow-action-label"><Plus className="h-4 w-4" /><span>New</span></span>
+            </button>
+          </div>
+
+          <input ref={fileInputRef} type="file" accept=".pdf,.docx,.txt,.md,.json,.csv,.js,.ts,.py" onChange={handleFileUpload} className="hidden" />
+          {uploadError && uploadStatus === 'error' && (
+            <p className="rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-[11px] leading-relaxed text-red-300">{uploadError}</p>
+          )}
+
+          {/* Search */}
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-zinc-500" />
             <input type="text" placeholder="Search notes..." value={searchQuery}
               onChange={(e) => handleSearchChange(e.target.value)}
-              className="w-full bg-white/5 border border-white/5 rounded-xl py-2 pl-10 pr-4 text-xs focus:ring-1 focus:ring-purple-500/50 outline-none transition-all" />
+              className="w-full bg-white/5 border border-white/5 rounded-xl py-2 pl-9 pr-4 text-xs focus:ring-1 focus:ring-purple-500/50 outline-none transition-all" />
+          </div>
+
+          {/* Status filter chips */}
+          <div className="flex flex-wrap gap-1">
+            <button onClick={() => setStatusFilter('all')}
+              className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-widest transition-all ${statusFilter === 'all' ? 'bg-white/10 text-white' : 'text-zinc-600 hover:text-zinc-400'}`}>
+              All
+            </button>
+            {STATUSES.map(s => (
+              <button key={s.value} onClick={() => setStatusFilter(s.value)}
+                className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-widest transition-all ${statusFilter === s.value ? `${s.bg} ${s.color} border ${s.border}` : 'text-zinc-600 hover:text-zinc-400'}`}>
+                {s.label}
+              </button>
+            ))}
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4 space-y-1">
+        {/* Note list */}
+        <div className="flex-1 overflow-y-auto p-3 space-y-0.5">
           {searchResults !== null ? (
-            // Content search results
             <>
               <p className="text-[10px] text-zinc-600 font-mono px-2 pb-2">{searchResults.length} content match{searchResults.length !== 1 ? 'es' : ''}</p>
               {searchResults.map(result => (
-                <div key={result.name}
-                  onClick={() => { setSelectedNote({ name: result.name }); setSearchResults(null); setSearchQuery(''); }}
-                  className={`p-3 rounded-xl border cursor-pointer transition-all ${
-                    selectedNote?.name === result.name
-                      ? 'bg-purple-500/10 border-purple-500/30 text-white'
-                      : 'border-transparent hover:bg-white/5 text-zinc-500 hover:text-zinc-300'
-                  }`}
-                >
+                <div key={result.name} onClick={() => { setSelectedNote({ name: result.name }); setSearchResults(null); setSearchQuery(''); }}
+                  className={`p-2.5 rounded-xl border cursor-pointer transition-all ${selectedNote?.name === result.name ? 'bg-purple-500/10 border-purple-500/30 text-white' : 'border-transparent hover:bg-white/5 text-zinc-500 hover:text-zinc-300'}`}>
                   <div className="flex items-start gap-2">
                     <Eye className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
                     <div className="min-w-0">
@@ -631,31 +679,28 @@ const ReflectionsTab = ({ mode = 'full', onClose, context, onSendToSoma }) => {
               {searchResults.length === 0 && <p className="text-xs text-zinc-600 text-center py-4 font-mono">No matches found</p>}
             </>
           ) : (
-            // Normal note list
             <>
-              {notes.filter(n => !searchQuery || n.name.toLowerCase().includes(searchQuery.toLowerCase())).map(note => (
-                <div key={note.name} onClick={() => setSelectedNote(note)}
-                  className={`p-3 rounded-xl border cursor-pointer transition-all flex items-center justify-between group ${
-                    selectedNote?.name === note.name
-                      ? 'bg-purple-500/10 border-purple-500/30 text-white'
-                      : 'border-transparent hover:bg-white/5 text-zinc-500 hover:text-zinc-300'
-                  }`}
-                >
-                  <div className="flex items-center gap-3 min-w-0">
-                    <Eye className="w-4 h-4 flex-shrink-0" />
-                    <span className="text-xs font-medium truncate">{note.name.replace('.md', '')}</span>
+              {visibleNotes.map(note => {
+                const sm = statusMeta[note.status] || statusMeta.inbox;
+                return (
+                  <div key={note.name} onClick={() => setSelectedNote(note)}
+                    className={`p-2.5 rounded-xl border cursor-pointer transition-all flex items-center justify-between group ${selectedNote?.name === note.name ? 'bg-purple-500/10 border-purple-500/30 text-white' : 'border-transparent hover:bg-white/5 text-zinc-500 hover:text-zinc-300'}`}>
+                    <div className="flex items-center gap-2 min-w-0 flex-1">
+                      <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${sm.color.replace('text-', 'bg-')}`} />
+                      <span className="text-xs font-medium truncate">{note.name.replace('.md', '')}</span>
+                    </div>
+                    <button onClick={(e) => handleDeleteNote(e, note.name)}
+                      className="p-1 opacity-0 group-hover:opacity-100 hover:bg-red-500/20 text-zinc-500 hover:text-red-400 rounded-lg transition-all flex-shrink-0">
+                      <Trash2 className="w-3 h-3" />
+                    </button>
                   </div>
-                  <button 
-                    onClick={(e) => handleDeleteNote(e, note.name)}
-                    className="p-1.5 opacity-0 group-hover:opacity-100 hover:bg-red-500/20 text-zinc-500 hover:text-red-400 rounded-lg transition-all flex-shrink-0"
-                    title="Delete Note"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              ))}
+                );
+              })}
               {notes.length === 0 && (
                 <p className="text-xs text-zinc-600 text-center pt-8 font-mono">No reflections yet.<br />Press + to add one.</p>
+              )}
+              {notes.length > 0 && visibleNotes.length === 0 && (
+                <p className="text-xs text-zinc-600 text-center pt-6 font-mono">No {statusFilter} notes.</p>
               )}
             </>
           )}
@@ -663,74 +708,60 @@ const ReflectionsTab = ({ mode = 'full', onClose, context, onSendToSoma }) => {
       </div>
 
       {/* ── Main Area ── */}
-      <div className="flex-1 flex flex-col relative overflow-hidden">
+      <div className="flex-1 flex flex-col relative overflow-hidden min-w-0">
         <AnimatePresence mode="wait">
 
           {/* MUSE FLOW */}
           {isBrainstorming && (
             <motion.div key="brainstorm" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
               className="flex-1 flex flex-col bg-[#050506] overflow-hidden">
-              <div className="p-6 border-b border-white/5 flex items-center justify-between bg-orange-500/5">
+              <div className="p-5 border-b border-white/5 flex items-center justify-between bg-orange-500/5">
                 <div className="flex items-center gap-4">
-                  <div className="p-3 rounded-xl bg-orange-500/20 text-orange-400">
-                    <Zap className="w-5 h-5 animate-pulse" />
-                  </div>
+                  <div className="p-2.5 rounded-xl bg-orange-500/20 text-orange-400"><Zap className="w-4 h-4 animate-pulse" /></div>
                   <div>
-                    <h2 className="text-lg font-black text-white tracking-tighter uppercase italic">MUSE FLOW</h2>
+                    <h2 className="text-base font-black text-white tracking-tighter uppercase italic">MUSE FLOW</h2>
                     <p className="text-[10px] text-orange-400/60 font-bold tracking-[0.2em]">Creative Synthesis — Muse Persona Active</p>
                   </div>
                 </div>
                 <button onClick={finalizeBrainstorm}
-                  className="px-5 py-2 bg-orange-500 hover:bg-orange-400 text-black font-black text-xs rounded-xl transition-all shadow-lg shadow-orange-500/20">
+                  className="px-4 py-2 bg-orange-500 hover:bg-orange-400 text-black font-black text-xs rounded-xl transition-all shadow-lg shadow-orange-500/20">
                   CRYSTALLIZE
                 </button>
               </div>
-
-              <div className="flex-1 overflow-y-auto p-8 space-y-6">
+              <div className="flex-1 overflow-y-auto p-6 space-y-5">
                 {museResidue && (
-                  <div className="rounded-2xl border border-orange-500/20 bg-orange-500/[0.06] p-5">
-                    <div className="mb-4 flex items-center justify-between gap-3">
+                  <div className="rounded-2xl border border-orange-500/20 bg-orange-500/[0.06] p-4">
+                    <div className="mb-3 flex items-center justify-between gap-3">
                       <div>
                         <p className="text-[10px] font-black uppercase tracking-[0.24em] text-orange-400/70">Session Residue</p>
                         <h3 className="text-sm font-bold text-white">What Muse will preserve when crystallized</h3>
                       </div>
-                      <button
-                        onClick={finalizeBrainstorm}
-                        className="rounded-lg border border-orange-500/20 bg-orange-500/10 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-orange-300 hover:bg-orange-500/20"
-                      >
+                      <button onClick={finalizeBrainstorm}
+                        className="rounded-lg border border-orange-500/20 bg-orange-500/10 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-orange-300 hover:bg-orange-500/20">
                         Save Artifact
                       </button>
                     </div>
                     <div className="grid gap-3 lg:grid-cols-2">
-                      {[
-                        ['Spark', museResidue.spark],
-                        ['Variant', museResidue.variant],
-                        ['Critique', museResidue.critique],
-                        ['Crystallize', museResidue.crystallize]
-                      ].filter(([, value]) => value).map(([label, value]) => (
-                        <div key={label} className="rounded-xl border border-white/5 bg-black/25 p-3">
-                          <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-orange-300">{label}</p>
-                          <p className="line-clamp-4 text-xs leading-relaxed text-zinc-300">{value}</p>
-                        </div>
-                      ))}
+                      {[['Spark', museResidue.spark], ['Variant', museResidue.variant], ['Critique', museResidue.critique], ['Crystallize', museResidue.crystallize]]
+                        .filter(([, value]) => value).map(([label, value]) => (
+                          <div key={label} className="rounded-xl border border-white/5 bg-black/25 p-3">
+                            <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-orange-300">{label}</p>
+                            <p className="line-clamp-4 text-xs leading-relaxed text-zinc-300">{value}</p>
+                          </div>
+                        ))}
                     </div>
                   </div>
                 )}
                 {sessionLog.map((m, i) => (
                   <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                    <div className={`max-w-2xl p-5 rounded-2xl border ${
-                      m.role === 'user'
-                        ? 'bg-white/5 border-white/10 text-zinc-200'
-                        : 'bg-orange-500/10 border-orange-500/20 text-orange-100'
-                    }`}>
+                    <div className={`max-w-2xl p-4 rounded-2xl border ${m.role === 'user' ? 'bg-white/5 border-white/10 text-zinc-200' : 'bg-orange-500/10 border-orange-500/20 text-orange-100'}`}>
                       <p className="text-sm leading-relaxed whitespace-pre-wrap">{m.text}</p>
                     </div>
                   </div>
                 ))}
                 <div ref={museEndRef} />
               </div>
-
-              <div className="p-6 bg-black/40 border-t border-white/5">
+              <div className="p-5 bg-black/40 border-t border-white/5">
                 <div className="flex gap-3">
                   <input value={inputMessage} onChange={(e) => setInputMessage(e.target.value)}
                     onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
@@ -738,25 +769,163 @@ const ReflectionsTab = ({ mode = 'full', onClose, context, onSendToSoma }) => {
                     className="flex-1 bg-white/5 border border-white/10 rounded-2xl py-3 px-5 text-sm text-white outline-none focus:border-orange-500/50 transition-all" />
                   <button onClick={handleSendMessage}
                     className="p-3 bg-orange-500/10 hover:bg-orange-500/20 text-orange-400 rounded-2xl border border-orange-500/20 transition-all">
-                    <Send className="w-5 h-5" />
+                    <Send className="w-4 h-4" />
                   </button>
                 </div>
               </div>
             </motion.div>
           )}
 
+          {/* HYGIENE VIEW */}
+          {hygieneView && !isBrainstorming && (
+            <motion.div key="hygiene" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className="flex-1 overflow-y-auto p-6 space-y-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-mono tracking-widest uppercase text-orange-400">Vault Hygiene</p>
+                  <p className="text-xs text-zinc-600 mt-0.5">Orphans, broken links, stale notes</p>
+                </div>
+                <button onClick={loadHygiene} disabled={hygieneLoading}
+                  className="flex items-center gap-2 px-3 py-1.5 bg-orange-500/10 hover:bg-orange-500/20 disabled:opacity-40 text-orange-400 rounded-lg border border-orange-500/20 text-xs font-bold transition-all">
+                  <RefreshCw className={`w-3 h-3 ${hygieneLoading ? 'animate-spin' : ''}`} />
+                  {hygieneLoading ? 'Scanning...' : 'Rescan'}
+                </button>
+              </div>
+
+              {hygieneLoading && (
+                <div className="flex flex-col items-center justify-center py-12 gap-3">
+                  <div className="w-6 h-6 border-2 border-orange-500/50 border-t-orange-500 rounded-full animate-spin" />
+                  <p className="text-xs text-zinc-500 font-mono">Analyzing vault structure...</p>
+                </div>
+              )}
+
+              {hygieneData && !hygieneLoading && (
+                <>
+                  {/* Orphan notes */}
+                  <div>
+                    <div className="flex items-center gap-2 mb-3">
+                      <div className="w-1.5 h-1.5 bg-zinc-500 rounded-full" />
+                      <h3 className="text-xs font-bold uppercase tracking-widest text-zinc-400">
+                        Orphan Notes <span className="text-zinc-600">({hygieneData.orphans.length})</span>
+                      </h3>
+                    </div>
+                    {hygieneData.orphans.length === 0
+                      ? <p className="text-xs text-zinc-600 font-mono pl-3">None — every note is connected.</p>
+                      : hygieneData.orphans.map(n => (
+                        <div key={n.name} onClick={() => { setSelectedNote({ name: n.name }); setHygieneView(false); }}
+                          className="flex items-center justify-between p-3 mb-1 rounded-xl bg-white/[0.02] border border-white/5 hover:border-white/10 cursor-pointer transition-all">
+                          <div>
+                            <p className="text-xs font-semibold text-zinc-300">{n.title}</p>
+                            <p className="text-[10px] text-zinc-600">{n.wordCount} words · no links in or out</p>
+                          </div>
+                          <ArrowUpRight className="w-3.5 h-3.5 text-zinc-600 flex-shrink-0" />
+                        </div>
+                      ))
+                    }
+                  </div>
+
+                  {/* Broken links */}
+                  <div>
+                    <div className="flex items-center gap-2 mb-3">
+                      <div className="w-1.5 h-1.5 bg-red-400 rounded-full" />
+                      <h3 className="text-xs font-bold uppercase tracking-widest text-red-400">
+                        Broken Links <span className="text-red-600">({hygieneData.brokenLinks.length})</span>
+                      </h3>
+                    </div>
+                    {hygieneData.brokenLinks.length === 0
+                      ? <p className="text-xs text-zinc-600 font-mono pl-3">None — all links resolve.</p>
+                      : hygieneData.brokenLinks.map((b, i) => (
+                        <div key={i} onClick={() => { setSelectedNote({ name: b.note }); setHygieneView(false); }}
+                          className="flex items-center justify-between p-3 mb-1 rounded-xl bg-red-500/[0.04] border border-red-500/15 hover:border-red-500/25 cursor-pointer transition-all">
+                          <div>
+                            <p className="text-xs font-semibold text-zinc-300">{b.note.replace('.md', '')}</p>
+                            <p className="text-[10px] text-red-400/70">[[{b.link}]] → not found</p>
+                          </div>
+                          <ArrowUpRight className="w-3.5 h-3.5 text-red-600 flex-shrink-0" />
+                        </div>
+                      ))
+                    }
+                  </div>
+
+                  {/* Stale raw notes */}
+                  <div>
+                    <div className="flex items-center gap-2 mb-3">
+                      <div className="w-1.5 h-1.5 bg-amber-400 rounded-full" />
+                      <h3 className="text-xs font-bold uppercase tracking-widest text-amber-400">
+                        Stale Raw Notes <span className="text-amber-600">({hygieneData.staleRaw.length})</span>
+                      </h3>
+                      <span className="text-[10px] text-zinc-600">(raw/inbox, older than 7 days)</span>
+                    </div>
+                    {hygieneData.staleRaw.length === 0
+                      ? <p className="text-xs text-zinc-600 font-mono pl-3">None — inbox is clear.</p>
+                      : hygieneData.staleRaw.map(n => (
+                        <div key={n.name} onClick={() => { setSelectedNote({ name: n.name }); setHygieneView(false); }}
+                          className="flex items-center justify-between p-3 mb-1 rounded-xl bg-amber-500/[0.04] border border-amber-500/15 hover:border-amber-500/25 cursor-pointer transition-all group">
+                          <div>
+                            <p className="text-xs font-semibold text-zinc-300">{n.title}</p>
+                            <p className="text-[10px] text-amber-400/70">
+                              {n.status} · created {n.created ? new Date(n.created).toLocaleDateString() : 'unknown'}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-all">
+                            <button onClick={e => { e.stopPropagation(); handleStatusChange('refined'); }}
+                              className="px-2 py-1 bg-green-500/10 text-green-400 rounded-md text-[10px] font-bold border border-green-500/20 hover:bg-green-500/20">
+                              Refined
+                            </button>
+                            <button onClick={e => { e.stopPropagation(); handleStatusChange('archived'); }}
+                              className="px-2 py-1 bg-zinc-500/10 text-zinc-400 rounded-md text-[10px] font-bold border border-zinc-500/20 hover:bg-zinc-500/20">
+                              Archive
+                            </button>
+                          </div>
+                        </div>
+                      ))
+                    }
+                  </div>
+                </>
+              )}
+            </motion.div>
+          )}
+
           {/* HOME + NOTE VIEW */}
-          {!isBrainstorming && (
+          {!isBrainstorming && !hygieneView && (
             <motion.div key="main" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
               className="flex-1 flex flex-col overflow-hidden">
 
               <div className="flex-1 overflow-y-auto">
                 {selectedNote ? (
                   // ── NOTE VIEW ──
-                  <div className="p-8">
+                  <div className="p-6">
+                    {/* Header row */}
                     <div className="flex items-start justify-between mb-1 gap-4">
-                      <h1 className="text-2xl font-bold text-white tracking-tight leading-tight">{selectedNote.name.replace('.md', '')}</h1>
-                      <div className="flex gap-2 flex-shrink-0 mt-0.5">
+                      <h1 className="text-xl font-bold text-white tracking-tight leading-tight">{selectedNote.name.replace('.md', '')}</h1>
+                      <div className="flex gap-2 flex-shrink-0 mt-0.5 items-center">
+                        {/* Status editor */}
+                        <div className="relative">
+                          <button onClick={() => setStatusDropdownOpen(v => !v)} disabled={updatingStatus}
+                            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-[10px] font-bold uppercase tracking-widest transition-all hover:opacity-80 disabled:opacity-40"
+                            style={{ background: 'transparent' }}>
+                            {updatingStatus
+                              ? <span className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" />
+                              : <><Tag className="w-3 h-3" />{statusMeta[currentStatus]?.label || 'inbox'}<ChevronDown className="w-3 h-3" /></>
+                            }
+                          </button>
+                          <AnimatePresence>
+                            {statusDropdownOpen && (
+                              <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }}
+                                className="absolute right-0 top-full mt-1 w-36 bg-[#151518] border border-white/10 rounded-xl shadow-2xl z-50 overflow-hidden">
+                                {STATUSES.map(s => (
+                                  <button key={s.value} onClick={() => handleStatusChange(s.value)}
+                                    className={`w-full text-left px-3 py-2 text-[11px] font-bold flex items-center gap-2 hover:bg-white/5 transition-all ${currentStatus === s.value ? s.color : 'text-zinc-400'}`}>
+                                    <span className={`w-1.5 h-1.5 rounded-full ${s.color.replace('text-', 'bg-')}`} />
+                                    {s.label}
+                                  </button>
+                                ))}
+                              </motion.div>
+                            )}
+                          </AnimatePresence>
+                        </div>
+
+                        {/* Edit controls */}
                         {isEditing ? (
                           <>
                             <button onClick={cancelEdit}
@@ -776,117 +945,210 @@ const ReflectionsTab = ({ mode = 'full', onClose, context, onSendToSoma }) => {
                         )}
                       </div>
                     </div>
-                    <p className="text-zinc-600 text-xs font-mono mb-6">{selectedNote.name}</p>
+                    <p className="text-zinc-600 text-[10px] font-mono mb-4">{selectedNote.name}</p>
+
+                    {/* SOMA action buttons */}
+                    {!isEditing && !noteLoading && (
+                      <div className="flex flex-wrap gap-1.5 mb-5">
+                        {SOMA_ACTIONS.map(a => (
+                          <button key={a.id} onClick={() => handleSomaAction(a.id)}
+                            disabled={actionLoading}
+                            title={a.desc}
+                            className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-[10px] font-bold uppercase tracking-wide transition-all disabled:opacity-40 hover:bg-white/5 ${
+                              actionResult?.action === a.id ? `${a.color} bg-white/5 border-white/15` : 'text-zinc-600 border-white/5 hover:text-zinc-400'
+                            }`}>
+                            {actionLoading && actionResult?.action === a.id
+                              ? <span className="w-3 h-3 border border-current border-t-transparent rounded-full animate-spin" />
+                              : <a.Icon className={`w-3 h-3 ${actionResult?.action === a.id ? a.color : ''}`} />
+                            }
+                            {a.label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Action result panel */}
+                    <AnimatePresence>
+                      {actionResult && !actionResult.loading && actionResult.result && (
+                        <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
+                          className="mb-5 rounded-xl border border-purple-500/20 bg-purple-500/5 overflow-hidden">
+                          <div className="px-4 py-2.5 border-b border-purple-500/10 flex items-center justify-between">
+                            <p className="text-[10px] font-bold uppercase tracking-widest text-purple-400">
+                              {SOMA_ACTIONS.find(a => a.id === actionResult.action)?.label}
+                            </p>
+                            <button onClick={() => setActionResult(null)} className="text-zinc-600 hover:text-zinc-400">
+                              <X className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                          <div className="px-4 py-3">
+                            <p className="text-xs text-zinc-300 leading-relaxed whitespace-pre-wrap">{actionResult.result}</p>
+                          </div>
+                        </motion.div>
+                      )}
+                    </AnimatePresence>
+
                     {noteLoading ? (
                       <div className="flex items-center gap-3 text-zinc-600 text-sm">
                         <div className="w-4 h-4 border-2 border-purple-500 border-t-transparent rounded-full animate-spin" />
                         Loading...
                       </div>
                     ) : isEditing ? (
-                      <textarea
-                        value={editContent}
-                        onChange={(e) => setEditContent(e.target.value)}
+                      <textarea value={editContent} onChange={(e) => setEditContent(e.target.value)}
                         onKeyDown={(e) => { if (e.key === 's' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); handleSaveEdit(); } }}
-                        className="w-full h-[60vh] bg-white/3 border border-white/10 rounded-xl p-5 text-sm text-zinc-200 font-mono leading-relaxed outline-none focus:border-purple-500/40 resize-none transition-all"
-                        spellCheck={false}
-                      />
+                        className="w-full h-[55vh] bg-white/3 border border-white/10 rounded-xl p-5 text-sm text-zinc-200 font-mono leading-relaxed outline-none focus:border-purple-500/40 resize-none transition-all"
+                        spellCheck={false} />
                     ) : (
                       <>
-                        <MarkdownView content={noteContent} />
-                        <div className="mt-8 grid gap-4 xl:grid-cols-3">
-                          <div className="rounded-xl border border-white/5 bg-white/[0.03] p-4">
-                            <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-purple-400">Links</p>
-                            {noteIntelLoading ? (
-                              <p className="text-xs text-zinc-600">Reading note graph...</p>
-                            ) : (
-                              <div className="space-y-3">
-                                <div>
-                                  <p className="mb-1 text-[10px] uppercase tracking-widest text-zinc-600">Outgoing</p>
-                                  {(noteIntel?.links?.outgoing || []).length ? noteIntel.links.outgoing.map(link => (
-                                    <button key={`${link.label}-${link.name}`} onClick={() => link.name && setSelectedNote({ name: link.name })}
-                                      className={`mb-1 mr-1 rounded-md border px-2 py-1 text-[11px] ${link.resolved ? 'border-purple-500/20 bg-purple-500/10 text-purple-300' : 'border-amber-500/20 bg-amber-500/10 text-amber-300'}`}>
-                                      {link.title}
-                                    </button>
-                                  )) : <p className="text-xs text-zinc-600">No outgoing links.</p>}
-                                </div>
-                                <div>
-                                  <p className="mb-1 text-[10px] uppercase tracking-widest text-zinc-600">Backlinks</p>
-                                  {(noteIntel?.links?.backlinks || []).length ? noteIntel.links.backlinks.map(link => (
-                                    <button key={link.name} onClick={() => setSelectedNote({ name: link.name })}
-                                      className="mb-1 mr-1 rounded-md border border-cyan-500/20 bg-cyan-500/10 px-2 py-1 text-[11px] text-cyan-300">
-                                      {link.title}
-                                    </button>
-                                  )) : <p className="text-xs text-zinc-600">No backlinks yet.</p>}
-                                </div>
-                              </div>
-                            )}
-                          </div>
-
-                          <div className="rounded-xl border border-white/5 bg-white/[0.03] p-4">
-                            <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-cyan-400">Related</p>
-                            {(noteIntel?.related || []).length ? noteIntel.related.map(item => (
-                              <button key={item.name} onClick={() => setSelectedNote({ name: item.name })}
-                                className="mb-2 block w-full rounded-lg border border-white/5 bg-black/20 px-3 py-2 text-left hover:bg-white/[0.06]">
-                                <span className="block truncate text-xs font-semibold text-zinc-300">{item.name.replace('.md', '')}</span>
-                                {item.snippet && <span className="mt-1 line-clamp-2 block text-[10px] leading-relaxed text-zinc-600">{item.snippet}</span>}
-                              </button>
-                            )) : <p className="text-xs text-zinc-600">No related notes found yet.</p>}
-                          </div>
-
-                          <div className="rounded-xl border border-white/5 bg-white/[0.03] p-4">
-                            <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-amber-400">Unlinked Mentions</p>
-                            {(noteIntel?.links?.mentions || []).length ? noteIntel.links.mentions.map(item => (
-                              <button key={item.name} onClick={() => setSelectedNote({ name: item.name })}
-                                className="mb-1 mr-1 rounded-md border border-amber-500/20 bg-amber-500/10 px-2 py-1 text-[11px] text-amber-300">
-                                {item.title}
-                              </button>
-                            )) : <p className="text-xs text-zinc-600">No obvious missed links.</p>}
-                            {noteIntel?.links?.note?.frontmatter && (
-                              <div className="mt-4 border-t border-white/5 pt-3">
-                                <p className="mb-2 text-[10px] uppercase tracking-widest text-zinc-600">Receipt</p>
-                                <div className="space-y-1 text-[11px] text-zinc-500">
-                                  {['status', 'source', 'mimeType', 'extractor', 'extractedChars'].map(key => noteIntel.links.note.frontmatter[key] && (
-                                    <div key={key} className="flex justify-between gap-3">
-                                      <span>{key}</span>
-                                      <span className="truncate text-zinc-400">{noteIntel.links.note.frontmatter[key]}</span>
+                        {/* Structured import view for raw uploads */}
+                        {(() => {
+                          const fm = noteContent.match(/^---\s*\n([\s\S]*?)\n---/);
+                          const meta = {};
+                          if (fm) for (const line of fm[1].split('\n')) {
+                            const idx = line.indexOf(':');
+                            if (idx !== -1) meta[line.slice(0, idx).trim()] = line.slice(idx + 1).trim().replace(/^["']|["']$/g, '');
+                          }
+                          if (meta.source === 'upload' && meta.extractionStatus) {
+                            return (
+                              <div className="mb-5 rounded-xl border border-amber-500/15 bg-amber-500/[0.04] p-4">
+                                <p className="text-[10px] font-bold uppercase tracking-widest text-amber-400 mb-2">Ingestion Receipt</p>
+                                <div className="grid grid-cols-2 gap-x-6 gap-y-1 text-[11px]">
+                                  {['source', 'mimeType', 'extractor', 'extractedChars', 'status', 'ingested'].map(k => meta[k] && (
+                                    <div key={k} className="flex justify-between gap-2">
+                                      <span className="text-zinc-600">{k}</span>
+                                      <span className="text-zinc-400 truncate">{meta[k]}</span>
                                     </div>
                                   ))}
                                 </div>
+                                {(meta.status === 'raw' || !meta.status) && (
+                                  <button onClick={() => handleSomaAction('summarize')} disabled={actionLoading}
+                                    className="mt-3 flex items-center gap-1.5 px-3 py-1.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 rounded-lg border border-amber-500/20 text-[10px] font-bold uppercase tracking-wide transition-all disabled:opacity-40">
+                                    <Brain className="w-3 h-3" /> Process this document
+                                  </button>
+                                )}
+                              </div>
+                            );
+                          }
+                          return null;
+                        })()}
+
+                        <MarkdownView content={noteContent} />
+
+                        {/* Graph / Links / Related panel */}
+                        <div className="mt-6 grid gap-4 xl:grid-cols-3">
+                          <div className="rounded-xl border border-white/5 bg-white/[0.02] p-4">
+                            <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-purple-400">Links</p>
+                            {noteIntelLoading ? <p className="text-xs text-zinc-600">Reading note graph...</p> : (
+                              <div className="space-y-3">
+                                <div>
+                                  <p className="mb-1 text-[10px] uppercase tracking-widest text-zinc-600">Outgoing</p>
+                                  {(noteIntel?.links?.outgoing || []).length
+                                    ? noteIntel.links.outgoing.map(link => (
+                                      <button key={`${link.label}-${link.name}`} onClick={() => link.name && setSelectedNote({ name: link.name })}
+                                        className={`mb-1 mr-1 rounded-md border px-2 py-1 text-[11px] ${link.resolved ? 'border-purple-500/20 bg-purple-500/10 text-purple-300' : 'border-amber-500/20 bg-amber-500/10 text-amber-300'}`}>
+                                        {link.title}
+                                      </button>
+                                    ))
+                                    : <p className="text-xs text-zinc-600">No outgoing links.</p>}
+                                </div>
+                                <div>
+                                  <p className="mb-1 text-[10px] uppercase tracking-widest text-zinc-600">Backlinks</p>
+                                  {(noteIntel?.links?.backlinks || []).length
+                                    ? noteIntel.links.backlinks.map(link => (
+                                      <button key={link.name} onClick={() => setSelectedNote({ name: link.name })}
+                                        className="mb-1 mr-1 rounded-md border border-cyan-500/20 bg-cyan-500/10 px-2 py-1 text-[11px] text-cyan-300">
+                                        {link.title}
+                                      </button>
+                                    ))
+                                    : <p className="text-xs text-zinc-600">No backlinks yet.</p>}
+                                </div>
                               </div>
                             )}
+                          </div>
+
+                          <div className="rounded-xl border border-white/5 bg-white/[0.02] p-4">
+                            <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-cyan-400">Related</p>
+                            {(noteIntel?.related || []).length
+                              ? noteIntel.related.map(item => (
+                                <button key={item.name} onClick={() => setSelectedNote({ name: item.name })}
+                                  className="mb-2 block w-full rounded-lg border border-white/5 bg-black/20 px-3 py-2 text-left hover:bg-white/[0.06]">
+                                  <span className="block truncate text-xs font-semibold text-zinc-300">{item.name.replace('.md', '')}</span>
+                                  {item.snippet && <span className="mt-1 line-clamp-2 block text-[10px] leading-relaxed text-zinc-600">{item.snippet}</span>}
+                                </button>
+                              ))
+                              : <p className="text-xs text-zinc-600">No related notes found yet.</p>}
+                          </div>
+
+                          <div className="rounded-xl border border-white/5 bg-white/[0.02] p-4">
+                            <p className="mb-3 text-[10px] font-bold uppercase tracking-widest text-amber-400">Unlinked Mentions</p>
+                            {(noteIntel?.links?.mentions || []).length
+                              ? noteIntel.links.mentions.map(item => (
+                                <button key={item.name} onClick={() => setSelectedNote({ name: item.name })}
+                                  className="mb-1 mr-1 rounded-md border border-amber-500/20 bg-amber-500/10 px-2 py-1 text-[11px] text-amber-300">
+                                  {item.title}
+                                </button>
+                              ))
+                              : <p className="text-xs text-zinc-600">No obvious missed links.</p>}
                           </div>
                         </div>
                       </>
                     )}
                   </div>
                 ) : (
-                  // ── INSIGHTS HOME ──
-                  <div className="p-8 space-y-6">
+                  // ── HOME / INSIGHTS ──
+                  <div className="p-6 space-y-5">
+                    {/* Header */}
                     <div className="flex items-center justify-between">
                       <div>
                         <p className="text-xs font-mono tracking-widest uppercase text-zinc-500">SOMA Reflection Pool</p>
                         <p className="text-xs text-zinc-600 mt-0.5">{notes.length} note{notes.length !== 1 ? 's' : ''} in vault</p>
                       </div>
-                      <button
-                        onClick={handleAnalyzeVault}
-                        disabled={insightsLoading || notes.length === 0}
-                        className="flex items-center gap-2 px-4 py-2 bg-purple-600/10 hover:bg-purple-600/20 disabled:opacity-40 text-purple-400 rounded-xl border border-purple-500/20 text-xs font-bold tracking-wide transition-all"
-                      >
+                      <button onClick={handleAnalyzeVault} disabled={insightsLoading || notes.length === 0}
+                        className="flex items-center gap-2 px-3 py-1.5 bg-purple-600/10 hover:bg-purple-600/20 disabled:opacity-40 text-purple-400 rounded-xl border border-purple-500/20 text-xs font-bold transition-all">
                         <Brain className={`w-3.5 h-3.5 ${insightsLoading ? 'animate-pulse' : ''}`} />
                         {insightsLoading ? 'Scanning...' : 'Scan Vault'}
                       </button>
                     </div>
 
+                    {/* Graph surface */}
+                    {notes.length > 0 && (
+                      <div className="rounded-xl border border-white/5 bg-white/[0.02] p-4">
+                        <div className="flex items-center justify-between mb-3">
+                          <p className="text-[10px] font-bold uppercase tracking-widest text-cyan-400 flex items-center gap-1.5">
+                            <GitBranch className="w-3.5 h-3.5" /> Vault Graph
+                          </p>
+                          <button onClick={loadGraphStats} disabled={graphLoading}
+                            className="p-1 hover:bg-white/5 rounded text-zinc-600 hover:text-zinc-400 transition-all">
+                            <RefreshCw className={`w-3 h-3 ${graphLoading ? 'animate-spin' : ''}`} />
+                          </button>
+                        </div>
+                        {graphStats ? (
+                          <div className="grid grid-cols-3 gap-3">
+                            {[
+                              { label: 'Notes', value: graphStats.nodes, color: 'text-white' },
+                              { label: 'Links', value: graphStats.edges, color: 'text-cyan-400' },
+                              { label: 'Isolated', value: graphStats.isolated, color: graphStats.isolated > 0 ? 'text-amber-400' : 'text-zinc-600' },
+                            ].map(stat => (
+                              <div key={stat.label} className="text-center">
+                                <p className={`text-lg font-black ${stat.color}`}>{stat.value}</p>
+                                <p className="text-[10px] text-zinc-600 uppercase tracking-widest">{stat.label}</p>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-xs text-zinc-600 text-center py-2">Loading graph...</p>
+                        )}
+                      </div>
+                    )}
+
                     {insightsLoading && (
-                      <div className="flex flex-col items-center justify-center py-12 gap-4">
-                        <div className="w-8 h-8 border-2 border-purple-500/50 border-t-purple-500 rounded-full animate-spin" />
+                      <div className="flex flex-col items-center justify-center py-10 gap-3">
+                        <div className="w-7 h-7 border-2 border-purple-500/50 border-t-purple-500 rounded-full animate-spin" />
                         <p className="text-xs text-zinc-500 font-mono">SOMA is reading your vault...</p>
                       </div>
                     )}
 
                     {insights && !insightsLoading && (
-                      <div className="space-y-6">
-
+                      <div className="space-y-5">
                         {insights.patterns?.length > 0 && (
                           <div>
                             <div className="flex items-center gap-2 mb-3">
@@ -895,7 +1157,7 @@ const ReflectionsTab = ({ mode = 'full', onClose, context, onSendToSoma }) => {
                             </div>
                             <div className="space-y-2">
                               {insights.patterns.map((p, i) => (
-                                <div key={i} className="p-4 rounded-xl bg-purple-500/5 border border-purple-500/15 hover:border-purple-500/25 transition-colors">
+                                <div key={i} className="p-3 rounded-xl bg-purple-500/5 border border-purple-500/15 hover:border-purple-500/25 transition-colors">
                                   <p className="text-sm font-semibold text-white mb-1">{p.title}</p>
                                   <p className="text-xs text-zinc-400 leading-relaxed">{p.description}</p>
                                 </div>
@@ -903,7 +1165,6 @@ const ReflectionsTab = ({ mode = 'full', onClose, context, onSendToSoma }) => {
                             </div>
                           </div>
                         )}
-
                         {insights.gaps?.length > 0 && (
                           <div>
                             <div className="flex items-center gap-2 mb-3">
@@ -912,7 +1173,7 @@ const ReflectionsTab = ({ mode = 'full', onClose, context, onSendToSoma }) => {
                             </div>
                             <div className="space-y-2">
                               {insights.gaps.map((g, i) => (
-                                <div key={i} className="p-4 rounded-xl bg-amber-500/5 border border-amber-500/15 hover:border-amber-500/25 transition-colors">
+                                <div key={i} className="p-3 rounded-xl bg-amber-500/5 border border-amber-500/15 hover:border-amber-500/25 transition-colors">
                                   <p className="text-sm font-semibold text-white mb-1">{g.title}</p>
                                   <p className="text-xs text-zinc-400 leading-relaxed">{g.description}</p>
                                 </div>
@@ -920,7 +1181,6 @@ const ReflectionsTab = ({ mode = 'full', onClose, context, onSendToSoma }) => {
                             </div>
                           </div>
                         )}
-
                         {insights.clusters?.length > 0 && (
                           <div>
                             <div className="flex items-center gap-2 mb-3">
@@ -929,7 +1189,7 @@ const ReflectionsTab = ({ mode = 'full', onClose, context, onSendToSoma }) => {
                             </div>
                             <div className="space-y-2">
                               {insights.clusters.map((c, i) => (
-                                <div key={i} className="p-4 rounded-xl bg-cyan-500/5 border border-cyan-500/15 hover:border-cyan-500/25 transition-colors">
+                                <div key={i} className="p-3 rounded-xl bg-cyan-500/5 border border-cyan-500/15 hover:border-cyan-500/25 transition-colors">
                                   <p className="text-sm font-semibold text-white mb-1">{c.title}</p>
                                   <p className="text-xs text-zinc-400 leading-relaxed">{c.description}</p>
                                 </div>
@@ -937,25 +1197,24 @@ const ReflectionsTab = ({ mode = 'full', onClose, context, onSendToSoma }) => {
                             </div>
                           </div>
                         )}
-
                         {!insights.patterns?.length && !insights.gaps?.length && !insights.clusters?.length && (
-                          <p className="text-xs text-zinc-600 text-center py-8 font-mono">Not enough notes to find patterns yet.<br />Add more reflections and try again.</p>
+                          <p className="text-xs text-zinc-600 text-center py-6 font-mono">Not enough notes to find patterns yet.</p>
                         )}
                       </div>
                     )}
 
                     {!insights && !insightsLoading && notes.length > 0 && (
-                      <div className="flex flex-col items-center justify-center py-16 gap-3 text-zinc-600">
+                      <div className="flex flex-col items-center justify-center py-12 gap-3 text-zinc-600">
                         <motion.div animate={{ opacity: [0.3, 0.6, 0.3] }} transition={{ duration: 4, repeat: Infinity }}>
-                          <Sparkles className="w-10 h-10" />
+                          <Sparkles className="w-8 h-8" />
                         </motion.div>
                         <p className="text-xs font-mono text-center">Press <span className="text-purple-400">Scan Vault</span> to let SOMA<br />find patterns in your thinking</p>
                       </div>
                     )}
 
                     {notes.length === 0 && (
-                      <div className="flex flex-col items-center justify-center py-16 gap-3 text-zinc-600 opacity-30">
-                        <Sparkles className="w-10 h-10" />
+                      <div className="flex flex-col items-center justify-center py-14 gap-3 text-zinc-600 opacity-30">
+                        <Sparkles className="w-8 h-8" />
                         <p className="text-xs font-mono text-center">Your vault is empty.<br />Press + to add your first reflection.</p>
                       </div>
                     )}
@@ -964,31 +1223,22 @@ const ReflectionsTab = ({ mode = 'full', onClose, context, onSendToSoma }) => {
               </div>
 
               {/* Archivist — always at bottom */}
-              <div className="border-t border-white/5 bg-black/60 backdrop-blur-3xl flex flex-col" style={{ maxHeight: '320px', minHeight: '200px' }}>
-                <div className="px-6 pt-4 pb-2 flex items-center gap-2 flex-shrink-0">
+              <div className="border-t border-white/5 bg-black/60 backdrop-blur-3xl flex flex-col" style={{ maxHeight: '300px', minHeight: '180px' }}>
+                <div className="px-5 pt-3 pb-2 flex items-center gap-2 flex-shrink-0">
                   <div className="w-1.5 h-1.5 bg-purple-500 rounded-full animate-pulse" />
                   <p className="text-[10px] text-purple-400 font-bold uppercase tracking-[0.25em]">Archivist</p>
-                  {selectedNote && (
-                    <span className="text-[10px] text-zinc-600 font-mono ml-auto">context: {selectedNote.name.replace('.md', '')}</span>
-                  )}
+                  {selectedNote && <span className="text-[10px] text-zinc-600 font-mono ml-auto">context: {selectedNote.name.replace('.md', '')}</span>}
                 </div>
-
-                <div className="flex-1 overflow-y-auto px-6 pb-2 space-y-3 min-h-0">
+                <div className="flex-1 overflow-y-auto px-5 pb-2 space-y-2.5 min-h-0">
                   {archivistLog.length === 0 && (
                     <p className="text-xs text-zinc-600 leading-relaxed">
                       Ask anything about your vault.{' '}
-                      {selectedNote
-                        ? 'Currently using this note as context.'
-                        : 'Select a note for deep context, or ask broadly — SOMA will find relevant notes automatically.'}
+                      {selectedNote ? 'Currently using this note as context.' : 'Select a note for deep context, or ask broadly.'}
                     </p>
                   )}
                   {archivistLog.map((m, i) => (
                     <div key={i} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-                      <div className={`max-w-lg px-4 py-2.5 rounded-xl text-sm leading-relaxed ${
-                        m.role === 'user'
-                          ? 'bg-white/8 text-zinc-200 border border-white/10'
-                          : 'bg-purple-500/10 text-purple-100 border border-purple-500/20'
-                      }`}>
+                      <div className={`max-w-lg px-4 py-2.5 rounded-xl text-sm leading-relaxed ${m.role === 'user' ? 'bg-white/8 text-zinc-200 border border-white/10' : 'bg-purple-500/10 text-purple-100 border border-purple-500/20'}`}>
                         {m.text}
                       </div>
                     </div>
@@ -1003,8 +1253,7 @@ const ReflectionsTab = ({ mode = 'full', onClose, context, onSendToSoma }) => {
                   )}
                   <div ref={archivistEndRef} />
                 </div>
-
-                <div className="px-6 pb-5 pt-2 flex-shrink-0">
+                <div className="px-5 pb-4 pt-2 flex-shrink-0">
                   <div className="relative group">
                     <div className="absolute -inset-px bg-gradient-to-r from-purple-600 to-indigo-600 rounded-xl blur opacity-0 group-focus-within:opacity-30 transition duration-500" />
                     <div className="relative bg-[#151518] border border-white/10 rounded-xl flex items-center pr-1.5">
@@ -1013,8 +1262,7 @@ const ReflectionsTab = ({ mode = 'full', onClose, context, onSendToSoma }) => {
                         onKeyDown={(e) => e.key === 'Enter' && handleArchivistMessage()}
                         placeholder="Ask the Archivist..."
                         className="w-full bg-transparent py-3 px-4 text-sm text-white outline-none placeholder:text-zinc-600" />
-                      <button onClick={handleArchivistMessage}
-                        disabled={archivistThinking || !archivistInput.trim()}
+                      <button onClick={handleArchivistMessage} disabled={archivistThinking || !archivistInput.trim()}
                         className="p-2.5 bg-purple-600/10 hover:bg-purple-600/20 disabled:opacity-40 text-purple-400 rounded-lg transition-all">
                         <Send className="w-4 h-4" />
                       </button>
@@ -1030,31 +1278,21 @@ const ReflectionsTab = ({ mode = 'full', onClose, context, onSendToSoma }) => {
         {/* CRYSTALLIZE modal */}
         <AnimatePresence>
           {crystallizeModalOpen && (
-            <motion.div
-              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              className="absolute inset-0 bg-black/80 backdrop-blur-sm z-[200] flex items-center justify-center p-8"
-            >
-              <motion.div
-                initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }}
-                className="w-full max-w-md bg-[#0d0d0f] rounded-2xl border border-orange-500/20 p-8 shadow-2xl shadow-orange-500/10"
-              >
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-black/80 backdrop-blur-sm z-[200] flex items-center justify-center p-8">
+              <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }}
+                className="w-full max-w-md bg-[#0d0d0f] rounded-2xl border border-orange-500/20 p-8 shadow-2xl shadow-orange-500/10">
                 <div className="flex items-center gap-3 mb-6">
-                  <div className="p-2 rounded-xl bg-orange-500/20">
-                    <Zap className="w-5 h-5 text-orange-400" />
-                  </div>
+                  <div className="p-2 rounded-xl bg-orange-500/20"><Zap className="w-5 h-5 text-orange-400" /></div>
                   <div>
                     <h3 className="text-base font-black text-white tracking-tight">Name this Concept</h3>
                     <p className="text-xs text-orange-400/60 mt-0.5">Crystallize your brainstorm into a permanent note</p>
                   </div>
                 </div>
-                <input
-                  autoFocus
-                  value={crystallizeName}
-                  onChange={(e) => setCrystallizeName(e.target.value)}
+                <input autoFocus value={crystallizeName} onChange={(e) => setCrystallizeName(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && doFinalizeBrainstorm()}
                   placeholder="e.g. Distributed Memory Architecture"
-                  className="w-full bg-white/5 border border-white/10 rounded-xl py-3 px-4 text-sm text-white outline-none focus:border-orange-500/50 transition-all mb-4"
-                />
+                  className="w-full bg-white/5 border border-white/10 rounded-xl py-3 px-4 text-sm text-white outline-none focus:border-orange-500/50 transition-all mb-4" />
                 <div className="flex gap-3">
                   <button onClick={() => setCrystallizeModalOpen(false)}
                     className="flex-1 py-3 bg-white/5 hover:bg-white/10 text-zinc-400 rounded-xl text-sm font-bold transition-all">
@@ -1071,23 +1309,16 @@ const ReflectionsTab = ({ mode = 'full', onClose, context, onSendToSoma }) => {
         </AnimatePresence>
       </div>
 
-      {/* Quick Note Slide-in — same style as floating panel */}
+      {/* Quick Note slide-in */}
       <AnimatePresence>
         {isQuickNoteOpen && !isBrainstorming && (
-          <motion.div
-            initial={{ opacity: 0, x: 100 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 100 }}
-            className="absolute top-0 right-0 h-full w-96 bg-[#0d0d0f]/95 backdrop-blur-3xl border-l border-white/10 shadow-2xl z-[100] flex flex-col"
-          >
-            {/* Header with editable title */}
+          <motion.div initial={{ opacity: 0, x: 100 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 100 }}
+            className="absolute top-0 right-0 h-full w-96 bg-[#0d0d0f]/95 backdrop-blur-3xl border-l border-white/10 shadow-2xl z-[100] flex flex-col">
             <div className="px-6 py-4 flex items-center justify-between border-b border-white/5">
               <div className="flex items-center gap-3 flex-1 min-w-0">
                 <Edit3 className="w-4 h-4 text-purple-400 flex-shrink-0" />
-                <input
-                  value={quickNoteName}
-                  onChange={e => setQuickNoteName(e.target.value)}
-                  placeholder="Note title..."
-                  className="flex-1 bg-transparent text-white font-semibold text-sm outline-none placeholder-zinc-600 min-w-0"
-                />
+                <input value={quickNoteName} onChange={e => setQuickNoteName(e.target.value)} placeholder="Note title..."
+                  className="flex-1 bg-transparent text-white font-semibold text-sm outline-none placeholder-zinc-600 min-w-0" />
               </div>
               <button onClick={() => setIsQuickNoteOpen(false)}
                 className="p-1.5 hover:bg-white/5 rounded-lg text-zinc-500 hover:text-white transition-all flex-shrink-0">
@@ -1095,7 +1326,6 @@ const ReflectionsTab = ({ mode = 'full', onClose, context, onSendToSoma }) => {
               </button>
             </div>
             <div className="flex-1 p-5 flex flex-col gap-3 min-h-0">
-              {/* Templates */}
               <div className="flex gap-2">
                 {TEMPLATES.map(t => (
                   <button key={t.label} onClick={() => { setQuickNoteName(t.title); setQuickNoteText(t.body); }}
@@ -1114,9 +1344,7 @@ const ReflectionsTab = ({ mode = 'full', onClose, context, onSendToSoma }) => {
               <div className="flex gap-2">
                 <button onClick={handleSaveQuickNote} disabled={quickNoteSaving || !quickNoteText.trim()}
                   className="flex-1 py-3 bg-zinc-800 hover:bg-zinc-700 disabled:opacity-40 disabled:cursor-not-allowed text-zinc-200 rounded-xl font-semibold text-sm transition-all border border-white/5 hover:border-purple-500/30 active:scale-[0.98] flex items-center justify-center gap-2">
-                  {quickNoteSaving
-                    ? <><span className="w-3.5 h-3.5 border-2 border-zinc-500 border-t-purple-400 rounded-full animate-spin" /> Saving...</>
-                    : <><Save className="w-3.5 h-3.5" /> Save</>}
+                  {quickNoteSaving ? <><span className="w-3.5 h-3.5 border-2 border-zinc-500 border-t-purple-400 rounded-full animate-spin" /> Saving...</> : <><Save className="w-3.5 h-3.5" /> Save</>}
                 </button>
                 {onSendToSoma && (
                   <button onClick={() => { if (quickNoteText.trim()) { onSendToSoma(quickNoteText); handleSaveQuickNote(); } }}

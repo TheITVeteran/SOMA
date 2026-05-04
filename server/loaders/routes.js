@@ -1333,8 +1333,20 @@ export async function loadRoutes(app, system) {
         try {
             const vaultPath = path.join(process.cwd(), 'data', 'vault', 'reflections');
             await fs.mkdir(vaultPath, { recursive: true });
-            const files = await fs.readdir(vaultPath);
-            const notes = files.filter(f => f.endsWith('.md')).map(f => ({ name: f, path: path.join(vaultPath, f) }));
+            const files = (await fs.readdir(vaultPath)).filter(f => f.endsWith('.md'));
+            const notes = await Promise.all(files.map(async f => {
+                const content = await fs.readFile(path.join(vaultPath, f), 'utf8').catch(() => '');
+                const fmMatch = content.match(/^---\s*\n([\s\S]*?)\n---/);
+                const fm = {};
+                if (fmMatch) {
+                    for (const line of fmMatch[1].split('\n')) {
+                        const idx = line.indexOf(':');
+                        if (idx === -1) continue;
+                        fm[line.slice(0, idx).trim()] = line.slice(idx + 1).trim().replace(/^["']|["']$/g, '');
+                    }
+                }
+                return { name: f, status: fm.status || 'inbox', type: fm.type || null };
+            }));
             res.json({ success: true, notes });
         } catch (error) { res.json({ success: false, error: error.message }); }
     });
@@ -1694,7 +1706,162 @@ Return ONLY valid JSON (no markdown, no explanation):
         } catch (error) { res.status(500).json({ success: false, error: error.message }); }
     });
 
-    
+    // ── REFLECTIONS: Status patch ────────────────────────────────────
+    app.patch('/api/reflections/note/:name/status', async (req, res) => {
+        try {
+            const { status } = req.body;
+            const VALID = ['inbox', 'raw', 'refined', 'linked', 'archived', 'promoted'];
+            if (!VALID.includes(status)) return res.status(400).json({ error: `Invalid status. Must be one of: ${VALID.join(', ')}` });
+            const vaultPath = path.resolve(process.cwd(), 'data', 'vault', 'reflections');
+            const safeName = path.basename(req.params.name);
+            const filePath = path.resolve(vaultPath, safeName);
+            if (!filePath.startsWith(vaultPath)) return res.status(403).json({ error: 'Forbidden' });
+            let content = await fs.readFile(filePath, 'utf8');
+            if (/^---[\s\S]*?^---/m.test(content)) {
+                content = content.replace(/^(---[\s\S]*?)^status:.*$/m, `$1status: ${status}`);
+                if (!/^status:/m.test(content)) {
+                    content = content.replace(/^---/, `---\nstatus: ${status}`);
+                }
+            } else {
+                content = `---\nstatus: ${status}\n---\n\n${content}`;
+            }
+            await fs.writeFile(filePath, content, 'utf8');
+            res.json({ success: true, status });
+        } catch (error) { res.status(500).json({ success: false, error: error.message }); }
+    });
+
+    // ── REFLECTIONS: SOMA actions ─────────────────────────────────────
+    app.post('/api/reflections/action', async (req, res) => {
+        try {
+            const { name, action, content } = req.body;
+            if (!action || !content) return res.status(400).json({ error: 'action and content required' });
+            const brain = system.quadBrain || system.somaArbiter;
+            if (!brain?.reason) return res.status(503).json({ error: 'Brain not available' });
+
+            const body = content.replace(/^---[\s\S]*?---\s*\n?/, '').trim().slice(0, 4000);
+
+            const prompts = {
+                summarize: `Summarize this note in 2-3 sentences. Be precise and preserve key terminology.\n\nNOTE:\n${body}\n\nSummary:`,
+                contradictions: `Find internal contradictions, logical gaps, or claims that conflict with each other in this note. Be specific and cite exact phrases.\n\nNOTE:\n${body}\n\nContradictions found:`,
+                tasks: `Extract every actionable task, decision, or next step from this note. Format as a numbered list. Only extract explicit or strongly implied actions.\n\nNOTE:\n${body}\n\nTasks:`,
+                'suggest-links': `Suggest 3-6 concept names or topic titles that this note should link to — things the author likely has or should write notes about. Return only a JSON array of short strings: ["concept one", "concept two", ...]\n\nNOTE:\n${body}`,
+                promote: `Extract the single most important insight from this note as a durable memory. Format: one paragraph, third-person, past-tense facts only. No filler.\n\nNOTE:\n${body}\n\nCore insight:`,
+                'expertise-seed': `Convert the key knowledge in this note into a structured expertise seed. Return JSON: {"domain":"...","concepts":["..."],"keyFacts":["..."],"openQuestions":["..."]}\n\nNOTE:\n${body}`,
+            };
+
+            const prompt = prompts[action];
+            if (!prompt) return res.status(400).json({ error: `Unknown action: ${action}` });
+
+            const result = await Promise.race([
+                brain.reason(prompt, { brain: 'LOGOS' }),
+                new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 25000))
+            ]);
+            const text = result?.text || result?.response?.text || (typeof result === 'string' ? result : '');
+
+            // If promote, also store in mnemonic
+            if (action === 'promote' && text && system.mnemonicArbiter) {
+                try {
+                    await system.mnemonicArbiter.store(text, {
+                        source: 'reflections',
+                        noteRef: name,
+                        type: 'insight'
+                    });
+                } catch (e) { console.warn('[Reflections] Promote to memory failed:', e.message); }
+            }
+
+            res.json({ success: true, action, result: text });
+        } catch (error) { res.status(500).json({ success: false, error: error.message }); }
+    });
+
+    // ── REFLECTIONS: Daily note ───────────────────────────────────────
+    app.post('/api/reflections/daily', async (req, res) => {
+        try {
+            const today = new Date();
+            const dateStr = today.toISOString().slice(0, 10);
+            const vaultPath = path.resolve(process.cwd(), 'data', 'vault', 'reflections');
+            await fs.mkdir(vaultPath, { recursive: true });
+            const filename = `${dateStr}-daily.md`;
+            const filePath = path.resolve(vaultPath, filename);
+
+            // If it already exists, just return it
+            const existing = await fs.readFile(filePath, 'utf8').catch(() => null);
+            if (existing) return res.json({ success: true, filename, created: false });
+
+            // Pull SOMA context
+            let activeGoals = [], recentActivity = [];
+            try {
+                if (system.goalPlanner?.getGoals) {
+                    const goals = await system.goalPlanner.getGoals();
+                    activeGoals = (goals || []).filter(g => g.status === 'active' || g.status === 'in_progress').slice(0, 5);
+                }
+            } catch (e) { /* non-fatal */ }
+            try {
+                if (system.messageBroker?._recentPublishes) {
+                    recentActivity = system.messageBroker._recentPublishes.slice(-10).map(p => p.topic);
+                }
+            } catch (e) { /* non-fatal */ }
+
+            const goalsSection = activeGoals.length
+                ? activeGoals.map(g => `- [ ] ${g.title || g.id || 'Unnamed goal'}`).join('\n')
+                : '- [ ] (no active goals)';
+            const activitySection = recentActivity.length
+                ? [...new Set(recentActivity)].slice(0, 8).map(t => `- ${t}`).join('\n')
+                : '- (no recent signals)';
+
+            const content = `---\ntitle: "Daily — ${dateStr}"\nstatus: inbox\ntype: daily\ncreated: ${today.toISOString()}\n---\n\n# ${dateStr} — Daily Reflection\n\n## Active Goals\n\n${goalsSection}\n\n## SOMA Activity\n\n${activitySection}\n\n## Thoughts & Observations\n\n\n\n## Unresolved Questions\n\n\n\n## Tomorrow\n\n`;
+            await fs.writeFile(filePath, content, 'utf8');
+            res.json({ success: true, filename, created: true });
+        } catch (error) { res.status(500).json({ success: false, error: error.message }); }
+    });
+
+    // ── REFLECTIONS: Vault hygiene ────────────────────────────────────
+    app.get('/api/reflections/hygiene', async (req, res) => {
+        try {
+            const vaultPath = path.resolve(process.cwd(), 'data', 'vault', 'reflections');
+            await fs.mkdir(vaultPath, { recursive: true });
+            const files = (await fs.readdir(vaultPath)).filter(f => f.endsWith('.md'));
+
+            const notes = [];
+            for (const file of files) {
+                const content = await fs.readFile(path.join(vaultPath, file), 'utf8').catch(() => '');
+                notes.push(parseNote(file, content));
+            }
+            const nodeNames = new Set(notes.map(n => n.name));
+            const hasBacklink = new Set();
+            for (const note of notes) {
+                for (const link of note.outgoing) {
+                    const target = [...nodeNames].find(n => n.replace('.md', '').toLowerCase() === link.toLowerCase());
+                    if (target) hasBacklink.add(target);
+                }
+            }
+
+            const now = Date.now();
+            const staleMs = 7 * 24 * 60 * 60 * 1000; // 7 days
+
+            const orphans = notes.filter(n => !hasBacklink.has(n.name) && n.outgoing.length === 0);
+            const brokenLinks = [];
+            for (const note of notes) {
+                for (const link of note.outgoing) {
+                    const resolved = [...nodeNames].some(n => n.replace('.md', '').toLowerCase() === link.toLowerCase());
+                    if (!resolved) brokenLinks.push({ note: note.name, link });
+                }
+            }
+            const staleRaw = notes.filter(n => {
+                const isRaw = !n.frontmatter.status || n.frontmatter.status === 'raw' || n.frontmatter.status === 'inbox';
+                const created = n.frontmatter.created || n.frontmatter.ingested;
+                if (!created) return false;
+                return isRaw && (now - new Date(created).getTime()) > staleMs;
+            });
+
+            res.json({
+                success: true,
+                orphans: orphans.map(n => ({ name: n.name, title: n.title, wordCount: n.wordCount })),
+                brokenLinks,
+                staleRaw: staleRaw.map(n => ({ name: n.name, title: n.title, status: n.frontmatter.status || 'raw', created: n.frontmatter.created || n.frontmatter.ingested }))
+            });
+        } catch (error) { res.status(500).json({ success: false, error: error.message }); }
+    });
+
     // ── ULTRAQUANT API: Knowledge Compaction ─────────────────────
     app.post('/api/ultraquant/compact', async (req, res) => {
         try {
@@ -1976,7 +2143,7 @@ Return ONLY valid JSON (no markdown, no explanation):
     };
 
     app.get('/api/soma/medical-discovery/stats', (req, res) => {
-        const discovery = system.medicalDiscovery;
+        const discovery = system.discoveryGradeMedical || system.medicalDiscovery;
         if (!discovery) return res.json({ success: false, error: 'DiscoveryGradeMedicalCortex not loaded' });
         res.json({ 
             success: true, 
@@ -1987,12 +2154,17 @@ Return ONLY valid JSON (no markdown, no explanation):
     });
 
     app.post('/api/soma/medical-discovery/deduce', async (req, res) => {
-        const discovery = system.medicalDiscovery;
+        const discovery = system.discoveryGradeMedical || system.medicalDiscovery;
         if (!discovery) return res.status(503).json({ success: false, error: 'DiscoveryGradeMedicalCortex not loaded' });
         
         try {
             // Trigger in background, don't wait for completion of the full mission
-            discovery.runAutonomousDeduction().catch(e => console.error('[Deduction] Failed:', e.message));
+            const runner = discovery.runAutonomousDeduction
+                ? discovery.runAutonomousDeduction()
+                : discovery.conductResearch
+                    ? discovery.conductResearch('autonomous medical deduction', [])
+                    : Promise.reject(new Error('No deduction runner available'));
+            runner.catch(e => console.error('[Deduction] Failed:', e.message));
             res.json({ success: true, message: 'Autonomous deduction cycle initiated' });
         } catch (e) {
             res.status(500).json({ success: false, error: e.message });
