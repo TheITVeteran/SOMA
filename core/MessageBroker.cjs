@@ -24,6 +24,7 @@ class MessageBroker extends EventEmitter {
             classificationIndex: new Map(),
             discoveryIndex: new Map(),
             subscriptions: new Map(),
+            tieredSubscriptions: new Map(), // topic -> { strategic: Set, cognitive: Set, operational: Set }
             recentPublishes: [],
             messageHistory: [],
             metrics: {
@@ -35,6 +36,11 @@ class MessageBroker extends EventEmitter {
         };
     }
 
+    // Backfill tieredSubscriptions for instances created before this field existed
+    if (!global.__SOMA_CNS__.tieredSubscriptions) {
+        global.__SOMA_CNS__.tieredSubscriptions = new Map();
+    }
+
     const cns = global.__SOMA_CNS__;
     this.arbiters = cns.arbiters;
     this.lobeIndex = cns.lobeIndex;
@@ -42,6 +48,7 @@ class MessageBroker extends EventEmitter {
     this.classificationIndex = cns.classificationIndex;
     this.discoveryIndex = cns.discoveryIndex;
     this.subscriptions = cns.subscriptions;
+    this.tieredSubscriptions = cns.tieredSubscriptions;
     this._recentPublishes = cns.recentPublishes;
     this.messageHistory = cns.messageHistory;
     this.metrics = cns.metrics;
@@ -250,35 +257,84 @@ class MessageBroker extends EventEmitter {
     return this.subscribe(topic, filtered);
   }
 
+  /**
+   * Tier-scoped subscription — handler fires after all handlers in higher tiers resolve.
+   * Dispatch order: strategic → cognitive → operational → untiered (flat subscriptions).
+   *
+   * @param {'strategic'|'cognitive'|'operational'} tier
+   * @param {string} topic
+   * @param {Function} handler
+   * @returns {Function} unsubscribe
+   */
+  subscribeTiered(tier, topic, handler) {
+    const VALID = ['strategic', 'cognitive', 'operational'];
+    if (!VALID.includes(tier)) throw new Error(`[MessageBroker] Unknown tier: ${tier}`);
+    if (!this.tieredSubscriptions.has(topic)) {
+      this.tieredSubscriptions.set(topic, { strategic: new Set(), cognitive: new Set(), operational: new Set() });
+    }
+    this.tieredSubscriptions.get(topic)[tier].add(handler);
+    return () => this.unsubscribeTiered(tier, topic, handler);
+  }
+
+  unsubscribeTiered(tier, topic, handler) {
+    const buckets = this.tieredSubscriptions.get(topic);
+    if (buckets && buckets[tier]) buckets[tier].delete(handler);
+  }
+
   async publish(topic, message) {
     // Track in ring buffer for perception dashboard
     this._recentPublishes.push({ topic, ts: Date.now(), preview: JSON.stringify(message).slice(0, 80) });
     if (this._recentPublishes.length > 20) this._recentPublishes.shift();
 
-    const handlers = this.subscriptions.get(topic);
-    if (!handlers || handlers.size === 0) {
+    const tieredBuckets = this.tieredSubscriptions.get(topic);
+    const flatHandlers = this.subscriptions.get(topic);
+    const hasTiered = tieredBuckets && (
+      tieredBuckets.strategic.size > 0 ||
+      tieredBuckets.cognitive.size > 0 ||
+      tieredBuckets.operational.size > 0
+    );
+
+    if (!hasTiered && (!flatHandlers || flatHandlers.size === 0)) {
       return 0;
     }
 
     const envelope = this._createEnvelope(message, topic);
-
-    // PERFORMANCE FIX: Parallelize handler execution with Promise.allSettled
-    const results = await Promise.allSettled(
-      Array.from(handlers)
-        .filter(h => typeof h === 'function')
-        .map(handler => handler(envelope))
-    );
-
-    // Count successes and failures
     let delivered = 0;
-    results.forEach((result, index) => {
-      if (result.status === 'fulfilled') {
-        delivered++;
-      } else {
-        console.error(`[MessageBroker] Error delivering to ${topic}:`, result.reason);
-        this.metrics.messagesFailed++;
+
+    // Tier-ordered dispatch: strategic → cognitive → operational (sequential, each awaited)
+    if (hasTiered) {
+      for (const tier of ['strategic', 'cognitive', 'operational']) {
+        const handlers = tieredBuckets[tier];
+        if (!handlers || handlers.size === 0) continue;
+        const results = await Promise.allSettled(
+          Array.from(handlers).filter(h => typeof h === 'function').map(h => h(envelope))
+        );
+        results.forEach(r => {
+          if (r.status === 'fulfilled') delivered++;
+          else {
+            console.error(`[MessageBroker] Error in ${tier}-tier handler for ${topic}:`, r.reason);
+            this.metrics.messagesFailed++;
+          }
+        });
       }
-    });
+    }
+
+    // Untiered flat subscriptions — parallel, existing behavior
+    if (flatHandlers && flatHandlers.size > 0) {
+      const results = await Promise.allSettled(
+        Array.from(flatHandlers)
+          .filter(h => typeof h === 'function')
+          .map(handler => handler(envelope))
+      );
+      results.forEach(result => {
+        if (result.status === 'fulfilled') {
+          delivered++;
+        } else {
+          console.error(`[MessageBroker] Error delivering to ${topic}:`, result.reason);
+          this.metrics.messagesFailed++;
+        }
+      });
+    }
 
     this.metrics.messagesDelivered += delivered;
     return delivered;

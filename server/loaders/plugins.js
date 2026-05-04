@@ -72,18 +72,22 @@ export async function loadPlugins(systemContext = {}) {
     }).catch(e => console.warn('      ⚠️ Finance init warning:', e.message));
     plugins.finance = financeAgent;
 
-    // 3. Engineering Swarm
-    const engineeringSwarm = new EngineeringSwarmArbiter({
-        name: 'EngineeringSwarm-Main',
-        messageBroker,
-        lobe: 'EXECUTIVE',
-        classification: 'ENGINEERING',
-        tags: ['coding', 'optimization', 'review']
-    });
-    engineeringSwarm.initialize().then(() => {
-        console.log('      ✅ Engineering Swarm active');
-    }).catch(e => console.warn('      ⚠️ Engineering Swarm init warning:', e.message));
-    plugins.engineeringSwarm = engineeringSwarm;
+    // 3. Engineering Swarm — reuse the fully-wired instance from cos.js if available
+    if (systemContext.engineeringSwarm) {
+        console.log('      ✅ Engineering Swarm already online (reusing COS instance)');
+    } else {
+        const engineeringSwarm = new EngineeringSwarmArbiter({
+            name: 'EngineeringSwarm-Main',
+            messageBroker,
+            lobe: 'EXECUTIVE',
+            classification: 'ENGINEERING',
+            tags: ['coding', 'optimization', 'review']
+        });
+        engineeringSwarm.initialize().then(() => {
+            console.log('      ✅ Engineering Swarm active');
+        }).catch(e => console.warn('      ⚠️ Engineering Swarm init warning:', e.message));
+        plugins.engineeringSwarm = engineeringSwarm;
+    }
 
     return plugins;
 }
