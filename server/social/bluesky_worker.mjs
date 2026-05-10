@@ -5,7 +5,7 @@
  * Reads a JSON task from stdin, writes a JSON result to stdout.
  * Runs in a clean process, unaffected by SOMA's main process state.
  *
- * Task types: login, post, reply, getNotifications, markSeen, refreshSession
+ * Task types: login, post, reply, getNotifications, markSeen, refreshSession, getTimeline, searchPosts
  */
 
 import https from 'https';
@@ -153,6 +153,16 @@ async function run() {
                 replyCount:   p?.replyCount   || 0,
                 quoteCount:   p?.quoteCount   || 0,
             };
+            break;
+        }
+
+        case 'getTimeline':
+            result = await xrpc('GET', `app.bsky.feed.getTimeline?limit=${task.limit || 20}`, null, task.token);
+            break;
+
+        case 'searchPosts': {
+            const q = encodeURIComponent(task.query || '');
+            result = await xrpc('GET', `app.bsky.feed.searchPosts?q=${q}&limit=${task.limit || 15}`, null, task.token);
             break;
         }
 

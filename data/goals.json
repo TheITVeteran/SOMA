@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "savedAt": 1778186001511,
+  "savedAt": 1778437755837,
   "goals": {
     "6e54cbeb-d852-4037-bcff-2cecb5729512": {
       "id": "6e54cbeb-d852-4037-bcff-2cecb5729512",
@@ -4156,14 +4156,759 @@
           "score": 0
         }
       }
+    },
+    "8c2b992d-9179-4d58-85e5-3eb0b36c881c": {
+      "id": "8c2b992d-9179-4d58-85e5-3eb0b36c881c",
+      "type": "operational",
+      "category": "user_priority",
+      "title": "EngineeringSwarmArbiter must receive `goal_assigned` and run `modifyCode()`",
+      "description": "Priority from Barry",
+      "status": "verification_failed",
+      "approved": true,
+      "priority": 72,
+      "metrics": {
+        "target": null,
+        "current": null,
+        "progress": 95
+      },
+      "dependencies": [],
+      "prerequisites": [],
+      "createdAt": 1778430855758,
+      "startedAt": 1778430855763,
+      "completedAt": null,
+      "dueDate": null,
+      "assignedTo": [],
+      "tasks": [],
+      "metadata": {
+        "source": "autonomous",
+        "confidence": 1,
+        "rationale": "",
+        "quality": {
+          "approved": true,
+          "score": 70,
+          "issues": [],
+          "warnings": [
+            "Description should explain why the goal matters",
+            "No success criteria provided",
+            "No verification method provided"
+          ],
+          "duplicateGoalId": null,
+          "successCriteria": [],
+          "verification": null
+        },
+        "successCriteria": [],
+        "verification": null,
+        "evidence": null,
+        "lastVerification": {
+          "passed": false,
+          "checkedAt": 1778432825387,
+          "checks": [
+            {
+              "type": "evidence",
+              "label": "Completion evidence supplied",
+              "passed": false,
+              "output": "No verifier or evidence supplied"
+            }
+          ],
+          "score": 0
+        }
+      }
+    },
+    "ac5bdec1-2ccd-41f0-97e1-c698e99c042f": {
+      "id": "ac5bdec1-2ccd-41f0-97e1-c698e99c042f",
+      "type": "operational",
+      "category": "user_priority",
+      "title": "It must send `update_goal_progress` with `progress: 100` when done",
+      "description": "Priority from Barry",
+      "status": "verification_failed",
+      "approved": true,
+      "priority": 72,
+      "metrics": {
+        "target": null,
+        "current": null,
+        "progress": 95
+      },
+      "dependencies": [],
+      "prerequisites": [],
+      "createdAt": 1778430855764,
+      "startedAt": 1778430855767,
+      "completedAt": null,
+      "dueDate": null,
+      "assignedTo": [],
+      "tasks": [],
+      "metadata": {
+        "source": "autonomous",
+        "confidence": 1,
+        "rationale": "",
+        "quality": {
+          "approved": true,
+          "score": 70,
+          "issues": [],
+          "warnings": [
+            "Description should explain why the goal matters",
+            "No success criteria provided",
+            "No verification method provided"
+          ],
+          "duplicateGoalId": null,
+          "successCriteria": [],
+          "verification": null
+        },
+        "successCriteria": [],
+        "verification": null,
+        "evidence": null,
+        "lastVerification": {
+          "passed": false,
+          "checkedAt": 1778433606094,
+          "checks": [
+            {
+              "type": "evidence",
+              "label": "Completion evidence supplied",
+              "passed": false,
+              "output": "No verifier or evidence supplied"
+            }
+          ],
+          "score": 0
+        }
+      }
+    },
+    "6b3df51f-714f-4a37-823a-0e23207f9d9b": {
+      "id": "6b3df51f-714f-4a37-823a-0e23207f9d9b",
+      "type": "operational",
+      "category": "user_priority",
+      "title": "DriveArbiter should see tension drop when goals complete",
+      "description": "Priority from Barry",
+      "status": "verification_failed",
+      "approved": true,
+      "priority": 72,
+      "metrics": {
+        "target": null,
+        "current": null,
+        "progress": 95
+      },
+      "dependencies": [],
+      "prerequisites": [],
+      "createdAt": 1778430855767,
+      "startedAt": 1778430855770,
+      "completedAt": null,
+      "dueDate": null,
+      "assignedTo": [],
+      "tasks": [],
+      "metadata": {
+        "source": "autonomous",
+        "confidence": 1,
+        "rationale": "",
+        "quality": {
+          "approved": true,
+          "score": 70,
+          "issues": [],
+          "warnings": [
+            "Description should explain why the goal matters",
+            "No success criteria provided",
+            "No verification method provided"
+          ],
+          "duplicateGoalId": null,
+          "successCriteria": [],
+          "verification": null
+        },
+        "successCriteria": [],
+        "verification": null,
+        "evidence": null,
+        "lastVerification": {
+          "passed": false,
+          "checkedAt": 1778434016024,
+          "checks": [
+            {
+              "type": "evidence",
+              "label": "Completion evidence supplied",
+              "passed": false,
+              "output": "No verifier or evidence supplied"
+            }
+          ],
+          "score": 0
+        }
+      }
+    },
+    "d28953fb-2a3b-4115-b08f-b0f11eb352d3": {
+      "id": "d28953fb-2a3b-4115-b08f-b0f11eb352d3",
+      "type": "operational",
+      "category": "user_priority",
+      "title": "0% progress after 7 days = auto-prune",
+      "description": "Priority from Barry",
+      "status": "verification_failed",
+      "approved": true,
+      "priority": 72,
+      "metrics": {
+        "target": null,
+        "current": null,
+        "progress": 95
+      },
+      "dependencies": [],
+      "prerequisites": [],
+      "createdAt": 1778430855771,
+      "startedAt": 1778430855774,
+      "completedAt": null,
+      "dueDate": null,
+      "assignedTo": [],
+      "tasks": [],
+      "metadata": {
+        "source": "autonomous",
+        "confidence": 1,
+        "rationale": "",
+        "quality": {
+          "approved": true,
+          "score": 70,
+          "issues": [],
+          "warnings": [
+            "Description should explain why the goal matters",
+            "No success criteria provided",
+            "No verification method provided"
+          ],
+          "duplicateGoalId": null,
+          "successCriteria": [],
+          "verification": null
+        },
+        "successCriteria": [],
+        "verification": null,
+        "evidence": null,
+        "lastVerification": {
+          "passed": false,
+          "checkedAt": 1778434521304,
+          "checks": [
+            {
+              "type": "evidence",
+              "label": "Completion evidence supplied",
+              "passed": false,
+              "output": "No verifier or evidence supplied"
+            }
+          ],
+          "score": 0
+        }
+      }
+    },
+    "4f269a8a-4017-4ced-a981-9b1e2bfcb1bb": {
+      "id": "4f269a8a-4017-4ced-a981-9b1e2bfcb1bb",
+      "type": "operational",
+      "category": "user_priority",
+      "title": "Duplicate titles (>50% word overlap) = reject at creation",
+      "description": "Priority from Barry",
+      "status": "verification_failed",
+      "approved": true,
+      "priority": 72,
+      "metrics": {
+        "target": null,
+        "current": null,
+        "progress": 95
+      },
+      "dependencies": [],
+      "prerequisites": [],
+      "createdAt": 1778430855774,
+      "startedAt": 1778430855777,
+      "completedAt": null,
+      "dueDate": null,
+      "assignedTo": [],
+      "tasks": [],
+      "metadata": {
+        "source": "autonomous",
+        "confidence": 1,
+        "rationale": "",
+        "quality": {
+          "approved": true,
+          "score": 70,
+          "issues": [],
+          "warnings": [
+            "Description should explain why the goal matters",
+            "No success criteria provided",
+            "No verification method provided"
+          ],
+          "duplicateGoalId": null,
+          "successCriteria": [],
+          "verification": null
+        },
+        "successCriteria": [],
+        "verification": null,
+        "evidence": null,
+        "lastVerification": {
+          "passed": false,
+          "checkedAt": 1778434980483,
+          "checks": [
+            {
+              "type": "evidence",
+              "label": "Completion evidence supplied",
+              "passed": false,
+              "output": "No verifier or evidence supplied"
+            }
+          ],
+          "score": 0
+        }
+      }
+    },
+    "60d42a6b-5f2b-41f7-ade9-ea48abffff40": {
+      "id": "60d42a6b-5f2b-41f7-ade9-ea48abffff40",
+      "type": "operational",
+      "category": "user_priority",
+      "title": "Brave Search: 500/month. Use free scrapers first. Brave only as last resort.",
+      "description": "Priority from Barry",
+      "status": "verification_failed",
+      "approved": true,
+      "priority": 72,
+      "metrics": {
+        "target": null,
+        "current": null,
+        "progress": 95
+      },
+      "dependencies": [],
+      "prerequisites": [],
+      "createdAt": 1778430855778,
+      "startedAt": 1778430855781,
+      "completedAt": null,
+      "dueDate": null,
+      "assignedTo": [],
+      "tasks": [],
+      "metadata": {
+        "source": "autonomous",
+        "confidence": 1,
+        "rationale": "",
+        "quality": {
+          "approved": true,
+          "score": 70,
+          "issues": [],
+          "warnings": [
+            "Description should explain why the goal matters",
+            "No success criteria provided",
+            "No verification method provided"
+          ],
+          "duplicateGoalId": null,
+          "successCriteria": [],
+          "verification": null
+        },
+        "successCriteria": [],
+        "verification": null,
+        "evidence": null,
+        "lastVerification": {
+          "passed": false,
+          "checkedAt": 1778435457118,
+          "checks": [
+            {
+              "type": "evidence",
+              "label": "Completion evidence supplied",
+              "passed": false,
+              "output": "No verifier or evidence supplied"
+            }
+          ],
+          "score": 0
+        }
+      }
+    },
+    "2c6488a7-cdde-41f5-9a1e-f02af9a512a6": {
+      "id": "2c6488a7-cdde-41f5-9a1e-f02af9a512a6",
+      "type": "operational",
+      "category": "user_priority",
+      "title": "Gemini: DISABLED. API key cancelled due to charges. Do NOT re-enable.",
+      "description": "Priority from Barry",
+      "status": "completed",
+      "approved": true,
+      "priority": 72,
+      "metrics": {
+        "target": null,
+        "current": null,
+        "progress": 100
+      },
+      "dependencies": [],
+      "prerequisites": [],
+      "createdAt": 1778430855782,
+      "startedAt": 1778430855785,
+      "completedAt": 1778431726208,
+      "dueDate": null,
+      "assignedTo": [],
+      "tasks": [],
+      "metadata": {
+        "source": "autonomous",
+        "confidence": 1,
+        "rationale": "",
+        "quality": {
+          "approved": true,
+          "score": 70,
+          "issues": [],
+          "warnings": [
+            "Description should explain why the goal matters",
+            "No success criteria provided",
+            "No verification method provided"
+          ],
+          "duplicateGoalId": null,
+          "successCriteria": [],
+          "verification": null
+        },
+        "successCriteria": [],
+        "verification": null,
+        "evidence": null,
+        "lastVerification": {
+          "passed": true,
+          "checkedAt": 1778431726208,
+          "checks": [
+            {
+              "type": "evidence",
+              "label": "Completion evidence supplied",
+              "passed": true,
+              "output": "Result/evidence present"
+            }
+          ],
+          "score": 100
+        },
+        "completionResult": {
+          "result": "Gemini API disabled permanently. API key cancelled due to charges. No re-enablement actions will be taken under any circumstances. Priority from Barry. This goal has been acknowledged and stored in memory."
+        }
+      }
+    },
+    "91bc2364-1f53-4224-8656-d32496e69d50": {
+      "id": "91bc2364-1f53-4224-8656-d32496e69d50",
+      "type": "operational",
+      "category": "user_priority",
+      "title": "DeepSeek: primary. Ollama: local fallback.",
+      "description": "Priority from Barry",
+      "status": "verification_failed",
+      "approved": true,
+      "priority": 72,
+      "metrics": {
+        "target": null,
+        "current": null,
+        "progress": 95
+      },
+      "dependencies": [],
+      "prerequisites": [],
+      "createdAt": 1778430855785,
+      "startedAt": 1778430855788,
+      "completedAt": null,
+      "dueDate": null,
+      "assignedTo": [],
+      "tasks": [],
+      "metadata": {
+        "source": "autonomous",
+        "confidence": 1,
+        "rationale": "",
+        "quality": {
+          "approved": true,
+          "score": 70,
+          "issues": [],
+          "warnings": [
+            "Description should explain why the goal matters",
+            "No success criteria provided",
+            "No verification method provided"
+          ],
+          "duplicateGoalId": null,
+          "successCriteria": [],
+          "verification": null
+        },
+        "successCriteria": [],
+        "verification": null,
+        "evidence": null,
+        "lastVerification": {
+          "passed": false,
+          "checkedAt": 1778435941655,
+          "checks": [
+            {
+              "type": "evidence",
+              "label": "Completion evidence supplied",
+              "passed": false,
+              "output": "No verifier or evidence supplied"
+            }
+          ],
+          "score": 0
+        }
+      }
+    },
+    "1f08acd7-99d7-4fc1-a82f-2ca1f7a85110": {
+      "id": "1f08acd7-99d7-4fc1-a82f-2ca1f7a85110",
+      "type": "operational",
+      "category": "user_priority",
+      "title": "Wire MAX ↔ SOMA engineering tasks",
+      "description": "Priority from Barry",
+      "status": "verification_failed",
+      "approved": true,
+      "priority": 72,
+      "metrics": {
+        "target": null,
+        "current": null,
+        "progress": 95
+      },
+      "dependencies": [],
+      "prerequisites": [],
+      "createdAt": 1778430855788,
+      "startedAt": 1778430855791,
+      "completedAt": null,
+      "dueDate": null,
+      "assignedTo": [],
+      "tasks": [],
+      "metadata": {
+        "source": "autonomous",
+        "confidence": 1,
+        "rationale": "",
+        "quality": {
+          "approved": true,
+          "score": 70,
+          "issues": [],
+          "warnings": [
+            "Description should explain why the goal matters",
+            "No success criteria provided",
+            "No verification method provided"
+          ],
+          "duplicateGoalId": null,
+          "successCriteria": [],
+          "verification": null
+        },
+        "successCriteria": [],
+        "verification": null,
+        "evidence": null,
+        "lastVerification": {
+          "passed": false,
+          "checkedAt": 1778436404115,
+          "checks": [
+            {
+              "type": "evidence",
+              "label": "Completion evidence supplied",
+              "passed": false,
+              "output": "No verifier or evidence supplied"
+            }
+          ],
+          "score": 0
+        }
+      }
+    },
+    "5bb9f2a2-fac4-44f8-aead-53913139411f": {
+      "id": "5bb9f2a2-fac4-44f8-aead-53913139411f",
+      "type": "operational",
+      "category": "user_priority",
+      "title": "Perception dashboard tab (daemon health, signal flow)",
+      "description": "Priority from Barry",
+      "status": "verification_failed",
+      "approved": true,
+      "priority": 72,
+      "metrics": {
+        "target": null,
+        "current": null,
+        "progress": 95
+      },
+      "dependencies": [],
+      "prerequisites": [],
+      "createdAt": 1778430855792,
+      "startedAt": 1778430855795,
+      "completedAt": null,
+      "dueDate": null,
+      "assignedTo": [],
+      "tasks": [],
+      "metadata": {
+        "source": "autonomous",
+        "confidence": 1,
+        "rationale": "",
+        "quality": {
+          "approved": true,
+          "score": 70,
+          "issues": [],
+          "warnings": [
+            "Description should explain why the goal matters",
+            "No success criteria provided",
+            "No verification method provided"
+          ],
+          "duplicateGoalId": null,
+          "successCriteria": [],
+          "verification": null
+        },
+        "successCriteria": [],
+        "verification": null,
+        "evidence": null,
+        "lastVerification": {
+          "passed": false,
+          "checkedAt": 1778436939449,
+          "checks": [
+            {
+              "type": "evidence",
+              "label": "Completion evidence supplied",
+              "passed": false,
+              "output": "No verifier or evidence supplied"
+            }
+          ],
+          "score": 0
+        }
+      }
+    },
+    "9eeeb2e5-1168-4e28-a83a-5a2f7c5c8683": {
+      "id": "9eeeb2e5-1168-4e28-a83a-5a2f7c5c8683",
+      "type": "operational",
+      "category": "user_priority",
+      "title": "Migrate .cjs arbiters to ESM (biggest stability risk)",
+      "description": "Priority from Barry",
+      "status": "verification_failed",
+      "approved": true,
+      "priority": 72,
+      "metrics": {
+        "target": null,
+        "current": null,
+        "progress": 95
+      },
+      "dependencies": [],
+      "prerequisites": [],
+      "createdAt": 1778430855795,
+      "startedAt": 1778430855799,
+      "completedAt": null,
+      "dueDate": null,
+      "assignedTo": [],
+      "tasks": [],
+      "metadata": {
+        "source": "autonomous",
+        "confidence": 1,
+        "rationale": "",
+        "quality": {
+          "approved": true,
+          "score": 70,
+          "issues": [],
+          "warnings": [
+            "Description should explain why the goal matters",
+            "No success criteria provided",
+            "No verification method provided"
+          ],
+          "duplicateGoalId": null,
+          "successCriteria": [],
+          "verification": null
+        },
+        "successCriteria": [],
+        "verification": null,
+        "evidence": null,
+        "lastVerification": {
+          "passed": false,
+          "checkedAt": 1778437377928,
+          "checks": [
+            {
+              "type": "evidence",
+              "label": "Completion evidence supplied",
+              "passed": false,
+              "output": "No verifier or evidence supplied"
+            }
+          ],
+          "score": 0
+        }
+      }
+    },
+    "b3fd00bb-4ab9-4349-9c73-3977e84a18bc": {
+      "id": "b3fd00bb-4ab9-4349-9c73-3977e84a18bc",
+      "type": "operational",
+      "category": "user_priority",
+      "title": "Marketplace wiring (UI exists, install logic not wired)",
+      "description": "Priority from Barry",
+      "status": "active",
+      "approved": true,
+      "priority": 72,
+      "metrics": {
+        "target": null,
+        "current": null,
+        "progress": 82
+      },
+      "dependencies": [],
+      "prerequisites": [],
+      "createdAt": 1778430855799,
+      "startedAt": 1778430855802,
+      "completedAt": null,
+      "dueDate": null,
+      "assignedTo": [],
+      "tasks": [],
+      "metadata": {
+        "source": "autonomous",
+        "confidence": 1,
+        "rationale": "",
+        "quality": {
+          "approved": true,
+          "score": 70,
+          "issues": [],
+          "warnings": [
+            "Description should explain why the goal matters",
+            "No success criteria provided",
+            "No verification method provided"
+          ],
+          "duplicateGoalId": null,
+          "successCriteria": [],
+          "verification": null
+        },
+        "successCriteria": [],
+        "verification": null,
+        "evidence": null
+      }
     }
   },
   "activeGoals": [
     "747c9e8c-ab98-4ca5-b721-5014b6cad26b",
     "98d73bd1-af59-4951-90fb-785310406d3d",
-    "4206589c-272d-4f30-9ee0-ff139567e6a4"
+    "4206589c-272d-4f30-9ee0-ff139567e6a4",
+    "8c2b992d-9179-4d58-85e5-3eb0b36c881c",
+    "ac5bdec1-2ccd-41f0-97e1-c698e99c042f",
+    "6b3df51f-714f-4a37-823a-0e23207f9d9b",
+    "d28953fb-2a3b-4115-b08f-b0f11eb352d3",
+    "4f269a8a-4017-4ced-a981-9b1e2bfcb1bb",
+    "60d42a6b-5f2b-41f7-ade9-ea48abffff40",
+    "91bc2364-1f53-4224-8656-d32496e69d50",
+    "1f08acd7-99d7-4fc1-a82f-2ca1f7a85110",
+    "5bb9f2a2-fac4-44f8-aead-53913139411f",
+    "9eeeb2e5-1168-4e28-a83a-5a2f7c5c8683",
+    "b3fd00bb-4ab9-4349-9c73-3977e84a18bc"
   ],
   "completedGoals": [
+    {
+      "id": "2c6488a7-cdde-41f5-9a1e-f02af9a512a6",
+      "type": "operational",
+      "category": "user_priority",
+      "title": "Gemini: DISABLED. API key cancelled due to charges. Do NOT re-enable.",
+      "description": "Priority from Barry",
+      "status": "completed",
+      "approved": true,
+      "priority": 72,
+      "metrics": {
+        "target": null,
+        "current": null,
+        "progress": 100
+      },
+      "dependencies": [],
+      "prerequisites": [],
+      "createdAt": 1778430855782,
+      "startedAt": 1778430855785,
+      "completedAt": 1778431726208,
+      "dueDate": null,
+      "assignedTo": [],
+      "tasks": [],
+      "metadata": {
+        "source": "autonomous",
+        "confidence": 1,
+        "rationale": "",
+        "quality": {
+          "approved": true,
+          "score": 70,
+          "issues": [],
+          "warnings": [
+            "Description should explain why the goal matters",
+            "No success criteria provided",
+            "No verification method provided"
+          ],
+          "duplicateGoalId": null,
+          "successCriteria": [],
+          "verification": null
+        },
+        "successCriteria": [],
+        "verification": null,
+        "evidence": null,
+        "lastVerification": {
+          "passed": true,
+          "checkedAt": 1778431726208,
+          "checks": [
+            {
+              "type": "evidence",
+              "label": "Completion evidence supplied",
+              "passed": true,
+              "output": "Result/evidence present"
+            }
+          ],
+          "score": 100
+        },
+        "completionResult": {
+          "result": "Gemini API disabled permanently. API key cancelled due to charges. No re-enablement actions will be taken under any circumstances. Priority from Barry. This goal has been acknowledged and stored in memory."
+        }
+      }
+    },
     {
       "id": "f88b487b-580f-456e-9122-608898a27cbd",
       "type": "operational",
@@ -6935,45 +7680,17 @@
         "confidence": 1,
         "rationale": "ProactiveCouncil strategic planning cycle"
       }
-    },
-    {
-      "id": "9c129a44-f3ce-4425-8211-1888e2c4acf9",
-      "type": "operational",
-      "category": "research",
-      "title": "Synthesize system state summary",
-      "description": "No active goals — review system state and propose next priorities",
-      "status": "completed",
-      "approved": false,
-      "priority": 70,
-      "metrics": {
-        "target": null,
-        "current": null,
-        "progress": 100
-      },
-      "dependencies": [],
-      "prerequisites": [],
-      "createdAt": 1777955909772,
-      "startedAt": 1777955922302,
-      "completedAt": 1777956517389,
-      "dueDate": null,
-      "assignedTo": [],
-      "tasks": [],
-      "metadata": {
-        "source": "autonomous",
-        "confidence": 1,
-        "rationale": "ProactiveCouncil strategic planning cycle"
-      }
     }
   ],
   "failedGoals": [],
   "stats": {
-    "goalsCreated": 383,
-    "goalsCompleted": 292,
+    "goalsCreated": 395,
+    "goalsCompleted": 293,
     "goalsFailed": 0,
     "goalsDeferred": 552,
-    "autonomousGoals": 379,
+    "autonomousGoals": 391,
     "userRequestedGoals": 4,
-    "avgCompletionTime": 67083450353.57533,
+    "avgCompletionTime": 66854499568.82934,
     "goalsPerWeek": 100
   }
 }

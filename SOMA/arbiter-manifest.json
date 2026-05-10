@@ -49,6 +49,17 @@
       "status": null
     },
     {
+      "file": "ChemistryArbiter.js",
+      "cls": "ChemistryArbiter",
+      "capabilities": [
+        "reasoning",
+        "knowledge-synthesis"
+      ],
+      "role": "maintainer",
+      "lobe": null,
+      "status": null
+    },
+    {
       "file": "ChemistryLabArbiter.js",
       "cls": "ChemistryLabArbiter",
       "capabilities": [
@@ -59,17 +70,6 @@
       "role": "specialist",
       "lobe": "COGNITIVE",
       "status": "verified"
-    },
-    {
-      "file": "ChemistryArbiter.js",
-      "cls": "ChemistryArbiter",
-      "capabilities": [
-        "reasoning",
-        "knowledge-synthesis"
-      ],
-      "role": "maintainer",
-      "lobe": null,
-      "status": null
     },
     {
       "file": "ContextSearchArbiter.js",
@@ -143,6 +143,18 @@
       "status": null
     },
     {
+      "file": "FileSystemArbiter.js",
+      "cls": "FileSystemArbiter",
+      "capabilities": [
+        "read-files",
+        "write-files",
+        "execute-code"
+      ],
+      "role": "implementer",
+      "lobe": null,
+      "status": null
+    },
+    {
       "file": "EngineeringSwarmArbiter.js",
       "cls": "EngineeringSwarmArbiter",
       "capabilities": [
@@ -154,18 +166,6 @@
         "security-audit"
       ],
       "role": "architect",
-      "lobe": null,
-      "status": null
-    },
-    {
-      "file": "FileSystemArbiter.js",
-      "cls": "FileSystemArbiter",
-      "capabilities": [
-        "read-files",
-        "write-files",
-        "execute-code"
-      ],
-      "role": "implementer",
       "lobe": null,
       "status": null
     },
@@ -269,6 +269,17 @@
       "status": null
     },
     {
+      "file": "ForecasterArbiter.js",
+      "cls": "ForecasterArbiter",
+      "capabilities": [
+        "search-web",
+        "execute-code"
+      ],
+      "role": "specialist",
+      "lobe": null,
+      "status": "verified"
+    },
+    {
       "file": "FinanceAgentArbiter.js",
       "cls": "FinanceAgentArbiter",
       "capabilities": [
@@ -281,17 +292,6 @@
       "role": "specialist",
       "lobe": null,
       "status": null
-    },
-    {
-      "file": "ForecasterArbiter.js",
-      "cls": "ForecasterArbiter",
-      "capabilities": [
-        "search-web",
-        "execute-code"
-      ],
-      "role": "specialist",
-      "lobe": null,
-      "status": "verified"
     },
     {
       "file": "MedicalDiscoveryCortex.js",
@@ -402,6 +402,17 @@
       "status": null
     },
     {
+      "file": "ChemistryArbiter.js",
+      "cls": "ChemistryArbiter",
+      "capabilities": [
+        "reasoning",
+        "knowledge-synthesis"
+      ],
+      "role": "maintainer",
+      "lobe": null,
+      "status": null
+    },
+    {
       "file": "ChemistryLabArbiter.js",
       "cls": "ChemistryLabArbiter",
       "capabilities": [
@@ -411,17 +422,6 @@
       ],
       "role": "specialist",
       "lobe": "COGNITIVE",
-      "status": null
-    },
-    {
-      "file": "ChemistryArbiter.js",
-      "cls": "ChemistryArbiter",
-      "capabilities": [
-        "reasoning",
-        "knowledge-synthesis"
-      ],
-      "role": "maintainer",
-      "lobe": null,
       "status": null
     },
     {
@@ -770,6 +770,18 @@
       "status": null
     },
     {
+      "file": "FileSystemArbiter.js",
+      "cls": "FileSystemArbiter",
+      "capabilities": [
+        "read-files",
+        "write-files",
+        "execute-code"
+      ],
+      "role": "implementer",
+      "lobe": null,
+      "status": null
+    },
+    {
       "file": "EngineeringSwarmArbiter.js",
       "cls": "EngineeringSwarmArbiter",
       "capabilities": [
@@ -781,18 +793,6 @@
         "security-audit"
       ],
       "role": "architect",
-      "lobe": null,
-      "status": null
-    },
-    {
-      "file": "FileSystemArbiter.js",
-      "cls": "FileSystemArbiter",
-      "capabilities": [
-        "read-files",
-        "write-files",
-        "execute-code"
-      ],
-      "role": "implementer",
       "lobe": null,
       "status": null
     },
@@ -901,6 +901,18 @@
       "status": null
     }
   ],
+  "reason-task": [
+    {
+      "file": "DiagnosticCortexArbiter.js",
+      "cls": "DiagnosticCortexArbiter",
+      "capabilities": [
+        "reason-task"
+      ],
+      "role": "diagnostician",
+      "lobe": "THALAMUS",
+      "status": "verified"
+    }
+  ],
   "code-generation": [
     {
       "file": "DiscoverySwarm.js",
@@ -921,236 +933,6 @@
         "analysis"
       ],
       "role": "engineer",
-      "lobe": null,
-      "status": null
-    }
-  ],
-  "reason-task": [
-    {
-      "file": "DiagnosticCortexArbiter.js",
-      "cls": "DiagnosticCortexArbiter",
-      "capabilities": [
-        "reason-task"
-      ],
-      "role": "diagnostician",
-      "lobe": "THALAMUS",
-      "status": "verified"
-    }
-  ],
-  "execute-code": [
-    {
-      "file": "EngineeringSwarmArbiter.js",
-      "cls": "EngineeringSwarmArbiter",
-      "capabilities": [
-        "read-files",
-        "write-files",
-        "execute-code",
-        "modify-code",
-        "self-healing",
-        "security-audit"
-      ],
-      "role": "architect",
-      "lobe": null,
-      "status": null
-    },
-    {
-      "file": "FileSystemArbiter.js",
-      "cls": "FileSystemArbiter",
-      "capabilities": [
-        "read-files",
-        "write-files",
-        "execute-code"
-      ],
-      "role": "implementer",
-      "lobe": null,
-      "status": null
-    },
-    {
-      "file": "FinanceAgentArbiter.js",
-      "cls": "FinanceAgentArbiter",
-      "capabilities": [
-        "search-web",
-        "micro-spawn",
-        "execute-code",
-        "memory-access",
-        "read-files"
-      ],
-      "role": "specialist",
-      "lobe": null,
-      "status": null
-    },
-    {
-      "file": "ForecasterArbiter.js",
-      "cls": "ForecasterArbiter",
-      "capabilities": [
-        "search-web",
-        "execute-code"
-      ],
-      "role": "specialist",
-      "lobe": null,
-      "status": null
-    },
-    {
-      "file": "LoadPipelineArbiter.js",
-      "cls": "LoadPipelineArbiter",
-      "capabilities": [
-        "execute-code",
-        "memory-access"
-      ],
-      "role": "architect",
-      "lobe": null,
-      "status": null
-    },
-    {
-      "file": "PulseArbiter.js",
-      "cls": "PulseArbiter",
-      "capabilities": [
-        "coordinate-asi",
-        "read-files",
-        "write-files",
-        "execute-code",
-        "memory-access"
-      ],
-      "role": "orchestrator",
-      "lobe": "COGNITIVE",
-      "status": null
-    },
-    {
-      "file": "QuantumSimulationArbiter.js",
-      "cls": "QuantumSimulationArbiter",
-      "capabilities": [
-        "execute-code",
-        "memory-access"
-      ],
-      "role": "specialist",
-      "lobe": null,
-      "status": null
-    },
-    {
-      "file": "ToolCreatorArbiter.js",
-      "cls": "ToolCreatorArbiter",
-      "capabilities": [
-        "write-files",
-        "execute-code",
-        "read-files"
-      ],
-      "role": "architect",
-      "lobe": null,
-      "status": null
-    }
-  ],
-  "modify-code": [
-    {
-      "file": "EngineeringSwarmArbiter.js",
-      "cls": "EngineeringSwarmArbiter",
-      "capabilities": [
-        "read-files",
-        "write-files",
-        "execute-code",
-        "modify-code",
-        "self-healing",
-        "security-audit"
-      ],
-      "role": "architect",
-      "lobe": null,
-      "status": null
-    },
-    {
-      "file": "ExecutiveCortexArbiter.js",
-      "cls": "ExecutiveCortexArbiter",
-      "capabilities": [
-        "execute-task",
-        "modify-code",
-        "deploy-system",
-        "reflex-execution"
-      ],
-      "role": "executive_cortex",
-      "lobe": null,
-      "status": null
-    },
-    {
-      "file": "SelfImprovementCoordinator.js",
-      "cls": "SelfImprovementCoordinator",
-      "capabilities": [
-        "track-learning",
-        "optimize-learning",
-        "modify-code",
-        "coordinate-asi"
-      ],
-      "role": "coordinator",
-      "lobe": "PROMETHEUS",
-      "status": null
-    }
-  ],
-  "self-healing": [
-    {
-      "file": "EngineeringSwarmArbiter.js",
-      "cls": "EngineeringSwarmArbiter",
-      "capabilities": [
-        "read-files",
-        "write-files",
-        "execute-code",
-        "modify-code",
-        "self-healing",
-        "security-audit"
-      ],
-      "role": "architect",
-      "lobe": null,
-      "status": null
-    },
-    {
-      "file": "SubstrateOptimizerArbiter.js",
-      "cls": "SubstrateOptimizerArbiter",
-      "capabilities": [
-        "self-healing",
-        "system-audit"
-      ],
-      "role": "maintainer",
-      "lobe": null,
-      "status": null
-    }
-  ],
-  "execute-task": [
-    {
-      "file": "ExecutiveCortexArbiter.js",
-      "cls": "ExecutiveCortexArbiter",
-      "capabilities": [
-        "execute-task",
-        "modify-code",
-        "deploy-system",
-        "reflex-execution"
-      ],
-      "role": "executive_cortex",
-      "lobe": null,
-      "status": null
-    }
-  ],
-  "deploy-system": [
-    {
-      "file": "ExecutiveCortexArbiter.js",
-      "cls": "ExecutiveCortexArbiter",
-      "capabilities": [
-        "execute-task",
-        "modify-code",
-        "deploy-system",
-        "reflex-execution"
-      ],
-      "role": "executive_cortex",
-      "lobe": null,
-      "status": null
-    }
-  ],
-  "reflex-execution": [
-    {
-      "file": "ExecutiveCortexArbiter.js",
-      "cls": "ExecutiveCortexArbiter",
-      "capabilities": [
-        "execute-task",
-        "modify-code",
-        "deploy-system",
-        "reflex-execution"
-      ],
-      "role": "executive_cortex",
       "lobe": null,
       "status": null
     }
@@ -1297,6 +1079,224 @@
       "status": null
     }
   ],
+  "execute-task": [
+    {
+      "file": "ExecutiveCortexArbiter.js",
+      "cls": "ExecutiveCortexArbiter",
+      "capabilities": [
+        "execute-task",
+        "modify-code",
+        "deploy-system",
+        "reflex-execution"
+      ],
+      "role": "executive_cortex",
+      "lobe": null,
+      "status": null
+    }
+  ],
+  "modify-code": [
+    {
+      "file": "ExecutiveCortexArbiter.js",
+      "cls": "ExecutiveCortexArbiter",
+      "capabilities": [
+        "execute-task",
+        "modify-code",
+        "deploy-system",
+        "reflex-execution"
+      ],
+      "role": "executive_cortex",
+      "lobe": null,
+      "status": null
+    },
+    {
+      "file": "EngineeringSwarmArbiter.js",
+      "cls": "EngineeringSwarmArbiter",
+      "capabilities": [
+        "read-files",
+        "write-files",
+        "execute-code",
+        "modify-code",
+        "self-healing",
+        "security-audit"
+      ],
+      "role": "architect",
+      "lobe": null,
+      "status": null
+    },
+    {
+      "file": "SelfImprovementCoordinator.js",
+      "cls": "SelfImprovementCoordinator",
+      "capabilities": [
+        "track-learning",
+        "optimize-learning",
+        "modify-code",
+        "coordinate-asi"
+      ],
+      "role": "coordinator",
+      "lobe": "PROMETHEUS",
+      "status": null
+    }
+  ],
+  "deploy-system": [
+    {
+      "file": "ExecutiveCortexArbiter.js",
+      "cls": "ExecutiveCortexArbiter",
+      "capabilities": [
+        "execute-task",
+        "modify-code",
+        "deploy-system",
+        "reflex-execution"
+      ],
+      "role": "executive_cortex",
+      "lobe": null,
+      "status": null
+    }
+  ],
+  "reflex-execution": [
+    {
+      "file": "ExecutiveCortexArbiter.js",
+      "cls": "ExecutiveCortexArbiter",
+      "capabilities": [
+        "execute-task",
+        "modify-code",
+        "deploy-system",
+        "reflex-execution"
+      ],
+      "role": "executive_cortex",
+      "lobe": null,
+      "status": null
+    }
+  ],
+  "execute-code": [
+    {
+      "file": "FileSystemArbiter.js",
+      "cls": "FileSystemArbiter",
+      "capabilities": [
+        "read-files",
+        "write-files",
+        "execute-code"
+      ],
+      "role": "implementer",
+      "lobe": null,
+      "status": null
+    },
+    {
+      "file": "ForecasterArbiter.js",
+      "cls": "ForecasterArbiter",
+      "capabilities": [
+        "search-web",
+        "execute-code"
+      ],
+      "role": "specialist",
+      "lobe": null,
+      "status": null
+    },
+    {
+      "file": "EngineeringSwarmArbiter.js",
+      "cls": "EngineeringSwarmArbiter",
+      "capabilities": [
+        "read-files",
+        "write-files",
+        "execute-code",
+        "modify-code",
+        "self-healing",
+        "security-audit"
+      ],
+      "role": "architect",
+      "lobe": null,
+      "status": null
+    },
+    {
+      "file": "FinanceAgentArbiter.js",
+      "cls": "FinanceAgentArbiter",
+      "capabilities": [
+        "search-web",
+        "micro-spawn",
+        "execute-code",
+        "memory-access",
+        "read-files"
+      ],
+      "role": "specialist",
+      "lobe": null,
+      "status": null
+    },
+    {
+      "file": "LoadPipelineArbiter.js",
+      "cls": "LoadPipelineArbiter",
+      "capabilities": [
+        "execute-code",
+        "memory-access"
+      ],
+      "role": "architect",
+      "lobe": null,
+      "status": null
+    },
+    {
+      "file": "PulseArbiter.js",
+      "cls": "PulseArbiter",
+      "capabilities": [
+        "coordinate-asi",
+        "read-files",
+        "write-files",
+        "execute-code",
+        "memory-access"
+      ],
+      "role": "orchestrator",
+      "lobe": "COGNITIVE",
+      "status": null
+    },
+    {
+      "file": "QuantumSimulationArbiter.js",
+      "cls": "QuantumSimulationArbiter",
+      "capabilities": [
+        "execute-code",
+        "memory-access"
+      ],
+      "role": "specialist",
+      "lobe": null,
+      "status": null
+    },
+    {
+      "file": "ToolCreatorArbiter.js",
+      "cls": "ToolCreatorArbiter",
+      "capabilities": [
+        "write-files",
+        "execute-code",
+        "read-files"
+      ],
+      "role": "architect",
+      "lobe": null,
+      "status": null
+    }
+  ],
+  "self-healing": [
+    {
+      "file": "EngineeringSwarmArbiter.js",
+      "cls": "EngineeringSwarmArbiter",
+      "capabilities": [
+        "read-files",
+        "write-files",
+        "execute-code",
+        "modify-code",
+        "self-healing",
+        "security-audit"
+      ],
+      "role": "architect",
+      "lobe": null,
+      "status": null
+    },
+    {
+      "file": "SubstrateOptimizerArbiter.js",
+      "cls": "SubstrateOptimizerArbiter",
+      "capabilities": [
+        "self-healing",
+        "system-audit"
+      ],
+      "role": "maintainer",
+      "lobe": null,
+      "status": null
+    }
+  ],
   "micro-spawn": [
     {
       "file": "FinanceAgentArbiter.js",
@@ -1375,6 +1375,46 @@
       "status": null
     }
   ],
+  "patch-code": [
+    {
+      "file": "GuardianArbiterV2.js",
+      "cls": "SelfHealingCloningGuardianArbiter",
+      "capabilities": [
+        "monitor-health",
+        "patch-code",
+        "verify-fix"
+      ],
+      "role": "immune_system",
+      "lobe": null,
+      "status": null
+    },
+    {
+      "file": "ThalamusArbiter.js",
+      "cls": "ThalamusArbiter",
+      "capabilities": [
+        "patch-code",
+        "monitor-health",
+        "security-audit"
+      ],
+      "role": "guardian",
+      "lobe": null,
+      "status": null
+    }
+  ],
+  "verify-fix": [
+    {
+      "file": "GuardianArbiterV2.js",
+      "cls": "SelfHealingCloningGuardianArbiter",
+      "capabilities": [
+        "monitor-health",
+        "patch-code",
+        "verify-fix"
+      ],
+      "role": "immune_system",
+      "lobe": null,
+      "status": null
+    }
+  ],
   "unified-memory": [
     {
       "file": "HippocampusArbiter.js",
@@ -1425,46 +1465,6 @@
         "fractal-sync"
       ],
       "role": "memory_cortex",
-      "lobe": null,
-      "status": null
-    }
-  ],
-  "patch-code": [
-    {
-      "file": "GuardianArbiterV2.js",
-      "cls": "SelfHealingCloningGuardianArbiter",
-      "capabilities": [
-        "monitor-health",
-        "patch-code",
-        "verify-fix"
-      ],
-      "role": "immune_system",
-      "lobe": null,
-      "status": null
-    },
-    {
-      "file": "ThalamusArbiter.js",
-      "cls": "ThalamusArbiter",
-      "capabilities": [
-        "patch-code",
-        "monitor-health",
-        "security-audit"
-      ],
-      "role": "guardian",
-      "lobe": null,
-      "status": null
-    }
-  ],
-  "verify-fix": [
-    {
-      "file": "GuardianArbiterV2.js",
-      "cls": "SelfHealingCloningGuardianArbiter",
-      "capabilities": [
-        "monitor-health",
-        "patch-code",
-        "verify-fix"
-      ],
-      "role": "immune_system",
       "lobe": null,
       "status": null
     }
@@ -1665,6 +1665,18 @@
       "status": null
     }
   ],
+  "learn": [
+    {
+      "file": "SelfReflectionArbiter.js",
+      "cls": "SelfReflectionArbiter",
+      "capabilities": [
+        "learn"
+      ],
+      "role": "analyst",
+      "lobe": null,
+      "status": null
+    }
+  ],
   "visual-perception": [
     {
       "file": "SensoryCortexArbiter.js",
@@ -1744,18 +1756,6 @@
         "integrate-systems"
       ],
       "role": "engineer",
-      "lobe": null,
-      "status": null
-    }
-  ],
-  "learn": [
-    {
-      "file": "SelfReflectionArbiter.js",
-      "cls": "SelfReflectionArbiter",
-      "capabilities": [
-        "learn"
-      ],
-      "role": "analyst",
       "lobe": null,
       "status": null
     }

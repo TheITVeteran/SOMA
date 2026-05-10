@@ -317,6 +317,8 @@ export async function loadExtendedSystems(system) {
         // Wire real search tools so curiosity explorations fetch actual web evidence
         if (system.toolRegistry) ext.curiosityEngine._toolRegistry = system.toolRegistry;
         if (system.braveSearch)  ext.curiosityEngine._braveSearch  = system.braveSearch;
+        // Wire curiosity topics into social engagement so she comments on what she's learning about
+        if (system.socialEngagement?.setCuriosityEngine) system.socialEngagement.setCuriosityEngine(ext.curiosityEngine);
     }
     if (ext.fragmentComms && system.fragmentRegistry) {
         if (system.quadBrain) system.quadBrain.fragmentComms = ext.fragmentComms;

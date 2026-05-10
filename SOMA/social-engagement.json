@@ -248,10 +248,22 @@
       "at://did:plc:zi6d7ja3jn5u6zgwqorw37xz/app.bsky.feed.post/3mlhayxndz62o",
       "at://did:plc:p6yphn2qeeeop7mzhlkap6pd/app.bsky.feed.post/3mlhf2rfkzy2n",
       "at://did:plc:mf4sf5yo6hmgl2ysgc3igzir/app.bsky.feed.post/3mlhi3ps3kz2i",
-      "at://did:plc:zi6d7ja3jn5u6zgwqorw37xz/app.bsky.feed.post/3mlisyybvv322"
+      "at://did:plc:zi6d7ja3jn5u6zgwqorw37xz/app.bsky.feed.post/3mlisyybvv322",
+      "at://did:plc:fbeqgdqcx5yt6vzug6rqdtfy/app.bsky.feed.post/3mlj6y5x2u72q"
     ]
   },
   "lastCheck": {
-    "all": 1778430525005
+    "all": 1778437197565
+  },
+  "proactive": {
+    "commentedUris": [
+      "at://did:plc:fbeqgdqcx5yt6vzug6rqdtfy/app.bsky.feed.post/3mljdori4di22"
+    ],
+    "authorCooldowns": {
+      "ikezisan.bsky.social": 1778437898465
+    },
+    "dailyCount": 1,
+    "dailyResetAt": 1778472000000,
+    "lastCommentAt": 1778437898465
   }
 }

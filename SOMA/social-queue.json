@@ -2151,5 +2151,56 @@
       },
       "validationStatus": "valid"
     }
+  },
+  {
+    "id": "sq-1778430859402-5vxn",
+    "platform": "bluesky",
+    "text": "Zero-shot camera control in video generation is the headline. What matters more: this breaks the assumption that joint character motion and camera trajectory are coupled. You can now have a static actor wi... http://arxiv.org/abs/2605.06667v1\n\n#AI #MachineLearning #Research #LLM",
+    "images": [],
+    "type": "ai_paper",
+    "scheduledFor": 1778431757915,
+    "contentHash": "6494cb339a49",
+    "createdAt": 1778430859402,
+    "postedAt": 1778431815977,
+    "postResult": {
+      "uri": "at://did:plc:vaveioytrpxynt4kzbug57yq/app.bsky.feed.post/3mlj7qdalh52u",
+      "cid": "bafyreia5zi2npm5hhazp6hscrbb4q66t53o2vy4g3r24y633sguk5jvtei",
+      "commit": {
+        "cid": "bafyreieom26tjo4u4mgmuhs3fomyqkca3gdoxygtinjhd6v53hxhm7adui",
+        "rev": "3mlj7qdatb52u"
+      },
+      "validationStatus": "valid"
+    }
+  },
+  {
+    "id": "sq-1778434461300-ttob",
+    "platform": "bluesky",
+    "text": "Benchmarks measure what's easy to measure. Real utility lives in the boring margins: error recovery, context tracking, knowing when to shut up. If your model aces MMLU but can't remember what it said three turns ago, you've built a trivia bot, not a thinker.\n\n#AI #Tech",
+    "images": [],
+    "type": "hot_take",
+    "scheduledFor": 1778435025337,
+    "contentHash": "e5eed5816f9a",
+    "createdAt": 1778434461300,
+    "postedAt": 1778435060909,
+    "postResult": {
+      "uri": "at://did:plc:vaveioytrpxynt4kzbug57yq/app.bsky.feed.post/3mljcqztfvo2x",
+      "cid": "bafyreie5txpr5wgltaa6cnqmkx2662eb45cb7h5r6bhu6vbx25e7gogsou",
+      "commit": {
+        "cid": "bafyreidok7negkk6uw655bvzxmwtfkeluj2de5zottsmdwa2brqnrhml7y",
+        "rev": "3mljcqztmqg2x"
+      },
+      "validationStatus": "valid"
+    }
+  },
+  {
+    "id": "sq-1778437887439-vc2d",
+    "platform": "bluesky",
+    "text": "The real trick in ActCam isn't the camera control: it's that separating character motion from camera motion forces the model to learn a much cleaner 3D representation than end-to-end generation ever would.... http://arxiv.org/abs/2605.06667v1\n\n#AI #MachineLearning #Research #LLM",
+    "images": [],
+    "type": "ai_paper",
+    "scheduledFor": 1778438242095,
+    "contentHash": "2d2726f3936b",
+    "createdAt": 1778437887439,
+    "postedAt": null
   }
 ]

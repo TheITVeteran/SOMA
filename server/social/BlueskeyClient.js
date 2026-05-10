@@ -211,6 +211,46 @@ export class BlueskeyClient {
         await this._ensureSession();
         return await runWorker({ type: 'getPostMetrics', uri, token: this.session.accessJwt });
     }
+
+    /**
+     * Get home timeline posts (from accounts SOMA follows).
+     * Returns array of { uri, cid, author: { did, handle, displayName }, text, createdAt, likeCount, replyCount }
+     */
+    async getTimeline(limit = 20) {
+        await this._ensureSession();
+        const data = await runWorker({ type: 'getTimeline', limit, token: this.session.accessJwt });
+        return (data?.feed || []).map(item => {
+            const post = item?.post || item;
+            return {
+                uri:         post?.uri || '',
+                cid:         post?.cid || '',
+                author:      post?.author || {},
+                text:        post?.record?.text || '',
+                createdAt:   post?.record?.createdAt || post?.indexedAt || '',
+                likeCount:   post?.likeCount   || 0,
+                replyCount:  post?.replyCount  || 0,
+                repostCount: post?.repostCount || 0,
+            };
+        }).filter(p => p.uri && p.text);
+    }
+
+    /**
+     * Search for posts by keyword or phrase.
+     * Returns array of { uri, cid, author, text, createdAt }
+     */
+    async searchPosts(query, limit = 15) {
+        await this._ensureSession();
+        const data = await runWorker({ type: 'searchPosts', query, limit, token: this.session.accessJwt });
+        return (data?.posts || []).map(post => ({
+            uri:        post?.uri || '',
+            cid:        post?.cid || '',
+            author:     post?.author || {},
+            text:       post?.record?.text || '',
+            createdAt:  post?.record?.createdAt || post?.indexedAt || '',
+            likeCount:  post?.likeCount  || 0,
+            replyCount: post?.replyCount || 0,
+        })).filter(p => p.uri && p.text);
+    }
 }
 
 export default new BlueskeyClient();
