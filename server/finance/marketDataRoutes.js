@@ -8,6 +8,14 @@ import marketDataService from './marketDataService.js';
 
 const router = express.Router();
 
+const freshnessByTimeframe = {
+    '1Min': 15 * 60 * 1000,
+    '5Min': 45 * 60 * 1000,
+    '15Min': 2 * 60 * 60 * 1000,
+    '1H': 6 * 60 * 60 * 1000,
+    '1D': 3 * 24 * 60 * 60 * 1000
+};
+
 router.get('/bars/:symbol', async (req, res) => {
     try {
         const { symbol } = req.params;
@@ -15,7 +23,10 @@ router.get('/bars/:symbol', async (req, res) => {
         const { timeframe = '1Min', limit = 100 } = req.query;
 
         const bars = await marketDataService.getBars(sym, timeframe, parseInt(limit));
-        const quality = marketDataService.validateDataQuality(bars);
+        const quality = marketDataService.validateDataQuality(
+            bars,
+            freshnessByTimeframe[timeframe] || freshnessByTimeframe['1Min']
+        );
 
         res.json({
             success: true,
@@ -107,7 +118,10 @@ router.get('/quality/:symbol', async (req, res) => {
         const { timeframe = '1Min', limit = 50 } = req.query;
 
         const bars = await marketDataService.getBars(symbol.toUpperCase(), timeframe, parseInt(limit));
-        const quality = marketDataService.validateDataQuality(bars);
+        const quality = marketDataService.validateDataQuality(
+            bars,
+            freshnessByTimeframe[timeframe] || freshnessByTimeframe['1Min']
+        );
 
         res.json({
             success: true,

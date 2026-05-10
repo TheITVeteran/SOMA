@@ -14,6 +14,7 @@
 import Database from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
+import marketEvidenceStore from './MarketEvidenceStore.js';
 
 class TradeLogger {
     constructor(dbPath = null) {
@@ -106,6 +107,29 @@ class TradeLogger {
             CREATE INDEX IF NOT EXISTS idx_learning_events_created ON learning_events(created_at);
         `);
 
+        // Create lifecycle journal table for replayable autonomous decisions
+        this.db.exec(`
+            CREATE TABLE IF NOT EXISTS trade_lifecycle_events (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                lifecycle_id TEXT,
+                trade_id INTEGER,
+                order_id TEXT,
+                symbol TEXT,
+                stage TEXT NOT NULL,
+                actor TEXT DEFAULT 'SOMA',
+                status TEXT DEFAULT 'info',
+                payload TEXT,
+                created_at TEXT DEFAULT (datetime('now'))
+            )
+        `);
+
+        this.db.exec(`
+            CREATE INDEX IF NOT EXISTS idx_lifecycle_id ON trade_lifecycle_events(lifecycle_id);
+            CREATE INDEX IF NOT EXISTS idx_lifecycle_symbol ON trade_lifecycle_events(symbol);
+            CREATE INDEX IF NOT EXISTS idx_lifecycle_stage ON trade_lifecycle_events(stage);
+            CREATE INDEX IF NOT EXISTS idx_lifecycle_created ON trade_lifecycle_events(created_at);
+        `);
+
         // Prepare statements for performance
         this._stmts.insertTrade = this.db.prepare(`
             INSERT INTO trades (order_id, symbol, side, qty, entry_price, filled_price, expected_price, slippage_pct, strategy, regime, status, entry_time)
@@ -126,6 +150,11 @@ class TradeLogger {
         this._stmts.insertSnapshot = this.db.prepare(`
             INSERT OR REPLACE INTO daily_snapshots (date, equity, cash, positions_count, daily_pnl, daily_trades, cumulative_pnl, max_drawdown_pct, win_rate)
             VALUES (@date, @equity, @cash, @positions_count, @daily_pnl, @daily_trades, @cumulative_pnl, @max_drawdown_pct, @win_rate)
+        `);
+
+        this._stmts.insertLifecycleEvent = this.db.prepare(`
+            INSERT INTO trade_lifecycle_events (lifecycle_id, trade_id, order_id, symbol, stage, actor, status, payload)
+            VALUES (@lifecycle_id, @trade_id, @order_id, @symbol, @stage, @actor, @status, @payload)
         `);
 
         console.log('[TradeLogger] SQLite initialized at', this.dbPath);
@@ -150,6 +179,28 @@ class TradeLogger {
             regime: trade.regime || null,
             entry_time: new Date().toISOString()
         });
+
+        try {
+            const evidenceType = trade.evidenceType || 'paper_trade';
+            marketEvidenceStore.append(evidenceType, {
+                tradeId: result.lastInsertRowid,
+                orderId: trade.orderId || null,
+                symbol: trade.symbol,
+                side: trade.side,
+                qty: trade.qty,
+                entryPrice: trade.entryPrice || trade.filledPrice || 0,
+                filledPrice: trade.filledPrice || null,
+                expectedPrice: trade.expectedPrice || null,
+                slippagePct: trade.slippagePct || null,
+                strategy: trade.strategy || 'manual',
+                regime: trade.regime || null,
+                mode: trade.mode || (evidenceType === 'paper_trade' ? 'paper' : 'broker'),
+                broker: trade.broker || null,
+                status: 'open'
+            }, { source: 'TradeLogger', symbol: trade.symbol, strategyId: trade.strategy || 'manual' });
+        } catch {
+            // Evidence logging is auxiliary; trade persistence remains authoritative.
+        }
 
         return result.lastInsertRowid;
     }
@@ -183,14 +234,37 @@ class TradeLogger {
             }
         }
 
+        const closedAt = new Date().toISOString();
         this._stmts.closeTrade.run({
             id: tradeId,
             exit_price: exitData.exitPrice || 0,
             pnl: exitData.pnl || 0,
             pnl_pct: exitData.pnlPct || 0,
-            exit_time: new Date().toISOString(),
+            exit_time: closedAt,
             exit_reason: exitData.reason || 'manual'
         });
+
+        try {
+            const closedTrade = this.db.prepare(`SELECT * FROM trades WHERE id = ?`).get(tradeId);
+            marketEvidenceStore.append('performance', {
+                tradeId,
+                orderId: closedTrade?.order_id || null,
+                symbol: closedTrade?.symbol || (typeof tradeIdOrSymbol === 'string' ? tradeIdOrSymbol : null),
+                strategy: closedTrade?.strategy || exitData.strategy || 'manual',
+                exitPrice: exitData.exitPrice || 0,
+                pnl: exitData.pnl || 0,
+                pnlPct: exitData.pnlPct || 0,
+                exitReason: exitData.reason || 'manual',
+                status: 'closed',
+                closedAt
+            }, {
+                source: 'TradeLogger',
+                symbol: closedTrade?.symbol || (typeof tradeIdOrSymbol === 'string' ? tradeIdOrSymbol : null),
+                strategyId: closedTrade?.strategy || exitData.strategy || 'manual'
+            });
+        } catch {
+            // Non-blocking evidence mirror.
+        }
     }
 
     /**
@@ -365,6 +439,56 @@ class TradeLogger {
         return this.db.prepare(`
             SELECT * FROM learning_events WHERE event_type = ? ORDER BY created_at DESC LIMIT ?
         `).all(eventType, limit);
+    }
+
+    /**
+     * Log a lifecycle event for audit replay: data, signal, guardrail, order, fill, close.
+     */
+    logLifecycleEvent({ lifecycleId = null, tradeId = null, orderId = null, symbol = null, stage, actor = 'SOMA', status = 'info', payload = {} }) {
+        if (!this.db || !stage) return null;
+
+        try {
+            const result = this._stmts.insertLifecycleEvent.run({
+                lifecycle_id: lifecycleId,
+                trade_id: tradeId,
+                order_id: orderId,
+                symbol,
+                stage,
+                actor,
+                status,
+                payload: JSON.stringify(payload || {})
+            });
+            return result.lastInsertRowid;
+        } catch (err) {
+            console.warn('[TradeLogger] Failed to log lifecycle event:', err.message);
+            return null;
+        }
+    }
+
+    /**
+     * Get recent lifecycle events for Mission Control audit and replay.
+     */
+    getLifecycleEvents({ limit = 100, lifecycleId = null } = {}) {
+        if (!this.db) return [];
+        const safeLimit = Math.min(500, Math.max(1, parseInt(limit, 10) || 100));
+        const rows = lifecycleId
+            ? this.db.prepare(`
+                SELECT * FROM trade_lifecycle_events
+                WHERE lifecycle_id = ?
+                ORDER BY created_at DESC, id DESC
+                LIMIT ?
+            `).all(lifecycleId, safeLimit)
+            : this.db.prepare(`
+                SELECT * FROM trade_lifecycle_events
+                ORDER BY created_at DESC, id DESC
+                LIMIT ?
+            `).all(safeLimit);
+
+        return rows.map(row => {
+            let payload = {};
+            try { payload = row.payload ? JSON.parse(row.payload) : {}; } catch {}
+            return { ...row, payload };
+        });
     }
 
     _emptyStats() {

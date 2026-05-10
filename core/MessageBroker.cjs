@@ -55,6 +55,10 @@ class MessageBroker extends EventEmitter {
 
     // CNS: Impulse Compression & Validation
     this.signalRegistry = SignalRegistry;
+    this.compressor = new SignalCompressor({
+      windowMs: Number(process.env.SOMA_SIGNAL_COMPRESS_MS || 1000),
+      onCompressed: (signal) => this._deliverSignal(signal)
+    });
     this.arbiterLoader = null; // Hook for on-the-fly expansion
 
     // Circular Buffer State
@@ -627,15 +631,32 @@ class MessageBroker extends EventEmitter {
    * Emit a structured COS Signal.
    * Signals are buffered and compressed before delivery.
    */
-  emitSignal(type, payload, priority = 'normal') {
+  emitSignal(type, payload = {}, priority = 'normal', source = 'MessageBroker') {
+    if (type && typeof type === 'object') {
+      const signalLike = type;
+      type = signalLike.type;
+      payload = signalLike.payload || {};
+      priority = signalLike.priority || priority;
+      source = signalLike.source || source;
+    }
+
     const signal = {
       id: this._generateMessageId(),
       type,
       payload,
       priority,
       timestamp: Date.now(),
-      source: 'MessageBroker' // Source is set by the emitter, but we default here
+      source
     };
+
+    try {
+      this.signalRegistry?.validate?.(signal);
+    } catch (err) {
+      this.metrics.messagesFailed++;
+      this.emit('signal_invalid', { signal, error: err.message });
+      console.warn(`[MessageBroker] Invalid signal blocked: ${type} — ${err.message}`);
+      return false;
+    }
 
     // CNS: Impulse Compression
     let swallowed = false;
@@ -644,8 +665,9 @@ class MessageBroker extends EventEmitter {
     }
 
     if (!swallowed) {
-      this._deliverSignal(signal);
+      return this._deliverSignal(signal);
     }
+    return true;
   }
 
   /**

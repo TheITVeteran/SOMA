@@ -28,7 +28,9 @@ class IdeaCaptureArbiter extends EventEmitter {
 
     // Dependencies
     this.broker = opts.broker || opts.messageBroker;
-    this.mnemonic = opts.mnemonic; // MnemonicArbiter for storage
+    this.mnemonic = opts.mnemonic || opts.mnemonicArbiter; // MnemonicArbiter for storage
+    this.reflections = opts.reflections;
+    this.museEngine = opts.museEngine;
     this.learningPipeline = opts.learningPipeline; // UniversalLearningPipeline for learning
     this.embeddingFn = opts.embeddingFn; // async(text) => vector
     this.summarizerFn = opts.summarizerFn || this._defaultSummarize;
@@ -44,13 +46,35 @@ class IdeaCaptureArbiter extends EventEmitter {
     this.heartbeatInterval = 400;    // 🔱 THE OMEGA PULSE: 400ms Resonance Rhythm
     this._heartbeatTimer = null;
     this._lastPulseAt = Date.now();
+
+    this.resonanceConfig = {
+      topK: 6,
+      similarityThreshold: 0.65
+    };
+
+    // Statistics
+    this.stats = {
+      totalCaptured: 0,
+      bySource: { ui: 0, voice: 0, file: 0, system: 0 },
+      resonanceTriggers: 0,
+      museTriggers: 0
+    };
+
+    // Wire broker subscriptions
+    if (this.broker && typeof this.broker.subscribe === 'function') {
+      this.broker.subscribe('idea.capture', msg => {
+        this.handleRawInput(msg.payload || msg).catch(err => this.emit('error', err));
+      });
+    }
+
+    console.log(`[${this.name}] Initialized - listening on 'idea.capture' topic`);
   }
 
   /**
    * Initialize and start the Resonance Heartbeat
    */
   async initialize() {
-    console.info(`[${this.name}] 🔱 Resonance Heartbeat ACTIVE (400ms precise downbeat)`);
+    console.info(`[${this.name}] Resonance Heartbeat ACTIVE (${this.heartbeatInterval}ms)`);
     
     // Start high-precision pulse loop
     this._precisePulseLoop();
@@ -72,10 +96,11 @@ class IdeaCaptureArbiter extends EventEmitter {
         }
         this._precisePulseLoop();
     }, nextPulseIn);
+    this._heartbeatTimer.unref?.();
   }
 
   /**
-   * The "Downbeat" of SOMA's heartbeat.
+   * The downbeat of SOMA's heartbeat.
    * Periodically emits resonance data to the CNS.
    */
   _emitResonancePulse() {
@@ -105,31 +130,6 @@ class IdeaCaptureArbiter extends EventEmitter {
     if (this.resonanceBuffer.length > 0 && Math.random() > 0.7) {
         this.resonanceBuffer.shift();
     }
-  }
-
-  /**
-   * Main entry point - accept raw input and process
-    this.resonanceConfig = {
-      topK: 6,
-      similarityThreshold: 0.65
-    };
-
-    // Statistics
-    this.stats = {
-      totalCaptured: 0,
-      bySource: { ui: 0, voice: 0, file: 0, system: 0 },
-      resonanceTriggers: 0,
-      museTriggers: 0
-    };
-
-    // Wire broker subscriptions
-    if (this.broker && typeof this.broker.subscribe === 'function') {
-      this.broker.subscribe('idea.capture', msg => {
-        this.handleRawInput(msg.payload || msg).catch(err => this.emit('error', err));
-      });
-    }
-
-    console.log(`[${this.name}] Initialized - listening on 'idea.capture' topic`);
   }
 
   /**
@@ -231,6 +231,15 @@ class IdeaCaptureArbiter extends EventEmitter {
 
       // 6. Run lightweight resonance scan (non-blocking)
       this._runResonance(node).catch(err => this.emit('error', err));
+
+      // 6b. Worthy idea path: trigger Muse and seed Reflections without blocking chat.
+      if (this._shouldStartReflection(node)) {
+        this._startReflectionSeed(node).catch(err => this.emit('warn', {
+          message: 'reflection_seed_failed',
+          nodeId: node.id,
+          error: err.message
+        }));
+      }
 
       // 7. Emit captured event
       this.emit('captured', { id, node });
@@ -384,6 +393,57 @@ class IdeaCaptureArbiter extends EventEmitter {
         }
       }
     }
+  }
+
+  _shouldStartReflection(node) {
+    const text = node?.originalText || '';
+    if (text.length < 80) return false;
+    if (node?.meta?.skipReflection) return false;
+    if (node?.source && ['system', 'file'].includes(node.source)) return false;
+    return /\b(idea|what if|maybe|should|architecture|design|reflection|muse|story|chapter|research|hypothesis|improve|build|create|discover|plan|next)\b/i.test(text);
+  }
+
+  async _startReflectionSeed(node) {
+    const title = this._titleFromText(node.originalText);
+    const payload = {
+      nodeId: node.id,
+      node,
+      matches: [],
+      source: 'idea_capture_reflection_seed',
+      persistReflection: true
+    };
+
+    if (this.broker && typeof this.broker.publish === 'function') {
+      await this.broker.publish(this.museTriggerTopic, payload);
+      this.stats.museTriggers++;
+      return { ok: true, mode: 'muse_trigger' };
+    }
+
+    if (this.museEngine && typeof this.museEngine._onTrigger === 'function') {
+      await this.museEngine._onTrigger(payload);
+      this.stats.museTriggers++;
+      return { ok: true, mode: 'muse_direct' };
+    }
+
+    if (this.reflections && typeof this.reflections.appendQuickNote === 'function') {
+      await this.reflections.appendQuickNote(node.originalText, {
+        title,
+        context: 'idea-capture-reflection-seed',
+        source: 'IdeaCaptureArbiter',
+        tags: ['idea-capture', 'muse-pending']
+      });
+      return { ok: true, mode: 'reflection_seed' };
+    }
+
+    return { ok: false, reason: 'no_muse_or_reflections' };
+  }
+
+  _titleFromText(text = '') {
+    const cleaned = String(text)
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 90);
+    return cleaned || 'Captured Idea';
   }
 
   /**

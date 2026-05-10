@@ -48,7 +48,8 @@ export class OdinOrchestrator extends EventEmitter {
                 ? prompt
                 : `ODIN RECURRENCE ${currentDepth}/${this.maxRecurrence}.
 Previous Insight: ${lastResponse.substring(0, 2000)}
-Task: Refine the above. Increase technical precision. If it is already optimal, repeat the key conclusion exactly to signal stability.`;
+Task: Refine the above. Increase technical precision. Eliminate generic filler. If it is already optimal, repeat the key conclusion exactly to signal stability. 
+IMPORTANT: NEVER use em-dashes (—).`;
 
             const brainResponse   = await this._callBrain(passPrompt, lobe);
             const currentResponse = brainResponse.text || brainResponse.response || '';

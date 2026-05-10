@@ -99,7 +99,7 @@ export class BaseDaemon extends EventEmitter {
         };
 
         try {
-            messageBroker.emitSignal(type, payload, priority);
+            messageBroker.emitSignal(type, payload, priority, this.name);
             // Also emit locally for the manager or tests
             this.emit('signal', signal);
         } catch (err) {

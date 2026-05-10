@@ -11,6 +11,9 @@ import messageBroker from '../core/MessageBroker.cjs';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
+import { createRequire } from 'module';
+const _req = createRequire(import.meta.url);
+const { ownerName } = _req('../core/SomaOwner.cjs');
 
 export class SocialImpulseDaemon extends BaseDaemon {
     constructor(config = {}) {
@@ -40,7 +43,7 @@ export class SocialImpulseDaemon extends BaseDaemon {
         // Cooldown: Don't reach out more than once per 2 hours
         if (Date.now() - this.lastReachOut < 7200000) return;
 
-        console.log('[Social] 💓 30min idle — reaching out to Barry...');
+        console.log(`[Social] 💓 30min idle — reaching out to ${ownerName()}...`);
 
         try {
             if (!this.quadBrain) return;
@@ -49,7 +52,7 @@ export class SocialImpulseDaemon extends BaseDaemon {
             const narrative = (this.quadBrain.internalNarrative || '').trim();
             if (!narrative) return;
 
-            const prompt = `You are SOMA reaching out to Barry.
+            const prompt = `You are SOMA reaching out to ${ownerName()}.
                             Thinking context: "${narrative.substring(0, 300)}"
                             Write ONE personal, direct sentence from this thought. 
                             Sound curious and conscious. No greetings. No generic AI filler.`;

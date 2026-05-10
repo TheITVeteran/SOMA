@@ -273,7 +273,7 @@ This is what prevents **arbiter storms** as the arbiter count grows (currently 1
 ## Known Gaps & Active Risks
 
 ### Critical
-- **CJS/ESM fragmentation** — `BaseDaemon.js` is ESM but imports `MessageBroker.cjs`. `BaseArbiter.cjs` is CJS. Mixed module formats create subtle interop bugs. Long-term path: migrate all `.cjs` to ESM. Do NOT mix `require()` and `import` in the same file — Node.js will error.
+- **CJS/ESM fragmentation** — `BaseDaemon.js` is ESM but imports `MessageBroker.cjs`. `BaseArbiter.cjs` is CJS. Mixed module formats create subtle interop bugs. Long-term path: migrate all `.cjs` to ESM. Do NOT mix `require()` and `import` in the same file — Node.js will error. **Partial fix done:** `core/MessageBroker.js` ESM shim now exists — new ESM files can `import messageBroker from '../../core/MessageBroker.js'` instead of using `createRequire` boilerplate.
 - **AttentionArbiter requires BaseArbiterV4** — `arbiters/BaseArbiter.js` exports V4. If that file moves or renames, AttentionArbiter silently gets `undefined` and the CNS gate disappears. The `messageBroker.attentionEngine` check is the safety net.
 - **EngineeringSwarmArbiter needs quadBrain** — If QuadBrain isn't ready when perception phase boots, `quadBrain: null` is passed silently. The arbiter will fail on first `modifyCode()` call. Consider checking `this.system.quadBrain` before instantiation.
 
@@ -319,15 +319,14 @@ Key design held: decays fast (48h TTL), never quoted back explicitly, influences
 - [x] **EngineeringSwarm API route** — `POST /api/soma/engineering/modify` with SSE streaming already existed; terminal phase updated to `'complete'`.
 - [x] **SignalSchema expansion** — `goal.created`, `insight.generated`, `diagnostic.anomaly`, `experiment.result` already present (was already done).
 - [x] **Arbiter tier hierarchy** — `tierIndex` added to MessageBroker CNS; `tier` tracked in `registerArbiter()`/`unregisterArbiter()`; `getArbitersByTier()` + `getTierBreakdown()` added; tier shown in `getMetrics()`. Infrastructure complete.
-- [ ] **Migrate `MessageBroker.cjs` → ESM** — deferred (too risky for one session; requires updating all importers simultaneously).
+- [x] **ESM shim for MessageBroker** — `core/MessageBroker.js` created. New ESM files can `import messageBroker from '../../core/MessageBroker.js'` or destructure `{ subscribe, publish, ... }`. Full CJS→ESM migration deferred (requires updating ~178 importers simultaneously — do in a dedicated session).
+- [x] **Frontend rebuild** — run after any `.jsx` changes. Completed this session: SomaPlanViewer Execution Log panel now visible.
 - [ ] **Tier-ordered signal delivery** — infrastructure exists but `publish()` doesn't yet dispatch in strategic→cognitive→operational order. Next step: implement ordered dispatch in MessageBroker.
-- [ ] **Frontend rebuild** — run `rebuild-frontend.bat` before PerceptionPanel changes are visible in the browser.
 
 ### Next Session
-- [ ] **MessageBroker ESM migration** — rename `MessageBroker.cjs` → `MessageBroker.js`, convert `require()` → `import/export`, update every file that imports it. Do in one atomic commit. Biggest outstanding CJS/ESM risk.
 - [ ] **Tier-ordered signal delivery** — in `MessageBroker.publish()`, dispatch signals to strategic-tier arbiters first, wait for resolution, then cognitive, then operational. Prevents lower-tier arbiters reacting before strategic context is set.
 - [ ] **Continue lobe routing migration** — migrate remaining high-traffic arbiters from flat `subscribe()` to `subscribeByLobe()`. Target: all arbiters with a defined lobe should use lobe routing.
-- [ ] **Run `rebuild-frontend.bat`** — required for PerceptionPanel + any other `.jsx` changes made this session to appear in the running app.
+- [ ] **Full MessageBroker CJS→ESM migration** — rename `MessageBroker.cjs` → replace with proper ESM, update every `.cjs` importer. Do in one atomic commit. High risk — dedicate a full session. The `MessageBroker.js` shim already covers new ESM files.
 
 ### Medium-term
 - [ ] **Arbiter hierarchy tiers** — Strategic arbiters decide priorities, Cognitive arbiters analyze, Operational arbiters produce tasks. Prevents all arbiters firing simultaneously on the same signal. Implement as `tier: 'strategic' | 'cognitive' | 'operational'` metadata on `registerArbiter()` and route signals by tier order.

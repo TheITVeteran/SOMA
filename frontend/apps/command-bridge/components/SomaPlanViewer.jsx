@@ -1,17 +1,24 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { RefreshCw, FileText, Clock } from 'lucide-react';
+import { RefreshCw, FileText, Clock, Activity, ChevronDown, ChevronUp } from 'lucide-react';
 import MarkdownIt from 'markdown-it';
 import somaBackend from '../somaBackend.js';
 
 const md = new MarkdownIt();
 
+const STATUS_COLORS = {
+  ok:    'text-emerald-400',
+  error: 'text-red-400',
+  idle:  'text-zinc-600',
+};
+
 const SomaPlanViewer = ({ isConnected }) => {
-  const [content, setContent] = useState('');
-  const [updatedAt, setUpdatedAt] = useState(null);
-  const [loading, setLoading] = useState(false);
+  const [content, setContent]       = useState('');
+  const [updatedAt, setUpdatedAt]   = useState(null);
+  const [loading, setLoading]       = useState(false);
+  const [activities, setActivities] = useState([]);
+  const [showLog, setShowLog]       = useState(false);
 
   const fetchPlan = useCallback(async () => {
-    if (!isConnected) return;
     setLoading(true);
     try {
       const res = await fetch('/api/soma/plan');
@@ -29,14 +36,14 @@ const SomaPlanViewer = ({ isConnected }) => {
     } finally {
       setLoading(false);
     }
-  }, [isConnected]);
+  }, []);
 
-  // Initial load
+  // Initial load — REST endpoint works regardless of WebSocket state
   useEffect(() => {
-    if (isConnected) fetchPlan();
-  }, [isConnected, fetchPlan]);
+    fetchPlan();
+  }, [fetchPlan]);
 
-  // Live update when GoalPlannerArbiter writes a new plan
+  // Live plan updates from GoalPlannerArbiter
   useEffect(() => {
     const handler = (payload) => {
       if (payload.content) setContent(payload.content);
@@ -44,6 +51,23 @@ const SomaPlanViewer = ({ isConnected }) => {
     };
     somaBackend.on('plan_updated', handler);
     return () => somaBackend.off('plan_updated', handler);
+  }, []);
+
+  // Fix 5: live execution feed from AutonomousHeartbeat
+  useEffect(() => {
+    const handler = (payload) => {
+      if (!payload?.source) return;
+      setActivities(prev => [{
+        source:      payload.source,
+        description: payload.description || '',
+        output:      payload.output || '',
+        status:      payload.status || 'ok',
+        durationMs:  payload.durationMs,
+        ts:          Date.now(),
+      }, ...prev].slice(0, 10));
+    };
+    somaBackend.on('soma_activity', handler);
+    return () => somaBackend.off('soma_activity', handler);
   }, []);
 
   const timeAgo = updatedAt ? new Date(updatedAt).toLocaleTimeString() : null;
@@ -92,6 +116,48 @@ const SomaPlanViewer = ({ isConnected }) => {
           <div className="flex flex-col items-center justify-center h-full text-zinc-700 text-xs">
             <FileText className="w-10 h-10 mb-3 opacity-20" />
             <p>No plan yet — SOMA will write one after her first planning cycle.</p>
+          </div>
+        )}
+      </div>
+
+      {/* Execution Activity Log */}
+      <div className="flex-shrink-0 border-t border-white/5">
+        <button
+          onClick={() => setShowLog(v => !v)}
+          className="flex items-center justify-between w-full px-5 py-2 text-[11px] text-zinc-500 hover:text-zinc-300 transition-colors"
+        >
+          <span className="flex items-center gap-1.5">
+            <Activity className="w-3 h-3" />
+            Execution Log
+            {activities.length > 0 && (
+              <span className="ml-1 px-1.5 py-0.5 rounded bg-violet-500/20 text-violet-400 text-[9px] font-semibold">
+                {activities.length}
+              </span>
+            )}
+          </span>
+          {showLog ? <ChevronDown className="w-3 h-3" /> : <ChevronUp className="w-3 h-3" />}
+        </button>
+
+        {showLog && (
+          <div className="max-h-48 overflow-y-auto px-5 pb-3 space-y-1.5 custom-scrollbar">
+            {activities.length === 0 ? (
+              <p className="text-[10px] text-zinc-700 py-2">No activity yet — heartbeat events will appear here.</p>
+            ) : (
+              activities.map((a, i) => (
+                <div key={i} className="flex items-start gap-2 text-[10px]">
+                  <span className={`mt-0.5 font-semibold shrink-0 ${STATUS_COLORS[a.status] || 'text-zinc-400'}`}>
+                    {a.status === 'ok' ? '✓' : a.status === 'error' ? '✗' : '·'}
+                  </span>
+                  <div className="min-w-0">
+                    <span className="text-zinc-500 mr-1">[{a.source}]</span>
+                    <span className="text-zinc-300">{(a.output || a.description).substring(0, 120)}</span>
+                    {a.durationMs && (
+                      <span className="ml-1 text-zinc-700">{(a.durationMs / 1000).toFixed(1)}s</span>
+                    )}
+                  </div>
+                </div>
+              ))
+            )}
           </div>
         )}
       </div>

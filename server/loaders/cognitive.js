@@ -200,7 +200,7 @@ export async function loadCognitiveSystems(toolRegistry = null) {
     });
     system.goalPlanner = new GoalPlannerArbiter({ name: 'GoalPlanner', messageBroker, quadBrain });
     system.beliefSystem = new BeliefSystemArbiter({ name: 'BeliefSystem', messageBroker, quadBrain });
-    system.museEngine = new MuseEngine({ name: 'MuseEngine', messageBroker, quadBrain });
+    system.museEngine = new MuseEngine({ name: 'MuseEngine', messageBroker, quadBrain, reflections: system.reflections });
     system.analytics = new PerformanceAnalytics({ rootPath: process.cwd() });
     system.timekeeper = new TimekeeperArbiter({ name: 'TimekeeperArbiter' });
     system.velocityTracker = new LearningVelocityTracker(messageBroker, { name: 'VelocityTracker' });

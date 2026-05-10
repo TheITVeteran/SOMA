@@ -31,16 +31,22 @@ export class MlInternArbiter extends EventEmitter {
      */
     async researchTopic(topic) {
         console.log(`🧪 [ML-INTERN] Starting autonomous research on: ${topic}`);
+        if (this.isBusy) throw new Error('ML Intern is already researching');
+        this.isBusy = true;
         
-        // 1. Search arXiv
-        const research = await this._dispatchPython('search_papers', { query: topic, limit: 5 });
-        if (!research.success) throw new Error(`Research failed: ${research.error}`);
+        try {
+            // 1. Search arXiv
+            const research = await this._dispatchPython('search_papers', { query: topic, limit: 5 });
+            if (!research.success) throw new Error(`Research failed: ${research.error}`);
 
-        // Store findings for status
-        this.findings = [...(research.data || []), ...this.findings].slice(0, 10);
+            // Store findings for status
+            this.findings = [...(research.data || []), ...this.findings].slice(0, 10);
 
-        this.emit('research_found', { topic, count: research.data.length });
-        return research.data;
+            this.emit('research_found', { topic, count: research.data.length });
+            return research.data;
+        } finally {
+            this.isBusy = false;
+        }
     }
 
     /**
@@ -69,19 +75,33 @@ export class MlInternArbiter extends EventEmitter {
         return new Promise((resolve, reject) => {
             const script = path.join(this.rootPath, 'ml_researcher.py');
             const py = spawn(this.pythonPath, [script]);
+            let settled = false;
             
             let output = '';
             let error = '';
 
+            const finish = (fn, value) => {
+                if (settled) return;
+                settled = true;
+                clearTimeout(timeout);
+                fn(value);
+            };
+
+            const timeout = setTimeout(() => {
+                try { py.kill(); } catch {}
+                finish(reject, new Error(`ML-Intern timed out during ${task}`));
+            }, 60_000);
+
             py.stdout.on('data', d => output += d.toString());
             py.stderr.on('data', d => error += d.toString());
+            py.on('error', e => finish(reject, e));
 
             py.on('close', code => {
-                if (code !== 0) return reject(new Error(`ML-Intern crashed: ${error}`));
+                if (code !== 0) return finish(reject, new Error(`ML-Intern crashed: ${error}`));
                 try {
-                    resolve(JSON.parse(output));
+                    finish(resolve, JSON.parse(output));
                 } catch (e) {
-                    reject(new Error(`Malformed researcher response: ${output}`));
+                    finish(reject, new Error(`Malformed researcher response: ${output}`));
                 }
             });
 

@@ -15,6 +15,7 @@ import PositionGuardian from '../../server/finance/PositionGuardian.js';
 import alpacaService from '../../server/finance/AlpacaService.js';
 import tradeLogger from '../../server/finance/TradeLogger.js';
 import simulationLearningEngine from '../../server/finance/SimulationLearningEngine.js';
+import missionControlRuntime from '../../server/finance/MissionControlRuntime.js';
 
 export async function loadTradingSafety(system) {
     console.log('\n[Loader] Trading Safety Systems...');
@@ -43,6 +44,14 @@ export async function loadTradingSafety(system) {
 
         // 3. Trade Logger (SQLite persistence for every trade)
         tradeLogger.initialize();
+
+        // 3b. Mission Control Runtime (learned strategy spine + audit journal)
+        missionControlRuntime.initialize({
+            tradeLogger,
+            riskManager,
+            guardrails,
+            simulationLearningEngine
+        });
 
         // 4. Position Guardian (background enforcement)
         const guardian = new PositionGuardian({
@@ -85,12 +94,14 @@ export async function loadTradingSafety(system) {
             guardian,
             tradeLogger,
             alpacaService,
-            simulationLearningEngine
+            simulationLearningEngine,
+            missionControlRuntime
         };
 
         console.log('      Risk Manager initialized (Kelly Criterion, 8 risk checks)');
         console.log('      Trading Guardrails active (size, loss, cooldown, position limits)');
         console.log('      Trade Logger active (SQLite at data/trading/trades.db)');
+        console.log('      Mission Control Runtime active (market lab learning, paper/live gates, audit journal)');
         console.log('      Position Guardian running (5s polling, stop/TP enforcement)');
         console.log('      Simulation Learning Engine active (5min cycle, adaptive parameters)');
 
@@ -99,7 +110,8 @@ export async function loadTradingSafety(system) {
             guardrails,
             guardian,
             tradeLogger,
-            simulationLearningEngine
+            simulationLearningEngine,
+            missionControlRuntime
         };
     } catch (error) {
         console.error('[TradingSafety] Failed to initialize (trading will work without safety):', error.message);

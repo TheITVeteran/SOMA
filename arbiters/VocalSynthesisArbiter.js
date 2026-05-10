@@ -30,7 +30,7 @@ export class VocalSynthesisArbiter extends BaseArbiter {
     this.name = 'VocalSynthesisArbiter';
     this.config = {
       primaryEngine: config.primaryEngine || 'fish-speech', 
-      fishSpeechUrl: config.fishSpeechUrl || 'http://localhost:8080',
+      fishSpeechUrl: config.fishSpeechUrl || 'http://localhost:8081',
       elevenLabsKey: process.env.ELEVENLABS_API_KEY,
       voiceId: process.env.ELEVENLABS_VOICE_ID || 'nf4MCGNSdM0hxM95ZBQR',
       playLocal: config.playLocal !== false, 
@@ -153,7 +153,7 @@ export class VocalSynthesisArbiter extends BaseArbiter {
         streaming: false
       }, { 
         responseType: 'arraybuffer',
-        timeout: 5000 
+        timeout: 45000 
       });
 
       if (!response.data || response.data.byteLength < 100) {

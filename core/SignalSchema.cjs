@@ -29,6 +29,14 @@ const SignalDefinitions = {
         description: 'Critical system health alerts',
         required: ['issue', 'details']
     },
+    'system.resource.critical': {
+        description: 'Critical resource pressure requiring throttling or memory relief',
+        required: ['issue']
+    },
+    'system.policy.actions': {
+        description: 'Policy engine actions recommended for current system state',
+        required: ['actions']
+    },
 
     // ── Swarm & Engineering ──
     'swarm.experience': {
@@ -62,6 +70,20 @@ const SignalDefinitions = {
     'experiment.result': {
         description: 'Emitted when a discovery swarm experiment completes',
         required: ['experimentId', 'success', 'filepath']
+    },
+
+    // ── Capability Health ──
+    'capability.map.updated': {
+        description: 'Full side-effect-free capability health map',
+        required: ['capabilities', 'timestamp']
+    },
+    'capability.degraded': {
+        description: 'A capability probe changed from healthy to degraded',
+        required: ['capability']
+    },
+    'capability.restored': {
+        description: 'A capability probe changed from degraded to healthy',
+        required: ['capability']
     },
 
     // ── UI & User ──

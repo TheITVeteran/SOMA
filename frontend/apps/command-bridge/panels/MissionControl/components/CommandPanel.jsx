@@ -1,7 +1,13 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { AssetType } from '../types.js';
-import { Search, Monitor, Cpu, TrendingUp, Zap, Shield, AlertTriangle, Brain, Check } from 'lucide-react';
+import { Search, Monitor, Cpu, TrendingUp, Zap, Shield, AlertTriangle, Check } from 'lucide-react';
 import { CRYPTO_SYMBOLS, STOCK_SYMBOLS, FUTURES_SYMBOLS, STRATEGY_PRESETS, AVAILABLE_SYMBOLS, SYMBOL_INFO } from '../constants.js';
+
+const SomaOutlineIcon = ({ className = "w-3 h-3" }) => (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M12 2C10.5 2 9 2.5 8 3.5C7 2.5 5.5 2 4 2C2.5 2 1 3 1 5C1 6.5 1.5 8 2.5 9C1.5 10 1 11.5 1 13C1 14.5 2 16 3.5 16.5C3 17.5 3 18.5 3.5 19.5C4 20.5 5 21 6 21.5C7 22 8.5 22 10 22H14C15.5 22 17 22 18 21.5C19 21 20 20.5 20.5 19.5C21 18.5 21 17.5 20.5 16.5C22 16 23 14.5 23 13C23 11.5 22.5 10 21.5 9C22.5 8 23 6.5 23 5C23 3 21.5 2 20 2C18.5 2 17 2.5 16 3.5C15 2.5 13.5 2 12 2Z" />
+    </svg>
+);
 
 export const CommandPanel = ({
     currentSymbol,
@@ -253,7 +259,7 @@ export const CommandPanel = ({
                         onClick={onAnalyze}
                         className="mt-auto w-full py-2 bg-gradient-to-r from-soma-accent/10 to-transparent border border-soma-accent/30 rounded flex items-center justify-center gap-2 text-soma-accent font-bold text-[10px] hover:bg-soma-accent/20 transition-all group hover:shadow-[0_0_15px_rgba(6,182,212,0.15)]"
                     >
-                        <Brain className="w-3 h-3 group-hover:rotate-12 transition-transform" />
+                        <SomaOutlineIcon className="w-3 h-3 group-hover:scale-110 transition-transform" />
                         DEEP SCAN
                     </button>
                 </div>

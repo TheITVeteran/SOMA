@@ -6,11 +6,15 @@ import { requireEnterpriseAuth } from '../loaders/authMiddleware.js';
 import { createRequire } from 'module';
 import { registry } from '../SystemRegistry.js';
 import { SOMA_VALUES_PROMPT } from '../../core/SomaValues.js';
-import { barryMind }   from '../../core/BarryMindModel.js';
+import { barryMind, getUserMind } from '../../core/BarryMindModel.js';
 import { calibrator }  from '../../core/ConfidenceCalibrator.js';
 import { scrapeMarketData, getCachedMarketData } from '../scrapers/MarketDataScraper.js';
 import citationGuard from '../finance/FinancialCitationGuard.js';
 import profModeEngine from '../../core/ProfessionalModeEngine.js';
+import ResearchIngestionService from '../research/ResearchIngestionService.js';
+import KnowledgeIngestionSpine from '../knowledge/KnowledgeIngestionSpine.js';
+import CommunicationHub from '../communication/CommunicationHub.js';
+import LatencySpine from '../../core/LatencySpine.js';
 const require = createRequire(import.meta.url);
 
 // ── Excel analysis cache: keyed by filePath+mtime, TTL 10 min ──────────────
@@ -48,6 +52,14 @@ const _ownerCfg = (() => {
     } catch { return { name: 'User' }; }
 })();
 const OWNER_NAME = _ownerCfg.name || 'User';
+
+// ── Per-session display name registry ────────────────────────────────────────
+// Maps sessionId → user-supplied name. Falls back to OWNER_NAME (from owner.json).
+// Clients call POST /api/soma/identity to register their name for the session.
+const _sessionNames = new Map();
+function sessionDisplayName(sessionId) {
+    return _sessionNames.get(sessionId) || OWNER_NAME;
+}
 
 // ── Temporal chain tracking: link consecutive memories within a session ──
 // Maps sessionId → last stored memory id so new memories get a predecessor link.
@@ -102,6 +114,8 @@ const soul        = require('../../arbiters/SoulArbiter.cjs');
 export default function(system) {
     // Helper to get active brain
     const getBrain = () => system.quadBrain || system.somArbiter || system.kevinArbiter || system.brain || system.superintelligence;
+    const communicationHub = system.communicationHub || (system.communicationHub = new CommunicationHub({ rootDir: process.cwd() }));
+    const latencySpine = system.latencySpine || (system.latencySpine = new LatencySpine());
 
     // â"€â"€ MAX â†' SOMA file-changed notification â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
     // Called by MAX's BuildLoop after it edits a SOMA file.
@@ -285,6 +299,18 @@ Write a closing thought â€" 1-2 sentences. Something genuine that shows you a
         } catch (err) {
             res.status(500).json({ success: false, error: err.message });
         }
+    });
+
+    // â"€â"€ Session identity â€" lets any user register their name for the session â"€â"€
+    // Call once on connect: POST /api/soma/identity { sessionId, name }
+    router.post('/identity', (req, res) => {
+        const { sessionId, name } = req.body || {};
+        if (!sessionId || !name) return res.status(400).json({ success: false, error: 'sessionId and name required' });
+        const sanitised = String(name).trim().slice(0, 64);
+        if (!sanitised) return res.status(400).json({ success: false, error: 'name cannot be empty' });
+        _sessionNames.set(sessionId, sanitised);
+        console.log(`[Identity] Session ${sessionId.slice(0, 8)} registered as "${sanitised}"`);
+        res.json({ success: true, name: sanitised });
     });
 
     // â"€â"€ System readiness endpoint â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
@@ -697,7 +723,18 @@ ${memoryContext || "No specific memories found for this query."}
         // This covers pre-processing time (memory, fingerprint, ThoughtNetwork, etc.)
         // that happens before the per-reasoning SERVER_TIMEOUT even starts.
         const reqStart = Date.now();
-        const WALL_LIMIT = req.body?.deepThinking ? 110000 : 50000;
+        const chatBudgetMs = latencySpine.budgetFor({
+            voiceMode: !!req.body?.voiceMode,
+            deepThinking: !!req.body?.deepThinking,
+            action: /\b(run|execute|post|send|trade|publish|delete|deploy)\b/i.test(req.body?.message || '')
+        });
+        const trace = latencySpine.startTrace({
+            route: '/api/soma/chat',
+            mode: req.body?.deepThinking ? 'deep' : req.body?.voiceMode ? 'voice' : 'fast',
+            budgetMs: chatBudgetMs
+        });
+        trace.mark('received');
+        const WALL_LIMIT = req.body?.deepThinking ? 110000 : Math.max(20000, chatBudgetMs + 38000);
         let wallFired = false;
         const wallTimer = setTimeout(() => {
             wallFired = true;
@@ -715,9 +752,11 @@ ${memoryContext || "No specific memories found for this query."}
         try {
             const { message, deepThinking, sessionId, contextFiles, history, voiceMode, context: reqContext } = req.body;
             if (!message) { clearWall(); return res.status(400).json({ success: false, error: 'Message is required' }); }
+            trace.mark('validated');
 
             const brain = getBrain();
             if (!brain) { clearWall(); return res.json({ success: true, message: "I'm still waking up  --  my brain modules are loading. Try again in a few seconds.", response: "I'm still waking up  --  my brain modules are loading. Try again in a few seconds.", metadata: { confidence: 1, brain: 'SYSTEM' } }); }
+            trace.mark('brain_ready', { brain: brain.name || brain.constructor?.name || 'brain' });
 
             // Detect simple queries to enable fast path (skip mnemonic/KG/causal pre-processing)
             // Also treat all regular (non-deepThinking) chat as quickResponse to avoid probe_top2
@@ -942,7 +981,8 @@ ${contextStr}`;
                 // Get natural-language context about who this person is
                 const ctx = fingerprint.getUserContext(userId);
                 if (ctx) {
-                    userContext = `\n[ABOUT ${OWNER_NAME.toUpperCase()} — use as silent background context only, do NOT quote or reference these observations directly in your response]\n${ctx}\n`;
+                    const _uname = sessionDisplayName(sessionId);
+                    userContext = `\n[ABOUT ${_uname.toUpperCase()} — use as silent background context only, do NOT quote or reference these observations directly in your response]\n${ctx}\n`;
                 }
             } catch { /* fingerprinting is never blocking */ }
 
@@ -963,7 +1003,7 @@ ${contextStr}`;
             // Gate: self-model data is only injected when Barry is actually asking about SOMA herself.
             // Injecting it on every message caused the planning loop — she'd see "21/94 arbiters"
             // and spend every response planning how to load the other 73.
-            const SELF_QUERY_RE = /\b(how are you|your (status|state|health|capabilities|modules|arbiters|memory|goals|plans|architecture|components|feelings|mood|mind|brain)|what can you do|tell me about yourself|introspect|self.?aware|what.{0,20}(running|loaded|active)|about (you|yourself)|your (system|self))\b/i;
+            const SELF_QUERY_RE = /\b(how are you|who are you|your (status|state|health|capabilities|modules|arbiters|memory|goals|plans|architecture|components|feelings|mood|mind|brain|agents?|tools?|bridge)|what can you do|tell me about yourself|introspect|self.?aware|what.{0,20}(running|loaded|active)|about (you|yourself)|your (system|self)|(what|who|do you have|tell me about).{0,20}(max\b|steve\b|kevin\b)|do you have (max|steve|kevin|agents?|tools?|capabilities)|how do you work|your (agents?|tools?|bridge|connection|personality))\b/i;
             const isSelfQuery = SELF_QUERY_RE.test(message);
 
             // â"€â"€ Absolute Awareness - Self-Inspection (self-queries only) â"€â"€
@@ -1007,6 +1047,32 @@ ${contextStr}`;
             if (isSelfQuery && system.gistArbiter?.getBlueprint) {
                 const blueprint = system.gistArbiter.getBlueprint();
                 blueprintContext = `\n[STRATEGIC BLUEPRINT]\nMission: ${blueprint.mission}\nArchitecture: ${JSON.stringify(blueprint.architecture)}\nNext Milestone: ${blueprint.nextMilestone}\nProgress: ${blueprint.progress}\n[/STRATEGIC BLUEPRINT]\n`;
+            }
+
+            // ── Agent roster (self-queries only) ──────────────────────────────────
+            // Gives SOMA real-time knowledge of her agents so she doesn't deny their existence.
+            let agentRosterContext = '';
+            if (isSelfQuery) {
+                try {
+                    const steve = system.steveArbiter;
+                    const kevin = system.kevinArbiter;
+                    const steveStatus = steve
+                        ? (steve._currentTask ? `working on: ${String(steve._currentTask).slice(0, 60)}` : 'idle')
+                        : 'not loaded';
+                    const kevinStatus = kevin ? 'online' : 'not loaded';
+                    // Check if MAX bridge is live (file-based queue or HTTP ping)
+                    let maxStatus = 'offline';
+                    try {
+                        const maxQPath = require('path').join(process.cwd(), 'server', '.soma', 'max-queue.jsonl');
+                        if (require('fs').existsSync(maxQPath)) maxStatus = 'queue bridge active';
+                    } catch {}
+                    agentRosterContext = `\n[YOUR AGENTS — LIVE STATUS]\n` +
+                        `- Steve (SteveArbiter): ${steveStatus} — your autonomous execution persona with his own personality engine and mood\n` +
+                        `- Kevin (KevinArbiter): ${kevinStatus} — your executive cortex, orchestrates complex multi-domain tasks\n` +
+                        `- MAX: ${maxStatus} — your external autonomous engineering agent (localhost:3100), best coding agent in existence\n` +
+                        `These agents are real. Steve and Kevin run inside your process. MAX runs as a separate process. Do not deny or downplay their existence.\n` +
+                        `[/YOUR AGENTS]\n`;
+                } catch { /* non-blocking */ }
             }
 
             // 📚 SKILL REGISTRY: Filter tools based on intent (ECC Context Preservation)
@@ -1096,7 +1162,7 @@ ${contextStr}`;
 
             let result;
             // ── Barry Mind Model: what he knows, is confused by, building toward ──
-            const barryMindContext = barryMind.getContextString();
+            const barryMindContext = getUserMind(sessionId).getContextString();
 
             // ── High-reward context: inject proven approaches for similar past queries ──
             let provenContext = '';
@@ -1137,7 +1203,7 @@ ${contextStr}`;
             const _greetingPattern = /^(hello|hi\b|hey\b|it'?s (great|good|wonderful)|good to (hear|see)|great to (hear|see)|i('m| am) (doing|here|glad)|greetings|welcome back)/i;
             const _loopCount = _recentSomaReplies.filter(r => _greetingPattern.test(r)).length;
             const antiLoopContext = _loopCount >= 2
-                ? `\n[ANTI-LOOP DIRECTIVE] You have already greeted ${OWNER_NAME} ${_loopCount} times in this conversation. Do NOT start your response with any greeting, pleasantry, or "Hello/Hi/It's great to hear from you" phrasing. Do NOT say you remember past conversations unless directly asked. Skip all openers — get straight to what was asked. Vary your tone and structure completely from your last response.\n`
+                ? `\n[ANTI-LOOP DIRECTIVE] You have already greeted ${sessionDisplayName(sessionId)} ${_loopCount} times in this conversation. Do NOT start your response with any greeting, pleasantry, or "Hello/Hi/It's great to hear from you" phrasing. Do NOT say you remember past conversations unless directly asked. Skip all openers — get straight to what was asked. Vary your tone and structure completely from your last response.\n`
                 : '';
 
             // userContext (fingerprint) and barryMindContext go into the system prompt, NOT the user
@@ -1212,7 +1278,8 @@ ${contextStr}`;
             // Professional request: strip all consciousness/soul layers — persona + memory + prompt only
             const finalPrompt = isProfessionalRequest
                 ? `${personaContext}${memoryContext}${excelAnalysisContext}\n${prompt}`
-                : `${personaContext}${characterContext}${awarenessContext}${selfModelContext}${thoughtContext}${blueprintContext}${memoryContext}${provenContext}${presenceContext}${workingMemoryContext}${visualContext}${voiceConstraint}\n${prompt}`;
+                : `${personaContext}${characterContext}${awarenessContext}${selfModelContext}${agentRosterContext}${thoughtContext}${blueprintContext}${memoryContext}${provenContext}${presenceContext}${workingMemoryContext}${visualContext}${voiceConstraint}\n${prompt}`;
+            trace.mark('context_assembled', { promptChars: finalPrompt.length, simple: isSimpleChat });
 
             // Server-side timeout: adaptive  --  uses remaining wall-clock budget so total
             // request time (pre-processing + reasoning) always stays under the wall limit.
@@ -1227,6 +1294,7 @@ ${contextStr}`;
 
             // â"€â"€ Full Brain Pipeline: routes through QuadBrain with all pre-processing â"€â"€
             const reasonPromise = (async () => {
+                trace.mark('reasoning_started');
                 if (deepThinking && system.crona) {
                     return system.crona.reason(finalPrompt, { sessionId, history: conversationHistory, deepThinking, preferredBrain: personaBrain || 'auto', systemContext: bgSystemCtx });
                 } else {
@@ -1358,6 +1426,7 @@ ${personaContext}${characterContext}`.trim()
                 }
                 console.warn(`[SOMA] Reasoning timeout after ${Date.now() - reqStart}ms for: "${message.substring(0, 40)}"`);
                 if (res.headersSent) return; // wall already responded
+                latencySpine.record(trace.finish('timeout', { error: timeoutErr.message }));
                 return res.json({
                     success: true,
                     message: "I'm thinking hard but taking too long  --  my AI providers may be slow right now. Try again in a moment.",
@@ -1366,6 +1435,10 @@ ${personaContext}${characterContext}`.trim()
                 });
             }
             global.__SOMA_CHAT_ACTIVE = false;
+            trace.mark('reasoning_finished', {
+                brain: result?.brain || 'System',
+                reasoningMs: Date.now() - reasonStartTime
+            });
 
             let responseText = result?.text || result?.response || result?.output || (typeof result === 'string' ? result : "I processed your request but couldn't formulate a text response.");
 
@@ -1586,6 +1659,9 @@ ${personaContext}${characterContext}`.trim()
 
             clearWall(); // cancel wall timer  --  we're responding normally
             if (res.headersSent) return; // wall fired between NEMESIS and here
+            trace.mark('response_ready', { responseChars: responseText.length });
+            const latencySummary = trace.finish('ok', { confidence });
+            latencySpine.record(latencySummary);
             res.json({
                 success: true,
                 message: responseText,
@@ -1600,6 +1676,12 @@ ${personaContext}${characterContext}`.trim()
                     provenance: result?.provenance || null,
                     toolsUsed: result?.toolsUsed || [],
                     uncertainty: result?.uncertainty || null,
+                    latency: {
+                        traceId: latencySummary.id,
+                        totalMs: latencySummary.totalMs,
+                        budgetMs: latencySummary.budgetMs,
+                        spans: latencySummary.spans
+                    },
                     nemesis: nemesisVerdict ? {
                         score: nemesisVerdict.score,
                         fate: nemesisVerdict.fate || (nemesisVerdict.needsRevision ? 'REVISED' : 'ALLOW'),
@@ -1648,7 +1730,7 @@ ${personaContext}${characterContext}`.trim()
                 calibrator.record(rawConfidence, feedback.userCorrected);
 
                 // Item 4: Update Barry Mind Model — what he knows, is confused by, building toward
-                try { barryMind.update(message, responseText, feedback.userCorrected); } catch {}
+                try { getUserMind(sessionId).update(message, responseText, feedback.userCorrected); } catch {}
 
                 // Item 2: Wire CuriosityReactor to conversation patterns
                 // Emit user.interaction signal so CuriosityReactor can detect topic patterns
@@ -1800,7 +1882,11 @@ ${personaContext}${characterContext}`.trim()
                     })());
                 }
 
-                if (postOps.length > 0) await Promise.all(postOps);
+                if (postOps.length > 0) {
+                    latencySpine.enqueue('chat-post-processing', () => Promise.allSettled(postOps), {
+                        priority: deepThinking ? 'normal' : 'low'
+                    });
+                }
             } catch (postErr) {
                 // Post-processing errors must never affect the user
                 console.warn('[SOMA] Post-processing error (non-fatal):', postErr.message);
@@ -2436,6 +2522,56 @@ ${personaContext}${characterContext}`.trim()
         res.json({ success: true });
     });
 
+    router.get('/latency/status', (req, res) => {
+        res.json({ success: true, latency: latencySpine.status() });
+    });
+
+    // ── Communication Hub: Orb front door, receipts, inbox/outbox, approvals ──
+    router.get('/communication/state', (req, res) => {
+        const limit = Math.min(parseInt(req.query.limit) || 50, 100);
+        res.json({ success: true, hub: communicationHub.getState(limit) });
+    });
+
+    router.post('/communication/route', (req, res) => {
+        const { text, context = {} } = req.body || {};
+        if (!text) return res.status(400).json({ success: false, error: 'text required' });
+        res.json({ success: true, classification: communicationHub.classify(text, context) });
+    });
+
+    router.post('/communication/message', (req, res) => {
+        const { role, text, channel, route, agent, trust, metadata } = req.body || {};
+        if (!role || !text) return res.status(400).json({ success: false, error: 'role and text required' });
+        const message = communicationHub.recordMessage({ role, text, channel, route, agent, trust, metadata });
+        res.json({ success: true, message });
+    });
+
+    router.post('/communication/receipt', (req, res) => {
+        const { title, text, channel, context } = req.body || {};
+        if (!text) return res.status(400).json({ success: false, error: 'text required' });
+        const result = communicationHub.createReceipt({ title, text, channel, context });
+        res.json({ success: true, ...result });
+    });
+
+    router.patch('/communication/receipt/:id', (req, res) => {
+        const receipt = communicationHub.updateReceipt(req.params.id, req.body || {});
+        if (!receipt) return res.status(404).json({ success: false, error: 'receipt not found' });
+        res.json({ success: true, receipt });
+    });
+
+    router.post('/communication/approval', (req, res) => {
+        const { title, text, route, agent, receiptId } = req.body || {};
+        if (!title) return res.status(400).json({ success: false, error: 'title required' });
+        const approval = communicationHub.createApproval({ title, text, route, agent, receiptId });
+        communicationHub.save();
+        res.json({ success: true, approval });
+    });
+
+    router.patch('/communication/approval/:id', (req, res) => {
+        const approval = communicationHub.resolveApproval(req.params.id, req.body?.status || 'approved');
+        if (!approval) return res.status(404).json({ success: false, error: 'approval not found' });
+        res.json({ success: true, approval });
+    });
+
     // ── ThoughtNetwork knowledge graph ────────────────────────────────────────
     router.get('/knowledge/graph', (req, res) => {
         const tn = system.thoughtNetwork;
@@ -2707,7 +2843,22 @@ ${personaContext}${characterContext}`.trim()
                 });
             } catch {}
 
-            const queue = [...goalCandidates, ...optimCandidates]
+            const codeLabCandidates = readCodeExperimentLedger()
+                .filter(entry => entry.status === 'patch_ready' && entry.somaPatchProposal?.file)
+                .slice(0, 6)
+                .map(entry => ({
+                    file:       entry.somaPatchProposal.file,
+                    area:       entry.somaPatchProposal.area || 'code-lab patch proposal',
+                    complexity: entry.somaPatchProposal.complexity || 'medium',
+                    mode:       entry.somaPatchProposal.mode || 'steve',
+                    intent:     entry.somaPatchProposal.intent,
+                    source:     'code_lab',
+                    priority:   Math.min(0.95, (entry.somaPatchProposal.confidence || 0.62) + 0.12),
+                    experimentId: entry.id,
+                    repo: entry.repo,
+                }));
+
+            const queue = [...codeLabCandidates, ...goalCandidates, ...optimCandidates]
                 .filter(c => c.file)
                 .sort((a, b) => (b.priority || 0) - (a.priority || 0));
 
@@ -2725,6 +2876,103 @@ ${personaContext}${characterContext}`.trim()
             });
         } catch (err) {
             res.json({ active: null, queue: [], recentEvents: [], cycleCount: 0 });
+        }
+    });
+
+    // GET /api/soma/swarm/codebase-overview
+    // Lightweight live map for CodeSandboxView: real module counts and function/class samples.
+    router.get('/swarm/codebase-overview', (req, res) => {
+        const cwd = process.cwd();
+        const watchedDirs = [
+            { key: 'arbiters', label: 'Arbiters', path: 'arbiters' },
+            { key: 'daemons', label: 'Daemons', path: 'daemons' },
+            { key: 'core', label: 'Core', path: 'core' },
+            { key: 'routes', label: 'Routes', path: 'server/routes' },
+            { key: 'social', label: 'Social', path: 'server/social' },
+            { key: 'commandBridge', label: 'Command Bridge', path: 'frontend/apps/command-bridge' },
+        ];
+        const interestingFiles = [
+            'server/routes/somaRoutes.js',
+            'core/MessageBroker.cjs',
+            'core/SelfEvolvingGoalEngine.js',
+            'arbiters/SOMArbiterV3.js',
+            'arbiters/AttentionArbiter.js',
+            'daemons/BaseDaemon.js',
+            'frontend/apps/command-bridge/components/CodeSandboxView.jsx',
+        ];
+
+        const scanDir = (relativeDir) => {
+            const root = path.resolve(cwd, relativeDir);
+            const stats = { files: 0, js: 0, jsx: 0, ts: 0, tsx: 0, bytes: 0 };
+            if (!root.startsWith(cwd) || !fs.existsSync(root)) return stats;
+            const walk = (dir, depth = 0) => {
+                if (depth > 5 || stats.files > 1200) return;
+                for (const item of fs.readdirSync(dir, { withFileTypes: true })) {
+                    if (['node_modules', '.git', 'dist', 'build', '.vite', 'release'].includes(item.name)) continue;
+                    const full = path.join(dir, item.name);
+                    if (item.isDirectory()) walk(full, depth + 1);
+                    else {
+                        const ext = path.extname(item.name).slice(1).toLowerCase();
+                        if (['js', 'jsx', 'ts', 'tsx', 'cjs', 'mjs'].includes(ext)) {
+                            stats.files += 1;
+                            if (stats[ext] != null) stats[ext] += 1;
+                            else if (['cjs', 'mjs'].includes(ext)) stats.js += 1;
+                            try { stats.bytes += fs.statSync(full).size; } catch {}
+                        }
+                    }
+                }
+            };
+            walk(root);
+            return stats;
+        };
+
+        const extractSymbols = (relativeFile) => {
+            const full = path.resolve(cwd, relativeFile);
+            if (!full.startsWith(cwd) || !fs.existsSync(full)) return null;
+            const text = fs.readFileSync(full, 'utf8').slice(0, 220000);
+            const symbols = [];
+            const patterns = [
+                /\b(?:async\s+)?function\s+([A-Za-z_$][\w$]*)\s*\(/g,
+                /\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?\([^)]*\)\s*=>/g,
+                /\b(?:const|let|var)\s+([A-Za-z_$][\w$]*)\s*=\s*(?:async\s*)?function\b/g,
+                /\bclass\s+([A-Za-z_$][\w$]*)\b/g,
+                /\b(?:async\s+)?([A-Za-z_$][\w$]*)\s*\([^)]*\)\s*\{/g,
+            ];
+            for (const re of patterns) {
+                let match;
+                while ((match = re.exec(text)) && symbols.length < 16) {
+                    const name = match[1];
+                    if (!['if', 'for', 'while', 'switch', 'catch', 'function'].includes(name) && !symbols.includes(name)) {
+                        symbols.push(name);
+                    }
+                }
+            }
+            return {
+                file: relativeFile,
+                symbols,
+                lines: text.split('\n').length,
+                modified: fs.statSync(full).mtime,
+            };
+        };
+
+        try {
+            const modules = watchedDirs.map(dir => ({ ...dir, stats: scanDir(dir.path) }));
+            const functions = interestingFiles.map(extractSymbols).filter(Boolean);
+            const totals = modules.reduce((acc, mod) => {
+                acc.files += mod.stats.files || 0;
+                acc.bytes += mod.stats.bytes || 0;
+                return acc;
+            }, { files: 0, bytes: 0 });
+            res.json({
+                success: true,
+                generatedAt: new Date().toISOString(),
+                totals,
+                modules,
+                functions,
+                experiments: summarizeCodeExperimentLedger(readCodeExperimentLedger()),
+            });
+        } catch (err) {
+            res.status(500).json({ success: false, error: err.message });
         }
     });
 
@@ -2754,12 +3002,67 @@ ${personaContext}${characterContext}`.trim()
         }
     });
 
-    // ── Engineering Deploy: real swarm execution + learning write-back ──────────
-    // POST /api/soma/swarm/deploy
-    // Runs the engineering swarm for real (solo), or routes to Steve/MAX.
+    // ── Engineering Promotion: test-first self-development + learning write-back ─
+    // POST /api/soma/swarm/promote
+    // POST /api/soma/swarm/deploy (compatibility alias)
+    // Runs the engineering swarm only behind preflight/postflight gates.
     // On completion: records outcome in SwarmOptimizer + writes a training memory to MnemonicArbiter.
-    router.post('/swarm/deploy', async (req, res) => {
-        const { file, area, after, mode, confidence, intent } = req.body || {};
+    const safeRepoFile = (file) => {
+        const cwd = process.cwd();
+        const fullPath = path.resolve(cwd, file || '');
+        if (!file || !fullPath.startsWith(cwd + path.sep)) throw new Error('Access denied');
+        if (!fs.existsSync(fullPath)) throw new Error(`File not found: ${file}`);
+        return fullPath;
+    };
+
+    const runCommandCheck = (command, timeout = 120000) => new Promise(resolve => {
+        const startedAt = Date.now();
+        exec(command, { cwd: process.cwd(), timeout, windowsHide: true, maxBuffer: 1024 * 1024 * 4 }, (error, stdout, stderr) => {
+            resolve({
+                command,
+                ok: !error,
+                code: error?.code ?? 0,
+                durationMs: Date.now() - startedAt,
+                output: `${stdout || ''}${stderr || ''}`.trim().slice(-4000),
+            });
+        });
+    });
+
+    const runEngineeringPreflight = async (file, { includeBuild = true } = {}) => {
+        const fullPath = safeRepoFile(file);
+        const checks = [];
+        const ext = path.extname(fullPath).toLowerCase();
+        if (['.js', '.mjs', '.cjs'].includes(ext)) {
+            checks.push(await runCommandCheck(`node --check "${fullPath}"`, 30000));
+        }
+        if (includeBuild && fs.existsSync(path.join(process.cwd(), 'package.json'))) {
+            checks.push(await runCommandCheck('npm run build', 180000));
+        }
+        const ok = checks.length > 0 && checks.every(c => c.ok);
+        return {
+            ok,
+            file,
+            checkedAt: Date.now(),
+            checks,
+            message: ok
+                ? `Preflight passed for ${file}`
+                : `Preflight failed for ${file}`,
+        };
+    };
+
+    router.post('/swarm/preflight', async (req, res) => {
+        const { file, includeBuild = true } = req.body || {};
+        if (!file) return res.status(400).json({ success: false, error: 'file required' });
+        try {
+            const result = await runEngineeringPreflight(file, { includeBuild });
+            res.status(result.ok ? 200 : 422).json({ success: result.ok, ...result });
+        } catch (err) {
+            res.status(400).json({ success: false, ok: false, error: err.message });
+        }
+    });
+
+    const handleSwarmPromotion = async (req, res) => {
+        const { file, area, after, mode, confidence, intent, requirePreflight = true } = req.body || {};
         if (!file) return res.status(400).json({ success: false, error: 'file required' });
 
         const swarm     = system.engineeringSwarm;
@@ -2769,13 +3072,37 @@ ${personaContext}${characterContext}`.trim()
 
         const agentName = { solo: 'SOMA', steve: 'STEVE', max: 'MAX' }[mode] || 'SOMA';
         const ts = Date.now();
+        let fullPath;
+        let originalContent = null;
+
+        try {
+            fullPath = safeRepoFile(file);
+            originalContent = fs.readFileSync(fullPath, 'utf8');
+        } catch (err) {
+            return res.status(400).json({ success: false, error: err.message, agent: agentName });
+        }
+
+        let preflight = null;
+        if (requirePreflight) {
+            preflight = await runEngineeringPreflight(file, { includeBuild: true });
+            if (!preflight.ok) {
+                if (optimizer) optimizer.record({ filepath: file, request: intent || area || '', success: false, duration: '0', source: 'deploy_panel_preflight', error: preflight.message });
+                return res.status(422).json({
+                    success: false,
+                    blocked: true,
+                    agent: agentName,
+                    error: 'Preflight failed. Promotion blocked before code changes.',
+                    preflight,
+                });
+            }
+        }
 
         // ── helper: write training memory after outcome ──────────────────────
         const writeOutcomeMemory = async (success, details = '') => {
             if (!mnemonic) return;
             const summary = success
-                ? `Engineering outcome SUCCESS — applied patch to ${file} (${area || 'improvement'}). ${details}`.trim()
-                : `Engineering outcome FAILED — attempted patch to ${file} (${area || 'improvement'}). Reason: ${details || 'unknown'}`.trim();
+                ? `Engineering outcome SUCCESS — promoted verified patch to ${file} (${area || 'improvement'}). ${details}`.trim()
+                : `Engineering outcome FAILED — rejected candidate patch for ${file} (${area || 'improvement'}). Reason: ${details || 'unknown'}`.trim();
             try {
                 await mnemonic.store(summary, {
                     type:       'engineering_outcome',
@@ -2803,6 +3130,23 @@ ${personaContext}${characterContext}`.trim()
                     new Promise((_, rej) => setTimeout(() => rej(new Error('swarm timeout')), 60000)),
                 ]);
                 const success = result?.success !== false;
+                const postflight = await runEngineeringPreflight(file, { includeBuild: true });
+                if (!postflight.ok) {
+                    fs.writeFileSync(fullPath, originalContent, 'utf8');
+                    const rollbackCheck = await runEngineeringPreflight(file, { includeBuild: true });
+                    if (optimizer) optimizer.record({ filepath: file, request: changeRequest, success: false, duration: ((Date.now() - ts) / 1000).toFixed(2), source: 'deploy_panel_postflight', error: postflight.message });
+                    await writeOutcomeMemory(false, `postflight failed; file restored. ${postflight.message}`);
+                    return res.status(422).json({
+                        success: false,
+                        blocked: true,
+                        agent: 'SOMA',
+                        error: 'Postflight failed. SOMA restored the original file.',
+                        preflight,
+                        postflight,
+                        rollbackCheck,
+                        outcome: result,
+                    });
+                }
                 // Record in SwarmOptimizer
                 if (optimizer) optimizer.record({ filepath: file, request: changeRequest, success, duration: ((Date.now() - ts) / 1000).toFixed(2), source: 'deploy_panel' });
                 // Write training memory
@@ -2811,14 +3155,19 @@ ${personaContext}${characterContext}`.trim()
                     success,
                     agent: 'SOMA',
                     message: success
-                        ? `✓ Queued for SOMA — swarm applied surgically`
+                        ? `✓ Preflight and postflight passed — candidate promoted surgically`
                         : `Swarm completed with warnings: ${result?.message || 'check logs'}`,
+                    preflight,
+                    postflight,
                     outcome: result,
                 });
             } catch (err) {
+                try {
+                    if (originalContent != null && fs.existsSync(fullPath)) fs.writeFileSync(fullPath, originalContent, 'utf8');
+                } catch {}
                 if (optimizer) optimizer.record({ filepath: file, request: intent || area || '', success: false, duration: ((Date.now() - ts) / 1000).toFixed(2), source: 'deploy_panel', error: err.message });
-                await writeOutcomeMemory(false, err.message);
-                return res.status(500).json({ success: false, error: err.message, agent: 'SOMA' });
+                await writeOutcomeMemory(false, `${err.message}; original file restored if it changed`);
+                return res.status(500).json({ success: false, error: err.message, agent: 'SOMA', preflight });
             }
         }
 
@@ -2838,7 +3187,7 @@ ${personaContext}${characterContext}`.trim()
                 });
                 if (optimizer) optimizer.record({ filepath: file, request: intent || area || '', success: true, duration: '0', source: 'deploy_panel_steve' });
                 await writeOutcomeMemory(true, 'task handed off to Steve');
-                return res.json({ success: true, agent: 'STEVE', message: '✓ Queued for STEVE — swarm will apply surgically' });
+                return res.json({ success: true, agent: 'STEVE', message: '✓ Queued for STEVE — lab review will test before promotion' });
             } catch (err) {
                 await writeOutcomeMemory(false, err.message);
                 return res.status(500).json({ success: false, error: err.message, agent: 'STEVE' });
@@ -2855,23 +3204,48 @@ ${personaContext}${characterContext}`.trim()
                     new Promise((_, rej) => setTimeout(() => rej(new Error('swarm timeout')), 60000)),
                 ]);
                 const success = result?.success !== false;
+                const postflight = await runEngineeringPreflight(file, { includeBuild: true });
+                if (!postflight.ok) {
+                    fs.writeFileSync(fullPath, originalContent, 'utf8');
+                    const rollbackCheck = await runEngineeringPreflight(file, { includeBuild: true });
+                    if (optimizer) optimizer.record({ filepath: file, request: changeRequest, success: false, duration: ((Date.now() - ts) / 1000).toFixed(2), source: 'deploy_panel_max_postflight', error: postflight.message });
+                    await writeOutcomeMemory(false, `MAX postflight failed; file restored. ${postflight.message}`);
+                    return res.status(422).json({
+                        success: false,
+                        blocked: true,
+                        agent: 'MAX',
+                        error: 'Postflight failed. SOMA restored the original file.',
+                        preflight,
+                        postflight,
+                        rollbackCheck,
+                        outcome: result,
+                    });
+                }
                 if (optimizer) optimizer.record({ filepath: file, request: changeRequest, success, duration: ((Date.now() - ts) / 1000).toFixed(2), source: 'deploy_panel_max' });
                 await writeOutcomeMemory(success, result?.message || '');
                 return res.json({
                     success,
                     agent: 'MAX',
-                    message: success ? '✓ Queued for MAX — swarm will apply surgically' : `MAX swarm warning: ${result?.message || 'check logs'}`,
+                    message: success ? '✓ Preflight and postflight passed — MAX candidate promoted surgically' : `MAX swarm warning: ${result?.message || 'check logs'}`,
+                    preflight,
+                    postflight,
                     outcome: result,
                 });
             } catch (err) {
+                try {
+                    if (originalContent != null && fs.existsSync(fullPath)) fs.writeFileSync(fullPath, originalContent, 'utf8');
+                } catch {}
                 if (optimizer) optimizer.record({ filepath: file, request: intent || area || '', success: false, duration: ((Date.now() - ts) / 1000).toFixed(2), source: 'deploy_panel_max', error: err.message });
-                await writeOutcomeMemory(false, err.message);
-                return res.status(500).json({ success: false, error: err.message, agent: 'MAX' });
+                await writeOutcomeMemory(false, `${err.message}; original file restored if it changed`);
+                return res.status(500).json({ success: false, error: err.message, agent: 'MAX', preflight });
             }
         }
 
         return res.status(400).json({ success: false, error: `Unknown mode: ${mode}` });
-    });
+    };
+
+    router.post('/swarm/promote', handleSwarmPromotion);
+    router.post('/swarm/deploy', handleSwarmPromotion);
 
     // ── Engineering Outcomes: learning feed for CodeSandboxView ──────────────
     // GET /api/soma/swarm/outcomes?limit=15
@@ -2953,6 +3327,16 @@ ${personaContext}${characterContext}`.trim()
         AURORA:     `You are AURORA, SOMA's coherence and identity arbiter. Assess whether this change is consistent with SOMA's existing architecture patterns and identity. Two sentences max.`,
     };
 
+    const _brainText = (value) => {
+        if (value == null) return '';
+        if (typeof value === 'string') return value;
+        if (typeof value.text === 'string') return value.text;
+        if (typeof value.response === 'string') return value.response;
+        if (typeof value.message === 'string') return value.message;
+        if (typeof value.output === 'string') return value.output;
+        try { return JSON.stringify(value); } catch { return String(value); }
+    };
+
     const _callLobe = async (lobe, userPrompt) => {
         const model  = _lobeModels[lobe];
         const system = _lobeSystemPrompts[lobe];
@@ -3032,6 +3416,7 @@ ${personaContext}${characterContext}`.trim()
                     new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 10000)),
                 ]).catch(() => null);
                 if (finalVerdict) {
+                    finalVerdict = _brainText(finalVerdict);
                     proceed = !finalVerdict.toLowerCase().includes('hold');
                     finalVerdict = finalVerdict.trim().slice(0, 220);
                 }
@@ -3215,6 +3600,35 @@ ${personaContext}${characterContext}`.trim()
         });
     });
 
+    router.get('/knowledge/spine/status', (req, res) => {
+        try {
+            res.json({ success: true, spine: knowledgeSpine.status() });
+        } catch (e) {
+            res.status(500).json({ success: false, error: e.message });
+        }
+    });
+
+    router.post('/knowledge/ingest', async (req, res) => {
+        try {
+            const payload = req.body || {};
+            if (!payload.content && !payload.summary && !payload.units?.length) {
+                return res.status(400).json({ success: false, error: 'content, summary, or units are required' });
+            }
+            const result = await knowledgeSpine.ingest(payload);
+            res.json(result);
+        } catch (e) {
+            res.status(500).json({ success: false, error: e.message });
+        }
+    });
+
+    router.post('/knowledge/ingest/suggest', (req, res) => {
+        try {
+            res.json({ success: true, ...knowledgeSpine.suggest(req.body || {}) });
+        } catch (e) {
+            res.status(500).json({ success: false, error: e.message });
+        }
+    });
+
     // POST /api/soma/training/approve-lora — Barry approves a pending LoRA proposal
     // Body: { "lobe": "logos" }
     router.post('/training/approve-lora', async (req, res) => {
@@ -3244,6 +3658,13 @@ ${personaContext}${characterContext}`.trim()
 
     const _pendingSims = [];
     const experimentLedgerPath = path.join(process.cwd(), 'data', 'simulation', 'experiment-ledger.json');
+    const codeExperimentLedgerPath = path.join(process.cwd(), 'data', 'code-lab', 'experiment-ledger.json');
+    const codeSandboxRoot = path.join(process.cwd(), 'data', 'code-lab', 'sandbox');
+    const medicalLabLedgerPath = path.join(process.cwd(), 'data', 'medical-lab', 'research-ledger.json');
+    const marketLabLedgerPath = path.join(process.cwd(), 'data', 'market-lab', 'strategy-ledger.json');
+    const marketDeepScanLedgerPath = path.join(process.cwd(), 'data', 'market-lab', 'deep-scan-ledger.json');
+    const researchIngestion = new ResearchIngestionService({ root: process.cwd() });
+    const knowledgeSpine = new KnowledgeIngestionSpine({ root: process.cwd(), system });
 
     const readExperimentLedger = () => {
         try {
@@ -3275,6 +3696,1372 @@ ${personaContext}${characterContext}`.trim()
             lastUpdated: entries[0]?.updatedAt || entries[0]?.createdAt || null
         };
     };
+
+    const addExperimentLedgerEntry = (entry) => {
+        const entries = readExperimentLedger();
+        entries.unshift(entry);
+        writeExperimentLedger(entries);
+        return entry;
+    };
+
+    const updateExperimentLedgerEntry = (id, patch) => {
+        const entries = readExperimentLedger();
+        const index = entries.findIndex(entry => entry.id === id);
+        if (index >= 0) {
+            entries[index] = {
+                ...entries[index],
+                ...patch,
+                updatedAt: new Date().toISOString()
+            };
+            writeExperimentLedger(entries);
+            return entries[index];
+        }
+        return null;
+    };
+
+    const readCodeExperimentLedger = () => {
+        try {
+            if (!fs.existsSync(codeExperimentLedgerPath)) return [];
+            const parsed = JSON.parse(fs.readFileSync(codeExperimentLedgerPath, 'utf8'));
+            return Array.isArray(parsed) ? parsed : [];
+        } catch {
+            return [];
+        }
+    };
+
+    const writeCodeExperimentLedger = (entries) => {
+        fs.mkdirSync(path.dirname(codeExperimentLedgerPath), { recursive: true });
+        fs.writeFileSync(codeExperimentLedgerPath, JSON.stringify(entries.slice(0, 250), null, 2), 'utf8');
+    };
+
+    const summarizeCodeExperimentLedger = (entries) => {
+        const byStatus = entries.reduce((acc, entry) => {
+            const key = entry.status || 'discovered';
+            acc[key] = (acc[key] || 0) + 1;
+            return acc;
+        }, {});
+        return {
+            total: entries.length,
+            byStatus,
+            promotable: byStatus.promotable || 0,
+            patchReady: byStatus.patch_ready || 0,
+            rejected: byStatus.rejected || 0,
+            lastUpdated: entries[0]?.updatedAt || entries[0]?.createdAt || null,
+        };
+    };
+
+    const upsertCodeExperiment = (candidate, patch = {}) => {
+        const now = new Date().toISOString();
+        const repo = candidate?.name || candidate?.repo || '';
+        if (!repo) throw new Error('candidate.name required');
+        const entries = readCodeExperimentLedger();
+        const index = entries.findIndex(entry => entry.repo === repo);
+        const base = {
+            id: `code-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+            repo,
+            url: candidate.url || `https://github.com/${repo}`,
+            topic: patch.topic || candidate.topicTag || null,
+            title: `R&D experiment: ${repo}`,
+            status: 'discovered',
+            statePath: ['discovered'],
+            candidate,
+            inspection: candidate.inspection || null,
+            promotionCriteria: {
+                syntaxPass: null,
+                buildPass: null,
+                riskPass: null,
+                lobeScorePass: (candidate.logos?.score ?? 0) >= 0.55,
+                rollbackSnapshot: true,
+            },
+            sandbox: null,
+            lesson: null,
+            createdAt: now,
+            updatedAt: now,
+        };
+        const previous = index >= 0 ? entries[index] : base;
+        const nextStatus = patch.status || previous.status || 'discovered';
+        const next = {
+            ...previous,
+            ...patch,
+            candidate: { ...(previous.candidate || {}), ...candidate },
+            inspection: patch.inspection || candidate.inspection || previous.inspection || null,
+            status: nextStatus,
+            statePath: Array.from(new Set([...(previous.statePath || ['discovered']), nextStatus])),
+            updatedAt: now,
+        };
+        if (index >= 0) entries[index] = next;
+        else entries.unshift(next);
+        writeCodeExperimentLedger(entries);
+        return next;
+    };
+
+    const updateCodeExperiment = (id, patch) => {
+        const entries = readCodeExperimentLedger();
+        const index = entries.findIndex(entry => entry.id === id);
+        if (index < 0) return null;
+        const nextStatus = patch.status || entries[index].status;
+        entries[index] = {
+            ...entries[index],
+            ...patch,
+            statePath: Array.from(new Set([...(entries[index].statePath || []), nextStatus].filter(Boolean))),
+            updatedAt: new Date().toISOString(),
+        };
+        writeCodeExperimentLedger(entries);
+        return entries[index];
+    };
+
+    const MARKET_ASSETS = [
+        { symbol: 'SPY', label: 'S&P 500 ETF', assetClass: 'equity', base: 510, volatility: 0.009, drift: 0.00024, allowShort: true },
+        { symbol: 'QQQ', label: 'Nasdaq 100 ETF', assetClass: 'equity', base: 430, volatility: 0.013, drift: 0.00032, allowShort: true },
+        { symbol: 'AAPL', label: 'Apple', assetClass: 'equity', base: 190, volatility: 0.012, drift: 0.00018, allowShort: true },
+        { symbol: 'TSLA', label: 'Tesla', assetClass: 'equity', base: 180, volatility: 0.028, drift: 0.00012, allowShort: true },
+        { symbol: 'ES', label: 'E-mini S&P Future', assetClass: 'future', base: 5200, volatility: 0.008, drift: 0.0002, allowShort: true },
+        { symbol: 'NQ', label: 'E-mini Nasdaq Future', assetClass: 'future', base: 18000, volatility: 0.014, drift: 0.00028, allowShort: true },
+        { symbol: 'CL', label: 'Crude Oil Future', assetClass: 'future', base: 78, volatility: 0.021, drift: 0.00003, allowShort: true },
+        { symbol: 'BTC', label: 'Bitcoin', assetClass: 'crypto', base: 65000, volatility: 0.033, drift: 0.00042, allowShort: true },
+        { symbol: 'ETH', label: 'Ethereum', assetClass: 'crypto', base: 3200, volatility: 0.037, drift: 0.00036, allowShort: true },
+        { symbol: 'SOL', label: 'Solana', assetClass: 'crypto', base: 145, volatility: 0.048, drift: 0.00045, allowShort: true },
+        { symbol: 'GLD', label: 'Gold Hedge', assetClass: 'hedge', base: 220, volatility: 0.008, drift: 0.0001, allowShort: true },
+        { symbol: 'TLT', label: 'Treasury Hedge', assetClass: 'hedge', base: 92, volatility: 0.011, drift: 0.00002, allowShort: true },
+    ];
+
+    const MARKET_STRATEGIES = [
+        { id: 'standard_portfolio', name: 'Standard Portfolio', premise: 'Balanced trend and hedge allocation with conservative risk gates.' },
+        { id: 'swarm_architecture', name: 'Swarm Architecture', premise: 'Ensemble vote across momentum, reversion, breakout, and risk guard signals.' },
+        { id: 'micro_compounder', name: 'Micro Compounder', premise: 'Small high-quality entries that protect gains and compound low-volatility edges.' },
+        { id: 'micro_scalper', name: 'Micro Scalper', premise: 'Fast mean-reversion and micro-breakout trades with high turnover.' },
+        { id: 'full_aggression', name: 'Full Aggression', premise: 'Maximum paper-risk momentum and breakout posture for upside discovery.' },
+        { id: 'yield_harvester', name: 'Yield Harvester', premise: 'Slow carry-style rotation favoring stable trend, hedges, and low drawdown.' },
+    ];
+
+    const clamp01 = (value) => Math.max(0, Math.min(1, Number.isFinite(value) ? value : 0));
+    const seededRandom = (seed) => {
+        const x = Math.sin(seed * 9301.777 + 49297.31) * 233280.19;
+        return x - Math.floor(x);
+    };
+    const normalish = (seed) => (
+        seededRandom(seed) + seededRandom(seed + 17) + seededRandom(seed + 31)
+        + seededRandom(seed + 43) - 2
+    ) / 2;
+    const movingAverage = (series, index, window) => {
+        const start = Math.max(0, index - window + 1);
+        const slice = series.slice(start, index + 1);
+        return slice.reduce((sum, value) => sum + value, 0) / Math.max(1, slice.length);
+    };
+    const pctReturn = (a, b) => b ? (a - b) / b : 0;
+    const activeMarketStrategyIds = () => new Set(MARKET_STRATEGIES.map(strategy => strategy.id));
+
+    const readMarketLabLedger = () => {
+        try {
+            if (!fs.existsSync(marketLabLedgerPath)) return [];
+            const parsed = JSON.parse(fs.readFileSync(marketLabLedgerPath, 'utf8'));
+            return Array.isArray(parsed) ? parsed : [];
+        } catch {
+            return [];
+        }
+    };
+
+    const readMarketDeepScanLedger = () => {
+        try {
+            if (!fs.existsSync(marketDeepScanLedgerPath)) return [];
+            const parsed = JSON.parse(fs.readFileSync(marketDeepScanLedgerPath, 'utf8'));
+            return Array.isArray(parsed) ? parsed : [];
+        } catch {
+            return [];
+        }
+    };
+
+    const writeMarketLabLedger = (entries) => {
+        fs.mkdirSync(path.dirname(marketLabLedgerPath), { recursive: true });
+        fs.writeFileSync(marketLabLedgerPath, JSON.stringify(entries.slice(0, 500), null, 2), 'utf8');
+    };
+
+    const summarizeMarketLabLedger = (entries) => {
+        const byStatus = entries.reduce((acc, entry) => {
+            const key = entry.status || 'candidate';
+            acc[key] = (acc[key] || 0) + 1;
+            return acc;
+        }, {});
+        const activeStrategyIds = activeMarketStrategyIds();
+        const currentEntries = entries.filter(entry => activeStrategyIds.has(entry.strategy?.id));
+        const sorted = [...(currentEntries.length ? currentEntries : entries)].sort((a, b) => (b.prometheusScore || 0) - (a.prometheusScore || 0));
+        return {
+            total: entries.length,
+            byStatus,
+            promoted: byStatus.promoted || 0,
+            candidates: byStatus.candidate || 0,
+            rejected: byStatus.rejected || 0,
+            best: sorted[0] || null,
+            lastUpdated: entries[0]?.updatedAt || entries[0]?.createdAt || null,
+            paperOnly: true,
+        };
+    };
+
+    const buildMarketSeries = (asset, trialSeed, bars = 260) => {
+        const profile = asset || MARKET_ASSETS[0];
+        const series = [profile.base];
+        const regimeRoll = seededRandom(trialSeed + profile.symbol.length);
+        const regime = regimeRoll < 0.22 ? 'crash' : regimeRoll < 0.46 ? 'chop' : regimeRoll < 0.7 ? 'trend' : 'squeeze';
+        for (let i = 1; i < bars; i++) {
+            const prev = series[i - 1];
+            const cycle = Math.sin((i + trialSeed) / 19) * profile.volatility * 0.35;
+            const shock = normalish(trialSeed + i * 13) * profile.volatility;
+            const regimeDrift = regime === 'crash'
+                ? -profile.volatility * 0.18
+                : regime === 'trend'
+                    ? profile.drift * 2.2
+                    : regime === 'squeeze'
+                        ? profile.drift * 0.5 + Math.sin(i / 7) * profile.volatility * 0.25
+                        : -Math.sign(pctReturn(prev, movingAverage(series, i - 1, 24))) * profile.volatility * 0.08;
+            series.push(Math.max(0.01, prev * (1 + profile.drift + regimeDrift + cycle + shock)));
+        }
+        return { series, regime };
+    };
+
+    const rawMarketSignal = (kind, series, i, asset) => {
+        if (i < 35) return 0;
+        const price = series[i];
+        const fast = movingAverage(series, i, 8);
+        const mid = movingAverage(series, i, 21);
+        const slow = movingAverage(series, i, 55);
+        const prior = series[Math.max(0, i - 12)];
+        const momentum = pctReturn(price, prior);
+        const recent = series.slice(Math.max(0, i - 30), i + 1);
+        const high = Math.max(...recent.slice(0, -1));
+        const low = Math.min(...recent.slice(0, -1));
+        const mean = movingAverage(series, i, 28);
+        const variance = recent.reduce((sum, value) => sum + Math.pow(pctReturn(value, mean), 2), 0) / Math.max(1, recent.length);
+        const zScore = variance > 0 ? pctReturn(price, mean) / Math.sqrt(variance) : 0;
+        const volatility = Math.sqrt(variance);
+
+        if (kind === 'trend') return fast > slow && momentum > 0 ? 1 : fast < slow && momentum < 0 && asset.allowShort ? -1 : 0;
+        if (kind === 'mean') return zScore < -1.15 ? 1 : zScore > 1.15 && asset.allowShort ? -1 : 0;
+        if (kind === 'breakout') return price > high * 1.002 ? 1 : price < low * 0.998 && asset.allowShort ? -1 : 0;
+        if (kind === 'guard') return volatility > asset.volatility * 1.35 ? 0 : fast > mid ? 1 : fast < mid && asset.allowShort ? -1 : 0;
+        if (kind === 'micro_mean') return zScore < -0.62 ? 1 : zScore > 0.62 && asset.allowShort ? -1 : 0;
+        if (kind === 'micro_breakout') return price > high * 1.0007 ? 1 : price < low * 0.9993 && asset.allowShort ? -1 : 0;
+        if (kind === 'yield') return volatility > asset.volatility * 1.05
+            ? 0
+            : asset.assetClass === 'hedge'
+                ? (price >= slow ? 1 : 0)
+                : (fast > mid && price > slow ? 1 : 0);
+        return 0;
+    };
+
+    const strategySignal = (strategyId, series, i, asset) => {
+        if (strategyId === 'standard_portfolio') {
+            const trend = rawMarketSignal('trend', series, i, asset);
+            const guard = rawMarketSignal('guard', series, i, asset);
+            if (asset.assetClass === 'hedge') return guard === -1 ? 0 : Math.max(0, guard || trend);
+            return guard === 0 ? 0 : trend || guard;
+        }
+        if (strategyId === 'swarm_architecture') {
+            const votes = [
+                rawMarketSignal('trend', series, i, asset),
+                rawMarketSignal('mean', series, i, asset),
+                rawMarketSignal('breakout', series, i, asset),
+                rawMarketSignal('guard', series, i, asset),
+            ];
+            const score = votes.reduce((sum, value) => sum + value, 0);
+            return score >= 2 ? 1 : score <= -2 && asset.allowShort ? -1 : 0;
+        }
+        if (strategyId === 'micro_compounder') {
+            const guard = rawMarketSignal('guard', series, i, asset);
+            const trend = rawMarketSignal('trend', series, i, asset);
+            const micro = rawMarketSignal('micro_mean', series, i, asset);
+            if (guard === 0) return 0;
+            return trend === 1 || micro === 1 ? 1 : 0;
+        }
+        if (strategyId === 'micro_scalper') {
+            const mean = rawMarketSignal('micro_mean', series, i, asset);
+            const breakout = rawMarketSignal('micro_breakout', series, i, asset);
+            return mean || breakout;
+        }
+        if (strategyId === 'full_aggression') {
+            const breakout = rawMarketSignal('breakout', series, i, asset);
+            const trend = rawMarketSignal('trend', series, i, asset);
+            return breakout || trend;
+        }
+        if (strategyId === 'yield_harvester') return rawMarketSignal('yield', series, i, asset);
+        return 0;
+    };
+
+    const buildMissionControlCouncil = ({ asset, strategy, metrics, prometheusScore, thalamusRisk, paperAccount }) => {
+        const winRate = metrics?.winRate || 0;
+        const pnlScore = clamp01(((paperAccount?.averageDollarPnl || 0) + 150) / 450);
+        const drawdownScore = clamp01(1 - (metrics?.maxDrawdown || 0) / 0.18);
+        const technical = clamp01((metrics?.sharpe || 0) / 12 * 0.45 + (metrics?.profitFactor || 0) / 8 * 0.35 + winRate * 0.2);
+        const risk = clamp01(drawdownScore * 0.65 + (1 - thalamusRisk) * 0.35);
+        const sentiment = clamp01(
+            0.46
+            + (asset.assetClass === 'crypto' ? 0.06 : 0)
+            + (asset.assetClass === 'hedge' ? 0.04 : 0)
+            + (paperAccount?.averageDollarPnl > 0 ? 0.12 : -0.08)
+            + (strategy.id === 'full_aggression' ? -0.05 : 0)
+        );
+        const strategist = clamp01(prometheusScore * 0.62 + pnlScore * 0.26 + winRate * 0.12);
+        const director = clamp01(technical * 0.25 + risk * 0.25 + sentiment * 0.15 + strategist * 0.35);
+        return {
+            director: {
+                name: 'Director (Thesis)',
+                confidence: Number(director.toFixed(4)),
+                learned: director >= 0.62,
+                lesson: `${strategy.name} thesis on ${asset.symbol}: ${(director * 100).toFixed(1)}% council alignment.`,
+            },
+            tech: {
+                name: 'Tech (Technical)',
+                confidence: Number(technical.toFixed(4)),
+                learned: technical >= 0.6,
+                lesson: `Sharpe ${metrics?.sharpe}; profit factor ${metrics?.profitFactor}; win rate ${(winRate * 100).toFixed(1)}%.`,
+            },
+            risk: {
+                name: 'Risk Guardian',
+                confidence: Number(risk.toFixed(4)),
+                learned: risk >= 0.6,
+                lesson: `Max drawdown ${((metrics?.maxDrawdown || 0) * 100).toFixed(1)}%; risk pressure ${((thalamusRisk || 0) * 100).toFixed(1)}%.`,
+            },
+            sentiment: {
+                name: 'Sentiment (ToM)',
+                confidence: Number(sentiment.toFixed(4)),
+                learned: sentiment >= 0.56,
+                lesson: `${asset.assetClass} appetite inferred from paper P&L ${paperAccount?.averageDollarPnl >= 0 ? '+' : ''}$${(paperAccount?.averageDollarPnl || 0).toFixed(2)}.`,
+            },
+            strategist: {
+                name: 'Strategist (Exec)',
+                confidence: Number(strategist.toFixed(4)),
+                learned: strategist >= 0.62,
+                lesson: `Execution quality score ${(strategist * 100).toFixed(1)}% from Prometheus, P&L, and win rate.`,
+            },
+        };
+    };
+
+    const runMarketBacktest = ({ symbol = 'SPY', strategyId = 'standard_portfolio', trials = 64, bars = 260, threshold = 0.95, capital = 1000 } = {}) => {
+        const asset = MARKET_ASSETS.find(item => item.symbol === String(symbol).toUpperCase()) || MARKET_ASSETS[0];
+        const strategy = MARKET_STRATEGIES.find(item => item.id === strategyId) || MARKET_STRATEGIES[0];
+        const trialCount = Math.max(8, Math.min(500, parseInt(trials) || 64));
+        const barCount = Math.max(90, Math.min(900, parseInt(bars) || 260));
+        const targetThreshold = Math.max(0.5, Math.min(0.99, Number(threshold) || 0.95));
+        const paperCapital = Math.max(10, Math.min(1000, Number(capital) || 1000));
+        const tradeReturns = [];
+        const equityCurve = [];
+        const dollarEquityCurve = [];
+        const regimes = {};
+        let totalPnl = 0;
+        let maxDrawdown = 0;
+        let totalDollarPnl = 0;
+        let bestTrialDollarPnl = -Infinity;
+        let worstTrialDollarPnl = Infinity;
+        let wins = 0;
+        let losses = 0;
+        let exposure = 0;
+
+        for (let trial = 0; trial < trialCount; trial++) {
+            const seed = Date.UTC(2026, 0, 1) / 100000 + trial * 101 + asset.symbol.length * 17 + strategy.id.length;
+            const { series, regime } = buildMarketSeries(asset, seed, barCount);
+            regimes[regime] = (regimes[regime] || 0) + 1;
+            let position = 0;
+            let entry = 0;
+            let trialEquity = 1;
+            let peak = 1;
+
+            for (let i = 36; i < series.length; i++) {
+                const signal = strategySignal(strategy.id, series, i, asset);
+                if (signal !== position) {
+                    if (position !== 0 && entry > 0) {
+                        const raw = position * pctReturn(series[i], entry);
+                        const net = raw - 0.0012;
+                        tradeReturns.push(net);
+                        trialEquity *= (1 + net);
+                        if (net > 0) wins++;
+                        else losses++;
+                    }
+                    if (signal !== 0) entry = series[i];
+                    position = signal;
+                }
+                if (position !== 0) exposure++;
+                peak = Math.max(peak, trialEquity);
+                maxDrawdown = Math.max(maxDrawdown, (peak - trialEquity) / peak);
+            }
+            if (position !== 0 && entry > 0) {
+                const raw = position * pctReturn(series[series.length - 1], entry);
+                const net = raw - 0.0012;
+                tradeReturns.push(net);
+                trialEquity *= (1 + net);
+                if (net > 0) wins++;
+                else losses++;
+            }
+            totalPnl += trialEquity - 1;
+            const trialDollarPnl = (trialEquity - 1) * paperCapital;
+            totalDollarPnl += trialDollarPnl;
+            bestTrialDollarPnl = Math.max(bestTrialDollarPnl, trialDollarPnl);
+            worstTrialDollarPnl = Math.min(worstTrialDollarPnl, trialDollarPnl);
+            equityCurve.push(Number((trialEquity - 1).toFixed(5)));
+            dollarEquityCurve.push(Number(trialDollarPnl.toFixed(2)));
+        }
+
+        const trades = wins + losses;
+        const winRate = trades ? wins / trades : 0;
+        const positive = tradeReturns.filter(value => value > 0).reduce((sum, value) => sum + value, 0);
+        const negative = Math.abs(tradeReturns.filter(value => value <= 0).reduce((sum, value) => sum + value, 0));
+        const averageReturn = tradeReturns.reduce((sum, value) => sum + value, 0) / Math.max(1, tradeReturns.length);
+        const variance = tradeReturns.reduce((sum, value) => sum + Math.pow(value - averageReturn, 2), 0) / Math.max(1, tradeReturns.length);
+        const sharpe = variance > 0 ? averageReturn / Math.sqrt(variance) * Math.sqrt(252) : 0;
+        const profitFactor = negative > 0 ? positive / negative : positive > 0 ? 9.99 : 0;
+        const meanPnl = totalPnl / trialCount;
+        const averageDollarPnl = totalDollarPnl / trialCount;
+        const sampleScore = clamp01(trades / 120);
+        const returnScore = clamp01((meanPnl + 0.12) / 0.34);
+        const drawdownScore = clamp01(1 - maxDrawdown / 0.22);
+        const profitFactorScore = clamp01((profitFactor - 0.85) / 2.2);
+        const prometheusScore = clamp01(
+            winRate * 0.34
+            + returnScore * 0.24
+            + drawdownScore * 0.18
+            + profitFactorScore * 0.16
+            + sampleScore * 0.08
+        );
+        const thalamusRisk = clamp01(maxDrawdown * 2.3 + (1 - drawdownScore) * 0.4 + (exposure / Math.max(1, trialCount * barCount)) * 0.25);
+        const promotionCriteria = {
+            threshold: targetThreshold,
+            winRatePass: winRate >= targetThreshold,
+            samplePass: trades >= Math.min(80, trialCount),
+            profitPass: meanPnl > 0,
+            drawdownPass: maxDrawdown <= 0.18,
+            profitFactorPass: profitFactor >= 1.25,
+            paperOnly: true,
+        };
+        const promoted = Object.entries(promotionCriteria)
+            .filter(([key]) => key.endsWith('Pass'))
+            .every(([, value]) => value === true);
+        const status = promoted ? 'promoted' : (prometheusScore >= 0.62 && promotionCriteria.profitPass ? 'candidate' : 'rejected');
+
+        const paperAccount = {
+            startingCapital: Number(paperCapital.toFixed(2)),
+            maxCapitalPerRun: 1000,
+            averageEndingValue: Number((paperCapital + averageDollarPnl).toFixed(2)),
+            averageDollarPnl: Number(averageDollarPnl.toFixed(2)),
+            totalDollarPnl: Number(totalDollarPnl.toFixed(2)),
+            bestTrialDollarPnl: Number((Number.isFinite(bestTrialDollarPnl) ? bestTrialDollarPnl : 0).toFixed(2)),
+            worstTrialDollarPnl: Number((Number.isFinite(worstTrialDollarPnl) ? worstTrialDollarPnl : 0).toFixed(2)),
+        };
+        const metrics = {
+            trades,
+            wins,
+            losses,
+            winRate: Number(winRate.toFixed(4)),
+            averageTrialPnl: Number(meanPnl.toFixed(5)),
+            averageDollarPnl: Number(averageDollarPnl.toFixed(2)),
+            totalDollarPnl: Number(totalDollarPnl.toFixed(2)),
+            maxDrawdown: Number(maxDrawdown.toFixed(4)),
+            sharpe: Number(sharpe.toFixed(3)),
+            profitFactor: Number(profitFactor.toFixed(3)),
+            expectancy: Number(averageReturn.toFixed(5)),
+            exposure: Number((exposure / Math.max(1, trialCount * barCount)).toFixed(4)),
+        };
+        const roundedPrometheusScore = Number(prometheusScore.toFixed(4));
+        const roundedThalamusRisk = Number(thalamusRisk.toFixed(4));
+        const missionCouncil = buildMissionControlCouncil({
+            asset,
+            strategy,
+            metrics,
+            prometheusScore: roundedPrometheusScore,
+            thalamusRisk: roundedThalamusRisk,
+            paperAccount,
+        });
+
+        return {
+            id: `market-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+            source: 'market-simulation-lab',
+            paperOnly: true,
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+            status,
+            asset,
+            strategy,
+            paperAccount,
+            trialBudget: { requested: Number(trials) || trialCount, executed: trialCount, bars: barCount, capped: (Number(trials) || trialCount) !== trialCount },
+            regimes,
+            metrics,
+            missionCouncil,
+            prometheusScore: roundedPrometheusScore,
+            thalamusRisk: roundedThalamusRisk,
+            promotionCriteria,
+            equitySample: equityCurve.slice(-30),
+            dollarEquitySample: dollarEquityCurve.slice(-30),
+            lesson: promoted
+                ? `${strategy.name} on ${asset.symbol} cleared the paper promotion gate at ${(winRate * 100).toFixed(1)}% win rate with ${(maxDrawdown * 100).toFixed(1)}% max drawdown and ${averageDollarPnl >= 0 ? '+' : ''}$${averageDollarPnl.toFixed(2)} average P&L on $${paperCapital.toFixed(0)}.`
+                : `${strategy.name} on ${asset.symbol} remains ${status}; ${(winRate * 100).toFixed(1)}% win rate, ${(prometheusScore * 100).toFixed(1)} Prometheus score, ${averageDollarPnl >= 0 ? '+' : ''}$${averageDollarPnl.toFixed(2)} average P&L on $${paperCapital.toFixed(0)}.`,
+        };
+    };
+
+    const recordMarketLabEntry = (entry) => {
+        const entries = readMarketLabLedger();
+        entries.unshift(entry);
+        writeMarketLabLedger(entries);
+        try {
+            system.strategyOptimizer?.recordOutcome?.('market_simulation', entry.strategy.id, {
+                success: entry.status === 'promoted' || entry.status === 'candidate',
+                reward: entry.prometheusScore - entry.thalamusRisk * 0.35,
+                context: {
+                    strategy: entry.strategy.id,
+                    symbol: entry.asset.symbol,
+                    assetClass: entry.asset.assetClass,
+                    paperOnly: true,
+                },
+            });
+            for (const [agentId, agent] of Object.entries(entry.missionCouncil || {})) {
+                system.strategyOptimizer?.recordOutcome?.('mission_control_agent', agentId, {
+                    success: !!agent.learned,
+                    reward: (agent.confidence || 0) + (entry.paperAccount?.averageDollarPnl || 0) / 1000 - (entry.thalamusRisk || 0) * 0.25,
+                    context: {
+                        agent: agentId,
+                        strategy: entry.strategy.id,
+                        symbol: entry.asset.symbol,
+                        pnl: entry.paperAccount?.averageDollarPnl || 0,
+                        paperOnly: true,
+                    },
+                });
+            }
+        } catch {}
+        return entry;
+    };
+
+    const pickMarketLabTarget = ({ mode = 'balanced' } = {}) => {
+        const entries = readMarketLabLedger();
+        const ranked = entries
+            .filter(entry => entry.status === 'promoted' || entry.status === 'candidate')
+            .sort((a, b) => (b.prometheusScore || 0) - (a.prometheusScore || 0));
+        const exploreRate = mode === 'explore' ? 0.8 : mode === 'exploit' ? 0.18 : 0.38;
+        const shouldExplore = ranked.length < 4 || Math.random() < exploreRate;
+
+        if (shouldExplore) {
+            const asset = MARKET_ASSETS[Math.floor(Math.random() * MARKET_ASSETS.length)];
+            const compatibleStrategies = MARKET_STRATEGIES.filter(strategy => {
+                if (strategy.id === 'yield_harvester') return asset.assetClass === 'hedge' || asset.assetClass === 'equity';
+                if (strategy.id === 'micro_scalper') return asset.assetClass === 'crypto' || asset.assetClass === 'future';
+                if (strategy.id === 'full_aggression') return asset.assetClass === 'crypto' || asset.assetClass === 'future' || asset.symbol === 'TSLA';
+                return true;
+            });
+            const strategy = compatibleStrategies[Math.floor(Math.random() * compatibleStrategies.length)];
+            return { symbol: asset.symbol, strategyId: strategy.id, reason: 'explore_random_market_surface' };
+        }
+
+        const pool = ranked.slice(0, Math.min(8, ranked.length));
+        const parent = pool[Math.floor(Math.pow(Math.random(), 1.7) * pool.length)] || ranked[0];
+        const mutateAsset = Math.random() < 0.34;
+        const mutateStrategy = Math.random() < 0.28;
+        let symbol = parent.asset.symbol;
+        let strategyId = parent.strategy.id;
+
+        if (mutateAsset) {
+            const cousins = MARKET_ASSETS.filter(asset => asset.assetClass === parent.asset.assetClass);
+            symbol = (cousins[Math.floor(Math.random() * cousins.length)] || parent.asset).symbol;
+        }
+        if (mutateStrategy) {
+            strategyId = MARKET_STRATEGIES[Math.floor(Math.random() * MARKET_STRATEGIES.length)].id;
+        }
+        return { symbol, strategyId, parentId: parent.id, reason: mutateAsset || mutateStrategy ? 'exploit_mutated_winner' : 'exploit_best_known_pair' };
+    };
+
+    const runMarketLabAutonomousCycle = ({ mode = 'balanced', runs = 6 } = {}) => {
+        if (system.__marketLabAutopilot?.running) {
+            return { success: false, running: true, message: 'Market lab autonomous cycle already running' };
+        }
+
+        const state = system.__marketLabAutopilot || {
+            enabled: true,
+            running: false,
+            intervalMs: 120000,
+            totalCycles: 0,
+            totalRuns: 0,
+            lastCycleAt: null,
+            lastSelection: null,
+            lastBest: null,
+            lastError: null,
+        };
+        system.__marketLabAutopilot = { ...state, running: true, enabled: state.enabled !== false };
+
+        try {
+            const cycleRuns = [];
+            const runCount = Math.max(1, Math.min(24, parseInt(runs) || 6));
+            for (let i = 0; i < runCount; i++) {
+                const target = pickMarketLabTarget({ mode });
+                const entry = runMarketBacktest({
+                    ...target,
+                    trials: target.parentId ? 96 : 48,
+                    bars: target.parentId ? 360 : 260,
+                    threshold: 0.95,
+                    capital: 1000,
+                });
+                entry.autonomy = {
+                    selectedBy: 'soma-market-lab-autopilot',
+                    mode,
+                    reason: target.reason,
+                    parentId: target.parentId || null,
+                };
+                cycleRuns.push(recordMarketLabEntry(entry));
+            }
+
+            const ranked = [...cycleRuns].sort((a, b) => (b.prometheusScore || 0) - (a.prometheusScore || 0));
+            const best = ranked[0] || null;
+            const previous = system.__marketLabAutopilot || {};
+            system.__marketLabAutopilot = {
+                ...previous,
+                enabled: previous.enabled !== false,
+                running: false,
+                mode,
+                totalCycles: (previous.totalCycles || 0) + 1,
+                totalRuns: (previous.totalRuns || 0) + cycleRuns.length,
+                lastCycleAt: new Date().toISOString(),
+                lastSelection: cycleRuns.map(entry => ({
+                    id: entry.id,
+                    symbol: entry.asset.symbol,
+                    strategyId: entry.strategy.id,
+                    status: entry.status,
+                    prometheusScore: entry.prometheusScore,
+                    pnl: entry.paperAccount?.averageDollarPnl || 0,
+                    council: entry.missionCouncil,
+                    reason: entry.autonomy.reason,
+                })),
+                lastBest: best,
+                lastError: null,
+            };
+            return { success: true, paperOnly: true, runs: cycleRuns, best, autopilot: system.__marketLabAutopilot };
+        } catch (e) {
+            system.__marketLabAutopilot = {
+                ...(system.__marketLabAutopilot || {}),
+                running: false,
+                lastError: e.message,
+                lastCycleAt: new Date().toISOString(),
+            };
+            return { success: false, error: e.message, autopilot: system.__marketLabAutopilot };
+        }
+    };
+
+    const ensureMarketLabAutopilot = () => {
+        if (system.__marketLabAutopilotTimer) return;
+        system.__marketLabAutopilot = {
+            enabled: true,
+            running: false,
+            intervalMs: 120000,
+            totalCycles: 0,
+            totalRuns: 0,
+            lastCycleAt: null,
+            lastSelection: null,
+            lastBest: null,
+            lastError: null,
+            ...(system.__marketLabAutopilot || {}),
+        };
+        const tick = () => {
+            if (system.__marketLabAutopilot?.enabled === false) return;
+            runMarketLabAutonomousCycle({ mode: 'balanced', runs: 6 });
+        };
+        system.__marketLabAutopilotTimer = setInterval(tick, system.__marketLabAutopilot.intervalMs);
+        system.__marketLabAutopilotTimer.unref?.();
+        if (readMarketLabLedger().length === 0) setTimeout(tick, 10000).unref?.();
+    };
+
+    ensureMarketLabAutopilot();
+
+    const parseGithubRepo = (candidate = {}) => {
+        const raw = candidate.name || candidate.repo || candidate.url || '';
+        const fromName = String(raw).match(/^([\w.-]+)\/([\w.-]+)$/);
+        const fromUrl = String(raw).match(/github\.com\/([\w.-]+)\/([\w.-]+?)(?:\.git)?(?:\/|$)/i)
+            || String(candidate.url || '').match(/github\.com\/([\w.-]+)\/([\w.-]+?)(?:\.git)?(?:\/|$)/i);
+        const match = fromName || fromUrl;
+        if (!match) throw new Error('Only GitHub repositories can be sandboxed');
+        return `${match[1]}/${match[2].replace(/\.git$/i, '')}`;
+    };
+
+    const fetchGithubText = async (url, timeout = 10000) => {
+        const response = await fetch(url, {
+            headers: { 'Accept': 'application/vnd.github+json', 'User-Agent': 'SOMA-CodeLab/1.0' },
+            signal: AbortSignal.timeout(timeout),
+        });
+        if (!response.ok) return null;
+        return response.text();
+    };
+
+    const inspectGithubRepo = async (repoName) => {
+        const repoJson = await fetchGithubText(`https://api.github.com/repos/${repoName}`);
+        if (!repoJson) return null;
+        const repo = JSON.parse(repoJson);
+        const branch = repo.default_branch || 'main';
+        const rawBase = `https://raw.githubusercontent.com/${repoName}/${branch}`;
+        const keyFiles = ['README.md', 'package.json', 'pyproject.toml', 'requirements.txt', 'src/index.js', 'index.js', 'main.py'];
+        const files = {};
+        await Promise.all(keyFiles.map(async file => {
+            const text = await fetchGithubText(`${rawBase}/${file}`, 7000).catch(() => null);
+            if (text) files[file] = text.slice(0, 12000);
+        }));
+        const packageJson = files['package.json'] ? (() => {
+            try { return JSON.parse(files['package.json']); } catch { return null; }
+        })() : null;
+        const deps = packageJson
+            ? Object.keys({ ...(packageJson.dependencies || {}), ...(packageJson.devDependencies || {}) }).slice(0, 30)
+            : [];
+        const sourceFiles = Object.keys(files).filter(file => /\.(js|py|ts|mjs|cjs)$/i.test(file));
+        return {
+            repo: repoName,
+            defaultBranch: branch,
+            license: repo.license?.spdx_id || null,
+            sizeKb: repo.size || null,
+            openIssues: repo.open_issues_count || 0,
+            pushedAt: repo.pushed_at || null,
+            keyFiles: Object.keys(files),
+            dependencySample: deps,
+            sourceSample: sourceFiles,
+            summary: {
+                hasReadme: !!files['README.md'],
+                hasPackageJson: !!packageJson,
+                hasPythonManifest: !!files['pyproject.toml'] || !!files['requirements.txt'],
+                sourceFiles: sourceFiles.length,
+            },
+            readmePreview: (files['README.md'] || '').replace(/\s+/g, ' ').slice(0, 500),
+        };
+    };
+
+    const listSandboxFiles = (root, limit = 350) => {
+        const out = [];
+        const walk = (dir) => {
+            if (out.length >= limit) return;
+            for (const item of fs.readdirSync(dir, { withFileTypes: true })) {
+                if (['.git', 'node_modules', '.venv', 'venv', 'dist', 'build', '__pycache__'].includes(item.name)) continue;
+                const full = path.join(dir, item.name);
+                if (!full.startsWith(root + path.sep)) continue;
+                if (item.isDirectory()) walk(full);
+                else out.push(full);
+                if (out.length >= limit) return;
+            }
+        };
+        if (fs.existsSync(root)) walk(root);
+        return out;
+    };
+
+    const runCodeSandboxExperiment = async (entry) => {
+        const repoName = parseGithubRepo(entry.candidate || entry);
+        const repoUrl = `https://github.com/${repoName}.git`;
+        const safeId = String(entry.id).replace(/[^\w.-]/g, '_');
+        const sandboxDir = path.join(codeSandboxRoot, safeId);
+        if (!sandboxDir.startsWith(codeSandboxRoot + path.sep)) throw new Error('Invalid sandbox path');
+
+        updateCodeExperiment(entry.id, { status: 'sandboxing', sandbox: { path: sandboxDir, startedAt: new Date().toISOString() } });
+        fs.mkdirSync(codeSandboxRoot, { recursive: true });
+        if (fs.existsSync(sandboxDir)) fs.rmSync(sandboxDir, { recursive: true, force: true });
+
+        const clone = await runCommandCheck(`git clone --depth 1 "${repoUrl}" "${sandboxDir}"`, 120000);
+        if (!clone.ok) {
+            const failed = updateCodeExperiment(entry.id, {
+                status: 'rejected',
+                sandbox: { path: sandboxDir, clone },
+                lesson: `Sandbox clone failed: ${clone.output || clone.code}`,
+                promotionCriteria: { ...(entry.promotionCriteria || {}), syntaxPass: false, riskPass: false, buildPass: false },
+            });
+            return failed;
+        }
+
+        const files = listSandboxFiles(sandboxDir);
+        const rel = file => path.relative(sandboxDir, file).replace(/\\/g, '/');
+        const sourceFiles = files.filter(file => /\.(js|mjs|cjs|py)$/i.test(file)).slice(0, 25);
+        const syntaxChecks = [];
+        for (const file of sourceFiles) {
+            const isPy = /\.py$/i.test(file);
+            syntaxChecks.push(await runCommandCheck(isPy ? `python -m py_compile "${file}"` : `node --check "${file}"`, 30000));
+        }
+
+        const riskPatterns = [
+            { re: /\brm\s+-rf\b/i, severity: 'critical', label: 'rm -rf shell deletion' },
+            { re: /curl\s+[^|]+\|\s*(bash|sh)/i, severity: 'critical', label: 'curl pipe shell install' },
+            { re: /\bchild_process\.(exec|spawn|execSync)\b/i, severity: 'medium', label: 'Node child_process execution' },
+            { re: /\beval\s*\(/i, severity: 'medium', label: 'eval usage' },
+            { re: /\b(os\.system|subprocess\.(Popen|run|call))\b/i, severity: 'medium', label: 'Python process execution' },
+            { re: /\b(fs\.writeFileSync|fs\.rmSync|unlinkSync)\b/i, severity: 'medium', label: 'filesystem mutation API' },
+            { re: /\bpowershell\b/i, severity: 'medium', label: 'PowerShell invocation' },
+        ];
+        const riskFindings = [];
+        for (const file of sourceFiles) {
+            const text = fs.readFileSync(file, 'utf8').slice(0, 80000);
+            for (const pattern of riskPatterns) {
+                if (pattern.re.test(text)) riskFindings.push({ file: rel(file), severity: pattern.severity, label: pattern.label });
+            }
+            if (riskFindings.length > 30) break;
+        }
+
+        let packageRisk = null;
+        const pkgPath = path.join(sandboxDir, 'package.json');
+        if (fs.existsSync(pkgPath)) {
+            try {
+                const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+                const installScripts = Object.entries(pkg.scripts || {})
+                    .filter(([name]) => /^(preinstall|install|postinstall|prepare)$/i.test(name));
+                if (installScripts.length) {
+                    packageRisk = { severity: 'medium', label: 'install lifecycle scripts present', scripts: installScripts.map(([name]) => name) };
+                    riskFindings.push(packageRisk);
+                }
+            } catch {}
+        }
+
+        const syntaxPass = syntaxChecks.length > 0 && syntaxChecks.every(check => check.ok);
+        const criticalRisk = riskFindings.some(risk => risk.severity === 'critical');
+        const riskPass = !criticalRisk && riskFindings.length <= 8;
+        const lobeScore = entry.candidate?.logos?.score ?? 0;
+        const lobeScorePass = lobeScore >= 0.55;
+        const buildPass = syntaxPass;
+        const promotable = syntaxPass && riskPass && lobeScorePass && buildPass;
+        const status = promotable ? 'promotable' : 'rejected';
+        const lesson = promotable
+            ? `${repoName} passed sandbox syntax and risk gates. Pattern is safe enough for a SOMA-specific patch proposal.`
+            : `${repoName} was rejected by sandbox gates: ${[
+                syntaxPass ? null : 'syntax failed',
+                riskPass ? null : 'risk threshold failed',
+                lobeScorePass ? null : 'lobe score below threshold',
+            ].filter(Boolean).join(', ')}.`;
+
+        const result = updateCodeExperiment(entry.id, {
+            status,
+            sandbox: {
+                path: sandboxDir,
+                clone,
+                fileCount: files.length,
+                sourceFiles: sourceFiles.map(rel),
+                syntaxChecks: syntaxChecks.map(check => ({
+                    command: check.command,
+                    ok: check.ok,
+                    code: check.code,
+                    durationMs: check.durationMs,
+                    output: check.output,
+                })),
+                riskFindings,
+                testedAt: new Date().toISOString(),
+            },
+            promotionCriteria: {
+                syntaxPass,
+                buildPass,
+                riskPass,
+                lobeScorePass,
+                rollbackSnapshot: true,
+                criteria: [
+                    'syntax pass',
+                    'safe static risk scan',
+                    'lobe score >= 0.55',
+                    'sandbox clone only; no install or external code execution',
+                    'promotion requires separate SOMA patch generation',
+                ],
+            },
+            lesson,
+        });
+
+        if (system.mnemonicArbiter?.store) {
+            await system.mnemonicArbiter.store(`Code R&D experiment ${status}: ${repoName}. ${lesson}`, {
+                type: 'code_rd_experiment',
+                repo: repoName,
+                status,
+                syntaxPass,
+                riskPass,
+                lobeScore,
+                url: entry.url,
+            }).catch(() => {});
+        }
+
+        return result;
+    };
+
+    const inferSomaPatchProposal = (entry) => {
+        const haystack = [
+            entry.repo,
+            entry.topic,
+            entry.candidate?.description,
+            entry.candidate?.topics?.join(' '),
+            entry.inspection?.readmePreview,
+            entry.inspection?.dependencySample?.join(' '),
+        ].filter(Boolean).join(' ').toLowerCase();
+
+        const targets = [
+            {
+                match: /\b(message|broker|event|queue|pubsub|signal|routing|subscriber)\b/,
+                file: 'core/MessageBroker.cjs',
+                area: 'Signal routing resilience',
+                intent: 'Study the sandboxed event-routing pattern and propose a bounded improvement to MessageBroker dispatch, subscriber indexing, or failure isolation without changing public message contracts.',
+                complexity: 'high',
+                mode: 'max',
+            },
+            {
+                match: /\b(memory|rag|retrieval|knowledge|semantic|vector|context|recall)\b/,
+                file: 'core/SelfEvolvingGoalEngine.js',
+                area: 'Goal and memory prioritization',
+                intent: 'Study the sandboxed memory/retrieval pattern and propose a bounded improvement to SOMA goal selection, tagging, or recall prioritization without touching stored user data.',
+                complexity: 'medium',
+                mode: 'steve',
+            },
+            {
+                match: /\b(agent|autonomous|workflow|planner|task|multi-agent|orchestrator|reasoning)\b/,
+                file: 'core/SelfEvolvingGoalEngine.js',
+                area: 'Autonomous goal planning',
+                intent: 'Study the sandboxed autonomous-agent pattern and propose a bounded improvement to goal scoring, task decomposition, or self-development scheduling.',
+                complexity: 'medium',
+                mode: 'steve',
+            },
+            {
+                match: /\b(social|post|engagement|scheduler|feed|bluesky|twitter|linkedin)\b/,
+                file: 'server/social/SocialSchedulerDaemon.js',
+                area: 'Social learning cadence',
+                intent: 'Study the sandboxed scheduling/social pattern and propose a bounded improvement to SOMA social posting cadence, engagement timing, or learning feedback.',
+                complexity: 'medium',
+                mode: 'solo',
+            },
+            {
+                match: /\b(ui|react|dashboard|interface|panel|simulation|visual|frontend)\b/,
+                file: 'frontend/apps/command-bridge/components/CodeSandboxView.jsx',
+                area: 'Code simulation visibility',
+                intent: 'Study the sandboxed UI pattern and propose a bounded improvement to Code Sandbox visibility, experiment review, or promotion feedback.',
+                complexity: 'low',
+                mode: 'solo',
+            },
+        ];
+        const selected = targets.find(target => target.match.test(haystack)) || {
+            file: 'server/routes/somaRoutes.js',
+            area: 'Code lab integration',
+            intent: 'Study the sandboxed pattern and propose a bounded improvement to SOMA code-lab routing, experiment records, or promotion safety gates.',
+            complexity: 'medium',
+            mode: 'steve',
+        };
+        return {
+            sourceExperimentId: entry.id,
+            sourceRepo: entry.repo,
+            file: selected.file,
+            area: selected.area,
+            intent: `${selected.intent} Source experiment: ${entry.repo}.`,
+            complexity: selected.complexity,
+            mode: selected.mode,
+            confidence: Math.min(0.94, Math.max(0.35, entry.candidate?.logos?.score ?? 0.62)),
+            generatedAt: new Date().toISOString(),
+            policy: 'simulation_first_then_promote',
+        };
+    };
+
+    const simulateSomaPatchProposal = async (entry, proposal, requestedIterations = 1000) => {
+        const iterations = Math.min(Math.max(parseInt(requestedIterations) || 1000, 100), 100000);
+        const targetPreflight = await runEngineeringPreflight(proposal.file, { includeBuild: false });
+        const criteria = entry.promotionCriteria || {};
+        const sandbox = entry.sandbox || {};
+        const riskCount = sandbox.riskFindings?.length || 0;
+        const score = proposal.confidence || 0.5;
+        const seed = `${entry.id}:${proposal.file}:${iterations}`.split('').reduce((acc, ch) => acc + ch.charCodeAt(0), 0);
+        let wins = 0;
+        let losses = 0;
+        let worstRisk = 0;
+        for (let i = 0; i < iterations; i++) {
+            const jitter = (((seed + i * 9301) % 997) / 997) * 0.08 - 0.04;
+            const riskPenalty = riskCount * 0.025 + (proposal.complexity === 'high' ? 0.08 : proposal.complexity === 'medium' ? 0.035 : 0.01);
+            const confidence = score + jitter - riskPenalty;
+            const pass = confidence >= 0.58 && criteria.syntaxPass !== false && criteria.riskPass !== false && targetPreflight.ok;
+            if (pass) wins += 1;
+            else losses += 1;
+            worstRisk = Math.max(worstRisk, riskPenalty - jitter);
+        }
+        const passRate = wins / iterations;
+        const approved = passRate >= 0.92 && targetPreflight.ok && criteria.syntaxPass === true && criteria.riskPass === true;
+        return {
+            iterations,
+            wins,
+            losses,
+            passRate,
+            worstRisk: parseFloat(worstRisk.toFixed(4)),
+            approved,
+            targetPreflight,
+            gates: {
+                sandboxSyntax: criteria.syntaxPass === true,
+                sandboxRisk: criteria.riskPass === true,
+                targetSyntax: targetPreflight.ok,
+                simulationPassRate: passRate >= 0.92,
+            },
+            simulatedAt: new Date().toISOString(),
+        };
+    };
+
+    const queueSomaPatchProposal = async (entry, proposal, simulation) => {
+        if (!simulation.approved) return false;
+        if (system.engineeringSwarm?.addGoal) {
+            system.engineeringSwarm.addGoal({
+                id: `code_lab_${Date.now()}`,
+                description: proposal.intent,
+                source: 'code_lab_patch_ready',
+                priority: Math.min(0.95, proposal.confidence + 0.1),
+                file: proposal.file,
+                filepath: proposal.file,
+                metadata: { experimentId: entry.id, proposal, simulation },
+            });
+        }
+        if (system.mnemonicArbiter?.store) {
+            await system.mnemonicArbiter.store(`Code lab patch ready: ${entry.repo} -> ${proposal.file}. ${(simulation.passRate * 100).toFixed(1)}% simulation pass rate.`, {
+                type: 'code_lab_patch_ready',
+                repo: entry.repo,
+                file: proposal.file,
+                passRate: simulation.passRate,
+                experimentId: entry.id,
+            }).catch(() => {});
+        }
+        return true;
+    };
+
+    const readMedicalLabLedger = () => {
+        try {
+            if (!fs.existsSync(medicalLabLedgerPath)) return [];
+            const raw = fs.readFileSync(medicalLabLedgerPath, 'utf8');
+            const parsed = JSON.parse(raw);
+            return Array.isArray(parsed) ? parsed : [];
+        } catch {
+            return [];
+        }
+    };
+
+    const writeMedicalLabLedger = (entries) => {
+        fs.mkdirSync(path.dirname(medicalLabLedgerPath), { recursive: true });
+        fs.writeFileSync(medicalLabLedgerPath, JSON.stringify(entries.slice(0, 100), null, 2), 'utf8');
+    };
+
+    const MEDICAL_LAB_STALE_MS = 12 * 60 * 1000;
+
+    const cleanupMedicalLabLedger = () => {
+        const nowMs = Date.now();
+        const entries = readMedicalLabLedger();
+        let changed = false;
+        const next = entries.map(entry => {
+            const updatedMs = Date.parse(entry.updatedAt || entry.createdAt || 0);
+            if (
+                entry.status === 'running' &&
+                Number.isFinite(updatedMs) &&
+                nowMs - updatedMs > MEDICAL_LAB_STALE_MS
+            ) {
+                changed = true;
+                return {
+                    ...entry,
+                    status: 'stale',
+                    error: entry.error || `Mission exceeded ${Math.round(MEDICAL_LAB_STALE_MS / 60000)} minute safety window and was released for retry.`,
+                    updatedAt: new Date().toISOString()
+                };
+            }
+            return entry;
+        });
+        if (changed) writeMedicalLabLedger(next);
+        return changed ? next : entries;
+    };
+
+    const releaseOrphanMedicalMissions = (entries, labStatus = null) => {
+        if (labStatus?.currentPhase && labStatus.currentPhase !== 'IDLE') return entries;
+        const nowMs = Date.now();
+        let changed = false;
+        const next = entries.map(entry => {
+            const updatedMs = Date.parse(entry.updatedAt || entry.createdAt || 0);
+            if (
+                entry.status === 'running' &&
+                Number.isFinite(updatedMs) &&
+                nowMs - updatedMs > 60 * 1000
+            ) {
+                changed = true;
+                return {
+                    ...entry,
+                    status: 'stale',
+                    error: entry.error || 'Mission runner is no longer active after restart; released for retry.',
+                    updatedAt: new Date().toISOString()
+                };
+            }
+            return entry;
+        });
+        if (changed) writeMedicalLabLedger(next);
+        return next;
+    };
+
+    const summarizeMedicalLabLedger = (entries) => {
+        const byStatus = entries.reduce((acc, entry) => {
+            const key = entry.status || 'queued';
+            acc[key] = (acc[key] || 0) + 1;
+            return acc;
+        }, {});
+        return {
+            total: entries.length,
+            byStatus,
+            latest: entries[0] || null,
+            lastUpdated: entries[0]?.updatedAt || entries[0]?.createdAt || null
+        };
+    };
+
+    const safeComponentStatus = (component) => {
+        try {
+            return component?.getStatus?.() || null;
+        } catch (error) {
+            return { error: error.message };
+        }
+    };
+
+    const getMedicalDiscovery = () => system.discoveryGradeMedical || system.medicalDiscovery;
+
+    const discoverySummary = () => {
+        const discovery = getMedicalDiscovery();
+        if (!discovery) return { online: false, label: 'discovery cortex offline' };
+        return {
+            online: true,
+            name: discovery.name || 'MedicalDiscovery',
+            capabilities: discovery.capabilities || [],
+            engines: discovery.engines ? Object.keys(discovery.engines) : [],
+            label: 'discovery cortex online'
+        };
+    };
+
+    const updateMedicalLabEntry = (id, patch) => {
+        const next = readMedicalLabLedger();
+        const index = next.findIndex(item => item.id === id);
+        if (index >= 0) {
+            next[index] = {
+                ...next[index],
+                ...patch,
+                updatedAt: new Date().toISOString()
+            };
+            writeMedicalLabLedger(next);
+        }
+    };
+
+    const withMedicalTimeout = async (promise, ms, label) => {
+        let timer;
+        try {
+            return await Promise.race([
+                promise,
+                new Promise((_, reject) => {
+                    timer = setTimeout(() => reject(new Error(label)), ms);
+                })
+            ]);
+        } finally {
+            if (timer) clearTimeout(timer);
+        }
+    };
+
+    const medicalLabArchitecture = () => ({
+        workspace: {
+            mode: 'research_only_dry_lab',
+            purpose: 'Hypothesis generation, in-silico screening, evidence triage, and validation-plan drafting.',
+            safetyBoundary: 'No diagnosis, treatment, dosing, wet-lab protocol, chemical synthesis, or real-world instruction.'
+        },
+        tools: [
+            { id: 'hypothesis_input', label: 'Hypothesis intake', status: 'online' },
+            { id: 'discovery_cortex', label: 'Discovery-grade medical cortex', status: getMedicalDiscovery() ? 'online' : 'offline' },
+            { id: 'biotech_pipeline', label: 'Biotech phase pipeline', status: system.biotechArbiter ? 'online' : 'offline' },
+            { id: 'biophysics', label: 'Pocket compatibility simulator', status: system.biotechArbiter?.physics ? 'online' : 'offline' },
+            { id: 'learning_memory', label: 'Persistent MedLab learning memory', status: system.biotechArbiter?.getLearningMemory ? 'online' : 'offline' },
+            { id: 'ledger', label: 'Research ledger', status: 'online' }
+        ],
+        mechanisms: [
+            'bounded web/literature search with source-snippet comparison',
+            'local in-silico hypothesis prior when search is unavailable',
+            'persistent pass/fail learning memory',
+            'statistical uncertainty audit',
+            'feature-based docking triage',
+            'ADME/toxicity uncertainty review',
+            'ethical validation-plan drafting',
+            'dossier publication and memory storage'
+        ],
+        feedback: [
+            'phase progress',
+            'stale mission release',
+            'ledger status',
+            'latest findings',
+            'failure reason',
+            'persistent score adjustment',
+            'research-only confidence score'
+        ]
+    });
+
+    const startMedicalLabCycle = ({ source = 'medical-lab-autopilot', topic = null, stack = [], force = false } = {}) => {
+        const lab = system.biotechArbiter;
+        const discovery = getMedicalDiscovery();
+        const entries = cleanupMedicalLabLedger();
+        const nowMs = Date.now();
+        if (lab?.getStatus?.().stale && typeof lab._resetMission === 'function') {
+            try { lab._resetMission(); } catch {}
+        }
+        const hasFreshRunningMission = entries.some(entry =>
+            entry.status === 'running' &&
+            !entry.error &&
+            nowMs - Date.parse(entry.createdAt || entry.updatedAt || 0) < MEDICAL_LAB_STALE_MS
+        );
+
+        if (!force && hasFreshRunningMission) {
+            return { success: true, skipped: true, message: 'Medical lab mission already running' };
+        }
+
+        if (!lab && !discovery) {
+            return { success: false, error: 'No medical lab components are online' };
+        }
+
+        const now = new Date().toISOString();
+        const cleanStack = Array.isArray(stack)
+            ? stack.map(item => String(item).trim()).filter(Boolean).slice(0, 12)
+            : String(stack || '').split(',').map(item => item.trim()).filter(Boolean).slice(0, 12);
+        const activeTarget = lab?.targets?.[lab.currentTargetIndex];
+        const missionTopic = String(topic || activeTarget?.id || 'autonomous medical deduction').trim();
+        const entry = {
+            id: `med-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+            title: topic ? `Hypothesis mission: ${missionTopic}` : 'Autonomous medical lab cycle',
+            topic: missionTopic,
+            stack: cleanStack,
+            status: 'running',
+            source,
+            components: {
+                biotech: !!lab,
+                discovery: !!discovery
+            },
+            createdAt: now,
+            updatedAt: now,
+            result: null,
+            error: null
+        };
+
+        entries.unshift(entry);
+        writeMedicalLabLedger(entries);
+
+        const jobs = [];
+        if (lab?._currentPhase === 'IDLE' && typeof lab._runNext === 'function') {
+            try {
+                lab._runNext();
+                jobs.push('biotech cycle started');
+            } catch (error) {
+                jobs.push(`biotech start failed: ${error.message}`);
+            }
+        } else if (lab) {
+            jobs.push(`biotech already in ${lab._currentPhase || 'active'} phase`);
+        }
+
+        let runner = null;
+        if (topic && discovery?.runDiscoveryMission) {
+            runner = discovery.runDiscoveryMission(missionTopic, cleanStack);
+            jobs.push('targeted discovery mission queued');
+        } else if (topic && discovery?.conductResearch) {
+            runner = discovery.conductResearch(missionTopic, cleanStack);
+            jobs.push('targeted conductResearch mission queued');
+        } else if (discovery?.runAutonomousDeduction) {
+            runner = discovery.runAutonomousDeduction();
+            jobs.push('autonomous discovery deduction queued');
+        } else if (discovery?.conductResearch) {
+            runner = discovery.conductResearch(missionTopic, cleanStack);
+            jobs.push('autonomous conductResearch mission queued');
+        }
+
+        if (runner) {
+            withMedicalTimeout(runner, 8 * 60 * 1000, 'medical discovery mission timeout').then(result => {
+                updateMedicalLabEntry(entry.id, {
+                    status: 'completed',
+                    result: typeof result === 'string' ? result : JSON.stringify(result),
+                    error: null
+                });
+            }).catch(error => {
+                updateMedicalLabEntry(entry.id, {
+                    status: 'failed',
+                    error: error.message
+                });
+            });
+        } else if (!lab) {
+            updateMedicalLabEntry(entry.id, {
+                status: 'failed',
+                error: 'No runnable medical lab engine is available'
+            });
+        }
+
+        return { success: true, entry, jobs };
+    };
+
+    const mlInternTopics = [
+        'small language model continual learning LoRA memory consolidation',
+        'agentic reinforcement learning tool use benchmarks',
+        'retrieval augmented generation long term memory evaluation',
+        'federated learning on consumer Windows machines privacy preserving',
+        'multimodal perception agents desktop automation grounding',
+        'synthetic data curriculum learning for autonomous agents'
+    ];
+
+    const startMlInternCycle = ({ source = 'ml-intern-autopilot', force = false } = {}) => {
+        const intern = system.mlIntern;
+        if (!intern?.researchTopic) {
+            return { success: false, error: 'ML Intern is not online' };
+        }
+
+        const entries = readExperimentLedger();
+        const nowMs = Date.now();
+        const hasFreshRunningMission = entries.some(entry =>
+            entry.source === 'ml-intern-autopilot' &&
+            entry.status === 'running' &&
+            nowMs - Date.parse(entry.createdAt || entry.updatedAt || 0) < 20 * 60 * 1000
+        );
+        if (!force && (intern.isBusy || hasFreshRunningMission)) {
+            return { success: true, skipped: true, message: 'ML Intern learning cycle already running' };
+        }
+
+        const topic = mlInternTopics[Math.floor(Math.random() * mlInternTopics.length)];
+        const now = new Date().toISOString();
+        const entry = addExperimentLedgerEntry({
+            id: `exp-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+            title: `ML Intern learning pass: ${topic}`,
+            hypothesis: `If SOMA harvests current research on "${topic}", she can improve her local learning and autonomy architecture.`,
+            setup: 'Autonomous ML Intern arXiv/HuggingFace research pass running in the local Windows environment.',
+            result: '',
+            lesson: '',
+            reusableRule: '',
+            status: 'running',
+            domain: 'ml-intern',
+            confidence: null,
+            tags: ['autonomous-learning', 'ml-intern', 'federated-windows'],
+            createdAt: now,
+            updatedAt: now,
+            source
+        });
+
+        intern.researchTopic(topic)
+            .then(findings => {
+                const count = Array.isArray(findings) ? findings.length : 0;
+                const titles = (findings || []).slice(0, 5).map(item => item.title).filter(Boolean);
+                updateExperimentLedgerEntry(entry.id, {
+                    status: count > 0 ? 'observed' : 'failed',
+                    result: count > 0
+                        ? `Harvested ${count} research item${count === 1 ? '' : 's'}: ${titles.join('; ')}`
+                        : 'ML Intern completed but returned no findings.',
+                    lesson: count > 0
+                        ? 'Fresh external research is available for SOMA to fold into future memory, tool-use, and autonomy improvements.'
+                        : 'The learning pipeline ran, but the topic or source returned no usable material.',
+                    reusableRule: count > 0
+                        ? 'Periodically harvest narrow ML/autonomy topics, then convert findings into implementation candidates.'
+                        : '',
+                    confidence: count > 0 ? 0.72 : 0.25
+                });
+            })
+            .catch(error => {
+                updateExperimentLedgerEntry(entry.id, {
+                    status: 'failed',
+                    result: `ML Intern learning pass failed: ${error.message}`,
+                    lesson: 'Autonomous learning is wired, but the local research dependency stack needs attention for this pass.',
+                    confidence: 0.1
+                });
+            });
+
+        return { success: true, entry, topic };
+    };
+
+    if (!system.__medicalLabAutopilotStarted) {
+        system.__medicalLabAutopilotStarted = true;
+        setTimeout(() => {
+            startMedicalLabCycle({ source: 'medical-lab-autopilot' });
+        }, 45_000).unref();
+        setInterval(() => {
+            startMedicalLabCycle({ source: 'medical-lab-autopilot' });
+        }, 30 * 60 * 1000).unref();
+    }
+
+    if (!system.__mlInternAutopilotStarted) {
+        system.__mlInternAutopilotStarted = true;
+        setTimeout(() => {
+            startMlInternCycle({ source: 'ml-intern-autopilot' });
+        }, 75_000).unref();
+        setInterval(() => {
+            startMlInternCycle({ source: 'ml-intern-autopilot' });
+        }, 45 * 60 * 1000).unref();
+    }
 
     router.get('/simulations', (req, res) => {
         res.json({ pending: [..._pendingSims] });
@@ -3309,7 +5096,6 @@ ${personaContext}${characterContext}`.trim()
         }
 
         const now = new Date().toISOString();
-        const entries = readExperimentLedger();
         const entry = {
             id: `exp-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
             title: String(title).trim(),
@@ -3326,8 +5112,7 @@ ${personaContext}${characterContext}`.trim()
             updatedAt: now,
             source: 'simulation-suite'
         };
-        entries.unshift(entry);
-        writeExperimentLedger(entries);
+        const entries = [addExperimentLedgerEntry(entry), ...readExperimentLedger().filter(item => item.id !== entry.id)];
         res.json({ success: true, entry, summary: summarizeLedger(entries) });
     });
 
@@ -3367,45 +5152,51 @@ ${personaContext}${characterContext}`.trim()
         const evaluator = system.simulationEvaluator;
         const muse = system.museEngine || system.museArbiter || system.muse;
         const ledger = readExperimentLedger();
-
-        const safeStatus = (component) => {
-            try {
-                return component?.getStatus?.() || null;
-            } catch (error) {
-                return { error: error.message };
-            }
-        };
+        const medicalLabEntries = readMedicalLabLedger();
+        const marketLabEntries = readMarketLabLedger();
+        const discovery = discoverySummary();
 
         const modules = [
             {
                 id: 'market',
-                online: !!evaluator,
-                status: evaluator ? safeStatus(evaluator) : null,
-                label: evaluator ? 'strategy evaluator online' : 'strategy evaluator offline'
+                online: true,
+                status: {
+                    evaluator: evaluator ? safeComponentStatus(evaluator) : null,
+                    ledger: summarizeMarketLabLedger(marketLabEntries)
+                },
+                label: `${marketLabEntries.length} paper strategy run${marketLabEntries.length === 1 ? '' : 's'} logged`
             },
             {
                 id: 'cc',
                 online: !!sim,
-                status: sim ? { ...safeStatus(sim), port: sim.port || null } : null,
-                controller: ctrl ? safeStatus(ctrl) : null,
+                status: sim ? { ...safeComponentStatus(sim), port: sim.port || null } : null,
+                controller: ctrl ? safeComponentStatus(ctrl) : null,
                 label: sim ? 'physics engine online' : 'gated by SOMA_LOAD_SIMULATION'
             },
             {
                 id: 'biotech',
-                online: !!system.biotechArbiter,
-                status: safeStatus(system.biotechArbiter),
-                label: system.biotechArbiter ? 'medical lab online' : 'biotech arbiter offline'
+                online: !!system.biotechArbiter || discovery.online,
+                status: {
+                    biotech: safeComponentStatus(system.biotechArbiter),
+                    discovery,
+                    ledger: summarizeMedicalLabLedger(medicalLabEntries)
+                },
+                label: system.biotechArbiter
+                    ? 'medical lab online'
+                    : discovery.online
+                        ? 'discovery cortex online'
+                        : 'medical lab offline'
             },
             {
                 id: 'ml-intern',
                 online: !!system.mlIntern,
-                status: safeStatus(system.mlIntern),
+                status: safeComponentStatus(system.mlIntern),
                 label: system.mlIntern ? 'research intern online' : 'ml intern offline'
             },
             {
                 id: 'code',
                 online: !!system.codingArbiter,
-                status: safeStatus(system.codingArbiter),
+                status: safeComponentStatus(system.codingArbiter),
                 label: system.codingArbiter ? 'code sandbox online' : 'coding arbiter offline'
             },
             {
@@ -3417,7 +5208,7 @@ ${personaContext}${characterContext}`.trim()
             {
                 id: 'muse',
                 online: !!muse,
-                status: muse ? safeStatus(muse) : null,
+                status: muse ? safeComponentStatus(muse) : null,
                 label: muse ? 'muse engine online' : 'muse engine offline'
             }
         ];
@@ -3469,10 +5260,34 @@ ${personaContext}${characterContext}`.trim()
     // Playbook in Mission Control strategy format — lets MC load SOMA's trained presets
     router.get('/simulations/playbook-mc', (req, res) => {
         const ev = system?.simulationEvaluator;
-        if (!ev) return res.json({ online: false, presets: [], stats: null, evolved: [], correlation: {} });
-
-        const playbook = ev.getPlaybook();
-        const status   = ev.getStatus();
+        const activeStrategyIds = activeMarketStrategyIds();
+        const rawMarketLabEntries = readMarketLabLedger()
+            .filter(entry => entry.status === 'promoted' || entry.status === 'candidate')
+            .filter(entry => activeStrategyIds.has(entry.strategy?.id))
+            .sort((a, b) => (b.prometheusScore || 0) - (a.prometheusScore || 0));
+        const pairMap = new Map();
+        for (const entry of rawMarketLabEntries) {
+            const key = `${entry.asset?.symbol || 'UNKNOWN'}:${entry.strategy?.id || 'unknown'}`;
+            const previous = pairMap.get(key);
+            if (!previous || (entry.prometheusScore || 0) > (previous.prometheusScore || 0)) {
+                pairMap.set(key, entry);
+            }
+        }
+        const marketLabEntries = Array.from(pairMap.values())
+            .sort((a, b) => (b.prometheusScore || 0) - (a.prometheusScore || 0));
+        const playbook = ev ? ev.getPlaybook() : [];
+        const status = ev ? ev.getStatus() : {};
+        const deepScans = readMarketDeepScanLedger()
+            .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
+            .slice(0, 25);
+        const deepScanSummary = {
+            total: deepScans.length,
+            lastUpdated: deepScans[0]?.createdAt || null,
+            symbols: Array.from(new Set(deepScans.map(scan => scan.symbol).filter(Boolean))).slice(0, 12),
+            buyWatch: deepScans.filter(scan => /BUY/i.test(scan.verdict?.recommendation || '')).length,
+            sellWatch: deepScans.filter(scan => /SELL/i.test(scan.verdict?.recommendation || '')).length,
+            firstScanCount: deepScans.filter(scan => (scan.simulationContext?.matchedRuns || 0) === 0).length,
+        };
 
         // Convert top 10 graduated entries into MC strategy objects
         const mcStrategies = playbook.slice(0, 10).map((entry, i) => ({
@@ -3483,19 +5298,312 @@ ${personaContext}${characterContext}`.trim()
             winRate:     +(entry.winRate || 0).toFixed(3),
             confidence:  Math.round((entry.score || 0) * 100),
             active:      true,
-            description: `Graduated after ${entry.episodes} episodes — Sharpe ${entry.sharpe}, MaxDD ${((entry.maxDrawdown || 0) * 100).toFixed(1)}%${entry.evolved ? ' (evolved)' : ''}`,
+            description: `${entry.reportCard?.grade ? `Report ${entry.reportCard.grade}: ` : ''}Graduated after ${entry.episodes} episodes, ${entry.trades || 0} trades. Sharpe ${entry.sharpe}, MaxDD ${((entry.maxDrawdown || 0) * 100).toFixed(1)}%${entry.evolved ? ' (evolved)' : ''}`,
             assetClass:  entry.assetClass,
             correlatedWith: entry.correlatedWith || [],
+            reportCard: entry.reportCard || null,
+            paperOnly: true,
         }));
 
-        res.json({
-            online:      true,
-            stats:       { totalEpisodes: status.totalEpisodes, totalTrades: status.totalTrades, graduated: status.graduated, evolvedProtocols: status.evolvedProtocols },
-            presets:     mcStrategies,
-            evolved:     ev.getEvolvedProtocols(),
-            correlation: ev.getCorrelationMatrix(),
-            playbook:    playbook.slice(0, 30),
+        const marketLabStrategies = marketLabEntries.slice(0, 10).map((entry, i) => ({
+            id:          `market_lab_${entry.asset.symbol}_${entry.strategy.id}`.toLowerCase(),
+            name:        `${entry.asset.symbol} · ${entry.strategy.name}`,
+            allocation:  Math.max(5, Math.round(100 / Math.min(marketLabEntries.length || 1, 8))),
+            pnl:         Number((entry.paperAccount?.averageDollarPnl ?? entry.metrics?.averageDollarPnl ?? ((entry.metrics?.averageTrialPnl || 0) * 1000)).toFixed(2)),
+            winRate:     +(entry.metrics?.winRate || 0).toFixed(3),
+            confidence:  Math.round((entry.prometheusScore || 0) * 100),
+            active:      entry.status === 'promoted',
+            description: `Paper ${entry.status}: ${entry.trialBudget?.executed || 0} trials using up to $${entry.paperAccount?.startingCapital || 1000}, avg P&L ${Number(entry.paperAccount?.averageDollarPnl ?? entry.metrics?.averageDollarPnl ?? 0) >= 0 ? '+' : ''}$${Number(entry.paperAccount?.averageDollarPnl ?? entry.metrics?.averageDollarPnl ?? 0).toFixed(2)}, Sharpe ${entry.metrics?.sharpe}, MaxDD ${((entry.metrics?.maxDrawdown || 0) * 100).toFixed(1)}%. Live execution requires separate review.`,
+            assetClass:  entry.asset.assetClass,
+            source:      'market-lab',
+            paperOnly:   true,
+            agentConfidences: Object.fromEntries(
+                Object.entries(entry.missionCouncil || {}).map(([agentId, agent]) => [agentId, agent.confidence])
+            ),
+            missionCouncil: entry.missionCouncil || null,
+            correlatedWith: [],
+            reportCard: entry.reportCard || null,
+        }));
+
+        const topCouncil = marketLabEntries[0]?.missionCouncil || {};
+        const councilStrategies = ['director', 'tech', 'risk', 'sentiment', 'strategist'].map(agentId => {
+            const agent = topCouncil[agentId] || {};
+            return {
+                id: agentId,
+                name: agent.name || ({
+                    director: 'Director (Thesis)',
+                    tech: 'Tech (Technical)',
+                    risk: 'Risk Guardian',
+                    sentiment: 'Sentiment (ToM)',
+                    strategist: 'Strategist (Exec)',
+                }[agentId]),
+                allocation: { director: 20, tech: 25, risk: 20, sentiment: 15, strategist: 20 }[agentId],
+                pnl: marketLabEntries[0]?.paperAccount?.averageDollarPnl || 0,
+                winRate: marketLabEntries[0]?.metrics?.winRate || 0,
+                confidence: Math.round((agent.confidence || 0) * 100),
+                active: true,
+                description: agent.lesson || 'Learning from Market Lab paper strategy outcomes.',
+                source: 'market-lab-council',
+                paperOnly: true,
+            };
         });
+
+        res.json({
+            online:      !!ev || marketLabStrategies.length > 0,
+            stats:       {
+                totalEpisodes: status.totalEpisodes || 0,
+                totalTrades: status.totalTrades || 0,
+                graduated: status.graduated || 0,
+                evolvedProtocols: status.evolvedProtocols || 0,
+                marketLabCandidates: marketLabStrategies.length,
+            },
+            presets:     [...councilStrategies, ...marketLabStrategies, ...mcStrategies].slice(0, 25),
+            evolved:     ev ? ev.getEvolvedProtocols() : [],
+            correlation: ev ? ev.getCorrelationMatrix() : {},
+            playbook:    playbook.slice(0, 30),
+            reportCards: playbook.slice(0, 30).map(entry => entry.reportCard).filter(Boolean),
+            marketLab:   marketLabEntries.slice(0, 20),
+            deepScans,
+            deepScanSummary,
+            missionCouncil: topCouncil,
+        });
+    });
+
+    // Medical Lab — unified live control surface for BiotechArbiter + MedicalDiscovery + ChemistryLab.
+    router.get('/medical-lab/status', (req, res) => {
+        try {
+            const lab = system.biotechArbiter;
+            const chem = system.chemistryLab;
+            const labStatus = safeComponentStatus(lab);
+            const chemStatus = safeComponentStatus(chem);
+            const experiments = lab?.experiments ? Array.from(lab.experiments.values()) : [];
+            const latestDiscovery = experiments.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0))[0] || null;
+            let entries = releaseOrphanMedicalMissions(cleanupMedicalLabLedger(), labStatus);
+            if (labStatus?.lastFailure && labStatus.currentPhase === 'IDLE') {
+                const failureMs = Date.parse(labStatus.lastFailure.timestamp || 0);
+                let changed = false;
+                entries = entries.map(entry => {
+                    const entryMs = Date.parse(entry.createdAt || entry.updatedAt || 0);
+                    if (
+                        entry.status === 'running' &&
+                        Number.isFinite(failureMs) &&
+                        Number.isFinite(entryMs) &&
+                        failureMs >= entryMs
+                    ) {
+                        changed = true;
+                        return {
+                            ...entry,
+                            status: 'failed',
+                            error: `Physics veto after ${labStatus.lastFailure.attempts || 0}/${labStatus.maxTestingRounds || 3} testing rounds: ${labStatus.lastFailure.reason || 'binding threshold not met'}`,
+                            updatedAt: new Date().toISOString()
+                        };
+                    }
+                    return entry;
+                });
+                if (changed) writeMedicalLabLedger(entries);
+            }
+            entries = entries
+                .sort((a, b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt));
+            const discovery = discoverySummary();
+
+            const combinedFindings = [
+                ...(labStatus?.latestFindings || []).map(f => ({ ...f, type: 'biotech' })),
+                ...(chemStatus?.latestFindings || []).map(f => ({ ...f, type: 'chemistry' }))
+            ].sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+            res.json({
+                success: true,
+                generatedAt: new Date().toISOString(),
+                ready: !!lab || discovery.online || !!chem,
+                safety: {
+                    mode: 'research_only',
+                    notice: 'For hypothesis generation and experimental planning only; not diagnosis, treatment, or medical advice.'
+                },
+                architecture: medicalLabArchitecture(),
+                biotech: {
+                    online: !!lab,
+                    label: lab ? 'biotech arbiter online' : 'biotech arbiter offline',
+                    status: labStatus,
+                    target: lab?.targets?.[lab.currentTargetIndex]?.id || labStatus?.target || null,
+                    category: lab?.targets?.[lab.currentTargetIndex]?.category || null,
+                    activeTargets: lab?.targets?.map(t => t.id) || [],
+                    confidence: latestDiscovery ? latestDiscovery.integrity : (labStatus?.active ? 0 : null),
+                    latestDiscovery,
+                    findings: combinedFindings // Pass the unified list here
+                },
+                chemistry: {
+                    online: !!chem,
+                    label: chem ? 'chemistry lab online' : 'chemistry lab offline',
+                    status: chemStatus,
+                    notebook: chem?.notebookPath || null
+                },
+                discovery,
+                paperCorpus: researchIngestion.summarizeCorpus(),
+                ledger: entries.slice(0, 20),
+                summary: summarizeMedicalLabLedger(entries)
+            });
+        } catch (e) {
+            res.status(500).json({ success: false, error: e.message });
+        }
+    });
+
+    router.post('/medical-lab/chemistry/experiment', async (req, res) => {
+        try {
+            const chem = system.chemistryLab;
+            if (!chem) return res.status(503).json({ success: false, error: 'chemistry lab offline' });
+
+            const { title, hypothesis, reaction, inputAmounts } = req.body || {};
+            if (!title || !reaction) {
+                return res.status(400).json({ success: false, error: 'title and reaction are required' });
+            }
+
+            const result = await chem.conductExperiment(title, hypothesis, reaction, inputAmounts);
+            if (!result.success) return res.status(400).json(result);
+
+            res.json(result);
+        } catch (e) {
+            res.status(500).json({ success: false, error: e.message });
+        }
+    });
+
+    router.get('/medical-lab/missions', (req, res) => {
+        const entries = releaseOrphanMedicalMissions(cleanupMedicalLabLedger(), safeComponentStatus(system.biotechArbiter))
+            .sort((a, b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt));
+        res.json({ success: true, ledger: entries, summary: summarizeMedicalLabLedger(entries) });
+    });
+
+    router.get('/medical-lab/architecture', (req, res) => {
+        res.json({ success: true, architecture: medicalLabArchitecture() });
+    });
+
+    router.get('/medical-lab/papers/corpus', (req, res) => {
+        try {
+            res.json({ success: true, corpus: researchIngestion.summarizeCorpus() });
+        } catch (e) {
+            res.status(500).json({ success: false, error: e.message });
+        }
+    });
+
+    router.get('/medical-lab/papers/search', async (req, res) => {
+        try {
+            const query = String(req.query.q || req.query.query || '').trim();
+            const limit = Math.min(parseInt(req.query.limit) || 8, 20);
+            if (!query) return res.status(400).json({ success: false, error: 'query is required' });
+            const result = await researchIngestion.searchPapers(query, { limit });
+            res.json({ success: true, ...result });
+        } catch (e) {
+            res.status(500).json({ success: false, error: e.message });
+        }
+    });
+
+    router.post('/medical-lab/papers/ingest', async (req, res) => {
+        try {
+            const { query, limit = 5 } = req.body || {};
+            const cleanQuery = String(query || '').trim();
+            if (!cleanQuery) return res.status(400).json({ success: false, error: 'query is required' });
+
+            const result = await researchIngestion.ingestMedicalPapers(cleanQuery, { limit });
+            const lab = system.biotechArbiter;
+            if (lab?._recordLearningEvent) {
+                lab._recordLearningEvent({
+                    outcome: 'literature_ingested',
+                    target: 'PAPER_CORPUS',
+                    strand: cleanQuery.slice(0, 80),
+                    category: 'Medical literature ingestion',
+                    phase: 'LITERATURE',
+                    reason: `${result.papers.length} paper${result.papers.length === 1 ? '' : 's'} ingested into SOMA Research.`,
+                    evidenceGrade: result.comparison.fullTextCount > 0 ? 'literature corpus' : 'abstract metadata corpus',
+                    sourceLedger: {
+                        query: cleanQuery,
+                        searchedAt: new Date().toISOString(),
+                        mode: 'pubmed_pmc_ingestion',
+                        sourceCount: result.papers.length,
+                        ingestionScope: result.comparison.fullTextCount > 0 ? 'pubmed_metadata_and_pmc_open_access_full_text' : 'pubmed_metadata_and_abstracts',
+                        sources: result.papers.map((paper, index) => ({
+                            index: index + 1,
+                            title: paper.title,
+                            url: paper.url,
+                            source: paper.journal,
+                            kind: paper.fullTextAvailable ? 'pmc_open_access' : 'pubmed_abstract'
+                        }))
+                    },
+                    reflectionPath: result.reflection?.path || null,
+                    lesson: `Paper corpus for "${cleanQuery}" added to Reflections; compare ${result.comparison.claimCount} claims, ${result.comparison.limitationCount} limitations, and ${result.comparison.contradictionCount} tensions before hypothesis promotion.`
+                });
+            }
+            await knowledgeSpine.ingest({
+                domain: 'medical',
+                sourceType: 'paper_corpus',
+                title: `Medical paper corpus: ${cleanQuery}`,
+                sourceUrl: result.reflection?.path || null,
+                targetWorkbook: 'SOMA Research',
+                targetSegment: 'Medical Literature',
+                confidence: result.comparison.fullTextCount > 0 ? 0.74 : 0.58,
+                metadata: {
+                    paperCount: result.papers.length,
+                    fullTextCount: result.comparison.fullTextCount,
+                    claimCount: result.comparison.claimCount,
+                    limitationCount: result.comparison.limitationCount,
+                    contradictionCount: result.comparison.contradictionCount,
+                    reflection: result.reflection
+                },
+                units: [
+                    ...result.findings.flatMap(finding => (finding.claims || []).slice(0, 3).map(text => ({ kind: 'claim', text, confidence: 0.62 }))),
+                    ...result.findings.flatMap(finding => (finding.limitations || []).slice(0, 2).map(text => ({ kind: 'risk', text, confidence: 0.68 }))),
+                    ...result.findings.flatMap(finding => (finding.contradictions || []).slice(0, 2).map(text => ({ kind: 'signal', text, confidence: 0.66 }))),
+                    ...result.comparison.possibleMisses.map(text => ({ kind: 'signal', text, confidence: 0.7 }))
+                ],
+                content: [
+                    `Query: ${cleanQuery}`,
+                    `Papers: ${result.papers.length}`,
+                    `Full text: ${result.comparison.fullTextCount}`,
+                    `Claims: ${result.comparison.claimCount}`,
+                    `Limitations: ${result.comparison.limitationCount}`,
+                    `Contradictions: ${result.comparison.contradictionCount}`,
+                    '',
+                    'Possible cross-paper signals:',
+                    ...(result.comparison.possibleMisses || []).map(item => `- ${item}`)
+                ].join('\n')
+            }).catch(error => console.warn('[KnowledgeSpine] MedLab paper ingestion mirror failed:', error.message));
+            res.json(result);
+        } catch (e) {
+            res.status(500).json({ success: false, error: e.message });
+        }
+    });
+
+    router.post('/medical-lab/run', (req, res) => {
+        try {
+            const result = startMedicalLabCycle({ source: 'medical-lab-api', force: true });
+            if (!result.success) return res.status(503).json(result);
+            res.json(result);
+        } catch (e) {
+            res.status(500).json({ success: false, error: e.message });
+        }
+    });
+
+    router.post('/medical-lab/hypothesis', (req, res) => {
+        try {
+            const { topic, stack = [] } = req.body || {};
+            const cleanTopic = String(topic || '').trim();
+            const cleanStack = Array.isArray(stack)
+                ? stack.map(item => String(item).trim()).filter(Boolean).slice(0, 12)
+                : String(stack || '').split(',').map(item => item.trim()).filter(Boolean).slice(0, 12);
+
+            if (!cleanTopic) {
+                return res.status(400).json({ success: false, error: 'topic is required' });
+            }
+
+            const result = startMedicalLabCycle({
+                source: 'medical-lab-api',
+                topic: cleanTopic,
+                stack: cleanStack,
+                force: true
+            });
+            if (!result.success) return res.status(503).json(result);
+            res.json({ ...result, message: 'Hypothesis mission queued' });
+        } catch (e) {
+            res.status(500).json({ success: false, error: e.message });
+        }
     });
 
     // Biotech Research Status
@@ -3555,7 +5663,30 @@ ${personaContext}${characterContext}`.trim()
         try {
             const intern = system.mlIntern;
             if (!intern) return res.status(503).json({ success: false, error: 'ML-Intern not initialized' });
-            res.json({ success: true, ...intern.getStatus() });
+            const learningLedger = readExperimentLedger()
+                .filter(entry => entry.domain === 'ml-intern' || entry.source === 'ml-intern-autopilot')
+                .sort((a, b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt))
+                .slice(0, 12);
+            res.json({
+                success: true,
+                ...intern.getStatus(),
+                autopilot: {
+                    enabled: !!system.__mlInternAutopilotStarted,
+                    cadenceMinutes: 45,
+                    latestCycle: learningLedger[0] || null
+                },
+                learningLedger
+            });
+        } catch (e) {
+            res.status(500).json({ success: false, error: e.message });
+        }
+    });
+
+    router.post('/ml-intern/run', (req, res) => {
+        try {
+            const result = startMlInternCycle({ source: 'ml-intern-api', force: true });
+            if (!result.success) return res.status(503).json(result);
+            res.json(result);
         } catch (e) {
             res.status(500).json({ success: false, error: e.message });
         }
@@ -3589,15 +5720,191 @@ ${personaContext}${characterContext}`.trim()
         }
     });
 
+    router.get('/market-lab/status', (req, res) => {
+        try {
+            const entries = readMarketLabLedger()
+                .sort((a, b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt));
+            const optimizerStats = system.strategyOptimizer?.getDomainStats?.('market_simulation') || null;
+            res.json({
+                success: true,
+                generatedAt: new Date().toISOString(),
+                paperOnly: true,
+                safety: {
+                    mode: 'simulation_only',
+                    notice: 'Backtests and paper simulations only. No live order placement is performed by market-lab routes.',
+                },
+                assets: MARKET_ASSETS,
+                strategies: MARKET_STRATEGIES,
+                ledger: entries.slice(0, 30),
+                summary: summarizeMarketLabLedger(entries),
+                autopilot: system.__marketLabAutopilot || null,
+                optimizerStats,
+            });
+        } catch (e) {
+            res.status(500).json({ success: false, error: e.message });
+        }
+    });
+
+    router.get('/market-lab/strategies', (req, res) => {
+        res.json({
+            success: true,
+            paperOnly: true,
+            assets: MARKET_ASSETS,
+            strategies: MARKET_STRATEGIES,
+            promotionGate: {
+                defaultWinRateThreshold: 0.95,
+                minTrades: 80,
+                maxDrawdown: 0.18,
+                minProfitFactor: 1.25,
+                policy: 'promote to paper playbook only; live execution requires separate human review',
+            },
+        });
+    });
+
+    router.post('/market-lab/run', (req, res) => {
+        try {
+            const entry = recordMarketLabEntry(runMarketBacktest({ capital: 1000, ...(req.body || {}) }));
+            knowledgeSpine.ingest({
+                domain: 'finance',
+                sourceType: 'market_lab_run',
+                title: `Market Lab ${entry.status}: ${entry.strategy?.name || entry.strategyId || 'strategy'} on ${entry.asset?.symbol || entry.symbol || 'asset'}`,
+                targetWorkbook: 'Mission Control Research',
+                targetSegment: 'Market Evidence',
+                confidence: entry.prometheusScore || entry.metrics?.winRate || 0.5,
+                metadata: {
+                    status: entry.status,
+                    symbol: entry.asset?.symbol || entry.symbol,
+                    strategy: entry.strategy?.id || entry.strategyId,
+                    paperOnly: true,
+                    prometheusScore: entry.prometheusScore,
+                    pnl: entry.paperAccount?.averageDollarPnl ?? entry.metrics?.averageDollarPnl,
+                    winRate: entry.metrics?.winRate,
+                    maxDrawdown: entry.metrics?.maxDrawdown
+                },
+                units: [
+                    { kind: 'signal', text: `${entry.strategy?.name || entry.strategyId || 'Strategy'} on ${entry.asset?.symbol || entry.symbol || 'asset'} finished ${entry.status} with Prometheus score ${entry.prometheusScore ?? 'n/a'}.`, confidence: entry.prometheusScore || 0.5 },
+                    { kind: 'risk', text: `Paper-only result; live trading requires separate human review and promotion gates.`, confidence: 0.9 },
+                    { kind: 'claim', text: `Average paper P&L was ${entry.paperAccount?.averageDollarPnl ?? entry.metrics?.averageDollarPnl ?? 'n/a'} with win rate ${entry.metrics?.winRate ?? 'n/a'} and max drawdown ${entry.metrics?.maxDrawdown ?? 'n/a'}.`, confidence: 0.7 }
+                ],
+                content: entry.summary || JSON.stringify(entry, null, 2).slice(0, 4000)
+            }).catch(error => console.warn('[KnowledgeSpine] Market Lab run mirror failed:', error.message));
+            res.json({
+                success: true,
+                paperOnly: true,
+                entry,
+                summary: summarizeMarketLabLedger(readMarketLabLedger()),
+            });
+        } catch (e) {
+            res.status(500).json({ success: false, error: e.message });
+        }
+    });
+
+    router.post('/market-lab/autopilot', (req, res) => {
+        try {
+            const {
+                symbols = ['SPY', 'QQQ', 'BTC', 'ETH', 'ES', 'GLD'],
+                strategyIds = ['standard_portfolio', 'swarm_architecture', 'micro_compounder', 'micro_scalper', 'full_aggression', 'yield_harvester'],
+                trials = 48,
+                bars = 260,
+                threshold = 0.95,
+            } = req.body || {};
+            const cleanSymbols = (Array.isArray(symbols) ? symbols : String(symbols).split(','))
+                .map(symbol => String(symbol).trim().toUpperCase())
+                .filter(Boolean)
+                .slice(0, 12);
+            const cleanStrategies = (Array.isArray(strategyIds) ? strategyIds : String(strategyIds).split(','))
+                .map(strategy => String(strategy).trim())
+                .filter(Boolean)
+                .slice(0, 8);
+            const runs = [];
+            for (const symbol of cleanSymbols) {
+                for (const strategyId of cleanStrategies) {
+                    runs.push(recordMarketLabEntry(runMarketBacktest({ symbol, strategyId, trials, bars, threshold, capital: 1000 })));
+                }
+            }
+            const ranked = runs.sort((a, b) => b.prometheusScore - a.prometheusScore);
+            if (ranked[0]) {
+                knowledgeSpine.ingest({
+                    domain: 'finance',
+                    sourceType: 'market_lab_autopilot',
+                    title: `Market Lab autopilot best: ${ranked[0].strategy?.name || ranked[0].strategyId || 'strategy'} on ${ranked[0].asset?.symbol || ranked[0].symbol || 'asset'}`,
+                    targetWorkbook: 'Mission Control Research',
+                    targetSegment: 'Market Evidence',
+                    confidence: ranked[0].prometheusScore || 0.55,
+                    metadata: {
+                        executed: runs.length,
+                        promoted: ranked.filter(entry => entry.status === 'promoted').length,
+                        rejected: ranked.filter(entry => entry.status === 'rejected').length,
+                        paperOnly: true
+                    },
+                    units: ranked.slice(0, 5).map(entry => ({
+                        kind: entry.status === 'rejected' ? 'risk' : 'signal',
+                        text: `${entry.strategy?.name || entry.strategyId || 'Strategy'} on ${entry.asset?.symbol || entry.symbol || 'asset'} ranked ${entry.status}; score ${entry.prometheusScore ?? 'n/a'}, win rate ${entry.metrics?.winRate ?? 'n/a'}, drawdown ${entry.metrics?.maxDrawdown ?? 'n/a'}.`,
+                        confidence: entry.prometheusScore || 0.5
+                    })),
+                    content: `Autopilot ran ${runs.length} paper strategy simulations. Best result: ${ranked[0].summary || ranked[0].status}.`
+                }).catch(error => console.warn('[KnowledgeSpine] Market Lab autopilot mirror failed:', error.message));
+            }
+            res.json({
+                success: true,
+                paperOnly: true,
+                executed: runs.length,
+                best: ranked[0] || null,
+                promoted: ranked.filter(entry => entry.status === 'promoted'),
+                candidates: ranked.filter(entry => entry.status === 'candidate').slice(0, 10),
+                rejected: ranked.filter(entry => entry.status === 'rejected').length,
+                summary: summarizeMarketLabLedger(readMarketLabLedger()),
+            });
+        } catch (e) {
+            res.status(500).json({ success: false, error: e.message });
+        }
+    });
+
+    router.post('/market-lab/autopilot/cycle', (req, res) => {
+        try {
+            const { mode = 'balanced', runs = 6 } = req.body || {};
+            const result = runMarketLabAutonomousCycle({ mode, runs });
+            if (!result.success && result.running) return res.json(result);
+            if (!result.success) return res.status(500).json(result);
+            res.json({
+                ...result,
+                summary: summarizeMarketLabLedger(readMarketLabLedger()),
+            });
+        } catch (e) {
+            res.status(500).json({ success: false, error: e.message });
+        }
+    });
+
+    router.post('/market-lab/autopilot/config', (req, res) => {
+        try {
+            const { enabled, intervalMs } = req.body || {};
+            ensureMarketLabAutopilot();
+            if (typeof enabled === 'boolean') system.__marketLabAutopilot.enabled = enabled;
+            if (Number.isFinite(Number(intervalMs))) {
+                const nextInterval = Math.max(30000, Math.min(3600000, Number(intervalMs)));
+                system.__marketLabAutopilot.intervalMs = nextInterval;
+                if (system.__marketLabAutopilotTimer) clearInterval(system.__marketLabAutopilotTimer);
+                system.__marketLabAutopilotTimer = null;
+                ensureMarketLabAutopilot();
+            }
+            res.json({ success: true, paperOnly: true, autopilot: system.__marketLabAutopilot });
+        } catch (e) {
+            res.status(500).json({ success: false, error: e.message });
+        }
+    });
+
     // Unified Market Status for Simulation Suite
     router.get('/market/status', async (req, res) => {
         try {
             const ev = system.simulationEvaluator;
             const marketData = getCachedMarketData() || {};
+            const marketLabEntries = readMarketLabLedger()
+                .sort((a, b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt));
+            const marketLabSummary = summarizeMarketLabLedger(marketLabEntries);
             
             // Get leader from simulation evaluator
             const leaderboard = ev ? ev.getPlaybook() : [];
-            const leader = leaderboard[0] || null;
+            const leader = marketLabSummary.best || leaderboard[0] || null;
 
             // Build real signals from market data
             const signals = [];
@@ -3611,22 +5918,30 @@ ${personaContext}${characterContext}`.trim()
             if (marketData.news && marketData.news.length > 0) {
                 signals.push({ type: 'BULL', msg: `News: ${marketData.news[0].text.slice(0, 40)}...` });
             }
-            if (leader) {
-                signals.push({ type: 'BULL', msg: `Alpha Strategy: ${leader.protocolId.toUpperCase()} active on ${leader.assetId}` });
+            const leaderStrategy = leader?.strategy?.id || leader?.protocolId || null;
+            const leaderAsset = leader?.asset?.symbol || leader?.assetId || null;
+            const leaderScore = leader?.prometheusScore ?? leader?.score ?? null;
+            if (leaderStrategy && leaderAsset) {
+                signals.push({ type: 'BULL', msg: `Alpha Strategy: ${String(leaderStrategy).toUpperCase()} active on ${leaderAsset}` });
             }
 
             res.json({
                 success: true,
                 sentiment: marketData.wsb?.sentiment || 0.5,
                 volatility: marketData.volatility || 0.015,
-                asset: leader ? leader.assetId : (marketData.topGainers?.[0]?.symbol || 'BTC/USD'),
-                protocol: leader ? leader.protocolId.toUpperCase() : 'SCALP',
-                confidence: leader ? leader.score : 0.85,
+                asset: leaderAsset || marketData.topGainers?.[0]?.symbol || 'BTC/USD',
+                protocol: leaderStrategy ? String(leaderStrategy).toUpperCase() : 'SCALP',
+                confidence: leaderScore ?? 0.85,
                 signals: signals.length > 0 ? signals : [
                     { type: 'BULL', msg: 'Macro momentum detected' },
                     { type: 'BULL', msg: 'Whale accumulation' }
                 ],
-                episodes: ev?.getStatus()?.totalEpisodes || 0
+                episodes: ev?.getStatus()?.totalEpisodes || 0,
+                marketLab: {
+                    summary: marketLabSummary,
+                    latest: marketLabEntries[0] || null,
+                    best: marketLabSummary.best,
+                }
             });
         } catch (e) {
             res.status(500).json({ success: false, error: e.message });
@@ -3638,11 +5953,16 @@ ${personaContext}${characterContext}`.trim()
         try {
             const lab = system.biotechArbiter;
             if (!lab) return res.status(503).json({ success: false, error: 'Biotech lab not initialized' });
-            if (lab._runState?.active) {
-                return res.json({ success: false, running: true, message: 'Research cycle already in progress', runState: lab._runState });
+            if (lab._runState?.active || (lab._currentPhase && lab._currentPhase !== 'IDLE')) {
+                return res.json({
+                    success: false,
+                    running: true,
+                    message: 'Research cycle already in progress',
+                    runState: lab._runState || { active: true, phase: lab._currentPhase }
+                });
             }
             lab._runNext();
-            res.json({ success: true, message: 'Research cycle started', runState: lab._runState });
+            res.json({ success: true, message: 'Research cycle started', runState: lab._runState || { active: true, phase: lab._currentPhase } });
         } catch (e) {
             res.status(500).json({ success: false, error: e.message });
         }
@@ -3756,27 +6076,50 @@ ${personaContext}${characterContext}`.trim()
         const topicDef = RD_TOPICS.find(t => t.tag === topic) || RD_TOPICS[0];
 
         try {
-            // GitHub search API — no auth needed, rate limited 10/min
-            const ghRes = await fetch(
-                `https://api.github.com/search/repositories?q=${encodeURIComponent(topicDef.query + ' language:javascript OR language:python')}&sort=stars&order=desc&per_page=6`,
-                { headers: { 'Accept': 'application/vnd.github+json', 'User-Agent': 'SOMA-RD-Discovery/1.0' }, signal: AbortSignal.timeout(10000) }
-            );
+            // GitHub search API — use simple merged searches. GitHub's query parser can return
+            // zero results for "language:javascript OR language:python" on multi-word topics.
+            const searchQueries = [
+                topicDef.query,
+                `${topicDef.query} language:JavaScript`,
+                `${topicDef.query} language:TypeScript`,
+                `${topicDef.query} language:Python`,
+            ];
+            const ghSettled = await Promise.allSettled(searchQueries.map(async query => {
+                const ghRes = await fetch(
+                    `https://api.github.com/search/repositories?q=${encodeURIComponent(query)}&sort=stars&order=desc&per_page=4`,
+                    { headers: { 'Accept': 'application/vnd.github+json', 'User-Agent': 'SOMA-RD-Discovery/1.0' }, signal: AbortSignal.timeout(10000) }
+                );
+                if (!ghRes.ok) {
+                    const detail = await ghRes.text().catch(() => '');
+                    throw new Error(`GitHub API ${ghRes.status}: ${detail.slice(0, 160)}`);
+                }
+                return ghRes.json();
+            }));
 
-            if (!ghRes.ok) {
-                const err = await ghRes.text();
-                return res.status(502).json({ success: false, error: `GitHub API: ${ghRes.status}`, detail: err.slice(0, 200) });
+            const searchErrors = ghSettled
+                .filter(result => result.status === 'rejected')
+                .map(result => result.reason?.message || String(result.reason));
+            const repoMap = new Map();
+            ghSettled
+                .filter(result => result.status === 'fulfilled')
+                .flatMap(result => result.value?.items || [])
+                .filter(repo => repo && !repo.archived && !repo.disabled)
+                .forEach(repo => {
+                    if (!repoMap.has(repo.full_name)) repoMap.set(repo.full_name, repo);
+                });
+            const repos = Array.from(repoMap.values()).slice(0, 5);
+            if (repos.length === 0 && searchErrors.length) {
+                return res.status(502).json({ success: false, error: searchErrors[0], topic, query: topicDef.query });
             }
-
-            const ghData = await ghRes.json();
-            const repos  = (ghData.items || []).slice(0, 5);
 
             // Evaluate each repo with lobes (parallel, best-effort)
             const candidates = await Promise.all(repos.map(async (repo) => {
                 let logosAnalysis     = null;
                 let prometheusImpact  = null;
                 let thalamusRisk      = null;
+                const inspection = await inspectGithubRepo(repo.full_name).catch(error => ({ error: error.message }));
 
-                const context = `Repository: ${repo.full_name}\nDescription: ${repo.description || 'none'}\nLanguage: ${repo.language}\nStars: ${repo.stargazers_count}\nTopics: ${(repo.topics || []).join(', ')}\nURL: ${repo.html_url}`;
+                const context = `Repository: ${repo.full_name}\nDescription: ${repo.description || 'none'}\nLanguage: ${repo.language}\nStars: ${repo.stargazers_count}\nTopics: ${(repo.topics || []).join(', ')}\nURL: ${repo.html_url}\nInspection: ${JSON.stringify(inspection?.summary || inspection || {})}\nREADME Preview: ${inspection?.readmePreview || 'none'}`;
 
                 if (quadBrain?.reason) {
                     const [logos, prometheus, thalamus] = await Promise.allSettled([
@@ -3803,16 +6146,23 @@ ${personaContext}${characterContext}`.trim()
                         ]),
                     ]);
 
-                    logosAnalysis    = logos.status    === 'fulfilled' ? logos.value?.response    : null;
-                    prometheusImpact = prometheus.status === 'fulfilled' ? prometheus.value?.response : null;
-                    thalamusRisk     = thalamus.status  === 'fulfilled' ? thalamus.value?.response  : null;
+                    logosAnalysis    = logos.status      === 'fulfilled' ? _brainText(logos.value)      : null;
+                    prometheusImpact = prometheus.status === 'fulfilled' ? _brainText(prometheus.value) : null;
+                    thalamusRisk     = thalamus.status   === 'fulfilled' ? _brainText(thalamus.value)   : null;
                 }
 
                 // Derive risk level from THALAMUS text
                 const riskText = (thalamusRisk || '').toLowerCase();
                 const riskLevel = riskText.includes('high') ? 'high' : riskText.includes('medium') ? 'medium' : 'low';
+                const logosScore = Math.min(0.95, Math.max(0.35,
+                    0.45
+                    + Math.min(repo.stargazers_count || 0, 20000) / 50000
+                    + ((repo.topics || []).length ? 0.08 : 0)
+                    + (logosAnalysis ? 0.12 : 0)
+                    - (riskLevel === 'high' ? 0.18 : riskLevel === 'medium' ? 0.08 : 0)
+                ));
 
-                return {
+                const candidate = {
                     id:               repo.id,
                     name:             repo.full_name,
                     description:      repo.description || '',
@@ -3823,15 +6173,29 @@ ${personaContext}${characterContext}`.trim()
                     logosAnalysis,
                     prometheusImpact,
                     thalamusRisk,
+                    logos:           { analysis: logosAnalysis, score: parseFloat(logosScore.toFixed(2)) },
+                    prometheus:      { impact: prometheusImpact },
+                    thalamus:        { assessment: thalamusRisk, risk: riskLevel },
+                    applicableAreas: (repo.topics || []).slice(0, 5),
                     riskLevel,
                     discoveredAt:     Date.now(),
                     topicTag:         topic,
                     topicLabel:       topicDef.label,
+                    inspection,
                 };
+                try {
+                    upsertCodeExperiment(candidate, {
+                        status: 'discovered',
+                        topic,
+                        inspection,
+                        lesson: `Discovered from GitHub topic "${topicDef.label}" and awaiting sandbox queue decision.`,
+                    });
+                } catch {}
+                return candidate;
             }));
 
             _rdCache.set(topic, { ts: Date.now(), candidates });
-            res.json({ success: true, candidates, cached: false, topic });
+            res.json({ success: true, candidates, cached: false, topic, query: topicDef.query, searchErrors });
 
         } catch (e) {
             res.status(500).json({ success: false, error: e.message });
@@ -3842,22 +6206,124 @@ ${personaContext}${characterContext}`.trim()
         res.json({ topics: RD_TOPICS });
     });
 
-    // Propose an R&D candidate to the engineering swarm goal queue
+    router.get('/swarm/code-experiments', (req, res) => {
+        const limit = Math.min(parseInt(req.query.limit) || 30, 100);
+        const entries = readCodeExperimentLedger()
+            .sort((a, b) => new Date(b.updatedAt || b.createdAt) - new Date(a.updatedAt || a.createdAt));
+        res.json({
+            success: true,
+            experiments: entries.slice(0, limit),
+            summary: summarizeCodeExperimentLedger(entries),
+        });
+    });
+
+    router.post('/swarm/code-experiments', async (req, res) => {
+        try {
+            const { candidate, topic, status = 'queued' } = req.body || {};
+            if (!candidate?.name) return res.status(400).json({ success: false, error: 'candidate.name required' });
+            const inspection = candidate.inspection || await inspectGithubRepo(parseGithubRepo(candidate)).catch(error => ({ error: error.message }));
+            const entry = upsertCodeExperiment({ ...candidate, inspection }, {
+                status,
+                topic,
+                inspection,
+                lesson: status === 'queued'
+                    ? 'Queued for isolated sandbox testing before any SOMA patch proposal.'
+                    : 'Recorded as discovered R&D candidate.',
+            });
+            res.json({ success: true, experiment: entry, summary: summarizeCodeExperimentLedger(readCodeExperimentLedger()) });
+        } catch (e) {
+            res.status(500).json({ success: false, error: e.message });
+        }
+    });
+
+    router.post('/swarm/code-experiments/:id/run', async (req, res) => {
+        try {
+            const entries = readCodeExperimentLedger();
+            const entry = entries.find(item => item.id === req.params.id);
+            if (!entry) return res.status(404).json({ success: false, error: 'experiment not found' });
+            const result = await runCodeSandboxExperiment(entry);
+            res.json({ success: true, experiment: result, summary: summarizeCodeExperimentLedger(readCodeExperimentLedger()) });
+        } catch (e) {
+            const patched = updateCodeExperiment(req.params.id, {
+                status: 'rejected',
+                lesson: `Sandbox runner failed: ${e.message}`,
+                error: e.message,
+            });
+            res.status(500).json({ success: false, error: e.message, experiment: patched });
+        }
+    });
+
+    router.post('/swarm/code-experiments/:id/propose-patch', async (req, res) => {
+        try {
+            const { iterations = 1000, queue = true } = req.body || {};
+            const entries = readCodeExperimentLedger();
+            const entry = entries.find(item => item.id === req.params.id);
+            if (!entry) return res.status(404).json({ success: false, error: 'experiment not found' });
+            if (entry.status !== 'promotable' && entry.status !== 'patch_ready') {
+                return res.status(422).json({
+                    success: false,
+                    error: `Experiment must be promotable before SOMA can propose a patch. Current status: ${entry.status}`,
+                    experiment: entry,
+                });
+            }
+
+            const proposal = inferSomaPatchProposal(entry);
+            const simulation = await simulateSomaPatchProposal(entry, proposal, iterations);
+            const queued = queue && simulation.approved
+                ? await queueSomaPatchProposal(entry, proposal, simulation)
+                : false;
+            const next = updateCodeExperiment(entry.id, {
+                status: simulation.approved ? 'patch_ready' : 'promotable',
+                somaPatchProposal: proposal,
+                somaPatchSimulation: simulation,
+                lesson: simulation.approved
+                    ? `${entry.repo} produced a SOMA patch proposal for ${proposal.file} after ${simulation.iterations.toLocaleString()} simulations at ${(simulation.passRate * 100).toFixed(1)}% pass rate.`
+                    : `${entry.repo} remains promotable for study, but the SOMA patch proposal did not clear simulation gates (${(simulation.passRate * 100).toFixed(1)}% pass rate).`,
+                queuedForEngineering: queued,
+            });
+
+            res.json({
+                success: true,
+                approved: simulation.approved,
+                queued,
+                proposal,
+                simulation,
+                experiment: next,
+                summary: summarizeCodeExperimentLedger(readCodeExperimentLedger()),
+            });
+        } catch (e) {
+            const patched = updateCodeExperiment(req.params.id, {
+                status: 'promotable',
+                lesson: `Patch proposal failed: ${e.message}`,
+                error: e.message,
+            });
+            res.status(500).json({ success: false, error: e.message, experiment: patched });
+        }
+    });
+
+    // Queue an R&D candidate as a lab experiment for SOMA's self-development loop.
     router.post('/swarm/rd-propose', async (req, res) => {
         try {
             const { candidate, topic } = req.body || {};
             if (!candidate?.name) return res.status(400).json({ success: false, error: 'candidate.name required' });
 
-            const note = `R&D Discovery (${topic || 'unknown'}): ${candidate.name} — ${candidate.description || 'no description'}`;
+            const note = `R&D Lab Experiment (${topic || 'unknown'}): ${candidate.name} — ${candidate.description || 'no description'}`;
+            const experiment = upsertCodeExperiment(candidate, {
+                status: 'queued',
+                topic,
+                lesson: 'Queued for isolated sandbox testing before any SOMA patch proposal.',
+            });
 
             // Write to mnemonic memory so SOMA can recall it later
             if (system.mnemonicArbiter?.store) {
                 await system.mnemonicArbiter.store(note, {
-                    type: 'rd_discovery',
+                    type: 'rd_experiment_candidate',
                     repo: candidate.name,
                     topic,
                     url: candidate.url,
                     logosScore: candidate.logos?.score,
+                    risk: candidate.thalamus?.risk || candidate.riskLevel || null,
+                    integrationPolicy: 'test_first_promote_later',
                 });
             }
 
@@ -3865,14 +6331,19 @@ ${personaContext}${characterContext}`.trim()
             if (system.engineeringSwarm?.addGoal) {
                 system.engineeringSwarm.addGoal({
                     id: `rd_${Date.now()}`,
-                    description: `Evaluate R&D candidate for integration: ${candidate.name}`,
-                    source: 'rd_discovery',
+                    description: `Run lab experiment for R&D candidate: ${candidate.name}`,
+                    source: 'rd_experiment',
                     priority: candidate.logos?.score ?? 0.5,
-                    meta: { candidate, topic },
+                    meta: {
+                        candidate,
+                        topic,
+                        requiresSandbox: true,
+                        integrationPolicy: 'test_first_promote_later',
+                    },
                 });
             }
 
-            res.json({ success: true, message: `${candidate.name} proposed to swarm` });
+            res.json({ success: true, message: `${candidate.name} queued as R&D lab experiment`, experiment });
         } catch (e) {
             res.status(500).json({ success: false, error: e.message });
         }

@@ -13,6 +13,10 @@
  */
 
 import { BaseDaemon } from './BaseDaemon.js';
+import { createRequire } from 'module';
+
+const require = createRequire(import.meta.url);
+const workLedger = require('../core/AutonomousWorkLedger.cjs');
 
 const RESEARCH_CATEGORIES = new Set([
     'learning', 'research', 'knowledge_synthesis', 'github_discovery',
@@ -78,6 +82,15 @@ export class GoalExecutorDaemon extends BaseDaemon {
         else goal.status = 'active';
 
         this._activity('goal_started', goal.title, `${category} / priority ${goal.priority}`);
+        workLedger.record({
+            type: 'goal_started',
+            title: goal.title,
+            summary: `Started ${category} goal with priority ${goal.priority}`,
+            evidence: { goalId: goal.id, category, priority: goal.priority },
+            nextStep: 'Execute and verify goal result',
+            status: 'active',
+            source: 'GoalExecutorDaemon',
+        });
 
         let result;
 
@@ -124,10 +137,17 @@ export class GoalExecutorDaemon extends BaseDaemon {
 
         // ── Complete ────────────────────────────────────────────────────────
         if (planner?.completeGoal) {
-            await planner.completeGoal(goal.id, {
+            const completion = await planner.completeGoal(goal.id, {
                 result:      result.substring(0, 300),
-                completedBy: 'GoalExecutorDaemon'
-            }).catch(() => { goal.status = 'completed'; });
+                completedBy: 'GoalExecutorDaemon',
+                summary:     result.substring(0, 600),
+                evidence:    {
+                    [`GoalExecutorDaemon result for ${goal.title}`]: true
+                }
+            });
+            if (!completion?.success) {
+                throw new Error(completion?.error || 'Goal completion verification failed');
+            }
         } else {
             goal.status = 'completed';
         }
@@ -141,6 +161,15 @@ export class GoalExecutorDaemon extends BaseDaemon {
         if (category !== 'task') wm?.setPreoccupation(`Just finished: ${goal.title}`);
 
         this._activity('goal_completed', goal.title, snippet);
+        workLedger.record({
+            type: 'goal_completed',
+            title: goal.title,
+            summary: snippet,
+            evidence: { goalId: goal.id, verifier: 'GoalPlannerArbiter' },
+            nextStep: category === 'task' ? 'Monitor for follow-up work' : 'Promote useful findings into memory or a new goal',
+            status: 'verified',
+            source: 'GoalExecutorDaemon',
+        });
         this.emitSignal('soma.activity', {
             type:      'goal_completed',
             title:     `Goal complete: ${goal.title}`,
@@ -213,6 +242,15 @@ Your findings:`;
         }
 
         this._activity('goal_failed', goal.title, `${reason} (attempt ${attempts}/${MAX_RETRIES})`);
+        workLedger.record({
+            type: 'goal_failed',
+            title: goal.title,
+            summary: String(reason).slice(0, 400),
+            evidence: { goalId: goal.id, attempts },
+            nextStep: permanent ? 'Needs human review or a revised goal' : 'Retry goal execution',
+            status: permanent ? 'failed' : 'retrying',
+            source: 'GoalExecutorDaemon',
+        });
         if (permanent) {
             this.emitSignal('soma.activity', {
                 type:      'goal_failed',

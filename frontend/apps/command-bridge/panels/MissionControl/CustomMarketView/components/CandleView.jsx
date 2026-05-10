@@ -1,10 +1,15 @@
 import React, { useEffect, useRef, useState } from 'react';
 import * as d3 from 'd3';
 
-const CandleView = ({ data, width, height, predictions }) => {
+const CandleView = ({ data, width, height, predictions, range }) => {
     const svgRef = useRef(null);
     const [visibleCount, setVisibleCount] = useState(60); // Default zoom
     const [hoverInfo, setHoverInfo] = useState(null);
+
+    useEffect(() => {
+        if (!range?.limit || !data?.length) return;
+        setVisibleCount(Math.min(range.limit, data.length));
+    }, [range?.id, range?.limit, data?.length]);
 
     // Handle Scroll Zoom
     const handleWheel = (e) => {
@@ -45,7 +50,7 @@ const CandleView = ({ data, width, height, predictions }) => {
         feMerge.append("feMergeNode").attr("in", "SourceGraphic");
 
         // --- SCALES ---
-        const timeDomain = visibleData.map(d => d.time.toString());
+        const timeDomain = visibleData.map(d => String(d.timestamp ?? d.time));
         const predDomain = predictionLength > 0 ? Array.from({ length: predictionLength }, (_, i) => `PRED-${i}`) : [];
         const fullDomain = [...timeDomain, ...predDomain];
 
@@ -92,7 +97,7 @@ const CandleView = ({ data, width, height, predictions }) => {
             .data(visibleData)
             .enter()
             .append("g")
-            .attr("transform", d => `translate(${x(d.time.toString()) || 0},0)`);
+            .attr("transform", d => `translate(${x(String(d.timestamp ?? d.time)) || 0},0)`);
 
         // Wicks
         candleGroup.append("line")
@@ -122,7 +127,7 @@ const CandleView = ({ data, width, height, predictions }) => {
             // Grab context for smoothness
             const contextSize = 3;
             const historyContext = visibleData.slice(-contextSize).map((d, i) => ({
-                x: (x(d.time.toString()) || 0) + bandwidthCenter,
+                x: (x(String(d.timestamp ?? d.time)) || 0) + bandwidthCenter,
                 y: y(d.close)
             }));
 
@@ -209,7 +214,7 @@ const CandleView = ({ data, width, height, predictions }) => {
             <div className="absolute top-4 left-4 pointer-events-none">
                 <div className="flex flex-col gap-1">
                     <div className="text-[9px] text-slate-500 font-mono tracking-widest mb-1 uppercase">
-                        Scanner :: {visibleCount < 100 ? 'Micro' : 'Macro'} Scope
+                        Scanner :: {range?.label || (visibleCount < 100 ? 'Micro' : 'Macro')} Scope
                     </div>
 
                     {hoverInfo ? (

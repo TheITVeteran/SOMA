@@ -910,13 +910,19 @@ export async function loadTools(systemContext = {}) {
                 return 'Goal planning system not available';
             }
             try {
-                const stepArray = steps.split(',').map(s => s.trim());
-                const goalId = await system.goalPlanner.createGoal({
-                    description: goal,
-                    steps: stepArray,
-                    priority: 5
+                const stepArray = String(steps || '').split(',').map(s => s.trim()).filter(Boolean);
+                const result = await system.goalPlanner.createGoal({
+                    title: goal,
+                    category: 'task',
+                    description: stepArray.length
+                        ? `${goal}\n\nSteps:\n${stepArray.map((s, i) => `${i + 1}. ${s}`).join('\n')}`
+                        : goal,
+                    priority: 60,
+                    successCriteria: stepArray.length ? stepArray : [`Complete: ${goal}`],
+                    verification: { type: 'evidence' }
                 });
-                return `Created goal "${goal}" with ${stepArray.length} steps (ID: ${goalId})`;
+                if (!result.success) return `Goal creation rejected: ${result.error}`;
+                return `Created goal "${goal}" with ${stepArray.length} steps (ID: ${result.goalId})`;
             } catch (e) {
                 return `Goal creation failed: ${e.message}`;
             }

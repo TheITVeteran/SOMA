@@ -171,13 +171,31 @@ export class EngineeringSwarmArbiter extends BaseArbiterV4 {
         if (fileMatch) filepath = fileMatch[0];
     }
 
+    if (!filepath && this.quadBrain) {
+      // Fix 1: Ask brain to infer the most relevant file for this goal
+      try {
+        const inference = await Promise.race([
+          this.quadBrain.reason(
+            `Given this engineering goal: "${goal.title}"\nDescription: "${goal.description || ''}"\n\nRespond with ONLY a single relative file path (e.g. arbiters/Foo.js) that is the most appropriate file to modify in order to implement this goal. If no code file is relevant, respond with the single word NONE.`,
+            { quickResponse: true, preferredBrain: 'LOGOS' }
+          ),
+          new Promise(resolve => setTimeout(() => resolve(null), 8_000))
+        ]);
+        const raw = (inference?.text || '').trim().split('\n')[0].trim();
+        if (raw && raw !== 'NONE') {
+          const match = raw.match(/[\w./\\-]+\.(js|cjs|mjs|ts|jsx|tsx|json|py)/i);
+          if (match) filepath = match[0];
+        }
+      } catch { /* fall through */ }
+    }
+
     if (!filepath) {
-      // Non-code goal — update progress to show it was acknowledged
-      this.auditLogger.warn(`[EngSwarm] Goal "${goal.title}" has no file target — cannot execute via modifyCode`);
+      // Non-code goal — acknowledge but cannot execute via modifyCode
+      this.auditLogger.warn(`[EngSwarm] Goal "${goal.title}" has no file target even after brain inference — skipping`);
       messageBroker.sendMessage({
         from: 'EngineeringSwarmArbiter', to: 'GoalPlannerArbiter',
         type: 'update_goal_progress',
-        payload: { goalId, progress: 5, metadata: { note: 'Accepted by swarm but no file target' } }
+        payload: { goalId, progress: 5, metadata: { note: 'No file target; routed to reasoning-only execution' } }
       }).catch(() => {});
       return { success: true, message: 'Goal acknowledged, no file target' };
     }

@@ -12,6 +12,16 @@ set SOMA_LOAD_TRADING=true
 set SOMA_HYBRID_SEARCH=true
 set SOMA_LOAD_VISION=true
 
+rem ── Local Ollama models (installed on this machine) ──────────────────────────
+rem   OLLAMA_MODEL      : default / heartbeat / proactive messages
+rem   OLLAMA_MODEL_LOGOS     : code, logic, engineering (heaviest, best quality)
+rem   OLLAMA_MODEL_AURORA    : creative, synthesis, emotional reasoning
+rem   OLLAMA_MODEL_PROMETHEUS: strategy, planning, short tasks (fast)
+set OLLAMA_MODEL=qwen2.5:7b
+set OLLAMA_MODEL_LOGOS=qwen2.5-coder:14b
+set OLLAMA_MODEL_AURORA=qwen2.5:7b
+set OLLAMA_MODEL_PROMETHEUS=llama3.2:latest
+
 echo   [2] Checking for dependencies...
 if not exist "node_modules" (
     echo       Node modules not found. Installing...

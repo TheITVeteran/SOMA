@@ -27,8 +27,11 @@
  */
 
 import { EventEmitter } from 'events';
+import { createRequire } from 'module';
 import fs from 'fs';
 import path from 'path';
+const _require = createRequire(import.meta.url);
+const _workLedger = _require('../core/AutonomousWorkLedger.cjs');
 
 export class CuriosityEngine extends EventEmitter {
   constructor(opts = {}) {
@@ -49,6 +52,8 @@ export class CuriosityEngine extends EventEmitter {
     this.webResearcher= opts.webResearcher|| null;
     this.workingMemory= opts.workingMemory|| null;  // WorkingMemory — present-tense state
     this.synthesizer  = opts.synthesizer  || null;  // ExpertiseSynthesizer — crystallise deep curiosity into packs
+    this._toolRegistry = opts.toolRegistry || null; // ToolRegistry for free web_search / research_web
+    this._braveSearch  = opts.braveSearch  || null; // BraveSearch fallback (quota-limited)
 
     // Curiosity state
     this.curiosityQueue = []; // Questions/explorations to pursue
@@ -536,6 +541,43 @@ export class CuriosityEngine extends EventEmitter {
   }
 
   /**
+   * Fetch real web evidence for a query.
+   * Primary: ToolRegistry web_search/research_web (free, DuckDuckGo+Wikipedia).
+   * Fallback: BraveSearch API (500/month quota — only if tool fails).
+   * Returns {summary, sources, links} or null.
+   */
+  async _fetchWebEvidence(query) {
+    // Tier 1: free tool registry search (DuckDuckGo + Wikipedia, no quota)
+    if (this._toolRegistry?.execute) {
+      try {
+        const result = await Promise.race([
+          this._toolRegistry.execute('research_web', { topic: query, depth: 'quick' }),
+          new Promise(resolve => setTimeout(() => resolve(null), 15_000))
+        ]);
+        if (result && typeof result === 'string' && result.length > 50) {
+          return { summary: result, sources: [], links: [] };
+        }
+      } catch { /* fall through to Brave */ }
+    }
+    // Tier 2: BraveSearch (quota-limited, last resort)
+    if (this._braveSearch) {
+      try {
+        const result = await Promise.race([
+          this._braveSearch.searchWeb(query, { maxResults: 5 }),
+          new Promise(resolve => setTimeout(() => resolve(null), 10_000))
+        ]);
+        if (!result?.success || !result.results?.length) return null;
+        const summary = result.results
+          .map(r => `${r.title}: ${r.description || ''}`.trim())
+          .filter(Boolean).join('\n');
+        const links = result.results.map(r => r.url).filter(Boolean).slice(0, 5);
+        return { summary, sources: links, links };
+      } catch { return null; }
+    }
+    return null;
+  }
+
+  /**
    * Use the brain to turn a curiosity question into a sharp, searchable query.
    * Falls back to the raw question if brain is unavailable or too slow.
    */
@@ -547,7 +589,7 @@ export class CuriosityEngine extends EventEmitter {
 Curiosity: "${question}"
 Type: ${item.type || 'exploration'}
 
-Return ONLY the search query, nothing else.`;
+Return ONLY the search query, nothing else. DO NOT use em-dashes (—).`;
 
       const result = await Promise.race([
         this.brain.reason(prompt, { quickResponse: true, preferredBrain: 'LOGOS', systemOverride: 'search_optimizer' }),
@@ -662,12 +704,10 @@ Return ONLY the search query, nothing else.`;
     // 🎓 CURIOSITY-DRIVEN LEARNING: Trigger autonomous learning/training
     await this._triggerAutonomousLearning(item);
 
-    // REAL EXPLORATION: Free scrapers → Puppeteer dendrite → Brave only as last resort
+    // REAL EXPLORATION: ToolRegistry web_search (free) → BraveSearch (quota fallback)
     if (item.type !== 'physical_experiment') {
-      // Enrich the raw question into a focused web search query using the brain
       const searchQuery = await this._enrichQuestionForSearch(item.question, item);
 
-      // Publish so other systems (dashboards, logs) can observe
       if (this.messageBroker) {
         this.messageBroker.publish('curiosity:exploring', {
           question: searchQuery,
@@ -677,50 +717,14 @@ Return ONLY the search query, nothing else.`;
         });
       }
 
-      // Tier 1: CuriosityWebAccessConnector — Puppeteer scraping first, Brave only if scraping fails
-      // NOTE: Brave is 500 searches/month — WebAccessConnector already handles this conservatively
-      if (this.webResearcher) {
-        console.log(`[${this.name}] 🔭 Research via WebAccessConnector: "${searchQuery}"`);
-        // Await with 25s cap so synthesis can use real results, not just prior knowledge.
-        // Falls back to null (brain-only synthesis) if research times out or errors.
-        Promise.race([
-            this.webResearcher.handleCuriosity({
-                question: searchQuery,
-                type:     item.type,
-                priority: item.finalPriority
-            }),
-            new Promise(resolve => setTimeout(() => resolve(null), 25_000))
-        ]).then(webResult => {
-            this._synthesizeKnowledge(item, searchQuery, webResult).catch(() => {});
-        }).catch(() => {
-            this._synthesizeKnowledge(item, searchQuery, null).catch(() => {});
-        });
-
-      // Tier 2: EdgeWorkerOrchestrator — free HTML scraping (StackOverflow, GitHub, MDN, Dev.to)
-      } else if (this.messageBroker) {
-        await this.messageBroker.sendMessage({
-          from: this.name,
-          to: 'EdgeWorkerOrchestrator',
-          type: 'deploy_learning_task',
-          payload: {
-            type: 'web_crawl',
-            priority: 'high',
-            data: {
-              crawlTarget: {
-                name: 'curiosity_research',
-                type: 'general',
-                queries: [searchQuery],
-                maxPages: 3
-              },
-              source: 'curiosity_engine',
-              originalQuestion: item.question
-            }
-          }
-        });
-        console.log(`[${this.name}] 🚀 Dispatched (EdgeWorker fallback): "${searchQuery}"`);
-        // No web result available — synthesise from brain knowledge alone after brief delay
-        setTimeout(() => this._synthesizeKnowledge(item, searchQuery, null).catch(() => {}), 500);
-      }
+      this._fetchWebEvidence(searchQuery).then(webResult => {
+        if (webResult) {
+          console.log(`[${this.name}] 🌐 Got real web evidence for: "${searchQuery.substring(0, 50)}"`);
+        }
+        this._synthesizeKnowledge(item, searchQuery, webResult).catch(() => {});
+      }).catch(() => {
+        this._synthesizeKnowledge(item, searchQuery, null).catch(() => {});
+      });
     }
 
     // Non-web items (physical experiments etc.) still get brain synthesis
@@ -783,7 +787,7 @@ Return ONLY the search query, nothing else.`;
 ${webContext}
 ${styleNote}
 
-Respond as SOMA thinking to herself — first person, genuine, not a textbook. Keep it under 250 words. Start directly, no preamble.`;
+Respond as SOMA thinking to herself: first person, genuine, not a textbook. Keep it under 250 words. Start directly, no preamble. IMPORTANT: NEVER use em-dashes (—).`;
 
     const response = await this.brain.reason(prompt, {
         quickResponse: false,
@@ -810,6 +814,25 @@ Respond as SOMA thinking to herself — first person, genuine, not a textbook. K
     }
 
     console.log(`[${this.name}] 💡 Synthesised knowledge: "${topic.substring(0, 50)}" (${insight.length} chars)`);
+
+    // Write real discoveries to the work ledger so the proactive loop has actual evidence
+    if (webResult?.summary?.length > 30 || webResult?.sources?.length) {
+      try {
+        const evidenceStr = webResult.sources?.length
+          ? webResult.sources.slice(0, 3).join(', ')
+          : 'web research (DuckDuckGo/Wikipedia)';
+        _workLedger.record({
+          type:     'curiosity_discovery',
+          title:    `Explored: ${topic.substring(0, 100)}`,
+          summary:  insight.substring(0, 900),
+          evidence: evidenceStr,
+          nextStep: `Deepen: ${topic.substring(0, 80)}`,
+          status:   'observed',
+          source:   'CuriosityEngine',
+          links:    webResult.links || webResult.sources || []
+        });
+      } catch { /* non-critical */ }
+    }
 
     // For deep skill curiosities: consider building an expertise pack
     if (isSkill && insight.length > 300 && this.synthesizer) {

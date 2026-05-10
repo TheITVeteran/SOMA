@@ -6,7 +6,7 @@ import {
   Shield, User, Users, Lightbulb, ThermometerSun, ChevronLeft,
   ChevronRight, Sparkles, Terminal, Circle, BarChart3, Search, X, Clock,
   Download, TrendingUp, TrendingDown, Target, Server, Gauge, Mail, Mic,
-  Box, Share2, DollarSign, CircleDollarSign, Pencil, Eye
+  Box, Share2, DollarSign, CircleDollarSign, Pencil, Eye, Code2, Send
 } from 'lucide-react';
 import {
   LineChart, Line, RadarChart, Radar, PolarGrid,
@@ -103,6 +103,7 @@ const CommandCenterPanel = ({
   totalFragments, systemMetrics, analyticsSummary, activityStream,
   isConnected, formatUptime
 }) => {
+  const [showSpine, setShowSpine] = React.useState(false);
   const [steveMessages, setSteveMessages] = React.useState(() => {
     try {
       const saved = localStorage.getItem('soma_steve_messages');
@@ -241,6 +242,11 @@ const CommandCenterPanel = ({
         <button onClick={() => executeCommand('optimize_system', 'Optimize')}
           className="flex items-center gap-2 px-3 py-2 rounded-lg bg-purple-500/10 hover:bg-purple-500/20 border border-purple-500/20 text-purple-400 text-xs font-semibold transition-all">
           <Zap className="w-3.5 h-3.5" /> Optimize
+        </button>
+        <div className="flex-1" />
+        <button onClick={() => setShowSpine(true)}
+          className="flex items-center gap-2 px-3 py-2 rounded-lg bg-cyan-500/10 hover:bg-cyan-500/20 border border-cyan-500/20 text-cyan-400 text-xs font-semibold transition-all">
+          <Network className="w-3.5 h-3.5" /> Runtime Map
         </button>
       </div>
 
@@ -448,6 +454,31 @@ const CommandCenterPanel = ({
 
         </div>
       </div>
+
+      {/* Runtime Map (Spine) slide-over modal */}
+      {showSpine && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4"
+          onClick={(e) => e.target === e.currentTarget && setShowSpine(false)}
+        >
+          <div className="relative flex flex-col w-full max-w-6xl h-[90vh] rounded-2xl border border-white/10 bg-[#09090b] overflow-hidden shadow-2xl">
+            <div className="flex items-center justify-between px-6 py-3 border-b border-white/5 flex-shrink-0 bg-[#0d0d10]">
+              <div className="flex items-center gap-2 text-sm font-semibold text-cyan-300">
+                <Network className="w-4 h-4" /> Runtime &amp; Expertise Map
+              </div>
+              <button
+                onClick={() => setShowSpine(false)}
+                className="flex items-center justify-center w-7 h-7 rounded-md text-zinc-400 hover:text-white hover:bg-white/10 transition-colors"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-hidden">
+              <SomaSpinePanel isConnected={isConnected} />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -763,7 +794,7 @@ const SomaCommandBridge = () => {
   const [selectedNodeId, setSelectedNodeId] = useState(null);
   const [showSteve, setShowSteve] = useState(false);
   const [showExecution, setShowExecution] = useState(true);
-  const [showPulse, setShowPulse] = useState(false); // Pulse State
+  const [pulseVisited, setPulseVisited] = useState(false); // keep Maxwell IDE alive once opened
 
   // --- ARBITERIUM BACKEND INTEGRATION ---
   const [arbiteriumLastMessage, setArbiteriumLastMessage] = useState(null);
@@ -772,6 +803,11 @@ const SomaCommandBridge = () => {
   const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
   const [isCharacterLabOpen, setIsCharacterLabOpen] = useState(false);
   const [showQuickNote, setShowQuickNote] = useState(false);
+
+  // Mount Maxwell IDE on first visit so the iframe loads once and stays alive
+  useEffect(() => {
+    if (activeModule === 'pulse' && !pulseVisited) setPulseVisited(true);
+  }, [activeModule]);
 
   // Command Palette Shortcut
   useEffect(() => {
@@ -900,6 +936,9 @@ const SomaCommandBridge = () => {
   const [orbSidebarCollapsed, setOrbSidebarCollapsed] = useState(false);
   const [orbVisionCollapsed, setOrbVisionCollapsed] = useState(false);
   const [showOrbFace, setShowOrbFace] = useState(false);
+  const [orbPresence, setOrbPresence] = useState(null);
+  const [communicationHub, setCommunicationHub] = useState(null);
+  const [communicationView, setCommunicationView] = useState('timeline');
 
   // ------------------------------------------
   // RESTORED STATES (Cognitive & SLC)
@@ -989,7 +1028,10 @@ const SomaCommandBridge = () => {
     setOrbConversation(prev => [...prev, {
       role: response.role,
       text: response.text,
-      timestamp: response.timestamp || Date.now()
+      timestamp: response.timestamp || Date.now(),
+      route: response.route,
+      trust: response.trust,
+      receiptId: response.receiptId
     }]);
     
     if (response.reasoningTree) {
@@ -1030,7 +1072,24 @@ const SomaCommandBridge = () => {
     wakeWordActive,
     startWakeWordListening,
     stopWakeWordListening
-  } = useSomaAudio(handleOrbResponse, visionContextRef);
+  } = useSomaAudio(handleOrbResponse, visionContextRef, {
+    onReceipt: (payload) => {
+      setCommunicationHub(prev => {
+        if (!prev) return prev;
+        const next = { ...prev };
+        if (payload.receipt) {
+          const receipts = [payload.receipt, ...(next.receipts || []).filter(r => r.id !== payload.receipt.id)];
+          next.receipts = receipts.slice(0, 50);
+        }
+        if (payload.approval) {
+          const approvals = [payload.approval, ...(next.approvals || []).filter(a => a.id !== payload.approval.id)];
+          next.approvals = approvals.slice(0, 50);
+          next.stats = { ...(next.stats || {}), pendingApprovals: approvals.filter(a => a.status === 'pending').length };
+        }
+        return next;
+      });
+    }
+  });
 
   // Expose text query globally for manual input
   useEffect(() => {
@@ -1122,6 +1181,50 @@ const SomaCommandBridge = () => {
       startWakeWordListening();
     }
   }, []); // once on mount — restore preference from last session
+
+  useEffect(() => {
+    if (activeModule !== 'orb') return;
+    let cancelled = false;
+    const loadPresence = async () => {
+      try {
+        const [spineRes, activityRes] = await Promise.all([
+          fetch('/api/soma/knowledge/spine/status').catch(() => null),
+          fetch('/api/soma/activity?limit=6').catch(() => null)
+        ]);
+        const spine = spineRes?.ok ? await spineRes.json() : null;
+        const activity = activityRes?.ok ? await activityRes.json() : null;
+        if (!cancelled) setOrbPresence({ spine: spine?.spine || null, activity: activity?.activity || activity?.feed || activity?.items || [] });
+      } catch {
+        if (!cancelled) setOrbPresence(prev => prev || { spine: null, activity: [] });
+      }
+    };
+    loadPresence();
+    const timer = setInterval(loadPresence, 10000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [activeModule]);
+
+  useEffect(() => {
+    if (activeModule !== 'orb') return;
+    let cancelled = false;
+    const loadHub = async () => {
+      try {
+        const res = await fetch('/api/soma/communication/state?limit=40');
+        const data = await res.json();
+        if (!cancelled && data?.hub) setCommunicationHub(data.hub);
+      } catch {
+        if (!cancelled) setCommunicationHub(prev => prev || null);
+      }
+    };
+    loadHub();
+    const timer = setInterval(loadHub, 8000);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [activeModule]);
 
   // 7. User presence signal — throttled activity ping so SOMA knows the user is on-page
   useEffect(() => {
@@ -1471,8 +1574,7 @@ const SomaCommandBridge = () => {
         setShowProcessModal(true);
       }
       if ((modal === 'Pulse' || modal === 'Form') && action === 'open') {
-        console.log('[SomaCommandBridge] Opening Form Interface');
-        setShowPulse(true);
+        setActiveModule('pulse');
       }
     });
 
@@ -1992,11 +2094,6 @@ const SomaCommandBridge = () => {
         diagnosticLogs={diagnosticLogs}
         isConnected={isConnected}
       />
-      {showPulse && (
-        <div className="fixed inset-0 z-[200]">
-          <PulseIDE onClose={() => setShowPulse(false)} />
-        </div>
-      )}
       <CommandPalette 
         isOpen={isCommandPaletteOpen}
         onClose={() => setIsCommandPaletteOpen(false)}
@@ -2045,8 +2142,8 @@ const SomaCommandBridge = () => {
           {[
             { id: 'core', label: 'Core System', icon: Cpu, color: 'blue' },
             { id: 'command', label: 'Command Center', icon: Activity, color: 'fuchsia' },
-            { id: 'spine', label: 'Spine', icon: Network, color: 'cyan' },
             { id: 'terminal', label: 'SOMA CT', icon: Terminal, color: 'amber' },
+            { id: 'pulse', label: 'Pulse', icon: Code2, color: 'violet' },
             { id: 'orb', label: 'SOMA Orb', icon: Circle, color: 'purple' },
             { id: 'kevin', label: 'K.E.V.I.N.', icon: Mail, color: 'red' },
 
@@ -2085,7 +2182,7 @@ const SomaCommandBridge = () => {
       </div>
 
       {/* Main content */}
-      <div className={`flex-1 flex flex-col ${['terminal', 'orb', 'mission_control', 'knowledge', 'reflections'].includes(activeModule) ? 'overflow-hidden' : activeModule === 'command' ? 'overflow-hidden p-6' : 'overflow-y-auto p-6'}`}>
+      <div className={`flex-1 flex flex-col ${['terminal', 'orb', 'mission_control', 'knowledge', 'reflections', 'pulse'].includes(activeModule) ? 'overflow-hidden' : activeModule === 'command' ? 'overflow-hidden p-6' : 'overflow-y-auto p-6'}`}>
 
         {/* CORE SYSTEM MODULE */}
         {activeModule === 'core' && (
@@ -2207,6 +2304,13 @@ const SomaCommandBridge = () => {
         {/* TERMINAL MODULE */}
         {activeModule === 'terminal' && <div className="flex-1 h-full"><SomaCT /></div>}
 
+        {/* MAXWELL IDE — keep-alive after first visit so iframe doesn't reload on tab switch */}
+        {pulseVisited && (
+          <div style={{ display: activeModule === 'pulse' ? 'flex' : 'none' }} className="flex-1 h-full">
+            <PulseIDE />
+          </div>
+        )}
+
         {/* ORB MODULE */}
         {activeModule === 'orb' && (
           <div className="flex h-full w-full bg-black relative overflow-hidden">
@@ -2254,6 +2358,12 @@ const SomaCommandBridge = () => {
                             : 'bg-purple-500/10 border border-purple-500/20 text-purple-100 rounded-tl-none'
                         }`}>
                           {msg.text}
+                          {(msg.route || msg.trust?.score) && (
+                            <div className="mt-2 flex flex-wrap gap-1.5 border-t border-white/10 pt-2">
+                              {msg.route && <span className="rounded-full bg-white/5 px-2 py-0.5 text-[8px] uppercase tracking-widest text-zinc-400">{msg.route}</span>}
+                              {msg.trust?.score && <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[8px] uppercase tracking-widest text-emerald-300">{Math.round(msg.trust.score * 100)}% trust</span>}
+                            </div>
+                          )}
                         </div>
                         <span className="text-[8px] text-zinc-600 mt-1 uppercase font-mono tracking-tighter">
                           {msg.role === 'user' ? 'Human' : 'SOMA'} â€¢ {new Date(msg.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
@@ -2345,7 +2455,7 @@ const SomaCommandBridge = () => {
               {/* Synth Wave — reacts to SOMA's voice in black/purple — HIDE WHEN FACE IS ACTIVE */}
               {!showOrbFace && (
                 <div className="flex items-center justify-center mb-4 pointer-events-none">
-                  <SynthWave volume={volume} isTalking={isTalking} isActive={isOrbConnected} />
+                  <SynthWave volume={volume} isTalking={isTalking} isListening={isListening} isThinking={isThinking} isActive={isOrbConnected} />
                 </div>
               )}
 
@@ -2376,22 +2486,57 @@ const SomaCommandBridge = () => {
                     </p>
                   </div>
                 )}
+
+                {/* Manual Input Area */}
+                {isOrbConnected && (
+                  <div className="mt-4 w-full max-w-sm">
+                    <div className="bg-black/40 border border-white/10 rounded-2xl p-2.5 backdrop-blur-md shadow-2xl">
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          placeholder="Transmit command..."
+                          className="flex-1 bg-white/5 border border-white/5 rounded-xl px-4 py-2 text-xs text-zinc-200 placeholder-zinc-700 focus:outline-none focus:border-fuchsia-500/40 transition-all"
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter' && e.target.value.trim()) {
+                              const query = e.target.value.trim();
+                              e.target.value = '';
+                              if (window.somaTextQuery) window.somaTextQuery(query);
+                            }
+                          }}
+                        />
+                        <button
+                          onClick={(e) => {
+                            const input = e.currentTarget.parentElement.querySelector('input');
+                            if (input && input.value.trim()) {
+                              const query = input.value.trim();
+                              input.value = '';
+                              if (window.somaTextQuery) window.somaTextQuery(query);
+                            }
+                          }}
+                          className="p-2 bg-fuchsia-500/20 hover:bg-fuchsia-500/30 text-fuchsia-400 border border-fuchsia-500/30 rounded-xl transition-all"
+                        >
+                          <Send className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 
-            {/* Right: Mind's Eye Vision Panel */}
+            {/* Right: SOMA Presence Panel */}
             <motion.div
               initial={false}
-              animate={{ width: orbVisionCollapsed ? 0 : 280, opacity: orbVisionCollapsed ? 0 : 1 }}
+              animate={{ width: orbVisionCollapsed ? 0 : 300, opacity: orbVisionCollapsed ? 0 : 1 }}
               transition={{ duration: 0.4, ease: 'easeInOut' }}
               className="border-l border-white/5 flex flex-col bg-zinc-900/20 backdrop-blur-sm relative z-20 overflow-hidden"
             >
-              <div className="w-[280px] flex flex-col h-full">
+              <div className="w-[300px] flex flex-col h-full">
                 {/* Panel Header */}
                 <div className="p-4 border-b border-white/5 flex items-center justify-between flex-shrink-0">
                   <div className="flex items-center gap-2">
-                    <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-[0.2em]">Mind's Eye</span>
-                    <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${isVisionActive ? 'bg-emerald-500 shadow-[0_0_6px_#10b981]' : 'bg-zinc-700'}`} />
+                    <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-[0.2em]">SOMA Presence</span>
+                    <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${isOrbConnected ? 'bg-fuchsia-500 shadow-[0_0_8px_rgba(217,70,239,0.8)]' : 'bg-zinc-700'}`} />
                   </div>
                   <button
                     onClick={() => setOrbVisionCollapsed(true)}
@@ -2450,10 +2595,182 @@ const SomaCommandBridge = () => {
                     </div>
                     <span className="text-[9px] text-zinc-600 font-mono w-6 text-right">{Math.round(inputVolume * 100)}</span>
                   </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    {[
+                      { label: 'Link', value: isOrbConnected ? 'live' : 'idle', active: isOrbConnected },
+                      { label: 'Wake', value: wakeWordActive ? 'armed' : 'off', active: wakeWordActive },
+                      { label: 'Vision', value: isVisionActive ? visionChannel : 'off', active: isVisionActive },
+                      { label: 'Memory', value: orbPresence?.spine ? `${orbPresence.spine.unitCount || 0}` : 'sync', active: !!orbPresence?.spine },
+                      { label: 'Inbox', value: communicationHub?.stats ? `${communicationHub.stats.messages || 0}` : 'sync', active: !!communicationHub },
+                      { label: 'Approvals', value: communicationHub?.stats ? `${communicationHub.stats.pendingApprovals || 0}` : '0', active: (communicationHub?.stats?.pendingApprovals || 0) > 0 }
+                    ].map(item => (
+                      <div key={item.label} className="rounded-lg border border-white/5 bg-black/25 px-2 py-1.5">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-[8px] uppercase tracking-widest text-zinc-600">{item.label}</span>
+                          <span className={`h-1.5 w-1.5 rounded-full ${item.active ? 'bg-fuchsia-400 shadow-[0_0_6px_rgba(217,70,239,0.7)]' : 'bg-zinc-700'}`} />
+                        </div>
+                        <div className="mt-1 truncate text-[10px] font-mono text-zinc-300">{item.value}</div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
 
-                {/* Vision Feed */}
+                {/* Presence + Vision Feed */}
                 <div className="flex-1 overflow-y-auto p-3 custom-scrollbar space-y-3">
+                  <div className="rounded-xl border border-fuchsia-500/10 bg-fuchsia-500/[0.04] p-3">
+                    <div className="mb-2 flex items-center justify-between">
+                      <span className="text-[9px] font-bold uppercase tracking-widest text-fuchsia-300">Current State</span>
+                      <Activity className={`h-3 w-3 ${isThinking || isTalking || isListening ? 'text-fuchsia-300 animate-pulse' : 'text-zinc-600'}`} />
+                    </div>
+                    <div className="text-[11px] font-mono text-zinc-300">
+                      {isTalking ? 'Speaking through voice chain'
+                        : isThinking ? 'Reasoning on the last transmission'
+                        : isListening ? 'Listening for Barry'
+                        : isOrbConnected ? 'Linked and waiting'
+                        : 'Presence idle'}
+                    </div>
+                    {lastTranscript && (
+                      <div className="mt-2 rounded border border-white/5 bg-black/25 px-2 py-1 text-[9px] leading-snug text-zinc-500 line-clamp-2">
+                        Last heard: {lastTranscript}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="rounded-xl border border-white/10 bg-black/25 p-3">
+                    <div className="mb-2 flex items-center justify-between">
+                      <span className="text-[9px] font-bold uppercase tracking-widest text-zinc-500">Communication Hub</span>
+                      <MessageSquare className="h-3 w-3 text-zinc-500" />
+                    </div>
+                    <div className="mb-2 grid grid-cols-4 gap-1">
+                      {[
+                        ['timeline', 'Time'],
+                        ['receipts', 'Runs'],
+                        ['agents', 'Agents'],
+                        ['approvals', 'Gate']
+                      ].map(([id, label]) => (
+                        <button
+                          key={id}
+                          onClick={() => setCommunicationView(id)}
+                          className={`rounded-md border px-1.5 py-1 text-[8px] font-bold uppercase tracking-wider transition-all ${
+                            communicationView === id
+                              ? 'border-fuchsia-500/40 bg-fuchsia-500/15 text-fuchsia-200'
+                              : 'border-white/5 bg-white/[0.03] text-zinc-600 hover:text-zinc-300'
+                          }`}
+                        >
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+
+                    {communicationView === 'timeline' && (
+                      <div className="space-y-1.5">
+                        {(communicationHub?.timeline || []).slice(0, 5).map(item => (
+                          <div key={item.id} className="rounded-lg border border-white/5 bg-white/[0.03] px-2 py-1.5">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="truncate text-[10px] text-zinc-300">{item.title || item.type}</span>
+                              <span className={`h-1.5 w-1.5 rounded-full ${item.priority === 'important' ? 'bg-amber-400' : item.priority === 'ambient' ? 'bg-zinc-600' : 'bg-fuchsia-400'}`} />
+                            </div>
+                            <div className="mt-0.5 truncate text-[8px] uppercase tracking-wider text-zinc-600">{item.agent || item.route || 'SOMA'} / {new Date(item.ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+                          </div>
+                        ))}
+                        {!(communicationHub?.timeline || []).length && <div className="text-[10px] text-zinc-600">No communication events yet.</div>}
+                      </div>
+                    )}
+
+                    {communicationView === 'receipts' && (
+                      <div className="space-y-1.5">
+                        {(communicationHub?.receipts || []).slice(0, 4).map(item => (
+                          <div key={item.id} className="rounded-lg border border-white/5 bg-white/[0.03] px-2 py-1.5">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="truncate text-[10px] text-zinc-300">{item.title}</span>
+                              <span className={`text-[8px] uppercase ${item.status === 'completed' ? 'text-emerald-300' : item.status === 'failed' ? 'text-rose-300' : 'text-amber-300'}`}>{item.status}</span>
+                            </div>
+                            <div className="mt-1 grid grid-cols-6 gap-1">
+                              {(item.steps || []).map(step => (
+                                <div key={step.label} title={step.label} className={`h-1 rounded-full ${step.status === 'done' ? 'bg-emerald-400' : step.status === 'active' ? 'bg-fuchsia-400 animate-pulse' : 'bg-zinc-800'}`} />
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                        {!(communicationHub?.receipts || []).length && <div className="text-[10px] text-zinc-600">Receipts appear when SOMA handles a message.</div>}
+                      </div>
+                    )}
+
+                    {communicationView === 'agents' && (
+                      <div className="space-y-1.5">
+                        {(communicationHub?.agents || []).map(agent => (
+                          <div key={agent.id} className="flex items-center justify-between rounded-lg border border-white/5 bg-white/[0.03] px-2 py-1.5">
+                            <div className="min-w-0">
+                              <div className="truncate text-[10px] text-zinc-300">{agent.name}</div>
+                              <div className="truncate text-[8px] uppercase tracking-wider text-zinc-600">{agent.role}</div>
+                            </div>
+                            <div className="text-right">
+                              <div className="text-[9px] text-fuchsia-300">{Math.round((agent.confidence || 0) * 100)}%</div>
+                              <div className="text-[8px] uppercase text-zinc-600">{agent.status}</div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {communicationView === 'approvals' && (
+                      <div className="space-y-1.5">
+                        {(communicationHub?.approvals || []).slice(0, 4).map(item => (
+                          <div key={item.id} className="rounded-lg border border-amber-500/15 bg-amber-500/[0.04] px-2 py-1.5">
+                            <div className="truncate text-[10px] text-amber-100">{item.title}</div>
+                            <div className="mt-0.5 truncate text-[8px] uppercase tracking-wider text-amber-300/60">{item.status} / {item.agent}</div>
+                            {item.status === 'pending' && (
+                              <div className="mt-2 grid grid-cols-2 gap-1">
+                                {['approved', 'rejected'].map(status => (
+                                  <button
+                                    key={status}
+                                    onClick={async () => {
+                                      try {
+                                        await fetch(`/api/soma/communication/approval/${item.id}`, {
+                                          method: 'PATCH',
+                                          headers: { 'Content-Type': 'application/json' },
+                                          body: JSON.stringify({ status })
+                                        });
+                                        const res = await fetch('/api/soma/communication/state?limit=40');
+                                        const data = await res.json();
+                                        if (data?.hub) setCommunicationHub(data.hub);
+                                      } catch {}
+                                    }}
+                                    className={`rounded border px-2 py-1 text-[8px] uppercase tracking-wider ${status === 'approved' ? 'border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/10' : 'border-rose-500/30 text-rose-300 hover:bg-rose-500/10'}`}
+                                  >
+                                    {status}
+                                  </button>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                        {!(communicationHub?.approvals || []).length && <div className="text-[10px] text-zinc-600">Risky external actions will wait here.</div>}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="rounded-xl border border-white/10 bg-black/25 p-3">
+                    <div className="mb-2 flex items-center justify-between">
+                      <span className="text-[9px] font-bold uppercase tracking-widest text-zinc-500">Knowledge Spine</span>
+                      <Database className="h-3 w-3 text-zinc-500" />
+                    </div>
+                    <div className="grid grid-cols-2 gap-2 text-center font-mono">
+                      <div className="rounded border border-white/5 bg-white/[0.03] px-2 py-1">
+                        <div className="text-[12px] text-white">{orbPresence?.spine?.entryCount ?? '—'}</div>
+                        <div className="text-[8px] uppercase text-zinc-600">entries</div>
+                      </div>
+                      <div className="rounded border border-white/5 bg-white/[0.03] px-2 py-1">
+                        <div className="text-[12px] text-fuchsia-300">{orbPresence?.spine?.unitCount ?? '—'}</div>
+                        <div className="text-[8px] uppercase text-zinc-600">units</div>
+                      </div>
+                    </div>
+                    <div className="mt-2 text-[9px] leading-snug text-zinc-500 line-clamp-2">
+                      {orbPresence?.spine?.recentEntries?.[0]?.title || 'Waiting for the shared knowledge spine.'}
+                    </div>
+                  </div>
+
                   {!isVisionActive ? (
                     <div className="flex flex-col items-center justify-center h-32 text-center border border-dashed border-white/5 rounded-xl">
                       <span className="text-zinc-600 text-[10px] uppercase tracking-widest">Vision Daemon Offline</span>
@@ -2507,6 +2824,20 @@ const SomaCommandBridge = () => {
                     </div>
                   )}
 
+                  {orbPresence?.activity?.length > 0 && (
+                    <div className="space-y-1.5">
+                      <p className="text-[9px] text-zinc-600 uppercase tracking-widest font-mono">Recent Activity</p>
+                      {orbPresence.activity.slice(0, 4).map((item, i) => (
+                        <div key={item.id || i} className="rounded-lg border border-white/5 bg-white/[0.03] px-2 py-1.5">
+                          <div className="truncate text-[10px] text-zinc-300">{item.action || item.message || item.title || item.type || 'Activity'}</div>
+                          {(item.detail || item.agent) && (
+                            <div className="mt-0.5 truncate text-[8px] uppercase tracking-wider text-zinc-600">{item.agent || item.detail}</div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
                   {/* Channel selector */}
                   {isVisionActive && (
                     <div className="space-y-1.5">
@@ -2532,7 +2863,7 @@ const SomaCommandBridge = () => {
               </div>
             </motion.div>
 
-            {/* Mind's Eye re-expand button — visible when panel is collapsed */}
+            {/* SOMA Presence re-expand button — visible when panel is collapsed */}
             <AnimatePresence>
               {orbVisionCollapsed && (
                 <motion.div
@@ -2545,9 +2876,9 @@ const SomaCommandBridge = () => {
                   <button
                     onClick={() => setOrbVisionCollapsed(false)}
                     className="p-2.5 rounded-full border bg-fuchsia-500/10 border-fuchsia-500/30 text-fuchsia-400 hover:bg-fuchsia-500/20 transition-all"
-                    title="Expand Mind's Eye"
+                    title="Expand SOMA Presence"
                   >
-                    <Eye className="w-4 h-4" />
+                    <Sparkles className="w-4 h-4" />
                   </button>
                 </motion.div>
               )}
@@ -2986,8 +3317,7 @@ const SomaCommandBridge = () => {
         {activeModule === 'knowledge' && <KnowledgeApp brainStats={brainStats} />}
         {activeModule === 'reflections' && <ReflectionsTab />}
 
-        {/* SOMA SPINE MODULE */}
-        {activeModule === 'spine' && <SomaSpinePanel isConnected={isConnected} />}
+        {/* Spine is accessible via the Runtime Map button in Command Center */}
 
 
         {/* WORKFLOW MODULE - removed, non-functional */}
@@ -3121,7 +3451,7 @@ const SomaCommandBridge = () => {
             </div>
 
             {/* Floating Steve for Workflow Tab Only */}
-            {!showPulse && !showSteve && <WorkflowSteve onNavigate={setActiveModule} />}
+            {activeModule !== 'pulse' && !showSteve && <WorkflowSteve onNavigate={setActiveModule} />}
           </div>
         )}
 
@@ -3166,7 +3496,7 @@ const SomaCommandBridge = () => {
         )}
 
         {/* DEFAULT FALLBACK */}
-        {!['terminal', 'orb', 'kevin', 'simulation', 'core', 'arbiters', 'knowledge', 'reflections', 'storage', 'command', 'spine', 'settings', 'mission_control', 'forecaster', 'marketplace', 'finance', 'arbiterium'].includes(activeModule) && (
+        {!['terminal', 'orb', 'kevin', 'simulation', 'core', 'arbiters', 'knowledge', 'reflections', 'storage', 'command', 'spine', 'settings', 'mission_control', 'forecaster', 'marketplace', 'finance', 'arbiterium', 'pulse'].includes(activeModule) && (
           <div className="flex items-center justify-center h-full text-zinc-600 italic">
             Integration for Module "{activeModule}" is ongoing...
           </div>

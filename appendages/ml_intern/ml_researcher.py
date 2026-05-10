@@ -15,10 +15,11 @@ class MlResearcher:
         self.browser = None
 
     async def search_arxiv(self, query, max_results=5):
-        client = arxiv.Client()
+        limit = max(1, min(int(max_results or 5), 10))
+        client = arxiv.Client(page_size=limit, delay_seconds=3.0, num_retries=2)
         search = arxiv.Search(
             query=query,
-            max_results=max_results,
+            max_results=limit,
             sort_by=arxiv.SortCriterion.Relevance
         )
         results = []

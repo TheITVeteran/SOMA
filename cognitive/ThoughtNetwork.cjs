@@ -205,7 +205,8 @@ class ThoughtNetwork {
             "isChild": true/false,
             "parentId": "exact content of parent OR null if new root",
             "reason": "short reason"
-        }`;
+        }
+        IMPORTANT: NEVER use em-dashes (—).`;
 
         try {
             // Use Auto-Reasoning: Let the best brain for this concept decide its place

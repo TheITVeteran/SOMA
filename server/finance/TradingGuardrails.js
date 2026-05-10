@@ -21,6 +21,7 @@ class TradingGuardrails {
       maxPositionSize: config.maxPositionSize || 0.20,    // Max 20% of portfolio per position
       requireMarketHours: config.requireMarketHours !== undefined ? config.requireMarketHours : true
     };
+    this.activeTier = config.promotionTier || 'paper';
 
     // State tracking
     this.dailyLoss = 0;
@@ -318,6 +319,7 @@ class TradingGuardrails {
   getStatus() {
     return {
       config: this.config,
+      activeTier: this.activeTier,
       dailyLoss: this.dailyLoss,
       dailyTradeCount: this.dailyTradeCount,
       marketOpen: this.isMarketOpen(),
@@ -332,7 +334,14 @@ class TradingGuardrails {
    */
   updateConfig(newConfig) {
     this.config = { ...this.config, ...newConfig };
+    if (newConfig.promotionTier) this.activeTier = newConfig.promotionTier;
     console.log('[Guardrails] Configuration updated:', this.config);
+  }
+
+  applyTierProfile(profile = {}) {
+    this.updateConfig(profile);
+    this.activeTier = profile.promotionTier || this.activeTier;
+    return this.getStatus();
   }
 }
 

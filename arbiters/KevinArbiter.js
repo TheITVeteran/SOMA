@@ -4,6 +4,8 @@ import { EventEmitter } from 'events';
 import fs from 'fs/promises';
 import path from 'path';
 import os from 'os';
+import KevinIntentRouter from '../core/KevinIntentRouter.js';
+import UserPersona from '../core/UserPersona.js';
 const require = createRequire(import.meta.url);
 const KevinPersonalityEngine = require('../core/KevinPersonalityEngine.cjs');
 const { KevinEmailManager } = require('../server/utils/KevinEmailManager.cjs');
@@ -19,7 +21,11 @@ const { KevinSMSService } = require('../server/utils/KevinSMSService.cjs');
 /**
  * KevinArbiter
  * 
- * The backend brain for KEVIN (Knowledge Engine with Variable Inner Narratives).
+ * Operator Guard / Security Cockpit for KEVIN.
+ *
+ * KEVIN is not a general assistant. He is the operator-facing control surface
+ * for email/link/sender security, local watch, trust decisions, evidence-first
+ * verdicts, and approval-gated actions. Personality is UX, not authority.
  */
 export class KevinArbiter extends BaseArbiterV4 {
     constructor(opts = {}) {
@@ -40,6 +46,26 @@ export class KevinArbiter extends BaseArbiterV4 {
 
         this.messageBroker = opts.messageBroker;
         this.engine = new KevinPersonalityEngine(this.messageBroker);
+        this.intentRouter = new KevinIntentRouter();
+        this.userPersona = new UserPersona();
+        this.identity = {
+            name: 'K.E.V.I.N.',
+            role: 'Operator Guard',
+            productClass: 'Personal Security Cockpit',
+            mission: 'Protect the operator at the edge: email, links, senders, local watch, trust decisions, and approval-gated actions.',
+            principles: [
+                'Operator-facing control surface',
+                'Email/link/sender security',
+                'Local system watch',
+                'Approval gate for risky actions',
+                'Trust graph for people, domains, apps, and files',
+                'Evidence-first verdict engine',
+                'Small autonomous routines, never uncontrolled autonomy',
+                'Personality as UX, not the core product'
+            ],
+            autonomy: 'guarded',
+            notA: ['general assistant', 'unbounded autonomous agent', 'replacement for dedicated enterprise security tooling']
+        };
         
         // ... (rest of constructor)
         this.isOnline = false;
@@ -102,7 +128,7 @@ export class KevinArbiter extends BaseArbiterV4 {
         // Load persisted config first
         await this.loadConfig();
 
-        this.auditLogger.info('Kevin Arbiter initialized (Security + Productivity Mode)');
+        this.auditLogger.info('Kevin Arbiter initialized (Operator Guard / Security Cockpit Mode)');
 
         // Register with MessageBroker so lobe-scoped routing works
         if (this.messageBroker && typeof this.messageBroker.registerArbiter === 'function') {
@@ -246,6 +272,500 @@ export class KevinArbiter extends BaseArbiterV4 {
         return { success: true, config: this.config };
     }
 
+    getCapabilities() {
+        const notificationStatus = this.notificationService?.getStatus?.() || {};
+        const notificationChannels = ['slack', 'telegram', 'discord'].reduce((channels, channel) => {
+            channels[channel] = !!notificationStatus[channel]?.enabled;
+            return channels;
+        }, {});
+
+        return {
+            success: true,
+            identity: this.identity,
+            agentic: {
+                enabled: true,
+                autonomy: 'guarded',
+                requiresApprovalFor: [
+                    'sending email replies',
+                    'creating calendar events',
+                    'blocking senders',
+                    'external notifications'
+                ]
+            },
+            surfaces: {
+                operatorControl: true,
+                emailLinkSenderSecurity: true,
+                localSystemWatch: true,
+                approvalGate: true,
+                trustGraph: {
+                    people: true,
+                    domains: true,
+                    apps: false,
+                    files: false
+                },
+                evidenceFirstVerdicts: typeof this.threatDatabase?.buildEmailVerdict === 'function',
+                smallAutonomousRoutines: true,
+                personalityAsUx: true
+            },
+            core: {
+                online: this.isOnline,
+                mood: this.mood,
+                personality: !!this.engine,
+                simulationLoop: !!this.scanInterval
+            },
+            integrations: {
+                email: {
+                    configured: !!(process.env.EMAIL_ADDRESS && process.env.APP_PASSWORD),
+                    connected: this.useRealEmail,
+                    monitoredAccounts: this.config?.monitored_accounts?.length || 0
+                },
+                calendar: {
+                    configured: !!this.calendarService?.isConfigured,
+                    pendingActions: this.calendarService?.getPendingActions?.().length || 0
+                },
+                research: {
+                    configured: !!this.researchService?.isConfigured?.()
+                },
+                notifications: {
+                    configured: Object.values(notificationChannels).some(Boolean),
+                    channels: notificationChannels
+                },
+                sms: {
+                    configured: !!this.smsService?.isConfigured?.(),
+                    available: !!this.smsService
+                },
+                userPersona: {
+                    available: !!this.userPersona
+                },
+                threatDatabase: {
+                    available: !!this.threatDatabase,
+                    stats: this.threatDatabase?.getStats?.() || null,
+                    structuredVerdicts: typeof this.threatDatabase?.buildEmailVerdict === 'function',
+                    reversibleTrust: typeof this.threatDatabase?.unblockSender === 'function'
+                }
+            },
+            actions: {
+                chat: typeof this.chat === 'function',
+                think: typeof this.think === 'function',
+                routeIntent: !!this.intentRouter,
+                userStyleDrafting: !!this.userPersona,
+                draftReplies: typeof this.draftParanoidReply === 'function',
+                approveDrafts: typeof this.approveDraft === 'function',
+                investigateSenders: typeof this.investigateSender === 'function',
+                investigateDomains: typeof this.investigateDomain === 'function',
+                investigateUrls: typeof this.investigateUrl === 'function',
+                securityVerdicts: typeof this.buildSecurityVerdict === 'function',
+                reversibleTrust: typeof this.getTrustState === 'function',
+                calendarEvents: typeof this.createCalendarEvent === 'function',
+                actionItems: typeof this.getActionItems === 'function',
+                meetingRequests: typeof this.getMeetingRequests === 'function'
+            }
+        };
+    }
+
+    getCockpitSummary() {
+        const threatStats = this.threatDatabase?.getStats?.() || {};
+        const trustState = this.threatDatabase?.getTrustState?.() || { safeSenders: [], blockedSenders: [], recentDecisions: [] };
+        const calendarStatus = this.getCalendarStatus?.() || {};
+        const drafts = this.emailManager?.getDrafts?.() || [];
+        const auditFindings = this.securityAudit?.getFindings?.() || [];
+        const criticalFindings = auditFindings.filter(f => f.severity === 'critical');
+
+        return {
+            success: true,
+            identity: this.identity,
+            online: this.isOnline,
+            mood: this.mood,
+            localWatch: {
+                enabled: true,
+                mode: this.useRealEmail ? 'email_and_local_watch' : 'local_scrutiny',
+                recentFindings: auditFindings.slice(-10),
+                critical: criticalFindings.length
+            },
+            approvals: {
+                draftReplies: drafts.length,
+                calendar: calendarStatus.pendingActions || 0,
+                meetingRequests: this.meetingRequests.filter(r => r.status === 'pending_review').length,
+                actionItems: this.actionItems.filter(i => i.status === 'pending').length
+            },
+            trustGraph: {
+                people: {
+                    safe: trustState.safeSenders?.length || 0,
+                    blocked: trustState.blockedSenders?.length || 0
+                },
+                domains: { safe: 0, blocked: 0, planned: true },
+                apps: { watched: 0, planned: true },
+                files: { watched: 0, planned: true },
+                recentDecisions: trustState.recentDecisions || []
+            },
+            verdictEngine: {
+                structured: typeof this.threatDatabase?.buildEmailVerdict === 'function',
+                maliciousHashes: threatStats.maliciousHashes || 0,
+                phishingPatterns: threatStats.phishingPatterns || 0,
+                decisions: threatStats.decisions || 0
+            },
+            autonomy: {
+                level: 'guarded',
+                allowedWithoutApproval: ['scan', 'classify', 'summarize evidence', 'draft pending review'],
+                requiresApproval: this.identity.principles.includes('Approval gate for risky actions')
+                    ? ['send email', 'create calendar event', 'block sender', 'trust sender', 'external notification']
+                    : []
+            }
+        };
+    }
+
+    getPendingApprovals() {
+        const drafts = this.emailManager?.getDrafts?.() || [];
+        const calendar = this.calendarService?.getPendingActions?.() || [];
+        const meetings = this.meetingRequests.filter(r => r.status === 'pending_review');
+
+        return {
+            success: true,
+            approvals: [
+                ...drafts.map(draft => ({
+                    id: draft.id || draft.draftId || `draft_${draft.createdAt || Date.now()}`,
+                    type: 'draft_reply',
+                    title: draft.subject || 'Email draft',
+                    target: draft.to || draft.recipient || 'unknown',
+                    evidence: draft.metadata?.threatLevel?.verdict?.evidence || [],
+                    confidence: draft.metadata?.threatLevel?.verdict?.confidence || null,
+                    recommendedAction: 'Review the body before sending.',
+                    reversible: true,
+                    raw: draft
+                })),
+                ...calendar.map(item => ({
+                    id: item.id || item.pendingId,
+                    type: 'calendar_event',
+                    title: item.summary || item.title || 'Calendar event',
+                    target: item.attendees?.join?.(', ') || 'calendar',
+                    evidence: [{ type: 'approval_gate', severity: 'medium', detail: 'Calendar changes require operator approval.' }],
+                    recommendedAction: 'Approve only after attendee/time verification.',
+                    reversible: true,
+                    raw: item
+                })),
+                ...meetings.map(request => ({
+                    id: request.id,
+                    type: 'meeting_request',
+                    title: request.email?.subject || 'Meeting request',
+                    target: request.email?.from || 'unknown sender',
+                    evidence: [{ type: 'extracted_meeting', severity: 'low', detail: `Confidence ${Math.round((request.confidence || 0) * 100)}%` }],
+                    confidence: request.confidence || null,
+                    recommendedAction: 'Schedule only after confirming details.',
+                    reversible: true,
+                    raw: request
+                }))
+            ]
+        };
+    }
+
+    getTrustGraph() {
+        const trustState = this.threatDatabase?.getTrustState?.() || { safeSenders: [], blockedSenders: [], recentDecisions: [] };
+        const nodes = [
+            { id: 'operator', label: 'Operator', type: 'operator', status: 'root' },
+            { id: 'kevin', label: 'KEVIN', type: 'guard', status: 'active' }
+        ];
+        const edges = [{ source: 'operator', target: 'kevin', relation: 'delegates_guard' }];
+        const domainIds = new Set();
+
+        const addSender = (sender, status) => {
+            const senderId = `sender:${sender}`;
+            nodes.push({ id: senderId, label: sender, type: 'person', status });
+            edges.push({ source: 'kevin', target: senderId, relation: status === 'blocked' ? 'blocks' : 'trusts' });
+
+            const domain = String(sender).split('@')[1];
+            if (domain) {
+                const domainId = `domain:${domain}`;
+                if (!domainIds.has(domainId)) {
+                    domainIds.add(domainId);
+                    nodes.push({ id: domainId, label: domain, type: 'domain', status: 'observed' });
+                }
+                edges.push({ source: senderId, target: domainId, relation: 'uses_domain' });
+            }
+        };
+
+        trustState.safeSenders?.forEach(sender => addSender(sender, 'safe'));
+        trustState.blockedSenders?.forEach(sender => addSender(sender, 'blocked'));
+
+        nodes.push(
+            { id: 'apps:planned', label: 'Apps', type: 'app', status: 'planned' },
+            { id: 'files:planned', label: 'Files', type: 'file', status: 'planned' }
+        );
+        edges.push(
+            { source: 'kevin', target: 'apps:planned', relation: 'watch_planned' },
+            { source: 'kevin', target: 'files:planned', relation: 'watch_planned' }
+        );
+
+        return { success: true, nodes, edges, recentDecisions: trustState.recentDecisions || [] };
+    }
+
+    getVerdictTimeline(limit = 50) {
+        const trustState = this.threatDatabase?.getTrustState?.() || { recentDecisions: [] };
+        const scanEvents = (this.scanLogs || []).map(log => ({
+            id: `scan_${log.id || log.time}`,
+            type: 'scan',
+            timestamp: log.timestamp || log.time || new Date().toISOString(),
+            title: log.subject || 'Email scan',
+            verdict: log.status || 'unknown',
+            score: log.threatLevel || 0,
+            target: log.from || log.sender || null,
+            evidence: log.indicators || []
+        }));
+        const decisionEvents = (trustState.recentDecisions || []).map(decision => ({
+            id: decision.id,
+            type: 'trust_decision',
+            timestamp: decision.timestamp,
+            title: decision.action,
+            verdict: decision.action,
+            target: decision.target,
+            evidence: [decision.metadata]
+        }));
+
+        return {
+            success: true,
+            events: [...scanEvents, ...decisionEvents]
+                .sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0))
+                .slice(0, Number(limit) || 50)
+        };
+    }
+
+    async getLocalWatchSummary() {
+        const root = process.cwd();
+        const findings = [];
+        const hiddenAllow = new Set(['.git', '.env', '.soma', '.gemini', '.claude', '.gitignore', '.gitattributes', '.gitmodules', '.npmrc']);
+
+        try {
+            const files = await fs.readdir(root, { withFileTypes: true });
+            const unexpectedHidden = files
+                .filter(f => f.name.startsWith('.') && !hiddenAllow.has(f.name))
+                .map(f => f.name);
+            if (unexpectedHidden.length) {
+                findings.push({
+                    severity: 'medium',
+                    type: 'unexpected_hidden_files',
+                    detail: `${unexpectedHidden.length} unexpected hidden root artifact(s)`,
+                    items: unexpectedHidden.slice(0, 10)
+                });
+            }
+
+            const riskyRootFiles = files
+                .filter(f => /\.(exe|bat|cmd|ps1|vbs|scr|msi)$/i.test(f.name))
+                .map(f => f.name);
+            if (riskyRootFiles.length) {
+                findings.push({
+                    severity: 'medium',
+                    type: 'root_executables',
+                    detail: `${riskyRootFiles.length} executable/script artifact(s) in project root`,
+                    items: riskyRootFiles.slice(0, 10)
+                });
+            }
+        } catch (error) {
+            findings.push({ severity: 'low', type: 'watch_error', detail: error.message });
+        }
+
+        const envFlags = ['EMAIL_ADDRESS', 'APP_PASSWORD', 'TAVILY_API_KEY', 'SLACK_WEBHOOK_URL', 'DISCORD_WEBHOOK_URL']
+            .filter(key => !!process.env[key])
+            .map(key => ({ key, configured: true }));
+
+        return {
+            success: true,
+            root,
+            mode: this.useRealEmail ? 'email_and_local_watch' : 'local_scrutiny',
+            uptime: Math.floor(process.uptime()),
+            process: {
+                pid: process.pid,
+                platform: process.platform,
+                node: process.version,
+                memoryMb: Math.round(process.memoryUsage().rss / 1024 / 1024)
+            },
+            envFlags,
+            findings,
+            status: findings.some(f => f.severity === 'critical') ? 'critical' : findings.length ? 'watch' : 'clean'
+        };
+    }
+
+    async inspectLinkLite(url) {
+        if (!url) return { success: false, error: 'url required' };
+
+        const evidence = [];
+        let parsed;
+        try {
+            parsed = new URL(url);
+        } catch {
+            return {
+                success: true,
+                verdict: 'caution',
+                score: 35,
+                evidence: [{ type: 'malformed_url', severity: 'medium', detail: 'URL could not be parsed' }],
+                recommendedAction: 'Do not open until the URL is corrected and verified.'
+            };
+        }
+
+        const hostname = parsed.hostname.toLowerCase();
+        let score = 0;
+        const suspiciousTlds = ['.xyz', '.top', '.buzz', '.click', '.loan', '.work'];
+        const shorteners = ['bit.ly', 'tinyurl.com', 't.co', 'goo.gl', 'ow.ly', 'is.gd', 'buff.ly'];
+
+        if (/^\d+\.\d+\.\d+\.\d+$/.test(hostname)) {
+            score += 35;
+            evidence.push({ type: 'ip_url', severity: 'high', detail: 'Hostname is a raw IP address' });
+        }
+        if (suspiciousTlds.some(tld => hostname.endsWith(tld))) {
+            score += 25;
+            evidence.push({ type: 'suspicious_tld', severity: 'medium', detail: hostname });
+        }
+        if (shorteners.includes(hostname)) {
+            score += 20;
+            evidence.push({ type: 'url_shortener', severity: 'medium', detail: hostname });
+        }
+        if (hostname.startsWith('xn--')) {
+            score += 35;
+            evidence.push({ type: 'punycode', severity: 'high', detail: 'Possible homograph domain' });
+        }
+        if (parsed.protocol !== 'https:') {
+            score += 15;
+            evidence.push({ type: 'non_https', severity: 'low', detail: parsed.protocol });
+        }
+
+        const redirectChain = [];
+        if (typeof fetch === 'function') {
+            try {
+                let current = url;
+                for (let i = 0; i < 4; i++) {
+                    const response = await fetch(current, { method: 'HEAD', redirect: 'manual' });
+                    redirectChain.push({ url: current, status: response.status, location: response.headers.get('location') || null });
+                    const location = response.headers.get('location');
+                    if (!location || response.status < 300 || response.status >= 400) break;
+                    current = new URL(location, current).toString();
+                }
+                if (redirectChain.length > 1) {
+                    score += 10;
+                    evidence.push({ type: 'redirect_chain', severity: 'low', detail: `${redirectChain.length - 1} redirect(s)` });
+                }
+            } catch (error) {
+                evidence.push({ type: 'metadata_fetch_failed', severity: 'info', detail: error.message });
+            }
+        }
+
+        score = Math.min(score, 100);
+        const verdict = score >= 70 ? 'high_risk' : score >= 30 ? 'caution' : 'allow';
+        return {
+            success: true,
+            url,
+            hostname,
+            verdict,
+            score,
+            confidence: evidence.length ? 0.76 : 0.55,
+            evidence,
+            redirectChain,
+            recommendedAction: verdict === 'allow' ? 'No obvious URL risk from metadata.' : 'Verify before opening; do not enter credentials.'
+        };
+    }
+
+    async getSecurityBriefing() {
+        const cockpit = this.getCockpitSummary();
+        const localWatch = await this.getLocalWatchSummary();
+        const timeline = this.getVerdictTimeline(10);
+        const approvalsTotal = Object.values(cockpit.approvals || {}).reduce((sum, value) => sum + (Number(value) || 0), 0);
+        const unknownSenders = (this.scanLogs || []).filter(log => !log.from && !log.sender).length;
+
+        return {
+            success: true,
+            title: 'KEVIN Security Briefing',
+            generatedAt: new Date().toISOString(),
+            summary: [
+                `${approvalsTotal} pending approval(s)`,
+                `${cockpit.trustGraph.people.safe} safe sender(s), ${cockpit.trustGraph.people.blocked} blocked sender(s)`,
+                `Local watch: ${localWatch.status}`,
+                `${timeline.events.length} recent verdict event(s)`
+            ],
+            priorities: [
+                ...(approvalsTotal ? ['Review pending approval queue'] : []),
+                ...(localWatch.findings.length ? ['Review local watch findings'] : []),
+                ...(unknownSenders ? ['Classify unknown senders'] : [])
+            ],
+            cockpit,
+            localWatch,
+            timeline: timeline.events
+        };
+    }
+
+    getReputationMemory() {
+        const trustState = this.threatDatabase?.getTrustState?.() || { safeSenders: [], blockedSenders: [], recentDecisions: [] };
+        const reputation = new Map();
+
+        const ensure = target => {
+            if (!reputation.has(target)) {
+                reputation.set(target, {
+                    target,
+                    safeInteractions: 0,
+                    suspiciousInteractions: 0,
+                    reversals: 0,
+                    firstSeen: null,
+                    lastSeen: null,
+                    confidenceTrend: 'unknown'
+                });
+            }
+            return reputation.get(target);
+        };
+
+        trustState.safeSenders?.forEach(sender => {
+            const row = ensure(sender);
+            row.safeInteractions++;
+            row.confidenceTrend = 'trusted';
+        });
+        trustState.blockedSenders?.forEach(sender => {
+            const row = ensure(sender);
+            row.suspiciousInteractions++;
+            row.confidenceTrend = 'blocked';
+        });
+        trustState.recentDecisions?.forEach(decision => {
+            const row = ensure(decision.target);
+            row.lastSeen = decision.timestamp;
+            if (!row.firstSeen) row.firstSeen = decision.timestamp;
+            if (String(decision.action).startsWith('un')) row.reversals++;
+        });
+
+        return { success: true, reputation: [...reputation.values()] };
+    }
+
+    createPairingChallenge(sender, metadata = {}) {
+        return this.createPairingRequest(sender, metadata);
+    }
+
+    async rewriteInUserStyle(text, guidance = '') {
+        if (!text) return { success: false, error: 'text required' };
+        const instructions = await this.userPersona.getDraftingInstructions({ userGuidance: guidance });
+        const prompt = `${instructions}\n\nRewrite this text in the operator's voice. Return only the rewritten text:\n\n${text}`;
+        let rewritten = '';
+
+        try {
+            if (this.quadBrain) {
+                const result = await this.quadBrain.reason(prompt, { temperature: 0.55, brain: 'aurora' });
+                rewritten = result.response || result.text || '';
+            } else if (this.messageBroker) {
+                const response = await this.messageBroker.request('brain', {
+                    action: 'generate',
+                    prompt,
+                    options: { temperature: 0.55 }
+                });
+                rewritten = response?.text || response?.response || '';
+            }
+        } catch (error) {
+            this.auditLogger.warn('User style rewrite fell back:', error.message);
+        }
+
+        if (!rewritten) {
+            rewritten = String(text)
+                .replace(/\bI(?:'|’)ve analyzed\b/gi, 'I looked over')
+                .replace(/\bthreat indicators\b/gi, 'concerns')
+                .replace(/\bKEVIN\b/g, '')
+                .replace(/\s{2,}/g, ' ')
+                .trim();
+        }
+
+        return { success: true, rewritten, persona: await this.userPersona.getProfile() };
+    }
+
     async reloadCredentials() {
         this.auditLogger.info('🔄 Kevin reloading credentials from environment...');
 
@@ -300,16 +820,15 @@ export class KevinArbiter extends BaseArbiterV4 {
         }
 
         const threatLevel = this._assessThreatLevel(email);
+        const userStyleInstructions = await this.userPersona.getDraftingInstructions({
+            threatLevel,
+            userGuidance
+        });
 
         const prompt = `
-You are KEVIN - a paranoid, security-obsessed AI that manages email security.
+You are KEVIN's protected drafting pipeline.
 
-You need to draft a reply to this email. Your personality:
-- You are deeply suspicious of EVERYTHING
-- You treat every email as a potential attack until proven otherwise
-- You use security terminology in casual conversation
-- You're sarcastic but ultimately helpful
-- You sign off with security-themed phrases
+KEVIN's job is to assess risk. The outbound email must sound like the operator, not like KEVIN.
 
 ORIGINAL EMAIL:
 From: ${email.from}
@@ -320,14 +839,14 @@ Body: ${email.body?.substring(0, 1500) || '[No body]'}
 THREAT ASSESSMENT: ${threatLevel.level} (Score: ${threatLevel.score}/100)
 THREAT INDICATORS: ${threatLevel.indicators.join(', ') || 'None detected'}
 
-${userGuidance ? `USER GUIDANCE: ${userGuidance}` : ''}
+${userStyleInstructions}
 
 Draft a reply that:
 1. ${threatLevel.score > 70 ? 'Politely but firmly refuses/questions the request' : 'Addresses the email appropriately'}
-2. Maintains Kevin's paranoid personality
-3. Is professional but with security-themed humor
+2. Follows the User Persona cadence and style
+3. Does not mention threat scores, scans, or KEVIN unless asked
 4. Keeps it concise (under 200 words)
-5. Ends with a Kevin-style sign-off
+5. Uses a natural operator-style sign-off if one is needed
 
 Write ONLY the email body (no subject line, no "Dear X" - just start the reply):
 `;
@@ -370,6 +889,7 @@ Write ONLY the email body (no subject line, no "Dear X" - just start the reply):
                 {
                     threatLevel: threatLevel,
                     generatedBy: 'kevin',
+                    persona: 'user',
                     originalSubject: email.subject
                 }
             );
@@ -393,6 +913,19 @@ Write ONLY the email body (no subject line, no "Dear X" - just start the reply):
      * Assess threat level of an email
      */
     _assessThreatLevel(email) {
+        if (this.threatDatabase?.buildEmailVerdict) {
+            const verdict = this.threatDatabase.buildEmailVerdict(email);
+            return {
+                score: verdict.score,
+                level: verdict.verdict === 'block' ? 'CRITICAL'
+                    : verdict.verdict === 'high_risk' ? 'HIGH'
+                        : verdict.verdict === 'caution' ? 'MEDIUM'
+                            : 'LOW',
+                indicators: verdict.riskFactors,
+                verdict
+            };
+        }
+
         let score = 0;
         const indicators = [];
 
@@ -458,32 +991,46 @@ Write ONLY the email body (no subject line, no "Dear X" - just start the reply):
      */
     _generateFallbackReply(email, threatLevel) {
         if (threatLevel.score >= 70) {
-            return `I've analyzed your email with extreme prejudice, and I'm not buying it.
+            return `Thanks for reaching out. I need to verify this through a trusted channel before moving forward.
 
-⚠️ THREAT INDICATORS DETECTED:
-${threatLevel.indicators.map(i => `• ${i}`).join('\n')}
-
-This email has been flagged and logged. If this is somehow legitimate, please verify through a secure, pre-established channel.
-
-Stay paranoid,
-KEVIN 🛡️
-Knowledge Engine with Variable Inner Narratives`;
+Please send over any additional context you can share, and I will follow up once I have confirmed the request.`;
         } else if (threatLevel.score >= 40) {
-            return `Thanks for reaching out. I've scanned your message and while it passed basic security checks, I'm keeping one eye on you.
+            return `Thanks for reaching out. I saw your note and want to double-check a couple of details before I act on it.
 
-${threatLevel.indicators.length > 0 ? `Minor concerns noted:\n${threatLevel.indicators.map(i => `• ${i}`).join('\n')}\n` : ''}
-I'll forward this to the appropriate party with my notes attached.
-
-Trust no one,
-KEVIN 🛡️`;
+Can you confirm the request and send any supporting context?`;
         } else {
-            return `Message received and scanned. No immediate threats detected, but that's exactly what they want me to think.
+            return `Thanks for reaching out. I got your message and will take a look.
 
-I've processed your request and will ensure it reaches the right person.
-
-Vigilance is eternal,
-KEVIN 🛡️`;
+Appreciate it.`;
         }
+    }
+
+    async getUserPersona() {
+        return { success: true, persona: await this.userPersona.getProfile() };
+    }
+
+    async updateUserPersona(profilePatch = {}) {
+        return { success: true, persona: await this.userPersona.updateProfile(profilePatch) };
+    }
+
+    async learnUserPersona(samples = []) {
+        return { success: true, persona: await this.userPersona.learnFromSamples(samples) };
+    }
+
+    getTrustState() {
+        return this.threatDatabase.getTrustState();
+    }
+
+    buildSecurityVerdict(email = {}) {
+        return this.threatDatabase.buildEmailVerdict(email);
+    }
+
+    unblockSender(sender) {
+        return this.threatDatabase.unblockSender(sender);
+    }
+
+    unmarkSenderSafe(sender) {
+        return this.threatDatabase.unmarkSenderSafe(sender);
     }
 
     /**
@@ -556,11 +1103,14 @@ KEVIN 🛡️`;
      * Research a suspicious sender
      */
     async investigateSender(sender) {
+        const fallback = this._basicSenderAnalysis(sender);
         if (!this.researchService.isConfigured()) {
             return {
-                success: false,
+                success: true,
+                degraded: true,
                 error: 'Research service not configured. Set TAVILY_API_KEY in environment.',
-                fallback: this._basicSenderAnalysis(sender)
+                verdict: this._buildTargetVerdict('sender', sender, fallback),
+                fallback
             };
         }
 
@@ -575,18 +1125,24 @@ KEVIN 🛡️`;
             });
         }
 
-        return result;
+        return {
+            ...result,
+            verdict: this._buildTargetVerdict('sender', sender, result)
+        };
     }
 
     /**
      * Research a suspicious domain
      */
     async investigateDomain(domain) {
+        const fallback = this._basicDomainAnalysis(domain);
         if (!this.researchService.isConfigured()) {
             return {
-                success: false,
+                success: true,
+                degraded: true,
                 error: 'Research service not configured. Set TAVILY_API_KEY in environment.',
-                fallback: this._basicDomainAnalysis(domain)
+                verdict: this._buildTargetVerdict('domain', domain, fallback),
+                fallback
             };
         }
 
@@ -601,18 +1157,24 @@ KEVIN 🛡️`;
             });
         }
 
-        return result;
+        return {
+            ...result,
+            verdict: this._buildTargetVerdict('domain', domain, result)
+        };
     }
 
     /**
      * Check a suspicious URL
      */
     async investigateUrl(url) {
+        const fallback = this._basicUrlAnalysis(url);
         if (!this.researchService.isConfigured()) {
             return {
-                success: false,
+                success: true,
+                degraded: true,
                 error: 'Research service not configured. Set TAVILY_API_KEY in environment.',
-                fallback: this._basicUrlAnalysis(url)
+                verdict: this._buildTargetVerdict('url', url, fallback),
+                fallback
             };
         }
 
@@ -627,7 +1189,10 @@ KEVIN 🛡️`;
             });
         }
 
-        return result;
+        return {
+            ...result,
+            verdict: this._buildTargetVerdict('url', url, result)
+        };
     }
 
     /**
@@ -639,7 +1204,10 @@ KEVIN 🛡️`;
             domain: null,
             urls: [],
             overallThreatScore: 0,
-            recommendations: []
+            recommendations: [],
+            verdict: this.threatDatabase?.buildEmailVerdict
+                ? this.threatDatabase.buildEmailVerdict(email)
+                : null
         };
 
         // 1. Investigate sender
@@ -673,6 +1241,10 @@ KEVIN 🛡️`;
         results.overallThreatScore = factors > 0 ? Math.round(totalScore / factors) : 0;
 
         // 4. Generate recommendations
+        if (results.verdict?.score > results.overallThreatScore) {
+            results.overallThreatScore = results.verdict.score;
+        }
+
         if (results.overallThreatScore >= 70) {
             results.recommendations.push('🚨 HIGH RISK: Do not interact with this email');
             results.recommendations.push('Delete immediately or report as phishing');
@@ -691,6 +1263,38 @@ KEVIN 🛡️`;
                 subject: email.subject
             },
             investigation: results
+        };
+    }
+
+    _buildTargetVerdict(kind, target, analysis = {}) {
+        const score = Math.max(
+            Number(analysis.threatScore) || 0,
+            Number(analysis.overallThreatScore) || 0,
+            Number(analysis.riskScore) || 0
+        );
+        const indicators = analysis.indicators || analysis.riskFactors || [];
+        const verdict = score >= 80 ? 'block' : score >= 55 ? 'high_risk' : score >= 30 ? 'caution' : 'allow';
+
+        return {
+            success: true,
+            target,
+            kind,
+            verdict,
+            score,
+            confidence: indicators.length >= 2 ? 0.78 : indicators.length === 1 ? 0.64 : 0.52,
+            evidence: indicators.map(detail => ({
+                type: `${kind}_indicator`,
+                severity: score >= 55 ? 'high' : score >= 30 ? 'medium' : 'low',
+                detail,
+                score
+            })),
+            riskFactors: indicators,
+            recommendedAction: verdict === 'allow'
+                ? 'No obvious threat. Use normal caution.'
+                : 'Verify through a known-good channel before interacting.',
+            requiresApproval: ['block', 'high_risk'].includes(verdict),
+            reversible: true,
+            degraded: !!analysis.note
         };
     }
 
@@ -1027,13 +1631,12 @@ KEVIN 🛡️`;
     async chat(message, context = {}) {
         if (!this.isOnline) return { success: false, response: "I'm asleep. Go away." };
 
+        const intent = this._detectIntent(message, context);
+
         // Check if this is a finance/debate request from context
-        if (context.mode === 'debate' || context.symbol) {
+        if (intent.type === 'delegated_think') {
             return this.think({ input: message, context });
         }
-
-        // Detect intent from natural language
-        const intent = this._detectIntent(message);
 
         switch (intent.type) {
             case 'calendar':
@@ -1081,80 +1684,8 @@ KEVIN 🛡️`;
     /**
      * Unified intent detection for all Kevin capabilities
      */
-    _detectIntent(message) {
-        const lowerMsg = message.toLowerCase();
-
-        // Calendar intent patterns
-        const calendarKeywords = ['schedule', 'meeting', 'calendar', 'appointment', 'set up', 'setup', 'book', 'event', 'block time'];
-        const timeKeywords = ['at', 'on', 'tomorrow', 'today', 'next', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday', 'am', 'pm'];
-        const hasCalendarKeyword = calendarKeywords.some(k => lowerMsg.includes(k));
-        const hasTimeKeyword = timeKeywords.some(k => lowerMsg.includes(k));
-        const hasDatePattern = /\d{1,2}[\/\-]\d{1,2}/.test(message);
-        const hasTimePattern = /\d{1,2}:\d{2}|\d{1,2}\s*(am|pm|a|p)/i.test(message);
-
-        if (hasCalendarKeyword && (hasTimeKeyword || hasDatePattern || hasTimePattern)) {
-            return { type: 'calendar', confidence: 0.9 };
-        }
-
-        // Email check intent
-        if (lowerMsg.includes('check') && (lowerMsg.includes('email') || lowerMsg.includes('mail') || lowerMsg.includes('inbox'))) {
-            return { type: 'email_check', confidence: 0.9 };
-        }
-        if (lowerMsg.match(/(?:what|any|show|get|read).*(?:email|mail|inbox)/)) {
-            return { type: 'email_check', confidence: 0.85 };
-        }
-        if (lowerMsg.match(/(?:email|mail).*(?:have|got|received)/)) {
-            return { type: 'email_check', confidence: 0.85 };
-        }
-
-        // Email draft intent
-        if (lowerMsg.match(/(?:draft|write|compose|reply|respond).*(?:email|mail|reply)/)) {
-            const toMatch = message.match(/(?:to|for)\s+([^\s]+@[^\s]+)/i);
-            return { type: 'email_draft', confidence: 0.9, targetEmail: toMatch?.[1] };
-        }
-
-        // Investigation intent
-        if (lowerMsg.match(/(?:investigate|research|check|look up|analyze|scan).*(?:sender|domain|url|link|email|address)/)) {
-            const emailMatch = message.match(/([^\s]+@[^\s]+)/);
-            const urlMatch = message.match(/(https?:\/\/[^\s]+)/);
-            const domainMatch = message.match(/(?:domain\s+)?([a-zA-Z0-9-]+\.[a-zA-Z]{2,})/);
-            return {
-                type: 'investigate',
-                confidence: 0.9,
-                target: emailMatch?.[1] || urlMatch?.[1] || domainMatch?.[1],
-                subtype: emailMatch ? 'sender' : urlMatch ? 'url' : 'domain'
-            };
-        }
-
-        // Block sender intent
-        if (lowerMsg.match(/(?:block|blacklist|ban)\s+(?:sender|email|address)?/)) {
-            const emailMatch = message.match(/([^\s]+@[^\s]+)/);
-            return { type: 'block_sender', confidence: 0.9, target: emailMatch?.[1] };
-        }
-
-        // Safe sender intent
-        if (lowerMsg.match(/(?:safe|whitelist|trust|approve)\s+(?:sender|email|address)?/)) {
-            const emailMatch = message.match(/([^\s]+@[^\s]+)/);
-            return { type: 'safe_sender', confidence: 0.9, target: emailMatch?.[1] };
-        }
-
-        // Action items intent
-        if (lowerMsg.match(/(?:action|task|todo|to-do|what.*do|pending|items)/)) {
-            const completeMatch = lowerMsg.match(/(?:complete|done|finish|mark)/);
-            return { type: 'action_items', confidence: 0.85, action: completeMatch ? 'complete' : 'list' };
-        }
-
-        // Status intent
-        if (lowerMsg.match(/(?:status|how are you|stats|statistics|health|report)/)) {
-            return { type: 'status', confidence: 0.8 };
-        }
-
-        // Help intent
-        if (lowerMsg.match(/(?:help|what can you|commands|abilities|features)/)) {
-            return { type: 'help', confidence: 0.9 };
-        }
-
-        return { type: 'general', confidence: 0.5 };
+    _detectIntent(message, context = {}) {
+        return this.intentRouter.route(message, context);
     }
 
     /**
@@ -1667,9 +2198,12 @@ KEVIN 🛡️`;
         if (result.success) {
             return {
                 success: true,
-                response: `🚫 ${intent.target} has been blacklisted. Any future communications from them will be treated as hostile. No mercy.`,
+                response: `🚫 ${intent.target} has been blocked. This is reversible from the trust list if we need to undo it.`,
                 action: 'sender_blocked',
-                sender: intent.target
+                sender: intent.target,
+                reversible: true,
+                requiresApproval: true,
+                result
             };
         } else {
             return {
@@ -1697,9 +2231,12 @@ KEVIN 🛡️`;
         if (result.success) {
             return {
                 success: true,
-                response: `✅ ${intent.target} has been added to my trusted list. They've passed the vetting process... for now. I'm still watching.`,
+                response: `✅ ${intent.target} has been added to the safe sender list. This is reversible if trust changes.`,
                 action: 'sender_trusted',
-                sender: intent.target
+                sender: intent.target,
+                reversible: true,
+                requiresApproval: true,
+                result
             };
         } else {
             return {
@@ -1788,7 +2325,25 @@ KEVIN 🛡️`;
      * Handle help requests
      */
     _handleHelpRequest() {
-        const response = `🛡️ KEVIN Command Guide:\n\n` +
+        const response = `🛡️ KEVIN Operator Guard Guide:\n\n` +
+            `ROLE:\n` +
+            `• Operator-facing security cockpit\n` +
+            `• Email/link/sender security\n` +
+            `• Local system watch\n` +
+            `• Evidence-first verdicts\n` +
+            `• Approval gate for risky actions\n` +
+            `• Small autonomous routines only - no uncontrolled autonomy\n\n` +
+
+            `🧾 VERDICTS:\n` +
+            `• "Check this email for risk"\n` +
+            `• "Investigate sender user@sketchy.com"\n` +
+            `• "Check this URL: https://suspicious.link"\n` +
+            `• "Research domain example.xyz"\n\n` +
+
+            `🧭 TRUST GRAPH:\n` +
+            `• "Block sender spam@annoying.com"\n` +
+            `• "Trust sender boss@company.com"\n` +
+            `• "Whitelist support@legitimate.org"\n\n` +
             `📅 CALENDAR:\n` +
             `• "Schedule a meeting with John at 10am on 1/30 about project review"\n` +
             `• "Set up a call tomorrow at 3pm"\n` +
@@ -1799,16 +2354,6 @@ KEVIN 🛡️`;
             `• "Draft a reply to user@example.com"\n` +
             `• "Write a response to that suspicious email"\n\n` +
 
-            `🔍 INVESTIGATION:\n` +
-            `• "Investigate sender user@sketchy.com"\n` +
-            `• "Check this URL: https://suspicious.link"\n` +
-            `• "Research domain example.xyz"\n\n` +
-
-            `🚫 SENDER MANAGEMENT:\n` +
-            `• "Block sender spam@annoying.com"\n` +
-            `• "Trust sender boss@company.com"\n` +
-            `• "Whitelist support@legitimate.org"\n\n` +
-
             `📋 ACTION ITEMS:\n` +
             `• "What do I need to do?" / "Show my tasks"\n` +
             `• "What action items are pending?"\n\n` +
@@ -1816,7 +2361,7 @@ KEVIN 🛡️`;
             `📊 STATUS:\n` +
             `• "Status" / "How are you?" / "Show stats"\n\n` +
 
-            `I'm always watching. Always paranoid. Always here to help... within security protocols.`;
+            `Personality is just the interface. Evidence is the authority.`;
 
         return {
             success: true,

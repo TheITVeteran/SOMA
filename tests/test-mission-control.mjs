@@ -6,7 +6,7 @@
 
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
-import { existsSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 import fetch from 'node-fetch';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -74,8 +74,7 @@ console.log('─'.repeat(60));
 
 const checkFileContains = (file, searchString) => {
     try {
-        const fs = await import('fs');
-        const content = fs.readFileSync(join(rootDir, file), 'utf-8');
+        const content = readFileSync(join(rootDir, file), 'utf-8');
         return content.includes(searchString);
     } catch (error) {
         return false;
@@ -84,13 +83,13 @@ const checkFileContains = (file, searchString) => {
 
 // Check SomaCommandBridge.jsx has Mission Control import
 try {
-    const { readFileSync } = await import('fs');
     const bridgeContent = readFileSync(join(rootDir, 'frontend/apps/command-bridge/SomaCommandBridge.jsx'), 'utf-8');
     
     test(
         'MissionControlApp imported in SomaCommandBridge',
+        bridgeContent.includes("import MissionControlApp from './panels/MissionControl/MissionControlApp'") ||
         bridgeContent.includes("import MissionControlApp from './components/MissionControl/MissionControlApp'"),
-        'Found on line 51'
+        'Mission Control module import found'
     );
     
     test(
@@ -108,28 +107,27 @@ try {
     test('SomaCommandBridge.jsx checks', false, `Error: ${error.message}`);
 }
 
-// Check launcher_ULTRA.mjs has route imports
+// Check route loader has Mission Control finance routes
 try {
-    const { readFileSync } = await import('fs');
-    const launcherContent = readFileSync(join(rootDir, 'launcher_ULTRA.mjs'), 'utf-8');
+    const routesContent = readFileSync(join(rootDir, 'server/loaders/routes.js'), 'utf-8');
     
     test(
-        'Scalping routes imported in launcher',
-        launcherContent.includes("import scalpingRoutes from './server/finance/scalpingRoutes.js'")
+        'Scalping routes imported in route loader',
+        routesContent.includes("import scalpingRoutes from '../../server/finance/scalpingRoutes.js'")
     );
     
     test(
-        'Market data routes imported in launcher',
-        launcherContent.includes("import marketDataRoutes from './server/finance/marketDataRoutes.js'")
+        'Market data routes imported in route loader',
+        routesContent.includes("import marketDataRoutes from '../../server/finance/marketDataRoutes.js'")
     );
     
     test(
         'Routes mounted correctly',
-        launcherContent.includes("app.use('/api/scalping', scalpingRoutes)") &&
-        launcherContent.includes("app.use('/api/market', marketDataRoutes)")
+        routesContent.includes("safeMount('/api/scalping', checkReady, scalpingRoutes)") &&
+        routesContent.includes("safeMount('/api/market', checkReady, marketDataRoutes)")
     );
 } catch (error) {
-    test('launcher_ULTRA.mjs checks', false, `Error: ${error.message}`);
+    test('server/loaders/routes.js checks', false, `Error: ${error.message}`);
 }
 
 // Test 4: API Endpoints (if backend is running)

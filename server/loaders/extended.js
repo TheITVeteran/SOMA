@@ -275,6 +275,9 @@ export async function loadExtendedSystems(system) {
         'IdeaCaptureArbiter.js',
         'ConversationCuriosityExtractor.js',
         'DiscoveryGradeMedicalCortex.js',
+        'BiotechArbiter.js',
+        'ChemistryLabArbiter.js',
+        'MlInternArbiter.js',
         'DreamArbiter.cjs'
     ];
 
@@ -291,9 +294,16 @@ export async function loadExtendedSystems(system) {
         else if (name === 'FragmentCommunicationHub') ext.fragmentComms = inst;
         else if (name === 'IdeaCaptureArbiter') ext.ideaCapture = inst;
         else if (name === 'ConversationCuriosityExtractor') ext.curiosityExtractor = inst;
-        else if (name === 'DiscoveryGradeMedicalCortex') ext.medicalDiscovery = inst;
+        else if (name === 'DiscoveryGradeMedicalCortex') { ext.medicalDiscovery = inst; system.discoveryGradeMedical = inst; }
+        else if (name === 'BiotechArbiter') { ext.biotechArbiter = inst; system.biotechArbiter = inst; }
+        else if (name === 'ChemistryLabArbiter' || name === 'ChemistryLab') { ext.chemistryLab = inst; system.chemistryLab = inst; }
+        else if (name === 'MlInternArbiter' || name === 'MlIntern') { ext.mlIntern = inst; system.mlIntern = inst; }
         else if (name === 'DreamArbiter') { ext.dreamArbiter = inst; system.dreamArbiter = inst; }
     });
+
+    if (ext.medicalDiscovery) {
+        system.discoveryGradeMedical = ext.medicalDiscovery;
+    }
 
     // 🔗 WIRE LEARNING & RESEARCH
     if (ext.learningPipeline) {
@@ -304,10 +314,25 @@ export async function loadExtendedSystems(system) {
     if (ext.curiosityEngine) {
         system.curiosityEngine = ext.curiosityEngine;
         if (system.quadBrain) system.quadBrain.curiosityEngine = ext.curiosityEngine;
+        // Wire real search tools so curiosity explorations fetch actual web evidence
+        if (system.toolRegistry) ext.curiosityEngine._toolRegistry = system.toolRegistry;
+        if (system.braveSearch)  ext.curiosityEngine._braveSearch  = system.braveSearch;
     }
     if (ext.fragmentComms && system.fragmentRegistry) {
         if (system.quadBrain) system.quadBrain.fragmentComms = ext.fragmentComms;
         console.log('    🔗 Fragment Registry ↔ Communication Hub ↔ QuadBrain');
+    }
+    if (ext.ideaCapture) {
+        system.ideaCapture = ext.ideaCapture;
+        ext.ideaCapture.mnemonic = ext.ideaCapture.mnemonic || system.mnemonicArbiter;
+        ext.ideaCapture.learningPipeline = ext.ideaCapture.learningPipeline || system.learningPipeline;
+        ext.ideaCapture.reflections = ext.ideaCapture.reflections || system.reflections;
+        ext.ideaCapture.museEngine = ext.ideaCapture.museEngine || system.museEngine;
+        if (system.museEngine) {
+            system.museEngine.ideaCapture = system.museEngine.ideaCapture || ext.ideaCapture;
+            system.museEngine.reflections = system.museEngine.reflections || system.reflections;
+        }
+        console.log('    🔗 IdeaCapture → Muse → Reflections');
     }
 
     // ═══════════════════════════════════════════
@@ -475,6 +500,13 @@ export function toggleAutopilot(enabled, system) {
         if (enabled) { system.socialAutonomy.activate?.(); }
         else { system.socialAutonomy.deactivate?.(); }
         results.social = system.socialAutonomy.isActive ?? enabled;
+    } else {
+        const socialDaemons = [system.socialIntel, system.socialScheduler, system.socialEngagement, system.socialImpulse].filter(Boolean);
+        for (const daemon of socialDaemons) {
+            if (enabled) daemon.start?.();
+            else daemon.stop?.();
+        }
+        results.social = socialDaemons.length > 0 ? socialDaemons.some(d => d.active) : false;
     }
 
     console.log(`[Autopilot] ${enabled ? '▶️  ENABLED' : '⏸️  PAUSED'} — Heartbeat: ${results.heartbeat}, Goals: ${results.goals}, Rhythms: ${results.rhythms}, Social: ${results.social}`);
@@ -489,7 +521,10 @@ export function getAutopilotStatus(system) {
             heartbeatStats: system.autonomousHeartbeat?.stats ?? null,
             goals: system.goalPlanner?.isAutonomousActive?.() ?? false,
             rhythms: system.timekeeper?.isAutonomousActive?.() ?? false,
-            social: system.socialAutonomy?.isActive ?? false
+            social: system.socialAutonomy?.isActive ??
+                [system.socialIntel, system.socialScheduler, system.socialEngagement, system.socialImpulse]
+                    .filter(Boolean)
+                    .some(daemon => daemon.active)
         }
     };
 }

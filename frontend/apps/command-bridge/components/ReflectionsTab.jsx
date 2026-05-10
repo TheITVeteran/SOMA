@@ -4,7 +4,7 @@ import {
   Edit3, X, Eye, Lightbulb, Zap, Home, Upload, Brain, Save, Pencil,
   CheckCircle, HelpCircle, Target, Calendar, GitBranch, Shield,
   Link, FileText, Cpu, Star, AlertTriangle, ArrowUpRight, RefreshCw,
-  Tag, ChevronDown
+  Tag, ChevronDown, Network, Layers
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import './ReflectionsTab.css';
@@ -35,6 +35,20 @@ const TEMPLATES = [
   { label: 'Question', Icon: HelpCircle, color: 'text-blue-400',    title: 'Question: ', body: '## The Question\n\n\n## Why I\'m asking\n\n' },
   { label: 'Insight',  Icon: Zap,        color: 'text-fuchsia-400', title: 'Insight: ',  body: '## The Insight\n\n\n## What changes because of this\n\n' },
 ];
+
+const canvasPosition = (name, index, total) => {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) hash = ((hash << 5) - hash + name.charCodeAt(i)) | 0;
+  const ring = 0.18 + ((Math.abs(hash) % 100) / 100) * 0.32;
+  const angle = ((index / Math.max(1, total)) * Math.PI * 2) + ((Math.abs(hash) % 37) / 37);
+  return {
+    x: 50 + Math.cos(angle) * ring * 100,
+    y: 50 + Math.sin(angle) * ring * 72,
+  };
+};
+
+const shortTitle = (name = '') =>
+  name.replace(/\.md$/i, '').replace(/[._-]+/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 const renderInline = (text) => {
@@ -95,15 +109,28 @@ const ReflectionsTab = ({ mode = 'full', onClose, context, onSendToSoma }) => {
   const [noteLoading, setNoteLoading] = useState(false);
   const [noteIntel, setNoteIntel] = useState(null);
   const [noteIntelLoading, setNoteIntelLoading] = useState(false);
+  const [workspaceMode, setWorkspaceMode] = useState('home');
+  const [canvasGraph, setCanvasGraph] = useState(null);
+  const [canvasLayout, setCanvasLayout] = useState({ positions: {} });
+  const [canvasLoading, setCanvasLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [isQuickNoteOpen, setIsQuickNoteOpen] = useState(mode === 'quick-note-only');
   const [quickNoteText, setQuickNoteText] = useState(() => localStorage.getItem('soma_draft_text') || '');
   const [quickNoteName, setQuickNoteName] = useState(() => localStorage.getItem('soma_draft_name') || '');
   const [quickNoteError, setQuickNoteError] = useState('');
   const [quickNoteSaving, setQuickNoteSaving] = useState(false);
+  const [createModal, setCreateModal] = useState(null);
+  const [createForm, setCreateForm] = useState({ title: '', workbook: '', segment: '', description: '' });
+  const [createContext, setCreateContext] = useState({});
+  const [createSaving, setCreateSaving] = useState(false);
   const [uploadStatus, setUploadStatus] = useState('');
   const [uploadError, setUploadError] = useState('');
+  const [storyStatus, setStoryStatus] = useState(null);
+  const [storyActionStatus, setStoryActionStatus] = useState(null);
   const fileInputRef = useRef(null);
+  const canvasSurfaceRef = useRef(null);
+  const canvasDragRef = useRef(null);
+  const canvasDragMovedRef = useRef(false);
 
   useEffect(() => { localStorage.setItem('soma_draft_text', quickNoteText); }, [quickNoteText]);
   useEffect(() => { localStorage.setItem('soma_draft_name', quickNoteName); }, [quickNoteName]);
@@ -169,7 +196,73 @@ const ReflectionsTab = ({ mode = 'full', onClose, context, onSendToSoma }) => {
     } catch (e) { console.error('Failed to fetch reflections', e); }
   }, []);
 
+  const loadCanvasGraph = useCallback(async () => {
+    setCanvasLoading(true);
+    try {
+      const [graphRes, layoutRes] = await Promise.all([
+        fetch('/api/reflections/graph'),
+        fetch('/api/reflections/canvas-layout').catch(() => null),
+      ]);
+      const data = await graphRes.json();
+      if (data.success) setCanvasGraph(data);
+      if (layoutRes) {
+        const layout = await layoutRes.json().catch(() => null);
+        if (layout?.success) setCanvasLayout(layout.layout || { positions: {} });
+      }
+    } catch (e) { console.error('Canvas graph failed', e); }
+    finally { setCanvasLoading(false); }
+  }, []);
+
+  const saveCanvasLayout = useCallback(async (positions) => {
+    try {
+      await fetch('/api/reflections/canvas-layout', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ positions }),
+      });
+    } catch (e) { console.error('Canvas layout save failed', e); }
+  }, []);
+
+  const loadStoryStatus = useCallback(async () => {
+    try {
+      const res = await fetch('/api/social/stories/status');
+      const data = await res.json();
+      if (res.ok && data.ok !== false) setStoryStatus(data);
+    } catch (e) { console.error('Story workspace status failed', e); }
+  }, []);
+
+  const handleCanvasPointerMove = useCallback((event) => {
+    const drag = canvasDragRef.current;
+    const surface = canvasSurfaceRef.current;
+    if (!drag || !surface) return;
+    const rect = surface.getBoundingClientRect();
+    const x = Math.max(3, Math.min(97, ((event.clientX - rect.left) / rect.width) * 100));
+    const y = Math.max(5, Math.min(95, ((event.clientY - rect.top) / rect.height) * 100));
+    canvasDragMovedRef.current = true;
+    setCanvasLayout(prev => ({
+      ...prev,
+      positions: {
+        ...(prev.positions || {}),
+        [drag.id]: { x, y },
+      },
+    }));
+  }, []);
+
+  const handleCanvasPointerUp = useCallback(() => {
+    if (!canvasDragRef.current) return;
+    canvasDragRef.current = null;
+    setCanvasLayout(prev => {
+      saveCanvasLayout(prev.positions || {});
+      return prev;
+    });
+    setTimeout(() => { canvasDragMovedRef.current = false; }, 0);
+  }, [saveCanvasLayout]);
+
   useEffect(() => { refreshNotes(); }, [refreshNotes]);
+  useEffect(() => { loadStoryStatus(); }, [loadStoryStatus]);
+  useEffect(() => {
+    if (workspaceMode === 'canvas') loadCanvasGraph();
+  }, [workspaceMode, loadCanvasGraph, notes.length]);
 
   useEffect(() => {
     if (!selectedNote) { setNoteContent(''); setNoteIntel(null); setActionResult(null); return; }
@@ -202,6 +295,7 @@ const ReflectionsTab = ({ mode = 'full', onClose, context, onSendToSoma }) => {
     setSessionLog([]);
     setMuseResidue(null);
     setHygieneView(false);
+    setWorkspaceMode('home');
     setActionResult(null);
   };
 
@@ -302,7 +396,88 @@ const ReflectionsTab = ({ mode = 'full', onClose, context, onSendToSoma }) => {
     setHygieneView(true);
     setSelectedNote(null);
     setIsBrainstorming(false);
+    setWorkspaceMode('home');
     if (!hygieneData) loadHygiene();
+  };
+
+  const openCreateModal = (type, context = {}) => {
+    const firstWorkbook = notes.find(n => n.type === 'workbook')?.title || notes.find(n => n.type === 'workbook')?.name?.replace(/\.md$/i, '') || '';
+    const firstSegment = notes.find(n => n.type === 'segment' && (!firstWorkbook || n.workbook === firstWorkbook))?.title || '';
+    setCreateModal(type);
+    setCreateContext(context);
+    setCreateForm({
+      title: '',
+      workbook: context.workbook || (type === 'workbook' ? '' : firstWorkbook),
+      segment: context.segment || (type === 'folio' ? firstSegment : ''),
+      description: '',
+    });
+  };
+
+  const handleCreateArtifact = async () => {
+    if (!createModal || !createForm.title.trim() || createSaving) return;
+    setCreateSaving(true);
+    try {
+      const endpoint = createModal === 'note'
+        ? '/api/reflections/quick-note'
+        : `/api/reflections/${createModal}`;
+      const payload = createModal === 'note'
+        ? { title: createForm.title.trim(), text: createForm.description.trim() || '# ' + createForm.title.trim() + '\n\n' }
+        : {
+          title: createForm.title.trim(),
+          workbook: createForm.workbook,
+          segment: createForm.segment,
+          description: createForm.description,
+          content: createForm.description,
+        };
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.success === false) throw new Error(data.error || `Create failed (${res.status})`);
+      setCreateModal(null);
+      setCreateContext({});
+      await refreshNotes();
+      if (data.filename) setSelectedNote({ name: data.filename });
+    } catch (error) {
+      setQuickNoteError(error.message || 'Create failed');
+    } finally {
+      setCreateSaving(false);
+    }
+  };
+
+  const openCanvas = () => {
+    setSelectedNote(null);
+    setNoteContent('');
+    setIsBrainstorming(false);
+    setHygieneView(false);
+    setWorkspaceMode('canvas');
+  };
+
+  const handleStoryExport = async (kind) => {
+    setStoryActionStatus(kind === 'wattpad' ? 'Exporting Wattpad draft...' : kind === 'full-chapter' ? 'Writing full chapter draft...' : 'Adding story to Reflections...');
+    try {
+      const endpoint = kind === 'wattpad'
+        ? '/api/social/stories/wattpad/export'
+        : kind === 'full-chapter'
+          ? '/api/social/stories/chapter/full'
+          : '/api/social/stories/reflections/export';
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(kind === 'full-chapter' ? { targetWords: 1600 } : { includeChapters: true }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data.ok === false) throw new Error(data.error || 'Story export failed');
+      setStoryActionStatus(kind === 'wattpad' ? 'Wattpad draft ready.' : kind === 'full-chapter' ? `Full chapter ready: ${data.wordCount || 'draft'} words.` : 'Story notes created.');
+      await loadStoryStatus();
+      if (kind === 'reflections' || kind === 'full-chapter') await refreshNotes();
+    } catch (error) {
+      setStoryActionStatus(error.message || 'Story export failed');
+    } finally {
+      setTimeout(() => setStoryActionStatus(null), 5000);
+    }
   };
 
   // ── Existing handlers ──────────────────────────────────────────────────────
@@ -391,6 +566,7 @@ const ReflectionsTab = ({ mode = 'full', onClose, context, onSendToSoma }) => {
 
   const startBrainstorm = () => {
     setIsBrainstorming(true);
+    setWorkspaceMode('home');
     setMuseResidue(null);
     setHygieneView(false);
     setSessionLog([{ role: 'soma', text: "The Muse is awake. What are we breaking open today?", timestamp: Date.now() }]);
@@ -525,6 +701,8 @@ const ReflectionsTab = ({ mode = 'full', onClose, context, onSendToSoma }) => {
     const matchesSearch = !searchQuery || n.name.toLowerCase().includes(searchQuery.toLowerCase());
     return matchesStatus && matchesSearch;
   });
+  const workbooks = notes.filter(n => n.type === 'workbook');
+  const segments = notes.filter(n => n.type === 'segment' && (!createForm.workbook || n.workbook === createForm.workbook));
 
   // ── QUICK NOTE MODE ────────────────────────────────────────────────────────
   if (mode === 'quick-note-only') {
@@ -595,6 +773,10 @@ const ReflectionsTab = ({ mode = 'full', onClose, context, onSendToSoma }) => {
                 className={`p-1.5 hover:bg-white/8 rounded-lg transition-all ${hygieneView ? 'text-orange-400 bg-orange-500/10' : 'text-zinc-500 hover:text-orange-400'}`}>
                 <Shield className="w-3.5 h-3.5" />
               </button>
+              <button onClick={openCanvas} title="Cognitive canvas"
+                className={`p-1.5 hover:bg-white/8 rounded-lg transition-all ${workspaceMode === 'canvas' ? 'text-cyan-300 bg-cyan-500/10' : 'text-zinc-500 hover:text-cyan-300'}`}>
+                <Network className="w-3.5 h-3.5" />
+              </button>
             </div>
           </div>
 
@@ -613,7 +795,7 @@ const ReflectionsTab = ({ mode = 'full', onClose, context, onSendToSoma }) => {
               </span>
             </button>
 
-            {isBrainstorming || selectedNote || hygieneView ? (
+            {isBrainstorming || selectedNote || hygieneView || workspaceMode === 'canvas' ? (
               <button type="button" onClick={goHome} className="reflections-glow-action reflections-glow-action-home" title="Home">
                 <span className="reflections-glow-action-gradient-container"><span className="reflections-glow-action-gradient" /></span>
                 <span className="reflections-glow-action-label"><Home className="h-4 w-4" /><span>Home</span></span>
@@ -628,6 +810,19 @@ const ReflectionsTab = ({ mode = 'full', onClose, context, onSendToSoma }) => {
             <button type="button" onClick={() => setIsQuickNoteOpen(true)} className="reflections-glow-action reflections-glow-action-new" title="New Note">
               <span className="reflections-glow-action-gradient-container"><span className="reflections-glow-action-gradient" /></span>
               <span className="reflections-glow-action-label"><Plus className="h-4 w-4" /><span>New</span></span>
+            </button>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2">
+            <button type="button" onClick={() => openCreateModal('note')}
+              className="flex items-center justify-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.035] px-2 py-2 text-[11px] font-semibold text-zinc-300 transition-all hover:border-purple-500/20 hover:bg-purple-500/10 hover:text-purple-100">
+              <FileText className="h-3.5 w-3.5" />
+              Note+
+            </button>
+            <button type="button" onClick={() => openCreateModal('workbook')}
+              className="flex items-center justify-center gap-1.5 rounded-lg border border-white/10 bg-white/[0.035] px-2 py-2 text-[11px] font-semibold text-zinc-300 transition-all hover:border-purple-500/20 hover:bg-purple-500/10 hover:text-purple-100">
+              <Layers className="h-3.5 w-3.5" />
+              Workbook+
             </button>
           </div>
 
@@ -680,7 +875,63 @@ const ReflectionsTab = ({ mode = 'full', onClose, context, onSendToSoma }) => {
             </>
           ) : (
             <>
-              {visibleNotes.map(note => {
+              {workbooks.length > 0 && statusFilter === 'all' && !searchQuery && (
+                <div className="mb-3 space-y-2">
+                  {workbooks.map(workbook => {
+                    const workbookTitle = workbook.title || workbook.name.replace(/\.md$/i, '');
+                    const childSegments = notes.filter(n => n.type === 'segment' && n.workbook === workbookTitle);
+                    return (
+                      <div key={workbook.name} className="rounded-xl border border-white/10 bg-white/[0.025] p-2">
+                        <div className="flex items-center gap-1">
+                          <button onClick={() => setSelectedNote(workbook)}
+                            className="flex min-w-0 flex-1 items-center gap-2 rounded-lg px-2 py-1.5 text-left text-xs font-semibold text-zinc-200 hover:bg-white/5">
+                            <Layers className="h-3.5 w-3.5 text-purple-300" />
+                            <span className="min-w-0 flex-1 truncate">{workbookTitle}</span>
+                          </button>
+                          <button type="button" onClick={() => openCreateModal('segment', { workbook: workbookTitle })}
+                            className="rounded-md border border-white/10 bg-black/20 px-2 py-1 text-[10px] font-semibold text-zinc-500 transition-all hover:border-cyan-400/25 hover:bg-cyan-400/10 hover:text-cyan-200"
+                            title="Add segment">
+                            Segment+
+                          </button>
+                        </div>
+                        <div className="mt-1 space-y-1 pl-4">
+                          {childSegments.map(segment => {
+                            const segmentTitle = segment.title || segment.name.replace(/\.md$/i, '');
+                            const folios = notes.filter(n => n.type === 'folio' && n.workbook === workbookTitle && n.segment === segmentTitle);
+                            return (
+                              <div key={segment.name}>
+                                <div className="flex items-center gap-1">
+                                  <button onClick={() => setSelectedNote(segment)}
+                                    className="flex min-w-0 flex-1 items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[11px] font-medium text-zinc-300 hover:bg-white/5">
+                                    <GitBranch className="h-3 w-3 text-cyan-300/70" />
+                                    <span className="min-w-0 flex-1 truncate">{segmentTitle}</span>
+                                  </button>
+                                  <button type="button" onClick={() => openCreateModal('folio', { workbook: workbookTitle, segment: segmentTitle })}
+                                    className="rounded-md border border-white/10 bg-black/20 px-2 py-1 text-[10px] font-semibold text-zinc-500 transition-all hover:border-purple-400/25 hover:bg-purple-400/10 hover:text-purple-200"
+                                    title="Add folio">
+                                    Folio+
+                                  </button>
+                                </div>
+                                <div className="space-y-0.5 pl-4">
+                                  {folios.map(folio => (
+                                    <button key={folio.name} onClick={() => setSelectedNote(folio)}
+                                      className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-[11px] text-zinc-400 hover:bg-white/5 hover:text-zinc-200">
+                                      <FileText className="h-3 w-3 text-zinc-500" />
+                                      <span className="min-w-0 flex-1 truncate">{folio.title || folio.name.replace(/\.md$/i, '')}</span>
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
+              {visibleNotes.filter(note => statusFilter !== 'all' || searchQuery || !['workbook', 'segment', 'folio'].includes(note.type)).map(note => {
                 const sm = statusMeta[note.status] || statusMeta.inbox;
                 return (
                   <div key={note.name} onClick={() => setSelectedNote(note)}
@@ -1093,6 +1344,157 @@ const ReflectionsTab = ({ mode = 'full', onClose, context, onSendToSoma }) => {
                       </>
                     )}
                   </div>
+                ) : workspaceMode === 'canvas' ? (
+                  // ── COGNITIVE CANVAS ──
+                  <div className="h-full min-h-[680px] overflow-hidden p-6">
+                    <div className="mb-4 flex items-center justify-between gap-4">
+                      <div>
+                        <p className="text-xs font-mono tracking-widest uppercase text-cyan-400">Cognitive Canvas</p>
+                        <p className="mt-0.5 text-xs text-zinc-600">Spatial memory surface for notes, backlinks, and emerging clusters</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <button onClick={loadCanvasGraph} disabled={canvasLoading}
+                          className="flex items-center gap-2 rounded-xl border border-cyan-500/20 bg-cyan-500/10 px-3 py-1.5 text-xs font-bold text-cyan-300 transition-all hover:bg-cyan-500/20 disabled:opacity-40">
+                          <RefreshCw className={`h-3.5 w-3.5 ${canvasLoading ? 'animate-spin' : ''}`} />
+                          Refresh
+                        </button>
+                        <button onClick={startBrainstorm}
+                          className="flex items-center gap-2 rounded-xl border border-orange-500/20 bg-orange-500/10 px-3 py-1.5 text-xs font-bold text-orange-300 transition-all hover:bg-orange-500/20">
+                          <Lightbulb className="h-3.5 w-3.5" />
+                          Muse
+                        </button>
+                      </div>
+                    </div>
+
+                    <div
+                      ref={canvasSurfaceRef}
+                      onPointerMove={handleCanvasPointerMove}
+                      onPointerUp={handleCanvasPointerUp}
+                      onPointerLeave={handleCanvasPointerUp}
+                      className="relative h-[calc(100%-4rem)] min-h-[590px] overflow-hidden rounded-3xl border border-white/10 bg-[radial-gradient(circle_at_50%_40%,rgba(34,211,238,0.12),transparent_35%),linear-gradient(135deg,rgba(24,24,27,0.84),rgba(3,7,18,0.92))] shadow-2xl shadow-black/30"
+                    >
+                      <div className="absolute inset-0 opacity-[0.08]" style={{ backgroundImage: 'linear-gradient(rgba(255,255,255,.14) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.14) 1px, transparent 1px)', backgroundSize: '42px 42px' }} />
+
+                      {(() => {
+                        const graphNodes = canvasGraph?.nodes?.length ? canvasGraph.nodes : notes.map(n => ({ id: n.name.replace(/\.md$/i, '') }));
+                        const noteById = new Map(notes.map(n => [n.name.replace(/\.md$/i, ''), n]));
+                        const positioned = graphNodes.map((node, index) => {
+                          const fallback = canvasPosition(node.id, index, graphNodes.length);
+                          const saved = canvasLayout.positions?.[node.id];
+                          return {
+                            ...node,
+                            note: noteById.get(node.id),
+                            x: saved?.x ?? fallback.x,
+                            y: saved?.y ?? fallback.y,
+                          };
+                        });
+                        const byId = new Map(positioned.map(node => [node.id, node]));
+                        const edges = (canvasGraph?.edges || []).filter(edge => byId.has(edge.source) && byId.has(edge.target));
+                        const clusters = [
+                          { label: 'Stories', test: n => /story|chapter|aurora|fiction/i.test(n.id), color: 'border-fuchsia-400/25 bg-fuchsia-400/10 text-fuchsia-200' },
+                          { label: 'Raw Inputs', test: n => n.note?.status === 'raw', color: 'border-amber-400/25 bg-amber-400/10 text-amber-200' },
+                          { label: 'Linked Memory', test: n => edges.some(e => e.source === n.id || e.target === n.id), color: 'border-cyan-400/25 bg-cyan-400/10 text-cyan-200' },
+                        ].map(cluster => ({ ...cluster, count: positioned.filter(cluster.test).length })).filter(cluster => cluster.count);
+
+                        return (
+                          <>
+                            <svg className="pointer-events-none absolute inset-0 h-full w-full">
+                              <defs>
+                                <linearGradient id="reflection-edge" x1="0%" y1="0%" x2="100%" y2="0%">
+                                  <stop offset="0%" stopColor="rgba(34,211,238,0.08)" />
+                                  <stop offset="100%" stopColor="rgba(168,85,247,0.34)" />
+                                </linearGradient>
+                              </defs>
+                              {edges.map((edge, index) => {
+                                const source = byId.get(edge.source);
+                                const target = byId.get(edge.target);
+                                return (
+                                  <line
+                                    key={`${edge.source}-${edge.target}-${index}`}
+                                    x1={`${source.x}%`}
+                                    y1={`${source.y}%`}
+                                    x2={`${target.x}%`}
+                                    y2={`${target.y}%`}
+                                    stroke="url(#reflection-edge)"
+                                    strokeWidth="1.5"
+                                  />
+                                );
+                              })}
+                            </svg>
+
+                            <div className="absolute left-5 top-5 max-w-xs rounded-2xl border border-white/10 bg-black/35 p-4 backdrop-blur-xl">
+                              <div className="mb-3 flex items-center gap-2">
+                                <Layers className="h-4 w-4 text-cyan-300" />
+                                <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-cyan-300">Living Structure</p>
+                              </div>
+                              <div className="grid grid-cols-3 gap-2 text-center">
+                                <div>
+                                  <p className="text-lg font-black text-white">{positioned.length}</p>
+                                  <p className="text-[9px] uppercase tracking-widest text-zinc-600">nodes</p>
+                                </div>
+                                <div>
+                                  <p className="text-lg font-black text-cyan-300">{edges.length}</p>
+                                  <p className="text-[9px] uppercase tracking-widest text-zinc-600">links</p>
+                                </div>
+                                <div>
+                                  <p className="text-lg font-black text-fuchsia-300">{clusters.length}</p>
+                                  <p className="text-[9px] uppercase tracking-widest text-zinc-600">clusters</p>
+                                </div>
+                              </div>
+                              <div className="mt-3 flex flex-wrap gap-1.5">
+                                {clusters.map(cluster => (
+                                  <span key={cluster.label} className={`rounded-full border px-2 py-1 text-[10px] ${cluster.color}`}>
+                                    {cluster.label} · {cluster.count}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+
+                            {positioned.map((node) => {
+                              const linked = edges.filter(edge => edge.source === node.id || edge.target === node.id).length;
+                              const isStory = /story|chapter|aurora|fiction/i.test(node.id);
+                              const status = node.note?.status || 'inbox';
+                              const sm = statusMeta[status] || statusMeta.inbox;
+                              return (
+                                <button
+                                  key={node.id}
+                                  onPointerDown={(event) => {
+                                    event.currentTarget.setPointerCapture?.(event.pointerId);
+                                    canvasDragRef.current = { id: node.id };
+                                    canvasDragMovedRef.current = false;
+                                  }}
+                                  onClick={() => {
+                                    if (!canvasDragMovedRef.current) setSelectedNote(node.note || { name: `${node.id}.md` });
+                                  }}
+                                  className={`absolute max-w-[220px] -translate-x-1/2 -translate-y-1/2 cursor-grab rounded-2xl border px-4 py-3 text-left shadow-xl backdrop-blur-xl transition-all hover:z-20 hover:scale-[1.04] active:cursor-grabbing ${
+                                    isStory
+                                      ? 'border-fuchsia-400/25 bg-fuchsia-400/10 shadow-fuchsia-950/30'
+                                      : linked
+                                        ? 'border-cyan-400/20 bg-cyan-400/10 shadow-cyan-950/20'
+                                        : 'border-white/10 bg-black/35 shadow-black/30'
+                                  }`}
+                                  style={{ left: `${node.x}%`, top: `${node.y}%` }}
+                                >
+                                  <div className="mb-2 flex items-center justify-between gap-3">
+                                    <span className={`h-2 w-2 rounded-full ${sm.color.replace('text-', 'bg-')}`} />
+                                    <span className="text-[9px] font-bold uppercase tracking-widest text-zinc-600">{linked} link{linked === 1 ? '' : 's'}</span>
+                                  </div>
+                                  <p className="line-clamp-2 text-sm font-semibold leading-snug text-zinc-100">{shortTitle(node.id)}</p>
+                                  <p className="mt-2 text-[10px] uppercase tracking-widest text-zinc-600">{status}</p>
+                                </button>
+                              );
+                            })}
+
+                            {positioned.length === 0 && (
+                              <div className="absolute inset-0 flex items-center justify-center">
+                                <p className="text-xs font-mono text-zinc-600">No notes yet. Capture a thought to seed the canvas.</p>
+                              </div>
+                            )}
+                          </>
+                        );
+                      })()}
+                    </div>
+                  </div>
                 ) : (
                   // ── HOME / INSIGHTS ──
                   <div className="p-6 space-y-5">
@@ -1108,6 +1510,44 @@ const ReflectionsTab = ({ mode = 'full', onClose, context, onSendToSoma }) => {
                         {insightsLoading ? 'Scanning...' : 'Scan Vault'}
                       </button>
                     </div>
+
+                    {storyStatus?.currentStory && (
+                      <div className="rounded-xl border border-fuchsia-500/15 bg-fuchsia-500/[0.045] p-4">
+                        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                          <div className="min-w-0">
+                            <p className="text-[10px] font-bold uppercase tracking-widest text-fuchsia-300">Story Workspace</p>
+                            <h3 className="mt-1 truncate text-base font-bold text-white">{storyStatus.currentStory.title || 'SOMA Story'}</h3>
+                            <p className="mt-1 text-xs text-zinc-500">
+                              {storyStatus.currentStory.genre || 'fiction'} · {storyStatus.currentStory.chapters || 0} chapters · {storyStatus.currentStory.fullChapters || 0} full drafts
+                            </p>
+                            {storyActionStatus && <p className="mt-2 text-xs text-fuchsia-200">{storyActionStatus}</p>}
+                          </div>
+                          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3 lg:w-auto">
+                            <button
+                              type="button"
+                              onClick={() => handleStoryExport('full-chapter')}
+                              className="inline-flex items-center justify-center gap-2 rounded-lg border border-amber-400/25 bg-amber-400/10 px-3 py-2 text-xs font-bold text-amber-100 transition-all hover:bg-amber-400/20">
+                              <Sparkles className="h-3.5 w-3.5" />
+                              Full Chapter
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleStoryExport('reflections')}
+                              className="inline-flex items-center justify-center gap-2 rounded-lg border border-fuchsia-400/25 bg-fuchsia-400/10 px-3 py-2 text-xs font-bold text-fuchsia-100 transition-all hover:bg-fuchsia-400/20">
+                              <FileText className="h-3.5 w-3.5" />
+                              Add to Reflections
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleStoryExport('wattpad')}
+                              className="inline-flex items-center justify-center gap-2 rounded-lg border border-cyan-400/25 bg-cyan-400/10 px-3 py-2 text-xs font-bold text-cyan-100 transition-all hover:bg-cyan-400/20">
+                              <Send className="h-3.5 w-3.5" />
+                              Wattpad Draft
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    )}
 
                     {/* Graph surface */}
                     {notes.length > 0 && (
@@ -1308,6 +1748,95 @@ const ReflectionsTab = ({ mode = 'full', onClose, context, onSendToSoma }) => {
           )}
         </AnimatePresence>
       </div>
+
+      {/* Workbook / Segment / Folio creator */}
+      <AnimatePresence>
+        {createModal && (
+          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            className="absolute inset-0 z-[180] flex items-center justify-center bg-black/75 p-8 backdrop-blur-sm">
+            <motion.div initial={{ scale: 0.94, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.94, opacity: 0 }}
+              className="w-full max-w-lg rounded-2xl border border-purple-500/20 bg-[#0d0d0f] p-7 shadow-2xl shadow-purple-950/20">
+              <div className="mb-5 flex items-center justify-between gap-4">
+                <div>
+                  <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-purple-300">
+                    {createModal === 'note' ? 'Note+' : createModal === 'workbook' ? 'Workbook+' : createModal === 'segment' ? 'Segment+' : 'Folio+'}
+                  </p>
+                  <h3 className="mt-1 text-lg font-bold text-white">
+                    {createModal === 'note' && 'Create a standalone note'}
+                    {createModal === 'workbook' && 'Create a workbook'}
+                    {createModal === 'segment' && 'Create a workbook segment'}
+                    {createModal === 'folio' && 'Create a folio page'}
+                  </h3>
+                </div>
+                <button onClick={() => setCreateModal(null)} className="rounded-lg p-2 text-zinc-500 hover:bg-white/5 hover:text-white">
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+
+              <div className="space-y-3">
+                <input autoFocus value={createForm.title} onChange={e => setCreateForm(prev => ({ ...prev, title: e.target.value }))}
+                  placeholder="Title..."
+                  className="w-full rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-white outline-none placeholder:text-zinc-600 focus:border-purple-500/40" />
+
+                {(createModal === 'segment' || createModal === 'folio') && !createContext.workbook && (
+                  <select value={createForm.workbook} onChange={e => setCreateForm(prev => ({ ...prev, workbook: e.target.value, segment: '' }))}
+                    className="w-full rounded-xl border border-white/10 bg-[#151518] px-4 py-3 text-sm text-white outline-none focus:border-purple-500/40">
+                    <option value="">Choose workbook...</option>
+                    {workbooks.map(workbook => (
+                      <option key={workbook.name} value={workbook.title || workbook.name.replace(/\.md$/i, '')}>
+                        {workbook.title || workbook.name.replace(/\.md$/i, '')}
+                      </option>
+                    ))}
+                  </select>
+                )}
+
+                {(createModal === 'segment' || createModal === 'folio') && createContext.workbook && (
+                  <div className="rounded-xl border border-white/10 bg-white/[0.035] px-4 py-3">
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-600">Workbook</p>
+                    <p className="mt-1 truncate text-sm text-zinc-200">{createContext.workbook}</p>
+                  </div>
+                )}
+
+                {createModal === 'folio' && !createContext.segment && (
+                  <select value={createForm.segment} onChange={e => setCreateForm(prev => ({ ...prev, segment: e.target.value }))}
+                    className="w-full rounded-xl border border-white/10 bg-[#151518] px-4 py-3 text-sm text-white outline-none focus:border-purple-500/40">
+                    <option value="">Choose segment...</option>
+                    {segments.map(segment => (
+                      <option key={segment.name} value={segment.title || segment.name.replace(/\.md$/i, '')}>
+                        {segment.title || segment.name.replace(/\.md$/i, '')}
+                      </option>
+                    ))}
+                  </select>
+                )}
+
+                {createModal === 'folio' && createContext.segment && (
+                  <div className="rounded-xl border border-white/10 bg-white/[0.035] px-4 py-3">
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-zinc-600">Segment</p>
+                    <p className="mt-1 truncate text-sm text-zinc-200">{createContext.segment}</p>
+                  </div>
+                )}
+
+                <textarea value={createForm.description} onChange={e => setCreateForm(prev => ({ ...prev, description: e.target.value }))}
+                  rows={5}
+                  placeholder={createModal === 'folio' || createModal === 'note' ? 'Start writing...' : 'Optional description...'}
+                  className="w-full resize-none rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm leading-relaxed text-zinc-200 outline-none placeholder:text-zinc-600 focus:border-purple-500/40" />
+              </div>
+
+              <div className="mt-5 flex gap-3">
+                <button onClick={() => setCreateModal(null)}
+                  className="flex-1 rounded-xl bg-white/5 py-3 text-sm font-bold text-zinc-400 transition-all hover:bg-white/10">
+                  Cancel
+                </button>
+                <button onClick={handleCreateArtifact}
+                  disabled={createSaving || !createForm.title.trim() || ((createModal === 'segment' || createModal === 'folio') && !createForm.workbook) || (createModal === 'folio' && !createForm.segment)}
+                  className="flex-1 rounded-xl bg-purple-600 py-3 text-sm font-black text-white transition-all hover:bg-purple-500 disabled:cursor-not-allowed disabled:opacity-40">
+                  {createSaving ? 'Creating...' : 'Create'}
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Quick Note slide-in */}
       <AnimatePresence>

@@ -41,6 +41,7 @@ class SignalCompressor {
         const timer = setTimeout(() => {
             this._flush(type);
         }, this.windowMs);
+        if (typeof timer.unref === 'function') timer.unref();
 
         this.timers.set(type, timer);
 

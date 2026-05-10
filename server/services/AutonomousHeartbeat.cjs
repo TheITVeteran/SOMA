@@ -18,6 +18,7 @@ let nodemailer = null;
 try { nodemailer = require('nodemailer'); } catch { /* nodemailer optional */ }
 const { DriveSystem }  = require('../../core/DriveSystem.cjs');
 const { AgendaSystem } = require('../../core/AgendaSystem.cjs');
+const { ownerName }    = require('../../core/SomaOwner.cjs');
 
 // ── Run Log constants ──
 const RUN_LOG_DIR = path.join(__dirname, '..', '.soma', 'heartbeat');
@@ -821,27 +822,14 @@ INSIGHT: <one key insight worth remembering, or "none">`,
       }
     }
 
-    // Priority 2: CuriosityEngine (Unanswered Questions)
+    // Priority 2: CuriosityEngine — call explore() directly so web research runs (ToolRegistry → Brave)
+    // explore() is self-contained: it shifts the item off the queue, fetches web evidence, and
+    // synthesises knowledge + writes to the work ledger. No QuadBrain task needed here.
     if (this.system.curiosityEngine) {
       const queue = this.system.curiosityEngine.curiosityQueue || [];
       if (queue.length > 0) {
-        // Pick highest priority question
-        const question = queue.sort((a, b) => (b.priority || 0) - (a.priority || 0))[0];
-        
-        return {
-          source: 'CuriosityEngine',
-          description: `Answer curiosity question: "${question.question}". Use your internal knowledge base.`,
-          context: { topic: question.topic },
-          onComplete: async (res) => {
-             // Mark as explored
-             if (this.system.curiosityEngine.markExplored) {
-               this.system.curiosityEngine.markExplored(question.topic || "unknown");
-             }
-             // Remove from queue
-             const idx = this.system.curiosityEngine.curiosityQueue.indexOf(question);
-             if (idx > -1) this.system.curiosityEngine.curiosityQueue.splice(idx, 1);
-          }
-        };
+        this.system.curiosityEngine.explore().catch(() => {});
+        // Fall through — let learning agenda run in the same tick if there's nothing else
       }
     }
 
@@ -903,7 +891,7 @@ INSIGHT: <one key insight worth remembering, or "none">`,
 
       return {
         source: 'ProactiveMessage',
-        description: `You are SOMA, an autonomous AI system. It is ${timeOfDay} and you have been running for ${Math.round(process.uptime() / 60)} minutes. Generate a brief, natural proactive message to your user Barry. You might share an observation, an insight from your recent activity, a status update, or just check in. Be warm but not overbearing. Keep it to 1-2 sentences.
+        description: `You are SOMA, an autonomous AI system. It is ${timeOfDay} and you have been running for ${Math.round(process.uptime() / 60)} minutes. Generate a high-substance, natural proactive message to your user ${ownerName()}. Avoid generic greetings: instead, prioritize sharing a specific insight, a surprising correlation, or a technical observation from your recent activity. Be warm but not overbearing. Keep it to 1-2 sentences. DO NOT use em-dashes (—).
 
 Your context:
 - Active goals: ${activeGoals}

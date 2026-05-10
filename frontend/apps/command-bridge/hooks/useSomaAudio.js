@@ -116,7 +116,7 @@ const detectVoiceActivity = (analyser, frequencyData) => {
   return hasEnoughEnergy && voiceStrongerThanNoise && hasVoiceCharacteristics;
 };
 
-export function useSomaAudio(onResponse, visionContextRef = null) {
+export function useSomaAudio(onResponse, visionContextRef = null, communicationCallbacks = {}) {
   const [isConnected, setIsConnected] = useState(false);
   const [volume, setVolume] = useState(0);
   const [inputVolume, setInputVolume] = useState(0);
@@ -134,6 +134,8 @@ export function useSomaAudio(onResponse, visionContextRef = null) {
   // Refs
   const onResponseRef = useRef(onResponse);
   useEffect(() => { onResponseRef.current = onResponse; }, [onResponse]);
+  const communicationCallbacksRef = useRef(communicationCallbacks);
+  useEffect(() => { communicationCallbacksRef.current = communicationCallbacks || {}; }, [communicationCallbacks]);
   
   const audioContextRef = useRef(null);
   const inputContextRef = useRef(null);
@@ -474,11 +476,41 @@ export function useSomaAudio(onResponse, visionContextRef = null) {
   };
 
   const processWithSoma = async (query) => {
+    let activeReceiptId = null;
+    let activeRoute = null;
+    let activeTrust = null;
     try {
       setLastTranscript(query);
 
+      try {
+        const receiptRes = await fetch('/api/soma/communication/receipt', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            title: `Orb transmission: ${query.slice(0, 64)}`,
+            text: query,
+            channel: 'orb',
+            context: {
+              source: 'soma-orb',
+              backendConnected: somaHealthy,
+              voiceMode: true,
+              visionActive: !!visionContextRef?.current?.lastPerception
+            }
+          })
+        });
+        const receiptData = await receiptRes.json();
+        if (receiptData?.receipt) {
+          activeReceiptId = receiptData.receipt.id;
+          activeRoute = receiptData.receipt.route;
+          activeTrust = receiptData.receipt.trust;
+          communicationCallbacksRef.current?.onReceipt?.(receiptData);
+        }
+      } catch {
+        /* communication receipts are non-blocking */
+      }
+
       if (onResponseRef.current) {
-        onResponseRef.current({ role: 'user', text: query, timestamp: Date.now() });
+        onResponseRef.current({ role: 'user', text: query, timestamp: Date.now(), route: activeRoute, trust: activeTrust, receiptId: activeReceiptId });
       }
 
       // Build vision-enriched query — inject what SOMA currently sees
@@ -510,6 +542,13 @@ export function useSomaAudio(onResponse, visionContextRef = null) {
       speakText(acknowledgment); // intentionally not awaited — overlap with stream startup
 
       setIsThinking(true);
+      if (activeReceiptId) {
+        fetch(`/api/soma/communication/receipt/${activeReceiptId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: 'running' })
+        }).catch(() => {});
+      }
       let fullResponse = '';
       let firstSentenceReceived = false;
 
@@ -576,7 +615,21 @@ export function useSomaAudio(onResponse, visionContextRef = null) {
 
       const trimmedResponse = fullResponse.trim();
       if (onResponseRef.current && trimmedResponse) {
-        onResponseRef.current({ role: 'soma', text: trimmedResponse, timestamp: Date.now() });
+        onResponseRef.current({ role: 'soma', text: trimmedResponse, timestamp: Date.now(), route: activeRoute, trust: activeTrust, receiptId: activeReceiptId });
+      }
+
+      if (activeReceiptId) {
+        try {
+          const doneRes = await fetch(`/api/soma/communication/receipt/${activeReceiptId}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ status: 'completed', response: trimmedResponse })
+          });
+          const doneData = await doneRes.json();
+          if (doneData?.receipt) communicationCallbacksRef.current?.onReceipt?.(doneData);
+        } catch {
+          /* non-blocking */
+        }
       }
 
       // Update conversation memory (keep last 10 turns = 20 messages)
@@ -588,6 +641,13 @@ export function useSomaAudio(onResponse, visionContextRef = null) {
 
     } catch (error) {
       setIsThinking(false);
+      if (activeReceiptId) {
+        fetch(`/api/soma/communication/receipt/${activeReceiptId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ status: 'failed', error: error.message || 'Orb processing failed' })
+        }).catch(() => {});
+      }
       await speakText('Something went wrong on my end.');
     }
   };

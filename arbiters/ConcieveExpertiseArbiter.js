@@ -194,7 +194,8 @@ export class ConcieveExpertiseArbiter extends ExpertiseBase {
                         `You are a senior forensic accountant.`,
                         `Analyse the following transaction statistics for financial drift, anomalous patterns, or evidence of fraud.`,
                         `Return a concise bullet-point summary of findings and a risk verdict (LOW / MEDIUM / HIGH / CRITICAL).`,
-                        `DATA: ${JSON.stringify(analysis.statistics ?? analysis)}`
+                        `DATA: ${JSON.stringify(analysis.statistics ?? analysis)}`,
+                        `IMPORTANT: NEVER use em-dashes (—).`
                     ].join('\n');
                     const result = await odin.reasonRecurrent(driftPrompt, 'logos', 'high');
                     return {

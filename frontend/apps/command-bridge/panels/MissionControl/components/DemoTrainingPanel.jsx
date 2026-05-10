@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Play, Pause, RotateCcw, TrendingUp, Zap, Brain, Minus, Move } from 'lucide-react';
 
 /**
- * Demo Training Control Panel
+ * Autonomous Training Control Panel
  * Draggable, Minimizable, Floating Widget
  */
 export const DemoTrainingPanel = ({ isDemoMode, isTraining: parentIsTraining, stats: parentStats, loading: parentLoading, onStart, onStop, onMinimize }) => {
@@ -86,8 +86,8 @@ export const DemoTrainingPanel = ({ isDemoMode, isTraining: parentIsTraining, st
 
             if (!statusData.success || !statusData.status?.connected) {
                 alert('⚠️ Alpaca API keys not configured!\n\n' +
-                      'To use paper trading, you need to:\n' +
-                      '1. Click the Settings icon (⚙️) in Mission Control\n' +
+                      'To use autonomous paper training, you need to:\n' +
+                      '1. Click Settings in Mission Control\n' +
                       '2. Get FREE Alpaca Paper Trading keys from:\n' +
                       '   https://alpaca.markets/\n' +
                       '3. Add your API Key and Secret Key\n' +
@@ -124,7 +124,7 @@ export const DemoTrainingPanel = ({ isDemoMode, isTraining: parentIsTraining, st
             console.log('✅ Paper trading started successfully!');
         } catch (error) {
             console.error('Training start error:', error);
-            alert(`❌ Failed to start training:\n\n${error.message}\n\nCheck console for details.`);
+            alert(`Failed to start autonomous training:\n\n${error.message}\n\nCheck console for details.`);
         } finally {
             setLocalLoading(false);
         }
@@ -143,11 +143,11 @@ export const DemoTrainingPanel = ({ isDemoMode, isTraining: parentIsTraining, st
     };
 
     const handleReset = async () => {
-        if (!confirm('Reset demo trading stats?')) return;
+        if (!confirm('Reset autonomous training stats?')) return;
         try {
             await fetch('/api/learning/reset', { method: 'POST' });
-            setStats(null);
-            alert('✅ Demo stats reset!');
+            setLocalStats(null);
+            alert('Autonomous training stats reset.');
         } catch (error) { console.error(error); }
     };
 
@@ -171,7 +171,7 @@ export const DemoTrainingPanel = ({ isDemoMode, isTraining: parentIsTraining, st
                             ? 'bg-gradient-to-r from-emerald-500 to-cyan-500 animate-pulse' 
                             : 'bg-zinc-800 border-zinc-600'
                         }`}
-                        title="Expand SOMA Training"
+                        title="Expand Autonomous Training"
                     >
                         <Brain className={`w-7 h-7 ${isTraining ? 'text-white' : 'text-zinc-400'}`} />
                     </button>
@@ -195,7 +195,7 @@ export const DemoTrainingPanel = ({ isDemoMode, isTraining: parentIsTraining, st
             >
                 <div className="flex items-center gap-2">
                     <Brain className="w-5 h-5 text-pink-400" />
-                    <h3 className="text-sm font-bold text-white">SOMA Training</h3>
+                    <h3 className="text-sm font-bold text-white">Autonomous Training</h3>
                 </div>
                 <div className="flex items-center gap-2">
                     <div className={`px-2 py-0.5 rounded text-[10px] font-bold ${
@@ -216,7 +216,7 @@ export const DemoTrainingPanel = ({ isDemoMode, isTraining: parentIsTraining, st
 
             <div className="p-4">
                 <p className="text-xs text-purple-300 mb-4">
-                    SOMA will paper trade using <strong>real Alpaca data</strong> with virtual $100k balance.
+                    SOMA will run the autonomous engine in paper mode using market data and virtual capital.
                 </p>
 
                 {/* Stats Display */}
@@ -250,7 +250,7 @@ export const DemoTrainingPanel = ({ isDemoMode, isTraining: parentIsTraining, st
                             className="w-full px-4 py-2 bg-gradient-to-r from-emerald-500 to-cyan-500 hover:from-emerald-600 hover:to-cyan-600 text-white font-bold rounded-lg transition-all flex items-center justify-center gap-2 disabled:opacity-50 shadow-lg shadow-emerald-500/20"
                         >
                             <Play className="w-4 h-4" />
-                            {loading ? 'Starting...' : 'Start Paper Trading'}
+                            {loading ? 'Starting...' : 'Start Autonomous Training'}
                         </button>
                     ) : (
                         <button

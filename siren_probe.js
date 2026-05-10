@@ -9,7 +9,7 @@ async function probe() {
 
     const siren = new VocalSynthesisArbiter('ProbeHead', {
         primaryEngine: 'fish-speech',
-        fishSpeechUrl: 'http://localhost:8080'
+        fishSpeechUrl: 'http://localhost:8081'
     });
 
     console.log('🧬 Initializing arbiter...');

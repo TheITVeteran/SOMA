@@ -21,12 +21,21 @@ export class ForensicVerdictArbiter extends EventEmitter {
     }
 
     /**
-     * TIE: Cross-reference a PDF Bank Statement against an Excel GL.
+     * TIE: Cross-reference a PDF (Bank Statement or Invoice) against an Excel GL.
      */
     async performTie(pdfPath, excelPath) {
         console.log(`🔗 [Forensic] Initiating TIE: ${path.basename(pdfPath)} ↔ ${path.basename(excelPath)}`);
 
-        // 1. Extract structural data and numerical figures from PDF
+        // 1. Structured Invoice Extraction (Deepened Logic)
+        let invoiceData = null;
+        try {
+            invoiceData = await this.performInvoiceExtraction(pdfPath);
+            console.log(`📄 [Forensic] Extracted structured invoice data. Confidence: ${invoiceData.confidence * 100}%`);
+        } catch (e) {
+            console.warn(`⚠️ [Forensic] Structured extraction failed, falling back to raw OCR: ${e.message}`);
+        }
+
+        // 2. Extract numerical figures from OCR'd tables/text for matching
         const oculus = this.system.oculus;
         if (!oculus) throw new Error("Ocular Vision Limb is offline.");
 
@@ -38,27 +47,18 @@ export class ForensicVerdictArbiter extends EventEmitter {
             pdfData = { success: false, error: e.message };
         }
 
-        // 2. Extract numerical figures from OCR'd tables/text for matching
         const pdfFigures = [];
+        // Combine structured figures and raw OCR figures
+        if (invoiceData && invoiceData.success) {
+            if (invoiceData.total_amount) pdfFigures.push(invoiceData.total_amount.toString());
+            if (invoiceData.all_figures) invoiceData.all_figures.forEach(f => pdfFigures.push(f.toString()));
+        }
+
         if (pdfData.success && pdfData.ocular.pages) {
             pdfData.ocular.pages.forEach(p => {
-                // Look for things that look like currency in the text
                 const moneyMatches = p.text.match(/\d{1,3}(,\d{3})*(\.\d{2})/g);
                 if (moneyMatches) {
                     moneyMatches.forEach(m => pdfFigures.push(m.replace(/,/g, '')));
-                }
-                // Also check tables
-                if (p.tables) {
-                    p.tables.forEach(t => {
-                        t.rows.forEach(r => {
-                            r.cells.forEach(c => {
-                                const val = c.text.replace(/[$, ]/g, '').replace(/,/g, '');
-                                if (!isNaN(parseFloat(val)) && val.includes('.')) {
-                                    pdfFigures.push(val);
-                                }
-                            });
-                        });
-                    });
                 }
             });
         }
@@ -76,17 +76,26 @@ export class ForensicVerdictArbiter extends EventEmitter {
             audit_trail: `TIE performed between ${path.basename(pdfPath)} and ${path.basename(excelPath)}`,
             heatmap: heatmap,
             matching: tieMatching,
+            invoice_data: invoiceData,
             pdf_metadata: pdfData.success ? {
                 hash: pdfData.ocular.hash,
                 tables_found: pdfData.ocular.total_tables,
                 figures_extracted: pdfFigures.length
             } : { error: "PDF structural extraction failed" },
-            verdict: (tieMatching.tie_fidelity > 0.7 && heatmap.total_findings === 0) ? "AUDIT READY" : "INVESTIGATION RECOMMENDED",
+            verdict: (tieMatching.tie_fidelity > 0.8 && heatmap.total_findings === 0) ? "AUDIT READY" : "INVESTIGATION RECOMMENDED",
             risk_score: (1 - tieMatching.tie_fidelity) * 0.7 + (heatmap.overall_risk_score * 3)
         };
 
         this.emit('tie_complete', result);
         return result;
+    }
+
+    /**
+     * Invoice Extraction: Uses specialized Python processor for structured data.
+     */
+    async performInvoiceExtraction(pdfPath) {
+        console.log(`🔍 [Forensic] Extracting structured data from: ${path.basename(pdfPath)}`);
+        return await this._callLimb('invoice_processor', { input: pdfPath });
     }
 
     /**
@@ -226,7 +235,9 @@ export class ForensicVerdictArbiter extends EventEmitter {
             const scriptMap = {
                 'benford': 'anomaly_detector.py',
                 'heatmap': 'excel_heatmap.py',
-                'tie_matcher': 'tie_matcher.py'
+                'tie_matcher': 'tie_matcher.py',
+                'invoice_processor': 'invoice_processor.py',
+                'meta_validator': 'meta_validator.py'
             };
             const script = path.join(process.cwd(), 'appendages', 'provenance', 'forensics', scriptMap[task]);
 
@@ -249,6 +260,22 @@ export class ForensicVerdictArbiter extends EventEmitter {
             py.stdin.write(JSON.stringify(inputObj));
             py.stdin.end();
         });
+    }
+
+    /**
+     * Meta-Context: Verify the vendor's domain for legitimacy.
+     */
+    async verifyVendorDomain(domain) {
+        console.log(`🌐 [Forensic] Verifying vendor domain: ${domain}`);
+        return await this._callLimb('meta_validator', { task: 'verify_domain', domain });
+    }
+
+    /**
+     * Meta-Context: Analyze email headers for delivery security.
+     */
+    async analyzeEmailHeaders(emlPath) {
+        console.log(`✉️ [Forensic] Analyzing email security headers: ${path.basename(emlPath)}`);
+        return await this._callLimb('meta_validator', { task: 'analyze_email', input: emlPath });
     }
 
 

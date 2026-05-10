@@ -25,6 +25,18 @@ export class MedicalDiscoveryCortex extends BaseArbiterV4 {
     this.log('info', '🔬 Medical Discovery Cortex active. Graphify-enhanced analysis enabled.');
   }
 
+  async _callLogos(prompt) {
+    if (this.quadBrain?.callBrain) {
+      const res = await this.quadBrain.callBrain('LOGOS', prompt, { temperature: 0.2 }, 'full');
+      return res.text || res.response || String(res || '');
+    }
+    if (this.quadBrain?.reason) {
+      const res = await this.quadBrain.reason(prompt, { activeLobe: 'LOGOS', brain: 'LOGOS', temperature: 0.2 });
+      return res.text || res.response || String(res || '');
+    }
+    throw new Error('No LOGOS-capable brain interface is available');
+  }
+
   /**
    * Autonomous research mission - Sovereign Grade Combinatorial Analysis
    */
@@ -109,8 +121,7 @@ export class MedicalDiscoveryCortex extends BaseArbiterV4 {
                     3. THE MISSING LINK: Based on this data, what is the ONE compound or protein missing from this stack to reach peak coherence?
                     4. RISK AUDIT: Identify any metabolic bottlenecks.`;
 
-    const res = await this.quadBrain.callBrain({ prompt, mode: 'logos' });
-    return res.text;
+    return this._callLogos(prompt);
   }
 
   async _searchProfessional(topic) {
@@ -156,8 +167,7 @@ export class MedicalDiscoveryCortex extends BaseArbiterV4 {
                     - Homeopathic/Natural Frontiers
                     - A "Research Gaps" section for her next mission.`;
 
-    const res = await this.quadBrain.callBrain({ prompt, mode: 'logos' });
-    return res.text;
+    return this._callLogos(prompt);
   }
 }
 

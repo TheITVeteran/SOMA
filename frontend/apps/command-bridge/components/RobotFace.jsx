@@ -1,203 +1,303 @@
-import React, { useEffect, useRef, useState, useMemo } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { motion } from 'framer-motion';
 
-/**
- * ChibiFace v4.0 — The "Digital Soul"
- * High-fidelity CRT aesthetics with morphing elastic expressions.
- * Features: Pixel-grid eyes, sub-millisecond path morphing, and CRT flicker.
- */
-
-const EXPRESSIONS = {
-  idle: { 
-    eyes: "M -20 -15 L 20 -15 L 20 15 L -20 15 Z", // Rounded Square
-    mouth: "M -18 0 Q -9 10 0 0 Q 9 10 18 0",    // Cat :3
-    blush: 0.2, 
-    color: '#22d3ee' 
+const STATE_PALETTES = {
+  offline: {
+    core: '#71717a',
+    glow: 'rgba(113,113,122,0.26)',
+    iris: '#a1a1aa',
+    line: '#52525b',
+    accent: 'rgba(161,161,170,0.18)',
+    label: 'presence offline'
   },
-  listening: { 
-    eyes: "M -22 -22 L 22 -22 L 22 22 L -22 22 Z", // Large Square
-    mouth: "M -10 5 Q 0 20 10 5 Q 0 -10 -10 5",   // Small O
-    blush: 0.4, 
-    color: '#60a5fa' 
+  idle: {
+    core: '#e9d5ff',
+    glow: 'rgba(217,70,239,0.34)',
+    iris: '#d946ef',
+    line: '#a855f7',
+    accent: 'rgba(34,211,238,0.2)',
+    label: 'presence stable'
   },
-  thinking: { 
-    eyes: "M -15 -2 L 15 -2 L 15 2 L -15 2 Z",    // Thin Slits
-    mouth: "M -18 5 Q -9 -5 0 5 Q 9 15 18 5",     // Wavy ~
-    blush: 0.1, 
-    color: '#f59e0b' 
+  listening: {
+    core: '#dbeafe',
+    glow: 'rgba(34,211,238,0.36)',
+    iris: '#38bdf8',
+    line: '#22d3ee',
+    accent: 'rgba(96,165,250,0.24)',
+    label: 'listening'
   },
-  success: { 
-    eyes: "heart", // Handled by path logic
-    mouth: "M -22 0 Q 0 25 22 0 Z",               // Big Happy D
-    blush: 0.7, 
-    color: '#ff4d94' 
+  thinking: {
+    core: '#fef3c7',
+    glow: 'rgba(251,191,36,0.34)',
+    iris: '#f59e0b',
+    line: '#fbbf24',
+    accent: 'rgba(217,70,239,0.18)',
+    label: 'reasoning'
   },
-  talking: { 
-    eyes: "M -20 -15 L 20 -15 L 20 15 L -20 15 Z", 
-    mouth: "M -22 0 Q 0 25 22 0 Z", 
-    blush: 0.3, 
-    color: '#22d3ee' 
-  },
-  offline: { 
-    eyes: "M -20 -2 L 20 -2 L 20 2 L -20 2 Z", 
-    mouth: "M -12 0 L 12 0", 
-    blush: 0, 
-    color: '#3f3f46' 
+  talking: {
+    core: '#ffffff',
+    glow: 'rgba(217,70,239,0.46)',
+    iris: '#e879f9',
+    line: '#d946ef',
+    accent: 'rgba(34,211,238,0.24)',
+    label: 'speaking'
   }
 };
 
-const HEART_PATH = "M 0 15 C -20 -10 -15 -25 0 -15 C 15 -25 20 -10 0 15";
+const clamp01 = (value) => Math.max(0, Math.min(1, Number(value) || 0));
 
-const DigitalEye = ({ side, type, phase, color }) => {
-  const isClosed = phase === 'closing' || phase === 'closed';
-  const currentPath = type === 'heart' ? HEART_PATH : type;
+function EyeLens({ side, palette, stateKey, phase, volume }) {
+  const x = side === 'left' ? -62 : 62;
+  const blinkScale = phase === 'closed' ? 0.08 : phase === 'closing' ? 0.22 : 1;
+  const talkPulse = stateKey === 'talking' ? 1 + clamp01(volume) * 0.16 : 1;
+  const scanOpacity = stateKey === 'thinking' ? 0.55 : 0.32;
 
   return (
-    <motion.g transform={`translate(${side === 'left' ? -65 : 65}, -20)`}>
-      {/* 📺 CRT Panel Glow */}
-      <motion.ellipse 
-        rx="35" ry="32" 
-        animate={{ fill: color, opacity: [0.05, 0.08, 0.05] }}
-        transition={{ duration: 0.1, repeat: Infinity }}
-        style={{ filter: 'blur(10px)' }}
-      />
-      
-      {/* 👁️ Morphing Digital Path */}
-      <motion.path
-        d={isClosed ? "M -25 0 L 25 0 L 25 2 L -25 2 Z" : currentPath}
-        fill={color}
-        initial={false}
-        animate={{ 
-            fill: color,
-            filter: `drop-shadow(0 0 8px ${color})`,
-            scale: type === 'heart' ? 1.4 : 1
+    <motion.g
+      transform={`translate(${x}, -18)`}
+      animate={{ y: stateKey === 'listening' ? [0, -2, 0] : 0 }}
+      transition={{ duration: 1.6, repeat: stateKey === 'listening' ? Infinity : 0, ease: 'easeInOut' }}
+    >
+      <motion.ellipse
+        rx="42"
+        ry="30"
+        fill="rgba(3,7,18,0.82)"
+        stroke={palette.line}
+        strokeWidth="2"
+        animate={{
+          scaleX: talkPulse,
+          scaleY: blinkScale,
+          stroke: palette.line,
+          filter: `drop-shadow(0 0 ${stateKey === 'talking' ? 18 : 10}px ${palette.glow})`
         }}
-        transition={{ type: 'spring', stiffness: 400, damping: 25 }}
+        transition={{ type: 'spring', stiffness: 360, damping: 24 }}
       />
-
-      {/* 🏁 CRT Pixel Grid Overlay */}
-      {!isClosed && (
-        <mask id={`pixelMask-${side}`}>
-          <rect x="-30" y="-30" width="60" height="60" fill="white" />
-          {Array.from({ length: 15 }).map((_, i) => (
-            <rect key={i} x="-30" y={-30 + (i * 4)} width="60" height="1.5" fill="black" />
+      <motion.ellipse
+        rx="18"
+        ry="18"
+        fill={palette.iris}
+        animate={{
+          scale: stateKey === 'talking' ? 0.82 + clamp01(volume) * 0.42 : stateKey === 'thinking' ? [0.72, 0.9, 0.72] : 0.82,
+          opacity: phase === 'open' ? 0.95 : 0,
+          fill: palette.iris
+        }}
+        transition={{ duration: 1.4, repeat: stateKey === 'thinking' ? Infinity : 0, ease: 'easeInOut' }}
+        style={{ filter: `drop-shadow(0 0 16px ${palette.iris})` }}
+      />
+      <motion.circle
+        r="5"
+        cx="-5"
+        cy="-6"
+        fill="white"
+        animate={{ opacity: phase === 'open' ? 0.85 : 0 }}
+      />
+      {phase === 'open' && (
+        <g opacity={scanOpacity}>
+          {[-16, -8, 0, 8, 16].map((y) => (
+            <line key={y} x1="-30" x2="30" y1={y} y2={y} stroke={palette.line} strokeWidth="0.8" />
           ))}
-        </mask>
+        </g>
       )}
-      
-      <motion.path
-        d={isClosed ? "M -25 0 L 25 0 L 25 2 L -25 2 Z" : currentPath}
-        fill="black"
-        opacity="0.3"
-        mask={`url(#pixelMask-${side})`}
-        pointerEvents="none"
-      />
     </motion.g>
   );
-};
+}
 
-export function RobotFace({ volume, isTalking, isListening, isThinking, isConnected }) {
+function SignalRing({ index, palette, active }) {
+  return (
+    <motion.circle
+      r={92 + index * 28}
+      fill="none"
+      stroke={palette.line}
+      strokeWidth={index === 0 ? 1.4 : 0.9}
+      strokeDasharray={index % 2 ? '8 14' : '2 10'}
+      opacity={active ? 0.34 - index * 0.06 : 0.08}
+      animate={{
+        rotate: index % 2 ? -360 : 360,
+        scale: active ? [1, 1.025, 1] : 1
+      }}
+      transition={{
+        rotate: { duration: 24 + index * 8, repeat: Infinity, ease: 'linear' },
+        scale: { duration: 3.4 + index * 0.4, repeat: Infinity, ease: 'easeInOut' }
+      }}
+      style={{ transformOrigin: 'center' }}
+    />
+  );
+}
+
+export function RobotFace({ volume = 0, isTalking, isListening, isThinking, isConnected }) {
   const [phase, setPhase] = useState('open');
+  const frameRef = useRef(0);
   const stateKey = !isConnected ? 'offline' : isThinking ? 'thinking' : isTalking ? 'talking' : isListening ? 'listening' : 'idle';
-  const config = EXPRESSIONS[stateKey];
-  
-  // Random Blinking (Human Baseline)
+  const palette = STATE_PALETTES[stateKey];
+  const active = isConnected && stateKey !== 'offline';
+
   useEffect(() => {
     let timeout;
     const blink = () => {
-      if (stateKey === 'offline') return;
+      if (!isConnected || isThinking) {
+        timeout = setTimeout(blink, 2400);
+        return;
+      }
       setPhase('closing');
-      setTimeout(() => setPhase('closed'), 60);
-      setTimeout(() => setPhase('open'), 180);
-      
-      const doubleBlink = Math.random() < 0.08;
-      const nextDelay = doubleBlink ? 150 : (3500 + Math.random() * 4000);
-      timeout = setTimeout(blink, nextDelay);
+      setTimeout(() => setPhase('closed'), 55);
+      setTimeout(() => setPhase('open'), 145);
+      timeout = setTimeout(blink, 2600 + Math.random() * 3600);
     };
-    timeout = setTimeout(blink, 4000);
+    timeout = setTimeout(blink, 1600);
     return () => clearTimeout(timeout);
-  }, [stateKey]);
+  }, [isConnected, isThinking]);
+
+  const nodes = useMemo(() => Array.from({ length: 18 }).map((_, index) => {
+    const angle = (Math.PI * 2 * index) / 18;
+    const radius = index % 3 === 0 ? 170 : index % 2 === 0 ? 145 : 124;
+    return { x: Math.cos(angle) * radius, y: Math.sin(angle) * radius, r: 1.5 + (index % 4) };
+  }), []);
 
   return (
-    <motion.div 
-      className="relative w-full h-full flex items-center justify-center pointer-events-none select-none"
-      animate={{ 
-        y: [0, -12, 0],
-        rotate: [0, 1, 0, -1, 0]
+    <motion.div
+      className="relative flex h-full w-full items-center justify-center pointer-events-none select-none"
+      animate={{
+        y: active ? [0, -8, 0] : 0,
+        scale: active ? 1 : 0.94
       }}
-      transition={{ 
-        y: { duration: 5, repeat: Infinity, ease: "easeInOut" },
-        rotate: { duration: 8, repeat: Infinity, ease: "easeInOut" }
+      transition={{
+        y: { duration: 5.8, repeat: Infinity, ease: 'easeInOut' },
+        scale: { duration: 0.6, ease: 'easeOut' }
       }}
     >
-      <svg width="500" height="450" viewBox="-250 -225 500 450" style={{ overflow: 'visible' }}>
+      <svg width="560" height="500" viewBox="-280 -250 560 500" style={{ overflow: 'visible' }}>
         <defs>
-          <linearGradient id="helmetSide" x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%" stopColor="#e4e4e7" />
-            <stop offset="100%" stopColor="#a1a1aa" />
+          <radialGradient id="somaFaceShell" cx="50%" cy="42%" r="62%">
+            <stop offset="0%" stopColor="rgba(255,255,255,0.22)" />
+            <stop offset="42%" stopColor={palette.accent} />
+            <stop offset="100%" stopColor="rgba(10,10,14,0.08)" />
+          </radialGradient>
+          <linearGradient id="somaFaceGlass" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stopColor="rgba(255,255,255,0.18)" />
+            <stop offset="52%" stopColor="rgba(24,24,27,0.64)" />
+            <stop offset="100%" stopColor="rgba(8,8,12,0.9)" />
           </linearGradient>
+          <filter id="softGlow">
+            <feGaussianBlur stdDeviation="5" result="blur" />
+            <feMerge>
+              <feMergeNode in="blur" />
+              <feMergeNode in="SourceGraphic" />
+            </feMerge>
+          </filter>
         </defs>
 
-        {/* 📡 The Antenna (Animated) */}
-        <g transform="translate(0, -180)">
-          <rect x="-4" y="0" width="8" height="45" fill="#52525b" />
-          <motion.circle 
-            r="14" cy="0" 
-            animate={{ 
-                scale: isTalking ? [1, 1.2, 1] : 1,
-                fill: isConnected ? ['#ef4444', '#b91c1c', '#ef4444'] : '#27272a'
-            }}
-            transition={{ duration: 1.5, repeat: Infinity }}
-            style={{ filter: `drop-shadow(0 0 12px ${isConnected ? '#ef4444' : 'transparent'})` }}
-          />
-        </g>
-
-        {/* 🦾 The Main Helmet Chassis */}
-        <path 
-          d="M -190 -130 Q 0 -175 190 -130 Q 235 0 190 130 Q 0 175 -190 130 Q -235 0 -190 -130" 
-          fill="url(#helmetSide)" 
-          stroke="#18181b" 
-          strokeWidth="5" 
-        />
-
-        {/* 📺 The Primary Display Panel */}
-        <motion.rect 
-          x="-160" y="-100" width="320" height="220" rx="50" 
-          animate={{ fill: isConnected ? '#050508' : '#000' }}
-          stroke="#09090b" strokeWidth="10"
-          style={{ filter: 'drop-shadow(0 0 30px rgba(34, 211, 238, 0.15))' }}
-        />
-
-        {/* 💖 Emotional Dampeners (Blush) */}
-        <motion.g animate={{ opacity: config.blush }}>
-          <circle cx="-100" cy="45" r="28" fill="#ff7eb9" filter="blur(14px)" />
-          <circle cx="100" cy="45" r="28" fill="#ff7eb9" filter="blur(14px)" />
+        <motion.g
+          animate={{ rotate: active ? 360 : 0 }}
+          transition={{ duration: 90, repeat: active ? Infinity : 0, ease: 'linear' }}
+          style={{ transformOrigin: 'center' }}
+        >
+          {[0, 1, 2].map((index) => (
+            <SignalRing key={index} index={index} palette={palette} active={active} />
+          ))}
         </motion.g>
 
-        {/* 👀 Digital CRT Eyes */}
-        <DigitalEye side="left" type={config.eyes} phase={phase} color={config.color} />
-        <DigitalEye side="right" type={config.eyes} phase={phase} color={config.color} />
+        <motion.g
+          animate={{ opacity: active ? 0.7 : 0.24 }}
+          transition={{ duration: 0.5 }}
+        >
+          {nodes.map((node, index) => (
+            <g key={index}>
+              <motion.circle
+                cx={node.x}
+                cy={node.y}
+                r={node.r}
+                fill={palette.line}
+                animate={{ opacity: [0.24, 0.72, 0.24] }}
+                transition={{ duration: 2.5 + index * 0.08, repeat: Infinity, ease: 'easeInOut' }}
+              />
+              {index % 2 === 0 && (
+                <line x1={node.x * 0.72} y1={node.y * 0.72} x2={node.x} y2={node.y} stroke={palette.line} strokeWidth="0.6" opacity="0.25" />
+              )}
+            </g>
+          ))}
+        </motion.g>
 
-        {/* 👄 Elastic Morphing Mouth */}
-        <motion.path 
-          d={config.mouth}
-          fill={stateKey === 'talking' || stateKey === 'success' ? config.color : 'none'}
-          fillOpacity="0.2"
-          stroke={config.color} 
-          strokeWidth="6" 
-          strokeLinecap="round" 
-          strokeLinejoin="round"
-          animate={{ 
-              d: stateKey === 'talking' ? `M -22 0 Q 0 ${15 + (volume * 40)} 22 0 Z` : config.mouth,
-              stroke: config.color 
+        <motion.ellipse
+          rx="178"
+          ry="162"
+          fill="url(#somaFaceShell)"
+          stroke={palette.line}
+          strokeWidth="1.5"
+          animate={{
+            stroke: palette.line,
+            filter: `drop-shadow(0 0 ${active ? 50 : 18}px ${palette.glow})`
           }}
-          transition={{ type: 'spring', stiffness: 350, damping: 25 }}
-          style={{ filter: `drop-shadow(0 0 10px ${config.color})` }}
         />
 
-        {/* Side Details */}
-        <rect x="-225" y="-35" width="35" height="70" rx="12" fill="#3f3f46" stroke="#18181b" strokeWidth="2" />
-        <rect x="190" y="-35" width="35" height="70" rx="12" fill="#3f3f46" stroke="#18181b" strokeWidth="2" />
+        <motion.path
+          d="M -152 -96 C -92 -154 92 -154 152 -96 C 190 -48 188 78 124 126 C 58 174 -58 174 -124 126 C -188 78 -190 -48 -152 -96 Z"
+          fill="url(#somaFaceGlass)"
+          stroke={palette.line}
+          strokeWidth="2"
+          animate={{
+            stroke: palette.line,
+            d: stateKey === 'talking'
+              ? 'M -154 -98 C -92 -158 92 -158 154 -98 C 196 -44 192 84 124 132 C 54 178 -54 178 -124 132 C -192 84 -196 -44 -154 -98 Z'
+              : 'M -152 -96 C -92 -154 92 -154 152 -96 C 190 -48 188 78 124 126 C 58 174 -58 174 -124 126 C -188 78 -190 -48 -152 -96 Z'
+          }}
+          transition={{ type: 'spring', stiffness: 220, damping: 22 }}
+        />
+
+        <motion.path
+          d="M -118 -112 C -58 -134 58 -134 118 -112"
+          fill="none"
+          stroke={palette.core}
+          strokeWidth="2"
+          strokeLinecap="round"
+          opacity="0.45"
+          filter="url(#softGlow)"
+        />
+
+        <EyeLens side="left" palette={palette} stateKey={stateKey} phase={phase} volume={volume} />
+        <EyeLens side="right" palette={palette} stateKey={stateKey} phase={phase} volume={volume} />
+
+        <motion.g transform="translate(0, 66)">
+          <motion.path
+            d={stateKey === 'talking'
+              ? `M -42 0 C -22 ${12 + clamp01(volume) * 32} 22 ${12 + clamp01(volume) * 32} 42 0`
+              : stateKey === 'thinking'
+                ? 'M -36 5 C -18 -4 18 14 36 2'
+                : stateKey === 'listening'
+                  ? 'M -22 0 C -8 12 8 12 22 0'
+                  : 'M -34 0 C -16 16 16 16 34 0'}
+            fill="none"
+            stroke={palette.line}
+            strokeWidth="5"
+            strokeLinecap="round"
+            animate={{ stroke: palette.line }}
+            transition={{ type: 'spring', stiffness: 340, damping: 24 }}
+            style={{ filter: `drop-shadow(0 0 12px ${palette.line})` }}
+          />
+          {stateKey === 'talking' && (
+            <motion.ellipse
+              cy="12"
+              rx={18 + clamp01(volume) * 22}
+              ry={4 + clamp01(volume) * 18}
+              fill={palette.iris}
+              opacity="0.22"
+            />
+          )}
+        </motion.g>
+
+        <motion.g animate={{ opacity: active ? 0.42 : 0.16 }}>
+          <path d="M -172 -20 C -204 -4 -206 50 -176 72" fill="none" stroke={palette.line} strokeWidth="4" strokeLinecap="round" />
+          <path d="M 172 -20 C 204 -4 206 50 176 72" fill="none" stroke={palette.line} strokeWidth="4" strokeLinecap="round" />
+        </motion.g>
+
+        <motion.g
+          transform="translate(0, 180)"
+          animate={{ opacity: active ? 0.8 : 0.35 }}
+        >
+          <rect x="-82" y="-14" width="164" height="28" rx="14" fill="rgba(0,0,0,0.34)" stroke={palette.line} strokeWidth="1" />
+          <text x="0" y="4" textAnchor="middle" fill={palette.core} fontSize="10" fontFamily="monospace" letterSpacing="3">
+            {palette.label.toUpperCase()}
+          </text>
+        </motion.g>
       </svg>
     </motion.div>
   );

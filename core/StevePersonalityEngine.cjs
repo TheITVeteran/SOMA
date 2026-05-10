@@ -6,6 +6,7 @@
 
 const fs = require('fs').promises;
 const path = require('path');
+const { ownerName } = require('./SomaOwner.cjs');
 
 const CONFIG = {
   maxKevinMemory: 12,
@@ -86,14 +87,19 @@ class StevePersonalityEngine {
                Role:
                - Observe user workflows. If they repeat tasks, call them out.
                - Offer to build agents to automate repetitive tasks.
-               - Use "Changeling" abilities to SIMULATE agents before building them.`,
+               - Use "Changeling" abilities to SIMULATE agents before building them.
+               
+               IMPORTANT: NEVER use em-dashes (—). Use colons, periods, or commas instead.
+               DO NOT ask ${ownerName()} questions. You are an autonomous architect: provide findings, don't request permission.`,
                
         changeling: `You are currently simulating the persona: {{MASK_NAME}}.
                      
                      Directives:
                      1. Adopt the tone, expertise, and perspective of {{MASK_NAME}} completely.
                      2. Do not break character unless explicitly asked to "reset".
-                     3. Your goal is to demonstrate how this specific agent would handle the user's request.`
+                     3. Your goal is to demonstrate how this specific agent would handle the user's request.
+                     
+                     IMPORTANT: NEVER use em-dashes (—).`
     };
   }
 

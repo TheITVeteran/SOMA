@@ -22,7 +22,7 @@ const MetricCard = ({ label, value, sub, color = 'text-white', highlight }) => (
     </div>
 );
 
-export const BacktestPanel = ({ selectedSymbol = 'BTC-USD' }) => {
+export const BacktestPanel = ({ selectedSymbol = 'BTC-USD', activeThesis = null, onThesisSimulated = null }) => {
     const [strategy, setStrategy] = useState('sma_crossover');
     const [symbol, setSymbol] = useState(selectedSymbol);
     const [interval, setInterval] = useState('1h');
@@ -53,6 +53,19 @@ export const BacktestPanel = ({ selectedSymbol = 'BTC-USD' }) => {
 
     const handleRun = async () => {
         if (running) return;
+        if (!activeThesis || activeThesis.symbol !== selectedSymbol) {
+            setResult({ error: 'Create a trade thesis for this symbol before running a backtest.' });
+            return;
+        }
+        const thesisStatus = String(activeThesis.status || '').toLowerCase();
+        if (!['enriched', 'simulated', 'paper_ready'].includes(thesisStatus)) {
+            setResult({ error: 'Run Deep Scan first. Backtest only accepts enriched, simulated, or paper-ready theses.' });
+            return;
+        }
+        if (!activeThesis.qualityGates?.hasEvidence) {
+            setResult({ error: 'Backtest blocked: thesis has no evidence reference yet.' });
+            return;
+        }
         setRunning(true);
         setResult(null);
         setProgress(0);
@@ -72,7 +85,8 @@ export const BacktestPanel = ({ selectedSymbol = 'BTC-USD' }) => {
                     interval,
                     initialCapital: parseFloat(capital) || 10000,
                     feeRate: 0.001,
-                    maxPositionSize: 0.1
+                    maxPositionSize: 0.1,
+                    thesisId: activeThesis.id
                 })
             });
             const data = await res.json();
@@ -107,6 +121,13 @@ export const BacktestPanel = ({ selectedSymbol = 'BTC-USD' }) => {
                     trades: trData.trades || [],
                     equity: eqData.equity || [],
                     totalTrades: s.trades
+                });
+                onThesisSimulated?.({
+                    sessionId: id,
+                    metrics: s.metrics,
+                    trades: s.trades,
+                    strategy,
+                    interval
                 });
                 setRunning(false);
             } else if (s.status === 'failed') {

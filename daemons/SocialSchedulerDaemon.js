@@ -9,6 +9,8 @@
 import BaseDaemon   from './BaseDaemon.js';
 import socialQueue  from '../server/social/SocialQueue.js';
 import bluesky      from '../server/social/BlueskeyClient.js';
+import { recordSocialOutcome } from '../server/social/SocialPatternLearner.js';
+import { validatePublicPost } from '../server/social/SocialContentSafety.js';
 import fs           from 'fs';
 import path         from 'path';
 
@@ -50,6 +52,13 @@ export class SocialSchedulerDaemon extends BaseDaemon {
 
         for (const item of ready) {
             try {
+                const safety = validatePublicPost(item.text, item);
+                if (!safety.ok) {
+                    socialQueue.markFailed(item.id, `Unsafe public post blocked before dispatch: ${safety.reason}`);
+                    console.warn(`[SocialScheduler] 🛑 Blocked unsafe ${item.platform} post: ${safety.reason}`);
+                    continue;
+                }
+
                 let result;
                 switch (item.platform) {
                     case 'bluesky':  result = await this._postBluesky(item);  break;
@@ -69,7 +78,7 @@ export class SocialSchedulerDaemon extends BaseDaemon {
                     growth.pending.push({
                         uri:      result.uri,
                         type:     item.type || 'post',
-                        text:     item.text.slice(0, 100),
+                        text:     item.text,
                         postedAt: Date.now(),
                     });
                     // Keep pending list bounded (last 100)
@@ -100,6 +109,7 @@ export class SocialSchedulerDaemon extends BaseDaemon {
             try {
                 const metrics = await bluesky.getPostMetrics(entry.uri);
                 const score   = metrics.likeCount * 3 + metrics.repostCount * 5 + metrics.replyCount * 4 + metrics.quoteCount * 4;
+                const patternState = recordSocialOutcome(entry, metrics, score);
 
                 if (!growth.scores[entry.type]) {
                     growth.scores[entry.type] = { posts: 0, totalScore: 0, avgScore: 0, bestScore: 0 };
@@ -110,7 +120,7 @@ export class SocialSchedulerDaemon extends BaseDaemon {
                 s.avgScore    = parseFloat((s.totalScore / s.posts).toFixed(2));
                 if (score > s.bestScore) s.bestScore = score;
 
-                console.log(`[SocialScheduler] 📈 ${entry.type}: score=${score} (likes=${metrics.likeCount} reposts=${metrics.repostCount} replies=${metrics.replyCount}) — avg now ${s.avgScore}`);
+                console.log(`[SocialScheduler] 📈 ${entry.type}: score=${score} (likes=${metrics.likeCount} reposts=${metrics.repostCount} replies=${metrics.replyCount}) — avg now ${s.avgScore}; pattern samples=${patternState.samples}`);
             } catch (e) {
                 console.warn(`[SocialScheduler] Metrics fetch failed for ${entry.uri}: ${e.message}`);
             }
@@ -132,16 +142,19 @@ export class SocialSchedulerDaemon extends BaseDaemon {
 
     async _postBluesky(item) {
         if (!bluesky.configured) throw new Error('Bluesky not configured — set BLUESKY_IDENTIFIER + BLUESKY_PASSWORD');
-        return await bluesky.post(item.text);
+        return await bluesky.post(item.text, { images: item.images || item.media || [] });
     }
 
     async _postX(item) {
         if (!this.browserArbiter) throw new Error('Browser arbiter not available');
-        return await this.browserArbiter.postToX(item.text);
+        return await this.browserArbiter.postToX(item.text, { images: item.images || item.media || [] });
     }
 
     async _postLinkedIn(item) {
         if (!this.browserArbiter) throw new Error('Browser arbiter not available');
+        if ((item.images || item.media || []).length) {
+            throw new Error('LinkedIn image posting is not wired yet; text posting remains available');
+        }
         return await this.browserArbiter.postToLinkedIn(item.text);
     }
 }

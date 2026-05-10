@@ -1321,8 +1321,9 @@ class MnemonicArbiter extends BaseArbiter {
 
     const prompt = `You are SOMA's memory consolidation engine.
 Below are ${entries.length} raw memory entries from a single session window.
-Extract 3-5 key facts, insights, or decisions that are worth remembering long-term.
+Extract 3-5 high-substance key facts, specific technical insights, or concrete decisions worth remembering long-term.
 Format: one bullet per insight, max 2 sentences each. Be specific. Skip pleasantries.
+IMPORTANT: NEVER use em-dashes (—).
 
 RAW ENTRIES:
 ${combined}

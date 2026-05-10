@@ -923,55 +923,6 @@ export const FeatureOverlay = ({
                     </div>
                 );
 
-            // --- THALAMUS ---
-            case 'Signal Firewall':
-                return (
-                    <div className="space-y-4">
-                        <p className="text-sm text-slate-400">Neural data packets are being inspected for integrity. Unauthorized patterns are filtered.</p>
-                        <div className="bg-slate-950 border border-red-900/40 p-4 rounded font-mono text-[10px] space-y-1">
-                            <div className="text-red-400 animate-pulse">[SCANNING STREAM: 0x4F2A...]</div>
-                            <div className="text-slate-500">PACKET-77: VALIDATED</div>
-                            <div className="text-slate-500">PACKET-78: VALIDATED</div>
-                            <div className="text-red-500 font-bold">PACKET-79: MALFORMED HEURISTIC - DROPPED</div>
-                            <div className="text-slate-500">PACKET-80: VALIDATED</div>
-                        </div>
-                        <button onClick={() => onAction('harden_firewall', {})} className="w-full py-2 bg-red-600 text-white text-[10px] font-bold rounded uppercase">
-                            Harden Firewall
-                        </button>
-                    </div>
-                );
-            case 'Protocol Guard':
-                return (
-                    <div className="space-y-4">
-                        <p className="text-sm text-slate-400">Enforcement of core AI directives. Any attempt to bypass safety logic will be intercepted here.</p>
-                        <div className="flex flex-col space-y-2">
-                            {['Primary Directive: Coherence', 'Secondary Directive: Non-Destruction', 'Tertiary Directive: Integrity'].map((dir, i) => (
-                                <div key={i} className="flex items-center space-x-3 p-3 bg-slate-950 border border-slate-800 rounded">
-                                    <ShieldCheck size={14} className="text-red-500" />
-                                    <span className="text-xs text-slate-300 font-bold uppercase tracking-widest">{dir}</span>
-                                    <div className="ml-auto text-[9px] text-green-500 font-mono">ACTIVE</div>
-                                </div>
-                            ))}
-                        </div>
-                        <button onClick={() => onAction('cycle_keys', {})} className="w-full py-2 bg-red-900/30 border border-red-500/50 text-red-500 text-[10px] font-bold rounded uppercase">
-                            Cycle Security Keys
-                        </button>
-                    </div>
-                );
-            case 'Sensory Gate':
-                return (
-                    <div className="space-y-4 text-center">
-                        <Lock size={32} className="mx-auto text-red-500 mb-2 opacity-50" />
-                        <p className="text-xs text-slate-500 font-mono">GATE STATUS: UNSTABLE DATA FLOW</p>
-                        <div className="h-1.5 w-full bg-slate-800 rounded-full overflow-hidden">
-                            <div className="h-full bg-red-500 w-2/3 animate-pulse"></div>
-                        </div>
-                        <p className="text-[10px] text-slate-400 leading-relaxed px-4">
-                            Data ingress from external prompts is currently gated to prevent hallucination cycles.
-                        </p>
-                    </div>
-                );
-
             default:
                 return (
                     <div className="p-10 text-center bg-slate-950 rounded-lg border border-slate-800">

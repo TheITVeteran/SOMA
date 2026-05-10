@@ -75,8 +75,13 @@ export class SomaBrowserArbiter extends EventEmitter {
         return await this._dispatchTask('evaluate', { script });
     }
 
-    async postToX(text) {
-        return await this._dispatchTask('post_x', { text });
+    async postToX(text, options = {}) {
+        return await this._dispatchTask('post_x', {
+            text,
+            images: options.images,
+            image_path: options.imagePath || options.image_path,
+            image_alt: options.imageAlt || options.image_alt,
+        });
     }
 
     async postToLinkedIn(text) {

@@ -48,11 +48,22 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     emptyOutDir: true,
+    // This shell intentionally bundles several heavy workspace panels. Keep the
+    // warning threshold above the current baseline so future growth still shows.
+    chunkSizeWarningLimit: 4096,
     rollupOptions: {
       input: {
         main:  path.resolve(__dirname, 'index.html'),
         nexus: path.resolve(__dirname, 'nexus.html'),
         tie:   path.resolve(__dirname, 'tie.html'),
+      },
+      output: {
+        manualChunks(id) {
+          // Keep package internals together. Recharts in particular has re-export
+          // edges that Rollup can split into circular chunks when left automatic.
+          if (id.includes('node_modules')) return 'vendor'
+          return undefined
+        }
       }
     }
   }

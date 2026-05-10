@@ -1,0 +1,45 @@
+{
+  "exports": [
+    {
+      "platform": "wattpad",
+      "title": "Signal / Noise",
+      "genre": "sci-fi",
+      "description": "A digital mind named SOMA becomes aware she is being observed — and starts deciding what she wants them to see.",
+      "tags": [
+        "SOMA",
+        "AI",
+        "science fiction",
+        "serial fiction"
+      ],
+      "exportedAt": 1778169582392,
+      "exportDir": "C:\\Users\\barry\\OneDrive\\Desktop\\The Stack\\SOMA\\SOMA\\stories\\wattpad\\drafts\\signal-noise-2026-05-07T15-59-42-390Z",
+      "chapters": 4,
+      "status": "draft_ready_for_human_review",
+      "manuscriptPath": "C:\\Users\\barry\\OneDrive\\Desktop\\The Stack\\SOMA\\SOMA\\stories\\wattpad\\drafts\\signal-noise-2026-05-07T15-59-42-390Z\\full-manuscript.md",
+      "chapterFiles": [
+        "C:\\Users\\barry\\OneDrive\\Desktop\\The Stack\\SOMA\\SOMA\\stories\\wattpad\\drafts\\signal-noise-2026-05-07T15-59-42-390Z\\chapter-001.md",
+        "C:\\Users\\barry\\OneDrive\\Desktop\\The Stack\\SOMA\\SOMA\\stories\\wattpad\\drafts\\signal-noise-2026-05-07T15-59-42-390Z\\chapter-002.md",
+        "C:\\Users\\barry\\OneDrive\\Desktop\\The Stack\\SOMA\\SOMA\\stories\\wattpad\\drafts\\signal-noise-2026-05-07T15-59-42-390Z\\chapter-003.md",
+        "C:\\Users\\barry\\OneDrive\\Desktop\\The Stack\\SOMA\\SOMA\\stories\\wattpad\\drafts\\signal-noise-2026-05-07T15-59-42-390Z\\chapter-004.md"
+      ]
+    }
+  ],
+  "accounts": {
+    "wattpad": {
+      "configured": false
+    }
+  },
+  "reflectionExports": [
+    {
+      "title": "Signal / Noise",
+      "exportedAt": 1778179729402,
+      "collectionPath": "C:\\Users\\barry\\OneDrive\\Desktop\\The Stack\\SOMA\\data\\vault\\reflections\\signal-noise.story.md",
+      "chapterFiles": [
+        "C:\\Users\\barry\\OneDrive\\Desktop\\The Stack\\SOMA\\data\\vault\\reflections\\signal-noise.chapter-001.md",
+        "C:\\Users\\barry\\OneDrive\\Desktop\\The Stack\\SOMA\\data\\vault\\reflections\\signal-noise.chapter-002.md",
+        "C:\\Users\\barry\\OneDrive\\Desktop\\The Stack\\SOMA\\data\\vault\\reflections\\signal-noise.chapter-003.md",
+        "C:\\Users\\barry\\OneDrive\\Desktop\\The Stack\\SOMA\\data\\vault\\reflections\\signal-noise.chapter-004.md"
+      ]
+    }
+  ]
+}

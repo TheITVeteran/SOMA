@@ -23,6 +23,7 @@
 import { promises as fs } from 'fs';
 import path from 'path';
 import { getCachedMarketData, fetchHistoricalOHLCV } from './MarketDataScraper.js';
+import marketEvidenceStore from '../finance/MarketEvidenceStore.js';
 
 // ── Asset universe ─────────────────────────────────────────────────────────
 
@@ -246,12 +247,126 @@ function scoreRuns(allTrades) {
   return { score, winRate, sharpe: +sharpe.toFixed(4), maxDrawdown: +maxDD.toFixed(4), profitFactor: +profitFactor.toFixed(2), totalPnL: +totalPnL.toFixed(2) };
 }
 
+function evaluateReportCard({ assetId, protocolId, entry, correlatedWith = [], isEvolved = false, parentId = null }) {
+  const trades = Array.isArray(entry?.allTrades) ? entry.allTrades : [];
+  const scores = entry?.scores || scoreRuns(trades);
+  const splitIndex = Math.max(1, Math.floor(trades.length * 0.7));
+  const inSample = scoreRuns(trades.slice(0, splitIndex));
+  const outOfSample = scoreRuns(trades.slice(splitIndex));
+  const oosTrades = Math.max(0, trades.length - splitIndex);
+  const oosDrawdownOk = outOfSample.maxDrawdown <= Math.min(MAX_DRAWDOWN_TO_GRADUATE, (scores.maxDrawdown || 0) + 0.08);
+
+  const gates = [
+    {
+      id: 'episodes',
+      label: 'Episode count',
+      passed: (entry?.episodes || 0) >= EPISODES_TO_GRADUATE,
+      value: entry?.episodes || 0,
+      threshold: EPISODES_TO_GRADUATE,
+      detail: `${entry?.episodes || 0}/${EPISODES_TO_GRADUATE} episodes`
+    },
+    {
+      id: 'sample_size',
+      label: 'Closed trades',
+      passed: trades.length >= MIN_TRADES_TO_GRADUATE,
+      value: trades.length,
+      threshold: MIN_TRADES_TO_GRADUATE,
+      detail: `${trades.length}/${MIN_TRADES_TO_GRADUATE} closed trades`
+    },
+    {
+      id: 'score',
+      label: 'Composite score',
+      passed: (scores.score || 0) >= GRADUATION_THRESHOLD,
+      value: +(scores.score || 0).toFixed(3),
+      threshold: GRADUATION_THRESHOLD,
+      detail: `${(scores.score || 0).toFixed(3)} score`
+    },
+    {
+      id: 'win_rate',
+      label: 'Win rate',
+      passed: (scores.winRate || 0) >= MIN_WIN_RATE_TO_GRADUATE,
+      value: +(scores.winRate || 0).toFixed(3),
+      threshold: MIN_WIN_RATE_TO_GRADUATE,
+      detail: `${((scores.winRate || 0) * 100).toFixed(1)}% wins`
+    },
+    {
+      id: 'profit_factor',
+      label: 'Profit factor',
+      passed: (scores.profitFactor || 0) >= MIN_PROFIT_FACTOR_TO_GRADUATE,
+      value: +(scores.profitFactor || 0).toFixed(2),
+      threshold: MIN_PROFIT_FACTOR_TO_GRADUATE,
+      detail: `${(scores.profitFactor || 0).toFixed(2)} PF`
+    },
+    {
+      id: 'drawdown',
+      label: 'Drawdown',
+      passed: (scores.maxDrawdown || 0) <= MAX_DRAWDOWN_TO_GRADUATE,
+      value: +(scores.maxDrawdown || 0).toFixed(4),
+      threshold: MAX_DRAWDOWN_TO_GRADUATE,
+      detail: `${((scores.maxDrawdown || 0) * 100).toFixed(1)}% max DD`
+    },
+    {
+      id: 'out_of_sample',
+      label: 'Out-of-sample holdout',
+      passed: oosTrades >= Math.max(20, Math.floor(MIN_TRADES_TO_GRADUATE * 0.25)) && outOfSample.score >= MIN_OUT_OF_SAMPLE_SCORE && oosDrawdownOk,
+      value: +outOfSample.score.toFixed(3),
+      threshold: MIN_OUT_OF_SAMPLE_SCORE,
+      detail: `${oosTrades} holdout trades, ${outOfSample.score.toFixed(3)} score`
+    }
+  ];
+
+  const passed = gates.filter(g => g.passed).length;
+  const failed = gates.filter(g => !g.passed);
+  const grade = passed === gates.length ? 'A'
+    : passed >= gates.length - 1 ? 'B'
+    : passed >= Math.ceil(gates.length * 0.6) ? 'C'
+    : 'D';
+  const graduateEligible = failed.length === 0;
+  const weakestGate = failed[0] || null;
+  const nextAction = weakestGate
+    ? weakestGate.id === 'sample_size' || weakestGate.id === 'episodes'
+      ? 'Keep paper simulation running until the sample is large enough.'
+      : weakestGate.id === 'out_of_sample'
+        ? 'Run more holdout testing before trusting the edge.'
+        : `Improve ${weakestGate.label.toLowerCase()} before promotion.`
+    : 'Eligible for paper deployment in Mission Control. Keep live trading disabled until broker risk gates pass.';
+
+  return {
+    assetId,
+    protocolId,
+    grade,
+    graduateEligible,
+    passedGates: passed,
+    totalGates: gates.length,
+    gates,
+    weakestGate,
+    nextAction,
+    evidence: {
+      episodes: entry?.episodes || 0,
+      trades: trades.length,
+      inSample,
+      outOfSample,
+      correlatedWith,
+      evolved: isEvolved,
+      evolvedFrom: parentId
+    },
+    summary: graduateEligible
+      ? `${assetId} ${protocolId} passed ${passed}/${gates.length} promotion gates.`
+      : `${assetId} ${protocolId} passed ${passed}/${gates.length} gates; blocked by ${weakestGate?.label || 'unknown gate'}.`
+  };
+}
+
 // ── Evaluator class ────────────────────────────────────────────────────────
 
 const LEDGER_PATH = path.join(process.cwd(), 'SOMA', 'strategy-ledger.json');
 const PLAYBOOK_PATH = path.join(process.cwd(), 'SOMA', 'mission-control-playbook.json');
 const GRADUATION_THRESHOLD = 0.70; // composite score to graduate to Mission Control
 const EPISODES_TO_GRADUATE = 20;   // min episodes before eligible
+const MIN_TRADES_TO_GRADUATE = 80;  // require a real sample, not a lucky handful
+const MAX_DRAWDOWN_TO_GRADUATE = 0.18;
+const MIN_PROFIT_FACTOR_TO_GRADUATE = 1.25;
+const MIN_WIN_RATE_TO_GRADUATE = 0.52;
+const MIN_OUT_OF_SAMPLE_SCORE = 0.55;
 
 export class SimulationEvaluator {
   constructor(opts = {}) {
@@ -326,6 +441,7 @@ export class SimulationEvaluator {
         key, ...v.scores, episodes: v.episodes, trades: v.allTrades.length,
         assetId: v.assetId, protocolId: v.protocolId, graduated: v.graduated,
         evolved: !!(PROTOCOLS.find(p => p.id === v.protocolId) === undefined && v.protocolId),
+        reportCard: v.reportCard || this._entryReportCard(v.assetId, v.protocolId, v),
       }))
       .sort((a, b) => b.score - a.score);
 
@@ -335,6 +451,26 @@ export class SimulationEvaluator {
     this._status.totalTrades = Object.values(this._ledger).reduce((a, v) => a + v.allTrades.length, 0);
     this._status.evolvedProtocols = this._evolvedProtocols.length;
     this._status.combos = this._combos.length;
+  }
+
+  _correlatedAssets(assetId) {
+    return Object.entries(this._correlationMatrix[assetId] || {})
+      .filter(([, c]) => Math.abs(c) > 0.75)
+      .sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]))
+      .slice(0, 3)
+      .map(([id, c]) => ({ id, correlation: c }));
+  }
+
+  _entryReportCard(assetId, protocolId, entry) {
+    const evolvedProtocol = this._evolvedProtocols.find(p => p.id === protocolId);
+    return evaluateReportCard({
+      assetId,
+      protocolId,
+      entry,
+      correlatedWith: this._correlatedAssets(assetId),
+      isEvolved: !!evolvedProtocol,
+      parentId: evolvedProtocol?._parent || null
+    });
   }
 
   start() {
@@ -509,7 +645,9 @@ export class SimulationEvaluator {
       batchResults.push({ key, assetId, protocolId, ...entry.scores, episodes: entry.episodes });
 
       // Check graduation
-      if (!entry.graduated && entry.episodes >= EPISODES_TO_GRADUATE && entry.scores.score >= GRADUATION_THRESHOLD) {
+      entry.reportCard = this._entryReportCard(assetId, protocolId, entry);
+
+      if (!entry.graduated && entry.reportCard.graduateEligible) {
         this._graduate(assetId, protocolId, entry);
       }
     }
@@ -569,19 +707,35 @@ export class SimulationEvaluator {
     };
 
     // Attach correlation context before saving
-    const correlatedWith = Object.entries(this._correlationMatrix[assetId] || {})
-      .filter(([, c]) => Math.abs(c) > 0.75)
-      .sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]))
-      .slice(0, 3)
-      .map(([id, c]) => ({ id, correlation: c }));
+    const correlatedWith = this._correlatedAssets(assetId);
     if (correlatedWith.length) playbookEntry.correlatedWith = correlatedWith;
 
     const isEvolved = !!this._evolvedProtocols.find(p => p.id === protocolId);
     const parentId = isEvolved ? (this._evolvedProtocols.find(p => p.id === protocolId)?._parent) : null;
     if (isEvolved) { playbookEntry.evolved = true; playbookEntry.evolvedFrom = parentId; }
 
+    playbookEntry.reportCard = entry.reportCard || evaluateReportCard({
+      assetId,
+      protocolId,
+      entry,
+      correlatedWith,
+      isEvolved,
+      parentId
+    });
+
     this._playbook.push(playbookEntry);
     this._playbook.sort((a, b) => b.score - a.score);
+    try {
+      const evidence = marketEvidenceStore.append('simulation', {
+        action: 'strategy_graduated',
+        assetId,
+        protocolId,
+        playbookEntry
+      }, { source: 'SimulationEvaluator', symbol: assetId, strategyId: protocolId });
+      playbookEntry.evidenceId = evidence.evidenceId;
+    } catch {
+      // Do not block simulation graduation on evidence mirroring.
+    }
 
     console.log(`[SimulationEvaluator] GRADUATED: ${assetId} + ${protocolId}${isEvolved ? ` (evolved from ${parentId})` : ''} — score ${entry.scores.score.toFixed(3)}, winRate ${(entry.scores.winRate * 100).toFixed(1)}%`);
 
@@ -607,7 +761,8 @@ export class SimulationEvaluator {
         `**Composite Score:** ${entry.scores.score.toFixed(3)}`,
         `**Episodes:** ${entry.episodes} (${entry.allTrades.length} trades)`,
         `**Total P&L:** $${entry.scores.totalPnL.toFixed(2)}${corrNote}`,
-        `**Status:** GRADUATED — ready for Mission Control deployment`,
+        `**Report Card:** ${playbookEntry.reportCard.grade} (${playbookEntry.reportCard.passedGates}/${playbookEntry.reportCard.totalGates} gates)`,
+        `**Status:** GRADUATED — paper deployment candidate for Mission Control`,
       ].join('\n');
 
       this.knowledgeCurator.file('prometheus', 'strategy_validated', content, 'SimulationEvaluator')
@@ -620,7 +775,28 @@ export class SimulationEvaluator {
   }
 
   getPlaybook() {
-    return this._playbook;
+    return this._playbook.map(entry => ({
+      ...entry,
+      reportCard: entry.reportCard || evaluateReportCard({
+        assetId: entry.assetId,
+        protocolId: entry.protocolId,
+        entry: {
+          episodes: entry.episodes,
+          allTrades: Array.from({ length: entry.trades || 0 }, () => ({ pnl: 0, pnlPct: 0 })),
+          scores: {
+            score: entry.score || 0,
+            winRate: entry.winRate || 0,
+            sharpe: entry.sharpe || 0,
+            maxDrawdown: entry.maxDrawdown || 0,
+            profitFactor: entry.profitFactor || 0,
+            totalPnL: entry.totalPnL || 0
+          }
+        },
+        correlatedWith: entry.correlatedWith || [],
+        isEvolved: !!entry.evolved,
+        parentId: entry.evolvedFrom || null
+      })
+    }));
   }
 
   getLedger() {
@@ -629,6 +805,7 @@ export class SimulationEvaluator {
         assetId: e.assetId, protocolId: e.protocolId, ...e.scores,
         episodes: e.episodes, trades: e.allTrades.length, graduated: e.graduated,
         evolved: !!this._evolvedProtocols.find(p => p.id === e.protocolId),
+        reportCard: e.reportCard || this._entryReportCard(e.assetId, e.protocolId, e),
       }))
       .sort((a, b) => b.score - a.score);
   }

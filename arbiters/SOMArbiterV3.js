@@ -14,9 +14,14 @@
 
 import { SOMArbiterV2_QuadBrain } from './SOMArbiterV2_QuadBrain.js';
 import { createRequire } from 'module';
+const _req = createRequire(import.meta.url);
+const { ownerName: _ownerName } = _req('../core/SomaOwner.cjs');
 import { getQueryComplexityClassifier } from './QueryComplexityClassifier.js';
 import { ChemistryArbiter } from './ChemistryArbiter.js';
 import { AuditArbiter } from './AuditArbiter.js';
+import { ContextSearchArbiter } from './ContextSearchArbiter.js';
+import { RelationshipAuditorArbiter } from './RelationshipAuditorArbiter.js';
+import { AdversarialSelfCorrectionArbiter } from './AdversarialSelfCorrectionArbiter.js';
 import fs from 'fs';
 import path from 'path';
 const require = createRequire(import.meta.url);
@@ -58,6 +63,15 @@ export class SOMArbiterV3 extends SOMArbiterV2_QuadBrain {
     // 2.6 Initialize Audit Layer
     this._initializeAudit(opts);
 
+    // 2.7 Initialize Context Search (Hound)
+    this._initializeContextSearch(opts);
+
+    // 2.8 Initialize Relationship Auditor (Causal Graph)
+    this._initializeRelationshipAuditor(opts);
+
+    // 2.9 Initialize Red Team (Self-Correction)
+    this._initializeRedTeam(opts);
+
     // 3. Initialize Triage Layer (Amygdala Gate)
     this.triage = getQueryComplexityClassifier();
 
@@ -68,7 +82,7 @@ export class SOMArbiterV3 extends SOMArbiterV2_QuadBrain {
     this.limbicState = _savedLimbic.limbicState || { dopamine: 0.5, cortisol: 0.1, oxytocin: 0.5, serotonin: 0.5 };
 
     // 5. NARRATIVE SCRATCHPAD (Stream of Consciousness) — persisted across restarts
-    this.internalNarrative = _savedLimbic.internalNarrative || "I am SOMA, a cognitive operating system for Barry. I reason, reflect, and assist — but I only act on external systems (email, files, browser, computer) when Barry explicitly asks me to. I never autonomously access private data.";
+    this.internalNarrative = _savedLimbic.internalNarrative || `I am SOMA, a cognitive operating system for ${_ownerName()}. I reason, reflect, and assist — but I only act on external systems (email, files, browser, computer) when ${_ownerName()} explicitly asks me to. I never autonomously access private data.`;
     this.longTermNarrative = [];
 
     console.log(`[${this.name}] 🧠 SOMA V3 INITIALIZED`);
@@ -312,6 +326,78 @@ Think strategically — long-term consequences, goal alignment, execution paths.
       });
     } catch (e) {
       console.error('[SOMArbiterV3] Failed to register audit tool:', e.message);
+    }
+  }
+
+  _initializeContextSearch(opts) {
+    this.hound = new ContextSearchArbiter({ system: this });
+    this.hound.initialize().catch(() => {});
+
+    // Register Tool
+    try {
+      const toolRegistry = require('../core/ToolRegistry.js').default;
+      toolRegistry.registerTool({
+        name: 'justify_discrepancy',
+        description: "Autonomously searches local archives (emails, Slack, vault) to find a justification or explanation for a financial discrepancy.",
+        parameters: {
+          type: 'object',
+          properties: {
+            discrepancyText: { type: 'string', description: 'Description of the discrepancy found' },
+            targetVendor: { type: 'string', description: 'The vendor associated with the transaction' }
+          },
+          required: ['discrepancyText']
+        },
+        execute: async (args) => this.hound.resolveDiscrepancy(args.discrepancyText, args.targetVendor)
+      });
+    } catch (e) {
+      console.error('[SOMArbiterV3] Failed to register hound tool:', e.message);
+    }
+  }
+
+  _initializeRelationshipAuditor(opts) {
+    this.relationshipAuditor = new RelationshipAuditorArbiter({ system: this });
+    this.relationshipAuditor.initialize().catch(() => {});
+
+    // Register Tool
+    try {
+      const toolRegistry = require('../core/ToolRegistry.js').default;
+      toolRegistry.registerTool({
+        name: 'audit_relationships',
+        description: "Audits the causal knowledge graph to find suspicious relationship patterns (Triangles of Fraud) for a specific entity.",
+        parameters: {
+          type: 'object',
+          properties: {
+            entityName: { type: 'string', description: 'Name of the vendor or employee to audit' }
+          },
+          required: ['entityName']
+        },
+        execute: async (args) => this.relationshipAuditor.auditEntityRelationships(args.entityName)
+      });
+    } catch (e) {
+      console.error('[SOMArbiterV3] Failed to register relationship auditor tool:', e.message);
+    }
+  }
+
+  _initializeRedTeam(opts) {
+    this.redTeam = new AdversarialSelfCorrectionArbiter({ system: this });
+    this.redTeam.initialize().catch(() => {});
+
+    // Register Tool
+    try {
+      const toolRegistry = require('../core/ToolRegistry.js').default;
+      toolRegistry.registerTool({
+        name: 'run_red_team_session',
+        description: "Initiates an adversarial stress-test against SOMA's internal logic to identify and patch vulnerabilities autonomously.",
+        parameters: {
+          type: 'object',
+          properties: {
+            target: { type: 'string', description: 'The process or arbiter to stress-test' }
+          }
+        },
+        execute: async (args) => this.redTeam.runRedTeamSession(args.target)
+      });
+    } catch (e) {
+      console.error('[SOMArbiterV3] Failed to register red team tool:', e.message);
     }
   }
 }

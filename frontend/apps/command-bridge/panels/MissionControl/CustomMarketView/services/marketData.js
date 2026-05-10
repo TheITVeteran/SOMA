@@ -10,6 +10,22 @@ const MOMENTUM_FACTOR = 0.95;
 let simPrice = 1000;
 let simMomentum = 0;
 
+const TIMEFRAME_MS = {
+    '1Min': 60_000,
+    '5Min': 5 * 60_000,
+    '15Min': 15 * 60_000,
+    '1H': 60 * 60_000,
+    '1D': 24 * 60 * 60_000
+};
+
+const BINANCE_INTERVALS = {
+    '1Min': '1m',
+    '5Min': '5m',
+    '15Min': '15m',
+    '1H': '1h',
+    '1D': '1d'
+};
+
 const generateSimTick = (lastPoint = undefined) => {
     const noise = (Math.random() - 0.5) * VOLATILITY_BASE;
     const regimeShift = (Math.random() - 0.5) * 0.1;
@@ -48,6 +64,26 @@ export const generateHistory = (count, startPrice = 1000) => {
     return history;
 };
 
+const normalizeBars = (bars = [], isSimulation = false) => bars
+    .map((b) => {
+        const rawTime = b.timestamp ?? b.time ?? Date.now();
+        const numericTime = Number(rawTime);
+        const parsedTime = Number.isFinite(numericTime) ? numericTime : Date.parse(rawTime);
+        const timestamp = Number.isFinite(parsedTime) ? parsedTime : Date.now();
+        return {
+            ...b,
+            time: b.time ?? timestamp,
+            timestamp,
+            open: Number(b.open),
+            high: Number(b.high),
+            low: Number(b.low),
+            close: Number(b.close),
+            volume: Number(b.volume || 0),
+            isSimulation: Boolean(isSimulation || b.isSimulation || b.isMock)
+        };
+    })
+    .filter(b => Number.isFinite(b.open) && Number.isFinite(b.high) && Number.isFinite(b.low) && Number.isFinite(b.close));
+
 // ── BINANCE SYMBOL MAPPING ──
 const toBinanceSymbol = (symbol) => {
     const upper = (symbol || '').toUpperCase();
@@ -67,17 +103,20 @@ const APPROX_PRICES = {
  * Fetch real historical klines from Binance REST API.
  * Falls back to SOMA backend proxy, then to simulation.
  */
-export const getHistoricalData = async (symbol) => {
+export const getHistoricalData = async (symbol, options = {}) => {
+    const timeframe = options.timeframe || '1Min';
+    const limit = options.limit || 1000;
     const binanceSymbol = toBinanceSymbol(symbol);
+    const binanceInterval = BINANCE_INTERVALS[timeframe] || '1m';
 
     // Strategy 1: SOMA backend proxy (server-to-server, no CORS issues)
     try {
-        const res = await fetch(`/api/market/bars/${symbol}?timeframe=1Min&limit=1000`);
+        const res = await fetch(`/api/market/bars/${encodeURIComponent(symbol)}?timeframe=${encodeURIComponent(timeframe)}&limit=${encodeURIComponent(limit)}`);
         if (res.ok) {
             const data = await res.json();
             if (data.success && data.bars?.length > 0) {
-                console.log(`[MarketData] SOMA backend: ${data.bars.length} bars for ${symbol}`);
-                return data.bars.map(b => ({ ...b, isSimulation: false }));
+                console.log(`[MarketData] SOMA backend: ${data.bars.length} ${timeframe} bars for ${symbol}`);
+                return normalizeBars(data.bars, false);
             }
         }
     } catch (e) {
@@ -89,23 +128,24 @@ export const getHistoricalData = async (symbol) => {
         const controller = new AbortController();
         const timeout = setTimeout(() => controller.abort(), 4000);
         const res = await fetch(
-            `https://api.binance.com/api/v3/klines?symbol=${binanceSymbol}&interval=1m&limit=1000`,
+            `https://api.binance.com/api/v3/klines?symbol=${binanceSymbol}&interval=${binanceInterval}&limit=${limit}`,
             { signal: controller.signal }
         );
         clearTimeout(timeout);
         if (res.ok) {
             const raw = await res.json();
             if (Array.isArray(raw) && raw.length > 0) {
-                console.log(`[MarketData] Binance REST: ${raw.length} bars for ${binanceSymbol}`);
-                return raw.map(k => ({
+                console.log(`[MarketData] Binance REST: ${raw.length} ${binanceInterval} bars for ${binanceSymbol}`);
+                return normalizeBars(raw.map(k => ({
                     time: k[0],
+                    timestamp: k[0],
                     open: parseFloat(k[1]),
                     high: parseFloat(k[2]),
                     low: parseFloat(k[3]),
                     close: parseFloat(k[4]),
                     volume: parseFloat(k[5]),
                     isSimulation: false
-                }));
+                })), false);
             }
         }
     } catch (e) {
@@ -119,13 +159,15 @@ export const getHistoricalData = async (symbol) => {
     simMomentum = 0;
     const history = [];
     let lastPoint = undefined;
-    for (let i = 0; i < 1000; i++) {
+    const intervalMs = TIMEFRAME_MS[timeframe] || TIMEFRAME_MS['1Min'];
+    for (let i = 0; i < limit; i++) {
         const point = generateSimTick(lastPoint);
-        point.time = Date.now() - (1000 - i) * 60000;
+        point.time = Date.now() - (limit - i) * intervalMs;
+        point.timestamp = point.time;
         history.push(point);
         lastPoint = point;
     }
-    return history;
+    return normalizeBars(history, true);
 };
 
 /**
@@ -133,9 +175,10 @@ export const getHistoricalData = async (symbol) => {
  * Tries Binance WebSocket first, falls back to SOMA backend polling, then simulation.
  */
 export class MarketStream {
-    constructor(symbol, onTick) {
+    constructor(symbol, onTick, options = {}) {
         this.symbol = symbol;
         this.onTick = onTick;
+        this.timeframe = options.timeframe || '1Min';
         this.ws = null;
         this.intervalId = null;
         this.isReal = false;
@@ -144,10 +187,11 @@ export class MarketStream {
 
     connect() {
         const binanceSymbol = toBinanceSymbol(this.symbol).toLowerCase();
+        const binanceInterval = BINANCE_INTERVALS[this.timeframe] || '1m';
 
         // Strategy 1: Binance WebSocket (real-time klines)
         try {
-            const wsUrl = `wss://stream.binance.com:9443/ws/${binanceSymbol}@kline_1m`;
+            const wsUrl = `wss://stream.binance.com:9443/ws/${binanceSymbol}@kline_${binanceInterval}`;
             this.ws = new WebSocket(wsUrl);
 
             this.ws.onopen = () => {
@@ -208,7 +252,7 @@ export class MarketStream {
         this.intervalId = setInterval(async () => {
             if (!backendFailed) {
                 try {
-                    const res = await fetch(`/api/market/bars/${this.symbol}?timeframe=1Min&limit=2`);
+                    const res = await fetch(`/api/market/bars/${encodeURIComponent(this.symbol)}?timeframe=${encodeURIComponent(this.timeframe)}&limit=2`);
                     if (res.ok) {
                         const data = await res.json();
                         if (data.success && data.bars?.length > 0) {

@@ -73,6 +73,21 @@ const KevinInterface = () => {
     
     const [stats, setStats] = useState({});
     const [accounts, setAccounts] = useState([]);
+    const [capabilities, setCapabilities] = useState(null);
+    const [cockpit, setCockpit] = useState(null);
+    const [approvals, setApprovals] = useState([]);
+    const [trustGraph, setTrustGraph] = useState({ nodes: [], edges: [], recentDecisions: [] });
+    const [timeline, setTimeline] = useState([]);
+    const [localWatch, setLocalWatch] = useState(null);
+    const [briefing, setBriefing] = useState(null);
+    const [reputation, setReputation] = useState([]);
+    const [activeTool, setActiveTool] = useState('link');
+    const [linkUrl, setLinkUrl] = useState('');
+    const [linkResult, setLinkResult] = useState(null);
+    const [rewriteText, setRewriteText] = useState('');
+    const [rewriteResult, setRewriteResult] = useState('');
+    const [pairingSender, setPairingSender] = useState('');
+    const [pairingResult, setPairingResult] = useState(null);
 
   // Fetch Kevin Data - REAL DATA ONLY
   useEffect(() => {
@@ -80,6 +95,14 @@ const KevinInterface = () => {
       try {
         const statusRes = await fetch('/api/kevin/status');
         const logRes = await fetch('/api/kevin/scan-log');
+        const capabilitiesRes = await fetch('/api/kevin/capabilities');
+        const cockpitRes = await fetch('/api/kevin/cockpit');
+        const approvalsRes = await fetch('/api/kevin/approvals');
+        const graphRes = await fetch('/api/kevin/trust-graph');
+        const timelineRes = await fetch('/api/kevin/verdict-timeline?limit=30');
+        const localWatchRes = await fetch('/api/kevin/local-watch');
+        const briefingRes = await fetch('/api/kevin/briefing');
+        const reputationRes = await fetch('/api/kevin/reputation');
 
         if (statusRes.ok) {
           const data = await statusRes.json();
@@ -120,6 +143,50 @@ const KevinInterface = () => {
             setScanLog(data.logs);
           }
         }
+
+        if (capabilitiesRes.ok) {
+          const data = await capabilitiesRes.json();
+          if (data.success) {
+            setCapabilities(data);
+          }
+        }
+
+        if (cockpitRes.ok) {
+          const data = await cockpitRes.json();
+          if (data.success) {
+            setCockpit(data);
+          }
+        }
+
+        if (approvalsRes.ok) {
+          const data = await approvalsRes.json();
+          if (data.success) setApprovals(data.approvals || []);
+        }
+
+        if (graphRes.ok) {
+          const data = await graphRes.json();
+          if (data.success) setTrustGraph({ nodes: data.nodes || [], edges: data.edges || [], recentDecisions: data.recentDecisions || [] });
+        }
+
+        if (timelineRes.ok) {
+          const data = await timelineRes.json();
+          if (data.success) setTimeline(data.events || []);
+        }
+
+        if (localWatchRes.ok) {
+          const data = await localWatchRes.json();
+          if (data.success) setLocalWatch(data);
+        }
+
+        if (briefingRes.ok) {
+          const data = await briefingRes.json();
+          if (data.success) setBriefing(data);
+        }
+
+        if (reputationRes.ok) {
+          const data = await reputationRes.json();
+          if (data.success) setReputation(data.reputation || []);
+        }
       } catch (e) {
         console.error("Kevin connection failed", e);
       }
@@ -133,6 +200,21 @@ const KevinInterface = () => {
 
     return () => clearInterval(interval);
   }, [isKevinThinking]); // Removed isOnline from dependency so it runs always
+
+  useEffect(() => {
+    const onKeyDown = (event) => {
+      if (event.target?.tagName === 'INPUT' || event.target?.tagName === 'TEXTAREA') return;
+      const key = event.key.toLowerCase();
+      if (key === 'v') setActiveTool('link');
+      if (key === 'a') setActiveTool('approvals');
+      if (key === 'r') setActiveTool('timeline');
+      if (key === 'b') setActiveTool('pairing');
+      if (key === 't') setActiveTool('trust');
+      if (key === 'g') setActiveTool('graph');
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
 
   // Handle Kevin Chat
   const handleChatSubmit = async (e) => {
@@ -290,17 +372,137 @@ const KevinInterface = () => {
     }
   };
 
+  const capabilityBadges = [
+    { id: 'guard', label: 'Guard', active: capabilities?.surfaces?.operatorControl },
+    { id: 'verdicts', label: 'Verdicts', active: capabilities?.surfaces?.evidenceFirstVerdicts },
+    { id: 'approval', label: 'Approval Gate', active: capabilities?.surfaces?.approvalGate },
+    { id: 'trust', label: 'Trust Graph', active: capabilities?.surfaces?.trustGraph?.people },
+    { id: 'watch', label: 'Local Watch', active: capabilities?.surfaces?.localSystemWatch },
+    { id: 'mail', label: 'Mail', active: capabilities?.integrations?.email?.connected },
+  ];
+
+  const verdictTone = (verdict) => {
+    const v = String(verdict || '').toLowerCase();
+    if (v.includes('block') || v.includes('threat') || v.includes('high')) return 'text-rose-400 border-rose-500/20 bg-rose-500/10';
+    if (v.includes('caution') || v.includes('warning')) return 'text-amber-400 border-amber-500/20 bg-amber-500/10';
+    if (v.includes('allow') || v.includes('safe') || v.includes('trust')) return 'text-emerald-400 border-emerald-500/20 bg-emerald-500/10';
+    return 'text-zinc-400 border-white/10 bg-white/5';
+  };
+
+  const pendingApprovalCount = approvals.length;
+  const blockedCount = Number(stats?.threats) || cockpit?.trustGraph?.people?.blocked || 0;
+  const decisionCount = cockpit?.verdictEngine?.decisions || timeline.length || 0;
+  const trustNodeCount = trustGraph.nodes.length || ((cockpit?.trustGraph?.people?.safe || 0) + (cockpit?.trustGraph?.people?.blocked || 0));
+  const cockpitReadiness = Math.min(100, Math.round(
+    (isOnline ? 25 : 0) +
+    (usingRealEmail ? 20 : 8) +
+    (capabilities?.surfaces?.approvalGate ? 15 : 0) +
+    (capabilities?.surfaces?.trustGraph?.people ? 15 : 0) +
+    (capabilities?.surfaces?.evidenceFirstVerdicts ? 15 : 0) +
+    (localWatch?.status ? 10 : 0)
+  ));
+  const headerState = kevinMood === 'threat'
+    ? { label: 'THREAT REVIEW', tone: 'text-rose-300 border-rose-500/30 bg-rose-500/10' }
+    : kevinMood === 'scanning'
+      ? { label: 'SCANNING EDGE', tone: 'text-amber-300 border-amber-500/30 bg-amber-500/10' }
+      : isOnline
+        ? { label: 'GUARD ONLINE', tone: 'text-emerald-300 border-emerald-500/30 bg-emerald-500/10' }
+        : { label: 'OFFLINE', tone: 'text-zinc-500 border-white/10 bg-white/5' };
+  const topSignals = [
+    { label: 'Readiness', value: `${cockpitReadiness}%`, icon: Shield, tone: 'text-emerald-300', detail: usingRealEmail ? 'email edge connected' : 'local mode' },
+    { label: 'Approvals', value: pendingApprovalCount, icon: Lock, tone: pendingApprovalCount ? 'text-amber-300' : 'text-zinc-300', detail: pendingApprovalCount ? 'needs operator' : 'clear' },
+    { label: 'Trust Nodes', value: trustNodeCount, icon: Network, tone: 'text-cyan-300', detail: `${cockpit?.trustGraph?.people?.safe || 0} safe / ${cockpit?.trustGraph?.people?.blocked || 0} blocked` },
+    { label: 'Verdicts', value: decisionCount, icon: Activity, tone: 'text-blue-300', detail: `${blockedCount} blocked` }
+  ];
+
+  const inspectLink = async () => {
+    if (!linkUrl.trim()) return;
+    setIsKevinThinking(true);
+    try {
+      const res = await fetch('/api/kevin/links/inspect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: linkUrl.trim() })
+      });
+      const data = await res.json();
+      setLinkResult(data);
+    } catch (error) {
+      setLinkResult({ success: false, error: error.message });
+    } finally {
+      setIsKevinThinking(false);
+    }
+  };
+
+  const rewriteAsUser = async () => {
+    if (!rewriteText.trim()) return;
+    setIsKevinThinking(true);
+    try {
+      const res = await fetch('/api/kevin/rewrite-user-style', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: rewriteText.trim(), guidance: 'keep it concise and natural' })
+      });
+      const data = await res.json();
+      setRewriteResult(data.rewritten || data.error || '');
+    } catch (error) {
+      setRewriteResult(error.message);
+    } finally {
+      setIsKevinThinking(false);
+    }
+  };
+
+  const createPairing = async () => {
+    if (!pairingSender.trim()) return;
+    setIsKevinThinking(true);
+    try {
+      const res = await fetch('/api/kevin/pairing/challenge', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sender: pairingSender.trim(), metadata: { source: 'command_bridge' } })
+      });
+      setPairingResult(await res.json());
+    } catch (error) {
+      setPairingResult({ success: false, error: error.message });
+    } finally {
+      setIsKevinThinking(false);
+    }
+  };
+
   return (
-    <div className="h-full flex flex-col bg-[#09090b] text-zinc-200 font-sans p-6 rounded-xl border border-white/5 relative overflow-hidden">
+    <div className="h-full flex flex-col bg-[#09090b] text-zinc-200 font-sans p-5 rounded-xl border border-white/5 relative overflow-hidden">
       <style>{`
         @keyframes slowWobble {
           0%, 100% { transform: rotate(-3deg) translateY(0px); }
           50% { transform: rotate(3deg) translateY(-2px); }
         }
+        @keyframes kevinSweep {
+          0% { transform: translateX(-120%); opacity: 0; }
+          12% { opacity: .45; }
+          45% { opacity: .12; }
+          100% { transform: translateX(140%); opacity: 0; }
+        }
         .kevin-wobble {
           animation: slowWobble 6s ease-in-out infinite;
         }
+        .kevin-sweep::after {
+          content: "";
+          position: absolute;
+          inset: 0;
+          background: linear-gradient(90deg, transparent, rgba(34,211,238,.14), transparent);
+          animation: kevinSweep 4.5s ease-in-out infinite;
+          pointer-events: none;
+        }
+        .kevin-glass {
+          background: linear-gradient(145deg, rgba(24,24,27,.86), rgba(9,9,11,.68));
+          box-shadow: inset 0 1px 0 rgba(255,255,255,.04), 0 18px 40px rgba(0,0,0,.22);
+        }
+        .kevin-chip {
+          background: rgba(255,255,255,.045);
+          border: 1px solid rgba(255,255,255,.075);
+        }
       `}</style>
+      <div className="absolute inset-0 pointer-events-none opacity-40 bg-[linear-gradient(rgba(255,255,255,.035)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,.035)_1px,transparent_1px)] bg-[size:42px_42px]" />
+      <div className="absolute inset-x-0 top-0 h-48 pointer-events-none bg-[linear-gradient(180deg,rgba(14,165,233,.10),transparent)]" />
 
       {showSettings && (
         <div className="absolute inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
@@ -964,47 +1166,86 @@ const KevinInterface = () => {
       )}
 
       {/* Header Area */}
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center space-x-4">
-          <div className="relative">
-            <div className={`w-16 h-16 rounded-full bg-zinc-800 border-2 overflow-hidden flex items-center justify-center transition-all duration-500 ${isOnline ? (kevinMood === 'threat' ? 'border-rose-500 shadow-[0_0_15px_rgba(244,63,94,0.4)]' : 'border-fuchsia-500 shadow-[0_0_15px_rgba(16,185,129,0.3)]') : 'border-zinc-700 opacity-50 grayscale'}`}>
-              <img
-                src="/kevin_icon.png"
-                alt="Kevin"
-                className="w-full h-full object-cover kevin-wobble"
-                onError={(e) => { e.target.src = '/kevin_profile.ico'; }}
-              />
+      <div className="relative z-10 kevin-glass kevin-sweep overflow-hidden rounded-xl border border-white/10 p-4 mb-4">
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex items-center gap-4 min-w-0">
+            <div className="relative shrink-0">
+              <div className={`w-20 h-20 rounded-xl bg-zinc-900 border overflow-hidden flex items-center justify-center transition-all duration-500 ${isOnline ? (kevinMood === 'threat' ? 'border-rose-500/60 shadow-[0_0_26px_rgba(244,63,94,0.25)]' : 'border-emerald-500/50 shadow-[0_0_26px_rgba(16,185,129,0.16)]') : 'border-zinc-700 opacity-60 grayscale'}`}>
+                <img
+                  src="/kevin_icon.png"
+                  alt="Kevin"
+                  className="w-full h-full object-cover kevin-wobble"
+                  onError={(e) => { e.target.src = '/kevin_profile.ico'; }}
+                />
+              </div>
+              <div className={`absolute -bottom-1 -right-1 px-2 py-1 rounded-md border text-[8px] font-bold uppercase tracking-widest ${headerState.tone}`}>
+                {isOnline ? 'LIVE' : 'IDLE'}
+              </div>
             </div>
-            {isOnline && <div className={`absolute bottom-0 right-0 w-4 h-4 rounded-full border-2 border-[#09090b] ${kevinMood === 'threat' ? 'bg-rose-500 animate-pulse' : kevinMood === 'scanning' ? 'bg-amber-500 animate-bounce' : 'bg-fuchsia-500'}`} />}
-          </div>
-          <div>
-            <h2 className="text-lg font-bold text-white tracking-tight">K.E.V.I.N.</h2>
-            <div className="text-xs text-zinc-500 mb-1">Knowledge Engine with Variable Inner Narratives</div>
-            <div className="flex items-center space-x-2">
-              <div className={`w-1.5 h-1.5 rounded-full ${isOnline ? 'bg-fuchsia-500' : 'bg-zinc-600'}`} />
-              <span className="text-[10px] font-mono text-zinc-400 uppercase tracking-widest">
-                {isOnline ? (usingRealEmail ? `GMAIL LINK ACTIVE // ${kevinMood.toUpperCase()}` : `SYSTEM ${kevinMood.toUpperCase()}`) : 'OFFLINE'}
-              </span>
+            <div className="min-w-0">
+              <div className="flex flex-wrap items-center gap-2 mb-1">
+                <h2 className="text-2xl font-black text-white tracking-tight leading-none">K.E.V.I.N.</h2>
+                <span className={`px-2 py-1 rounded-md border text-[9px] font-bold uppercase tracking-widest ${headerState.tone}`}>{headerState.label}</span>
+              </div>
+              <div className="text-xs text-zinc-400 mb-2">Operator Guard / Personal Security Cockpit</div>
+              <div className="flex flex-wrap gap-1.5 max-w-2xl">
+                {capabilityBadges.map(capability => (
+                  <span
+                    key={capability.id}
+                    className={`px-2.5 py-1 rounded-md border text-[9px] font-bold uppercase tracking-wider ${
+                      capability.active
+                        ? 'bg-emerald-500/10 border-emerald-500/25 text-emerald-300'
+                        : 'bg-zinc-950/70 border-white/5 text-zinc-600'
+                    }`}
+                  >
+                    {capability.label}
+                  </span>
+                ))}
+              </div>
+              {cockpit && (
+                <div className="mt-3 flex flex-wrap gap-2 text-[10px] text-zinc-500 font-mono uppercase tracking-wider">
+                  <span className="kevin-chip rounded-md px-2 py-1">mode {usingRealEmail ? 'edge email' : 'local watch'}</span>
+                  <span className="kevin-chip rounded-md px-2 py-1">autonomy {cockpit.autonomy?.mode || 'guarded'}</span>
+                  <span className="kevin-chip rounded-md px-2 py-1">evidence {cockpit.verdictEngine?.evidenceTypes?.length || 0} types</span>
+                </div>
+              )}
             </div>
           </div>
-        </div>
-        <div className="flex items-center space-x-3">
+          <div className="flex items-center space-x-3 shrink-0">
           <button
             onClick={() => setShowSettings(true)}
-            className="p-3 bg-white/5 border border-white/10 hover:bg-white/10 rounded-xl transition-colors group"
+            className="p-3 bg-white/5 border border-white/10 hover:bg-white/10 rounded-lg transition-colors group"
+            title="Kevin settings"
           >
             <Settings className="w-5 h-5 text-zinc-400 group-hover:text-white" />
           </button>
           <button
             onClick={togglePower}
-            className={`flex items-center space-x-3 px-6 py-3 rounded-xl font-bold transition-all border ${isOnline
+            className={`flex items-center space-x-3 px-5 py-3 rounded-lg font-bold transition-all border ${isOnline
               ? 'bg-zinc-800/50 text-zinc-400 border-white/5 hover:bg-zinc-800'
-              : 'bg-fuchsia-500/10 text-fuchsia-400 border-fuchsia-500/20 hover:bg-fuchsia-500/20'
+              : 'bg-emerald-500/10 text-emerald-300 border-emerald-500/25 hover:bg-emerald-500/20'
               }`}
           >
             <Power className="w-5 h-5" />
             <span className="text-xs uppercase tracking-widest">{isOnline ? 'Disengage' : 'Wake Kevin'}</span>
           </button>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-4 gap-3 mt-4">
+          {topSignals.map(signal => {
+            const Icon = signal.icon;
+            return (
+              <div key={signal.label} className="kevin-chip rounded-lg p-3 min-w-0">
+                <div className="flex items-center justify-between gap-2 mb-2">
+                  <span className="text-[9px] text-zinc-500 font-bold uppercase tracking-widest truncate">{signal.label}</span>
+                  <Icon className={`w-4 h-4 ${signal.tone}`} />
+                </div>
+                <div className={`text-2xl font-mono leading-none ${signal.tone}`}>{signal.value}</div>
+                <div className="text-[10px] text-zinc-600 mt-1 truncate">{signal.detail}</div>
+              </div>
+            );
+          })}
         </div>
       </div>
 
@@ -1014,154 +1255,294 @@ const KevinInterface = () => {
       </div>
 
       {/* Main Content Grid */}
-      <div className={`grid grid-cols-12 gap-6 flex-1 min-h-0 transition-opacity duration-500 ${isOnline ? 'opacity-100' : 'opacity-25 pointer-events-none'}`}>
+      <div className={`relative z-10 grid grid-cols-12 gap-4 flex-1 min-h-0 transition-opacity duration-500 ${isOnline ? 'opacity-100' : 'opacity-25 pointer-events-none'}`}>
 
-        {/* LEFT COLUMN: Stats (3 cols) */}
-        <div className="col-span-3 flex flex-col gap-4">
-          <div className="bg-[#151518]/60 p-4 rounded-xl border border-white/5">
-            <div className="text-zinc-600 text-[10px] font-bold uppercase tracking-widest mb-1">Scanned</div>
-            <div className="text-2xl font-mono text-white">{(Number(stats?.scanned) || 0).toLocaleString()}</div>
+        <div className="col-span-3 flex flex-col gap-4 min-h-0">
+          <div className="grid grid-cols-2 gap-3">
+            {[
+              ['Scanned', (Number(stats?.scanned) || 0).toLocaleString(), 'text-white'],
+              ['Blocked', Number(stats?.threats) || 0, 'text-rose-400'],
+              ['Approvals', approvals.length, 'text-amber-400'],
+              ['Decisions', cockpit?.verdictEngine?.decisions || 0, 'text-emerald-400']
+            ].map(([label, value, tone]) => (
+              <div key={label} className="kevin-glass p-3 rounded-lg border border-white/10">
+                <div className="text-zinc-600 text-[9px] font-bold uppercase tracking-widest mb-1">{label}</div>
+                <div className={`text-xl font-mono ${tone}`}>{value}</div>
+              </div>
+            ))}
           </div>
 
-          <div className="bg-[#151518]/60 p-4 rounded-xl border border-white/5">
-            <div className="text-zinc-600 text-[10px] font-bold uppercase tracking-widest mb-1">Blocked</div>
-            <div className="text-2xl font-mono text-rose-400">{Number(stats?.threats) || 0}</div>
-          </div>
-
-          <div className="bg-[#151518]/60 p-4 rounded-xl border border-white/5 relative overflow-hidden group">
-            <div className="absolute inset-0 bg-blue-500/5 group-hover:bg-blue-500/10 transition-colors" />
-            <div className="flex justify-between items-start mb-2 relative z-10">
-              <div className="text-zinc-400 text-[10px] font-bold uppercase tracking-widest leading-tight">Global<br />Intel</div>
-              <Globe className={`w-4 h-4 ${stats?.hiveMind?.active ? 'text-blue-400 animate-pulse' : 'text-zinc-600'}`} />
+          <div className="kevin-glass rounded-lg border border-white/10 p-4">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-widest flex items-center gap-2"><Bell className="w-4 h-4 text-amber-400" /> Briefing</h3>
+              <span className={`px-2 py-0.5 rounded border text-[9px] uppercase ${verdictTone(localWatch?.status)}`}>{localWatch?.status || 'idle'}</span>
             </div>
-            <div className="relative z-10">
-              <div className="text-xl font-mono text-blue-400 mb-1">{(stats?.hiveMind?.sharedThreats || 0).toLocaleString()}</div>
-            </div>
-          </div>
-
-          <div className="flex-1 bg-[#151518]/60 rounded-xl border border-white/5 p-4 flex flex-col overflow-hidden min-h-[150px]">
-            <div className="flex justify-between items-center mb-3">
-              <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-widest">Watchlist</h3>
-              <span className="text-[9px] bg-fuchsia-500/10 text-fuchsia-400 px-1.5 py-0.5 rounded-full font-bold uppercase border border-fuchsia-500/20">SECURE</span>
-            </div>
-            <div className="space-y-2 overflow-y-auto custom-scrollbar flex-1 pr-1">
-              {accounts.map(acc => (
-                <div key={acc.id} className="p-2 bg-black/20 rounded-lg border border-white/5 flex items-center justify-between group hover:border-white/10 transition-colors">
-                  <div className="flex items-center space-x-2 overflow-hidden">
-                    <Mail className="w-3 h-3 text-zinc-600 flex-shrink-0" />
-                    <div className="min-w-0">
-                      <div className="text-[10px] text-zinc-300 font-medium truncate">{acc.email}</div>
-                    </div>
-                  </div>
-                </div>
+            <div className="space-y-2">
+              {(briefing?.summary || ['Waiting for briefing data']).map((line, idx) => (
+                <div key={idx} className="text-[11px] text-zinc-400 bg-black/20 border border-white/5 rounded px-2 py-1">{line}</div>
               ))}
             </div>
           </div>
+
+          <div className="kevin-glass rounded-lg border border-white/10 p-4 flex-1 min-h-0 overflow-hidden">
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-widest flex items-center gap-2"><CheckCircle className="w-4 h-4 text-amber-400" /> Approvals</h3>
+              <button onClick={() => setActiveTool('approvals')} className="text-[9px] text-zinc-500 hover:text-white">A</button>
+            </div>
+            <div className="space-y-2 overflow-y-auto custom-scrollbar max-h-[220px] pr-1">
+              {approvals.map(item => (
+                <div key={`${item.type}-${item.id}`} className="p-2 bg-black/30 rounded border border-amber-500/10">
+                  <div className="flex justify-between gap-2">
+                    <div className="text-[11px] text-zinc-200 font-bold truncate">{item.title}</div>
+                    <span className="text-[9px] text-amber-400 uppercase">{item.type}</span>
+                  </div>
+                  <div className="text-[10px] text-zinc-500 truncate">{item.target}</div>
+                  <div className="text-[10px] text-zinc-600 mt-1">{item.recommendedAction}</div>
+                </div>
+              ))}
+              {approvals.length === 0 && <div className="py-8 text-center text-xs text-zinc-700 italic">No gated actions waiting.</div>}
+            </div>
+          </div>
         </div>
 
-        {/* MIDDLE COLUMN: Packet Analysis (5 cols) */}
-        <div className="col-span-5 bg-[#151518]/60 rounded-xl border border-white/5 p-4 flex flex-col">
-          <div className="flex justify-between items-center mb-4">
-            <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-widest flex items-center">
-              <Activity className="w-4 h-4 mr-2 text-blue-400" /> Live Analysis
-            </h3>
-            <div className="flex items-center space-x-2 text-[9px] text-zinc-500 font-mono">
-              <span className="w-1.5 h-1.5 bg-rose-500 rounded-full animate-pulse" />
-              <span>ACTIVE</span>
+        <div className="col-span-5 grid grid-rows-[1fr_1fr] gap-4 min-h-0">
+          <div className="grid grid-cols-2 gap-4 min-h-0">
+            <div className="kevin-glass rounded-lg border border-white/10 p-4 min-h-0 overflow-hidden">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-widest flex items-center gap-2"><Network className="w-4 h-4 text-emerald-400" /> Trust Graph</h3>
+                <button onClick={() => setActiveTool('graph')} className="text-[9px] text-zinc-500 hover:text-white">G</button>
+              </div>
+              <div className="grid grid-cols-2 gap-2 mb-3">
+                <div className="bg-emerald-500/10 border border-emerald-500/20 rounded p-2">
+                  <div className="text-[9px] uppercase text-emerald-500">Safe</div>
+                  <div className="text-lg font-mono text-emerald-300">{cockpit?.trustGraph?.people?.safe || 0}</div>
+                </div>
+                <div className="bg-rose-500/10 border border-rose-500/20 rounded p-2">
+                  <div className="text-[9px] uppercase text-rose-500">Blocked</div>
+                  <div className="text-lg font-mono text-rose-300">{cockpit?.trustGraph?.people?.blocked || 0}</div>
+                </div>
+              </div>
+              <div className="space-y-1 overflow-y-auto custom-scrollbar max-h-[130px]">
+                {trustGraph.nodes.filter(n => n.type === 'person' || n.type === 'domain').slice(0, 12).map(node => (
+                  <div key={node.id} className="flex items-center justify-between text-[10px] bg-black/20 rounded px-2 py-1 border border-white/5">
+                    <span className="truncate text-zinc-300">{node.label}</span>
+                    <span className={`uppercase ${node.status === 'blocked' ? 'text-rose-400' : node.status === 'safe' ? 'text-emerald-400' : 'text-zinc-600'}`}>{node.status}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="kevin-glass rounded-lg border border-white/10 p-4 min-h-0 overflow-hidden">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-widest flex items-center gap-2"><Activity className="w-4 h-4 text-blue-400" /> Verdict Timeline</h3>
+                <button onClick={() => setActiveTool('timeline')} className="text-[9px] text-zinc-500 hover:text-white">R</button>
+              </div>
+              <div className="space-y-2 overflow-y-auto custom-scrollbar max-h-[210px] pr-1">
+                {timeline.slice(0, 10).map(event => (
+                  <div key={event.id} className="p-2 bg-black/25 border border-white/5 rounded">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="text-[11px] text-zinc-300 truncate">{event.title}</div>
+                      <span className={`px-1.5 py-0.5 rounded border text-[8px] uppercase ${verdictTone(event.verdict)}`}>{event.verdict}</span>
+                    </div>
+                    <div className="text-[9px] text-zinc-600 font-mono mt-1">{event.target || event.type}</div>
+                  </div>
+                ))}
+                {timeline.length === 0 && <div className="py-8 text-center text-xs text-zinc-700 italic">No verdicts yet.</div>}
+              </div>
             </div>
           </div>
 
-          <div className="flex-1 overflow-y-auto custom-scrollbar">
-            <table className="w-full text-left border-separate border-spacing-y-1">
-              <thead className="text-[9px] text-zinc-600 font-bold uppercase tracking-widest sticky top-0 bg-[#151518] z-10">
-                <tr>
-                  <th className="pb-2 pl-2">Time</th>
-                  <th className="pb-2">Status</th>
-                  <th className="pb-2">Subject</th>
-                </tr>
-              </thead>
-              <tbody className="text-xs">
-                {scanLog.map((log) => (
-                  <tr key={log.id} className="hover:bg-white/5 transition-colors group cursor-default">
-                    <td className="py-2 pl-2 text-zinc-600 font-mono text-[10px] w-16 border-y border-white/5 border-l rounded-l-lg">{log.time.split(' ')[0]}</td>
-                    <td className="py-2 w-20 border-y border-white/5">{getStatusBadge(log.status)}</td>
-                    <td className="py-2 text-zinc-400 border-y border-white/5 border-r rounded-r-lg max-w-[120px] truncate text-[10px]">{log.subject}</td>
-                  </tr>
+          <div className="grid grid-cols-2 gap-4 min-h-0">
+            <div className="kevin-glass rounded-lg border border-white/10 p-4 min-h-0">
+              <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-widest flex items-center gap-2 mb-3"><Eye className="w-4 h-4 text-cyan-400" /> Local Watch</h3>
+              <div className="grid grid-cols-2 gap-2 mb-3">
+                <div className="bg-black/20 border border-white/5 rounded p-2">
+                  <div className="text-[9px] text-zinc-600 uppercase">Memory</div>
+                  <div className="text-sm text-zinc-300 font-mono">{localWatch?.process?.memoryMb || 0}MB</div>
+                </div>
+                <div className="bg-black/20 border border-white/5 rounded p-2">
+                  <div className="text-[9px] text-zinc-600 uppercase">Findings</div>
+                  <div className="text-sm text-zinc-300 font-mono">{localWatch?.findings?.length || 0}</div>
+                </div>
+              </div>
+              <div className="space-y-2 overflow-y-auto custom-scrollbar max-h-[125px]">
+                {(localWatch?.findings || []).map((finding, idx) => (
+                  <div key={idx} className="text-[10px] text-zinc-400 bg-black/20 border border-white/5 rounded p-2">
+                    <span className="text-amber-400 uppercase">{finding.severity}</span> {finding.detail}
+                  </div>
                 ))}
-                {scanLog.length === 0 && (
-                  <tr><td colSpan={3} className="py-12 text-center text-zinc-700 italic text-xs">System idle.</td></tr>
-                )}
-              </tbody>
-            </table>
+                {(!localWatch?.findings || localWatch.findings.length === 0) && <div className="text-xs text-zinc-700 italic text-center py-8">Local perimeter clean.</div>}
+              </div>
+            </div>
+
+            <div className="kevin-glass rounded-lg border border-white/10 p-4 min-h-0">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-widest flex items-center gap-2"><Database className="w-4 h-4 text-fuchsia-400" /> Reputation</h3>
+                <button onClick={() => setActiveTool('trust')} className="text-[9px] text-zinc-500 hover:text-white">T</button>
+              </div>
+              <div className="space-y-2 overflow-y-auto custom-scrollbar max-h-[190px]">
+                {reputation.slice(0, 8).map(row => (
+                  <div key={row.target} className="flex items-center justify-between text-[10px] bg-black/20 rounded px-2 py-1.5 border border-white/5">
+                    <span className="truncate text-zinc-300">{row.target}</span>
+                    <span className={row.confidenceTrend === 'blocked' ? 'text-rose-400' : row.confidenceTrend === 'trusted' ? 'text-emerald-400' : 'text-zinc-600'}>{row.confidenceTrend}</span>
+                  </div>
+                ))}
+                {reputation.length === 0 && <div className="text-xs text-zinc-700 italic text-center py-8">No reputation memory yet.</div>}
+              </div>
+            </div>
           </div>
         </div>
 
-        {/* RIGHT COLUMN: Chat (4 cols) - NEW */}
-        <div className="col-span-4 bg-[#0c0c0e] rounded-xl border border-white/10 flex flex-col shadow-inner overflow-hidden relative">
+        <div className="col-span-4 bg-[#0c0c0e] rounded-xl border border-white/10 flex flex-col shadow-inner overflow-hidden relative min-h-0">
           <div className="absolute inset-0 bg-[linear-gradient(transparent_50%,rgba(0,0,0,0.2)_50%)] bg-[length:100%_4px] pointer-events-none opacity-20" />
 
-          {/* Chat Header */}
           <div className="p-3 border-b border-white/5 bg-zinc-900/50 flex justify-between items-center">
             <div className="flex items-center space-x-2">
               <Terminal className={`w-4 h-4 ${isOnline ? 'text-fuchsia-400' : 'text-zinc-600'}`} />
-              <span className="text-xs font-mono font-bold text-zinc-400">SEC_UPLINK</span>
+              <span className="text-xs font-mono font-bold text-zinc-400">COCKPIT_TOOLS</span>
             </div>
-            <div className={`w-2 h-2 rounded-full ${isKevinThinking ? 'bg-amber-400 animate-ping' : 'bg-zinc-700'}`} />
+            <div className="flex gap-1 text-[9px] text-zinc-600 font-mono">
+              {['v','a','r','b','t','g'].map(k => <span key={k} className="px-1.5 py-0.5 rounded border border-white/5 bg-black/20">{k}</span>)}
+            </div>
           </div>
 
-          {/* Chat History */}
-          <div className="flex-1 overflow-y-auto custom-scrollbar p-3 space-y-3 flex flex-col-reverse">
-            {messages.length === 0 && (
-              <div className="text-center text-zinc-700 italic text-xs mt-10">
-                {isOnline ? "Link established. Kevin is listening." : "Link offline."}
-              </div>
-            )}
-
-            {/* We reverse map to show newest at bottom if using flex-col, 
-                    but standard chat is top-down. Let's use standard order.
-                    Actually, modifying the container to justify-end is better for sticky bottom. */}
-            {[...messages].reverse().map((msg, idx) => (
-              <div key={idx} className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'} animate-in fade-in slide-in-from-bottom-2 duration-300`}>
-                <div className={`max-w-[90%] rounded-lg p-2.5 text-xs ${msg.role === 'user'
-                  ? 'bg-zinc-800 text-zinc-200 border border-white/5'
-                  : 'bg-fuchsia-900/10 text-fuchsia-200 border border-fuchsia-500/20'
-                  }`}>
-                  {msg.content}
-                </div>
-                <span className="text-[9px] text-zinc-700 mt-1 uppercase font-mono">{msg.role === 'user' ? 'YOU' : 'K.E.V.I.N.'}</span>
-              </div>
+          <div className="p-3 border-b border-white/5 flex gap-1 overflow-x-auto custom-scrollbar">
+            {[
+              ['link', 'Verdict'],
+              ['approvals', 'Approvals'],
+              ['timeline', 'Timeline'],
+              ['pairing', 'Pairing'],
+              ['trust', 'Trust'],
+              ['rewrite', 'Rewrite'],
+              ['chat', 'Chat']
+            ].map(([id, label]) => (
+              <button key={id} onClick={() => setActiveTool(id)} className={`px-2 py-1 rounded border text-[10px] font-bold uppercase ${activeTool === id ? 'bg-fuchsia-500/15 text-fuchsia-300 border-fuchsia-500/30' : 'bg-black/20 text-zinc-500 border-white/5 hover:text-zinc-300'}`}>{label}</button>
             ))}
-
-            {/* Initial Greeting if empty */}
-            {messages.length === 0 && isOnline && (
-              <div className="flex flex-col items-start animate-in fade-in">
-                <div className="max-w-[90%] rounded-lg p-2.5 text-xs bg-fuchsia-900/10 text-fuchsia-200 border border-fuchsia-500/20">
-                  {quote}
-                </div>
-                <span className="text-[9px] text-zinc-700 mt-1 uppercase font-mono">K.E.V.I.N.</span>
-              </div>
-            )}
           </div>
 
-          {/* Input Area */}
-          <div className="p-3 bg-zinc-900/80 border-t border-white/5 backdrop-blur-sm">
-            <form onSubmit={handleChatSubmit} className="flex gap-2">
-              <input
-                type="text"
-                value={chatInput}
-                onChange={(e) => setChatInput(e.target.value)}
-                placeholder={isOnline ? "Type command..." : "System offline"}
-                disabled={!isOnline}
-                className="flex-1 bg-black/50 border border-white/10 rounded-lg px-3 py-2 text-xs font-mono text-fuchsia-500 placeholder-zinc-700 focus:outline-none focus:border-fuchsia-500/50 transition-colors disabled:opacity-50"
-              />
-              <button
-                type="submit"
-                disabled={!isOnline || isKevinThinking || !chatInput.trim()}
-                className="p-2 bg-fuchsia-600/20 text-fuchsia-400 border border-fuchsia-500/30 rounded-lg hover:bg-fuchsia-600/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                <Send className="w-3 h-3" />
-              </button>
-            </form>
+          <div className="flex-1 overflow-y-auto custom-scrollbar p-3 relative z-10">
+            {activeTool === 'link' && (
+              <div className="space-y-3">
+                <div className="text-xs text-zinc-400 font-bold uppercase tracking-widest">Link Detonation Lite</div>
+                <div className="flex gap-2">
+                  <input value={linkUrl} onChange={(e) => setLinkUrl(e.target.value)} placeholder="https://example.com" className="flex-1 bg-black/50 border border-white/10 rounded px-3 py-2 text-xs text-zinc-200 focus:outline-none focus:border-fuchsia-500/40" />
+                  <button onClick={inspectLink} className="px-3 py-2 bg-fuchsia-600/20 text-fuchsia-300 border border-fuchsia-500/30 rounded text-xs font-bold">Scan</button>
+                </div>
+                {linkResult && (
+                  <div className="p-3 bg-black/30 border border-white/10 rounded space-y-2">
+                    <div className="flex justify-between">
+                      <span className="text-xs text-zinc-300 truncate">{linkResult.hostname || linkResult.url || 'Result'}</span>
+                      <span className={`px-2 py-0.5 rounded border text-[9px] uppercase ${verdictTone(linkResult.verdict)}`}>{linkResult.verdict || 'error'} {linkResult.score ?? ''}</span>
+                    </div>
+                    <div className="text-[10px] text-zinc-500">{linkResult.recommendedAction || linkResult.error}</div>
+                    {(linkResult.evidence || []).map((e, idx) => <div key={idx} className="text-[10px] text-zinc-400 border border-white/5 rounded px-2 py-1">{e.type}: {e.detail}</div>)}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {activeTool === 'approvals' && (
+              <div className="space-y-2">
+                <div className="text-xs text-zinc-400 font-bold uppercase tracking-widest">Approval Queue</div>
+                {approvals.map(item => (
+                  <div key={`${item.type}-${item.id}`} className="p-3 bg-black/30 border border-amber-500/10 rounded">
+                    <div className="text-sm text-zinc-200 font-bold">{item.title}</div>
+                    <div className="text-[10px] text-zinc-500">{item.target}</div>
+                    <div className="text-[10px] text-amber-400 mt-2">{item.recommendedAction}</div>
+                  </div>
+                ))}
+                {approvals.length === 0 && <div className="text-xs text-zinc-700 italic text-center py-10">No approvals pending.</div>}
+              </div>
+            )}
+
+            {activeTool === 'timeline' && (
+              <div className="space-y-2">
+                <div className="text-xs text-zinc-400 font-bold uppercase tracking-widest">Verdict Timeline</div>
+                {timeline.map(event => (
+                  <div key={event.id} className="p-2 bg-black/30 border border-white/5 rounded">
+                    <div className="flex justify-between gap-2">
+                      <span className="text-xs text-zinc-300 truncate">{event.title}</span>
+                      <span className={`px-1.5 py-0.5 rounded border text-[8px] uppercase ${verdictTone(event.verdict)}`}>{event.verdict}</span>
+                    </div>
+                    <div className="text-[9px] text-zinc-600">{event.timestamp}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {activeTool === 'pairing' && (
+              <div className="space-y-3">
+                <div className="text-xs text-zinc-400 font-bold uppercase tracking-widest">Pairing Challenge</div>
+                <input value={pairingSender} onChange={(e) => setPairingSender(e.target.value)} placeholder="unknown@sender.com" className="w-full bg-black/50 border border-white/10 rounded px-3 py-2 text-xs text-zinc-200 focus:outline-none focus:border-fuchsia-500/40" />
+                <button onClick={createPairing} className="w-full px-3 py-2 bg-blue-600/20 text-blue-300 border border-blue-500/30 rounded text-xs font-bold uppercase">Generate Challenge</button>
+                {pairingResult && (
+                  <div className="p-3 bg-black/30 border border-white/10 rounded">
+                    <div className="text-lg text-blue-300 font-mono">{pairingResult.code || 'No Code'}</div>
+                    <div className="text-[10px] text-zinc-500">{pairingResult.message || pairingResult.error}</div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {activeTool === 'trust' && (
+              <div className="space-y-2">
+                <div className="text-xs text-zinc-400 font-bold uppercase tracking-widest">Reputation Memory</div>
+                {reputation.map(row => (
+                  <div key={row.target} className="p-2 bg-black/30 border border-white/5 rounded">
+                    <div className="flex justify-between gap-2">
+                      <span className="text-xs text-zinc-300 truncate">{row.target}</span>
+                      <span className={row.confidenceTrend === 'blocked' ? 'text-rose-400' : row.confidenceTrend === 'trusted' ? 'text-emerald-400' : 'text-zinc-600'}>{row.confidenceTrend}</span>
+                    </div>
+                    <div className="text-[9px] text-zinc-600">safe {row.safeInteractions} / suspicious {row.suspiciousInteractions} / reversals {row.reversals}</div>
+                  </div>
+                ))}
+                {reputation.length === 0 && <div className="text-xs text-zinc-700 italic text-center py-10">No reputation memory yet.</div>}
+              </div>
+            )}
+
+            {activeTool === 'graph' && (
+              <div className="space-y-2">
+                <div className="text-xs text-zinc-400 font-bold uppercase tracking-widest">Graph Nodes</div>
+                {trustGraph.nodes.map(node => (
+                  <div key={node.id} className="flex items-center justify-between p-2 bg-black/30 border border-white/5 rounded text-xs">
+                    <span className="text-zinc-300 truncate">{node.label}</span>
+                    <span className="text-[9px] text-zinc-600 uppercase">{node.type}:{node.status}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {activeTool === 'rewrite' && (
+              <div className="space-y-3">
+                <div className="text-xs text-zinc-400 font-bold uppercase tracking-widest">Operator Style Rewrite</div>
+                <textarea value={rewriteText} onChange={(e) => setRewriteText(e.target.value)} placeholder="Paste draft text..." className="w-full min-h-[110px] bg-black/50 border border-white/10 rounded px-3 py-2 text-xs text-zinc-200 focus:outline-none focus:border-fuchsia-500/40" />
+                <button onClick={rewriteAsUser} className="w-full px-3 py-2 bg-emerald-600/20 text-emerald-300 border border-emerald-500/30 rounded text-xs font-bold uppercase">Rewrite In My Style</button>
+                {rewriteResult && <div className="p-3 bg-black/30 border border-white/10 rounded text-xs text-zinc-300 whitespace-pre-wrap">{rewriteResult}</div>}
+              </div>
+            )}
+
+            {activeTool === 'chat' && (
+              <div className="flex flex-col h-full min-h-[360px]">
+                <div className="flex-1 overflow-y-auto custom-scrollbar space-y-3">
+                  {messages.length === 0 && isOnline && (
+                    <div className="flex flex-col items-start animate-in fade-in">
+                      <div className="max-w-[90%] rounded-lg p-2.5 text-xs bg-fuchsia-900/10 text-fuchsia-200 border border-fuchsia-500/20">{quote}</div>
+                      <span className="text-[9px] text-zinc-700 mt-1 uppercase font-mono">K.E.V.I.N.</span>
+                    </div>
+                  )}
+                  {messages.map((msg, idx) => (
+                    <div key={idx} className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
+                      <div className={`max-w-[90%] rounded-lg p-2.5 text-xs ${msg.role === 'user' ? 'bg-zinc-800 text-zinc-200 border border-white/5' : 'bg-fuchsia-900/10 text-fuchsia-200 border border-fuchsia-500/20'}`}>{msg.content}</div>
+                      <span className="text-[9px] text-zinc-700 mt-1 uppercase font-mono">{msg.role === 'user' ? 'YOU' : 'K.E.V.I.N.'}</span>
+                    </div>
+                  ))}
+                </div>
+                <form onSubmit={handleChatSubmit} className="flex gap-2 mt-3">
+                  <input type="text" value={chatInput} onChange={(e) => setChatInput(e.target.value)} placeholder={isOnline ? "Type command..." : "System offline"} disabled={!isOnline} className="flex-1 bg-black/50 border border-white/10 rounded-lg px-3 py-2 text-xs font-mono text-fuchsia-500 placeholder-zinc-700 focus:outline-none focus:border-fuchsia-500/50 disabled:opacity-50" />
+                  <button type="submit" disabled={!isOnline || isKevinThinking || !chatInput.trim()} className="p-2 bg-fuchsia-600/20 text-fuchsia-400 border border-fuchsia-500/30 rounded-lg hover:bg-fuchsia-600/30 disabled:opacity-50"><Send className="w-3 h-3" /></button>
+                </form>
+              </div>
+            )}
           </div>
         </div>
 

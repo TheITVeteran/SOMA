@@ -1,11 +1,49 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { MarketStream, getHistoricalData } from './services/marketData';
+import { getHistoricalData } from './services/marketData';
 import { analyzeMarketAtmosphere } from './services/geminiService';
 import TerrainView from './components/TerrainView';
 import CandleView from './components/CandleView';
-import { Activity, Wifi, WifiOff, Cpu, BarChart2, Maximize2, Globe } from 'lucide-react';
+import { Activity, Wifi, WifiOff, Cpu, BarChart2, Maximize2, Globe, RefreshCw } from 'lucide-react';
 
 const MAX_HISTORY = 2000;
+
+const MARKET_RANGES = [
+    { id: '1H', label: 'Hour', short: '1H', timeframe: '1Min', limit: 60, pollMs: 5000 },
+    { id: '1D', label: 'Day', short: '1D', timeframe: '5Min', limit: 288, pollMs: 8000 },
+    { id: '1W', label: 'Week', short: '1W', timeframe: '1H', limit: 168, pollMs: 30000 },
+    { id: '1Y', label: 'Year', short: '1Y', timeframe: '1D', limit: 365, pollMs: 60000 }
+];
+
+const normalizeMarketBars = (bars = []) => bars
+    .map((bar) => {
+        const rawTime = bar.timestamp ?? bar.time ?? Date.now();
+        const numericTime = Number(rawTime);
+        const parsedTime = Number.isFinite(numericTime) ? numericTime : Date.parse(rawTime);
+        const timestamp = Number.isFinite(parsedTime) ? parsedTime : Date.now();
+        return {
+            ...bar,
+            timestamp,
+            time: bar.time ?? timestamp,
+            open: Number(bar.open),
+            high: Number(bar.high),
+            low: Number(bar.low),
+            close: Number(bar.close),
+            volume: Number(bar.volume || 0),
+            isSimulation: Boolean(bar.isSimulation || bar.isMock)
+        };
+    })
+    .filter(bar => Number.isFinite(bar.open) && Number.isFinite(bar.high) && Number.isFinite(bar.low) && Number.isFinite(bar.close));
+
+const mergeLatestBars = (prev, latestBars, limit) => {
+    const latest = normalizeMarketBars(latestBars);
+    if (!latest.length) return prev;
+
+    const byTime = new Map(prev.map(bar => [bar.timestamp ?? bar.time, bar]));
+    latest.forEach(bar => byTime.set(bar.timestamp ?? bar.time, bar));
+    return Array.from(byTime.values())
+        .sort((a, b) => (a.timestamp ?? a.time) - (b.timestamp ?? b.time))
+        .slice(-Math.min(limit, MAX_HISTORY));
+};
 
 // --- FALLBACK ANALYSIS ENGINE ---
 const generateFallbackAnalysis = (data) => {
@@ -142,69 +180,151 @@ const ParticleSystem = ({ width, height }) => {
     return <canvas ref={canvasRef} className="absolute inset-0 pointer-events-none" />;
 };
 
-export default function CustomMarketView({ selectedSymbol, data: externalData, dataSource = 'REAL', activeProtocol = 'UNKNOWN' }) {
+export default function CustomMarketView({ selectedSymbol, data: externalData, dataSource = 'REAL', activeProtocol = 'UNKNOWN', onDataStatus, onInterpretAnalysis }) {
     // Map selectedSymbol (internal SOMA prop) to activeAsset in this component
     const activeAsset = selectedSymbol || 'btcusdt';
 
     const [internalData, setInternalData] = useState([]);
+    const [rangeId, setRangeId] = useState('1D');
     const [viewMode, setViewMode] = useState('TERRAIN');
     const [analysis, setAnalysis] = useState(null);
     const [isThinking, setIsThinking] = useState(false);
     const [isConnected, setIsConnected] = useState(false);
+    const [isLoadingData, setIsLoadingData] = useState(false);
+    const [marketQuality, setMarketQuality] = useState(null);
+    const [internalDataSource, setInternalDataSource] = useState(dataSource);
+    const [fallbackReason, setFallbackReason] = useState(null);
+    const [refreshNonce, setRefreshNonce] = useState(0);
 
     const containerRef = useRef(null);
+    const externalFallbackRef = useRef([]);
     const [dims, setDims] = useState({ width: 0, height: 0 });
+    const activeRange = useMemo(
+        () => MARKET_RANGES.find(range => range.id === rangeId) || MARKET_RANGES[1],
+        [rangeId]
+    );
 
-    // Use external data if provided, otherwise internal
-    const data = (externalData && externalData.length > 0) ? externalData : internalData;
+    const externalNormalized = useMemo(() => normalizeMarketBars(externalData || []), [externalData]);
+    const data = internalData.length > 0 ? internalData : externalNormalized;
+    const effectiveDataSource = data.some(bar => bar.isSimulation) ? 'SIMULATION' : (internalDataSource || dataSource);
+    const current = data[data.length - 1];
 
-    // --- DATA STREAM HANDLING (Only if no external data) ---
     useEffect(() => {
-        if (externalData && externalData.length > 0) {
-            setIsConnected(true); // Assume external source is connected
-            return;
-        }
+        externalFallbackRef.current = externalNormalized;
+    }, [externalNormalized]);
 
+    useEffect(() => {
+        if (!onDataStatus) return;
+        const lastTimestamp = current?.timestamp || current?.time || null;
+        const parsed = typeof lastTimestamp === 'number' ? lastTimestamp : Date.parse(lastTimestamp);
+        const ageSec = Number.isFinite(parsed) ? Math.max(0, Math.round((Date.now() - parsed) / 1000)) : null;
+        onDataStatus({
+            symbol: activeAsset,
+            source: effectiveDataSource,
+            rangeId,
+            timeframe: activeRange.timeframe,
+            barCount: data.length,
+            lastDataTime: Number.isFinite(parsed) ? parsed : Date.now(),
+            ageSec: ageSec ?? 0,
+            quality: marketQuality,
+            connected: isConnected,
+            fallbackReason
+        });
+    }, [onDataStatus, activeAsset, effectiveDataSource, rangeId, activeRange.timeframe, data.length, current?.timestamp, current?.time, marketQuality, isConnected, fallbackReason]);
+
+    // --- RANGE-AWARE REAL DATA HANDLING ---
+    useEffect(() => {
         setInternalData([]); // Clear data on switch
         setAnalysis(null);
         setIsConnected(false);
+        setIsLoadingData(true);
+        setMarketQuality(null);
+        setInternalDataSource('CONNECTING');
+        setFallbackReason(null);
 
-        let stream = null;
         let isMounted = true;
+        let intervalId = null;
 
-        const initData = async () => {
-            // 1. Fetch History (Mocked Service)
+        const fetchBars = async (limit = activeRange.limit) => {
+            let failureReason = null;
             try {
-                const history = await getHistoricalData(activeAsset);
-                if (isMounted && history.length > 0) {
-                    setInternalData(history);
+                const res = await fetch(`/api/market/bars/${encodeURIComponent(activeAsset)}?timeframe=${encodeURIComponent(activeRange.timeframe)}&limit=${encodeURIComponent(limit)}`);
+                if (res.ok) {
+                    const payload = await res.json();
+                    if (payload.success && payload.bars?.length > 0) {
+                        return {
+                            bars: normalizeMarketBars(payload.bars),
+                            source: payload.bars.some(bar => bar.isSimulation || bar.isMock) ? 'SIMULATION' : 'REAL',
+                            quality: payload.quality || null,
+                            fallbackReason: payload.bars.some(bar => bar.isSimulation || bar.isMock) ? 'Provider returned simulated bars' : null
+                        };
+                    }
+                    failureReason = payload.error || 'Backend returned no bars';
+                } else {
+                    failureReason = `Backend bars request failed (${res.status})`;
                 }
-            } catch (e) {
-                console.warn("History fetch failed:", e);
+            } catch (error) {
+                failureReason = error.message;
+                console.warn(`[MarketView] Backend bars failed for ${activeAsset}:`, error.message);
             }
 
-            // 2. Connect Stream (Mocked Service)
-            stream = new MarketStream(activeAsset, (point) => {
-                if (!isMounted) return;
-                setIsConnected(true);
-                setInternalData(prev => {
-                    const lastClose = prev.length > 0 ? prev[prev.length - 1].close : point.open;
-                    point.momentum = point.close - lastClose;
-
-                    const newHistory = [...prev, point];
-                    if (newHistory.length > MAX_HISTORY) newHistory.shift();
-                    return newHistory;
-                });
+            const fallbackBars = await getHistoricalData(activeAsset, {
+                timeframe: activeRange.timeframe,
+                limit
             });
+            return {
+                bars: normalizeMarketBars(fallbackBars),
+                source: fallbackBars.some(bar => bar.isSimulation || bar.isMock) ? 'SIMULATION' : 'REAL',
+                quality: null,
+                fallbackReason: fallbackBars.some(bar => bar.isSimulation || bar.isMock)
+                    ? `Using simulated fallback: ${failureReason || 'market provider unavailable'}`
+                    : `Using browser fallback: ${failureReason || 'backend unavailable'}`
+            };
         };
 
-        initData();
+        const hydrateRange = async () => {
+            try {
+                const result = await fetchBars(activeRange.limit);
+                if (!isMounted) return;
+                setInternalData(result.bars.slice(-activeRange.limit));
+                setInternalDataSource(result.source);
+                setMarketQuality(result.quality);
+                setFallbackReason(result.fallbackReason || null);
+                setIsConnected(result.bars.length > 0);
+            } catch (error) {
+                if (!isMounted) return;
+                console.warn(`[MarketView] Unable to load ${activeAsset} ${activeRange.id}:`, error.message);
+                setInternalData(externalFallbackRef.current.slice(-activeRange.limit));
+                setInternalDataSource(dataSource);
+                setFallbackReason(`Using parent fallback: ${error.message}`);
+                setIsConnected(externalFallbackRef.current.length > 0);
+            } finally {
+                if (isMounted) setIsLoadingData(false);
+            }
+        };
+
+        const pollLatest = async () => {
+            try {
+                const result = await fetchBars(Math.min(3, activeRange.limit));
+                if (!isMounted) return;
+                setInternalData(prev => mergeLatestBars(prev, result.bars, activeRange.limit));
+                setInternalDataSource(result.source);
+                setMarketQuality(result.quality);
+                setFallbackReason(result.fallbackReason || null);
+                setIsConnected(result.bars.length > 0);
+            } catch (error) {
+                if (isMounted) setIsConnected(false);
+            }
+        };
+
+        hydrateRange();
+        intervalId = setInterval(pollLatest, activeRange.pollMs);
 
         return () => {
             isMounted = false;
-            if (stream) stream.close();
+            if (intervalId) clearInterval(intervalId);
         };
-    }, [activeAsset, externalData]);
+    }, [activeAsset, activeRange, dataSource, refreshNonce]);
 
     // Dimension handling
     useEffect(() => {
@@ -245,27 +365,58 @@ export default function CustomMarketView({ selectedSymbol, data: externalData, d
         try {
             // Pass activeProtocol context for adaptive analysis
             const result = await analyzeMarketAtmosphere(data, activeProtocol);
+            const localAnalysis = generateFallbackAnalysis(data);
             if (result) {
-                setAnalysis(result);
+                const mergedAnalysis = {
+                    ...localAnalysis,
+                    ...result,
+                    predictions: result.predictions?.length ? result.predictions : localAnalysis.predictions
+                };
+                setAnalysis(mergedAnalysis);
+                onInterpretAnalysis?.({
+                    analysis: mergedAnalysis,
+                    symbol: activeAsset,
+                    range: activeRange,
+                    dataSource: effectiveDataSource,
+                    quality: marketQuality,
+                    latestBar: current
+                });
             } else {
                 // Fallback if analyzeMarketAtmosphere returns null/undefined
-                const fallbackResult = generateFallbackAnalysis(data);
-                setAnalysis(fallbackResult);
+                setAnalysis(localAnalysis);
+                onInterpretAnalysis?.({
+                    analysis: localAnalysis,
+                    symbol: activeAsset,
+                    range: activeRange,
+                    dataSource: effectiveDataSource,
+                    quality: marketQuality,
+                    latestBar: current
+                });
             }
         } catch (e) {
             console.error("Analysis failed:", e);
             // On error, also use fallback analysis
             const fallbackResult = generateFallbackAnalysis(data);
             setAnalysis(fallbackResult);
+            onInterpretAnalysis?.({
+                analysis: fallbackResult,
+                symbol: activeAsset,
+                range: activeRange,
+                dataSource: effectiveDataSource,
+                quality: marketQuality,
+                latestBar: current,
+                error: e.message
+            });
         }
         setIsThinking(false);
     };
 
     // Helper values
-    const current = data[data.length - 1];
     const prevData = data[data.length - 2];
     const isUp = current && prevData ? current.close > prevData.close : true;
-    const isSimulated = dataSource === 'SIMULATION';
+    const isSimulated = effectiveDataSource === 'SIMULATION';
+    const sourceLabel = isSimulated ? 'SYNTHETIC MODEL' : effectiveDataSource === 'CONNECTING' ? 'CONNECTING' : 'LIVE FEED';
+    const latestAgeSeconds = current?.timestamp ? Math.max(0, Math.floor((Date.now() - current.timestamp) / 1000)) : null;
 
     // ALIGNMENT: Snap AI predictions to current price to prevent visual "drop off"
     const alignedAnalysis = useMemo(() => {
@@ -290,9 +441,9 @@ export default function CustomMarketView({ selectedSymbol, data: externalData, d
     const renderView = () => {
         if (dims.width === 0) return null;
         switch (viewMode) {
-            case 'TERRAIN': return <TerrainView data={data} width={dims.width} height={dims.height} predictions={alignedAnalysis?.predictions} />;
-            case 'CANDLE': return <CandleView data={data} width={dims.width} height={dims.height} predictions={alignedAnalysis?.predictions} />;
-            default: return <TerrainView data={data} width={dims.width} height={dims.height} predictions={alignedAnalysis?.predictions} />;
+            case 'TERRAIN': return <TerrainView data={data} width={dims.width} height={dims.height} predictions={alignedAnalysis?.predictions} range={activeRange} />;
+            case 'CANDLE': return <CandleView data={data} width={dims.width} height={dims.height} predictions={alignedAnalysis?.predictions} range={activeRange} />;
+            default: return <TerrainView data={data} width={dims.width} height={dims.height} predictions={alignedAnalysis?.predictions} range={activeRange} />;
         }
     };
 
@@ -323,6 +474,9 @@ export default function CustomMarketView({ selectedSymbol, data: externalData, d
                         <div className="flex items-baseline gap-2">
                             <span className={`text-xl font-mono ${isUp ? 'text-fuchsia-500 neon-glow-text' : 'text-cyan-400 neon-glow-text'} transition-colors duration-300`}>
                                 {current?.close.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) || '---'}
+                            </span>
+                            <span className="text-[9px] font-mono uppercase tracking-[0.16em] text-slate-500">
+                                {activeRange.label} / {activeRange.timeframe}
                             </span>
                         </div>
                     </div>
@@ -356,6 +510,18 @@ export default function CustomMarketView({ selectedSymbol, data: externalData, d
                             {isThinking ? '...' : 'Interpret'}
                         </span>
                     </button>
+                    <button
+                        onClick={() => {
+                            setInternalData([]);
+                            setAnalysis(null);
+                            setInternalDataSource('CONNECTING');
+                            setRefreshNonce(value => value + 1);
+                        }}
+                        className="group flex items-center justify-center p-1.5 bg-slate-900/40 border border-slate-800/60 rounded-sm hover:border-cyan-400/50 transition-all backdrop-blur-sm"
+                        title="Refresh active range"
+                    >
+                        <RefreshCw className={`w-3.5 h-3.5 text-slate-500 group-hover:text-cyan-300 ${isLoadingData ? 'animate-spin' : ''}`} />
+                    </button>
                 </div>
             </header>
 
@@ -388,17 +554,34 @@ export default function CustomMarketView({ selectedSymbol, data: externalData, d
                         {isConnected ? <Wifi className={`w-3 h-3 ${isSimulated ? 'text-amber-500' : 'text-green-500'}`} /> : <WifiOff className="w-3 h-3 text-red-500" />}
                         <div className="flex flex-col">
                             <span className={`text-[9px] font-bold leading-none ${isConnected ? (isSimulated ? 'text-amber-500' : 'text-green-500') : 'text-red-500'}`}>
-                                {isConnected ? (isSimulated ? 'SYNTHETIC MODEL' : 'LIVE FEED') : 'OFFLINE'}
+                                {isConnected ? sourceLabel : 'OFFLINE'}
                             </span>
                             <span className="text-[7px] text-slate-500 font-mono leading-none mt-0.5">
-                                {isConnected ? 'UPLINK ESTABLISHED' : 'NO SIGNAL'}
+                                {isConnected ? `${activeRange.short} ${latestAgeSeconds !== null ? `${latestAgeSeconds}s ago` : 'UPLINK'}` : 'NO SIGNAL'}
                             </span>
                         </div>
                     </div>
+                    {marketQuality?.issues?.length > 0 && (
+                        <div className="mt-1 max-w-[260px] px-2 py-1 bg-amber-950/80 border border-amber-500/30 rounded text-[8px] leading-tight text-amber-200 font-mono">
+                            {marketQuality.issues[0]}
+                        </div>
+                    )}
                 </div>
 
                 {/* MODULAR LENS DECK - Adjusted for smaller container */}
-                <div className="absolute top-2 right-4 flex gap-1 z-50">
+                <div className="absolute top-2 right-4 flex items-center gap-1 z-50">
+                    <div className="mr-2 flex rounded bg-[#0f0720]/80 backdrop-blur border border-slate-800 overflow-hidden shadow">
+                        {MARKET_RANGES.map(range => (
+                            <button
+                                key={range.id}
+                                onClick={() => setRangeId(range.id)}
+                                className={`h-7 px-2 text-[9px] font-mono font-bold tracking-wider border-r border-slate-800 last:border-r-0 transition-all ${rangeId === range.id ? 'bg-indigo-500/20 text-white shadow-[0_0_12px_rgba(99,102,241,0.25)]' : 'text-slate-500 hover:text-slate-300 hover:bg-white/5'}`}
+                                title={`${range.label} view (${range.timeframe})`}
+                            >
+                                {range.short}
+                            </button>
+                        ))}
+                    </div>
 
                     <button
                         onClick={() => setViewMode('TERRAIN')}

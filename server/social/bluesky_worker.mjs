@@ -9,15 +9,25 @@
  */
 
 import https from 'https';
+import fs from 'fs';
+import path from 'path';
 
 const PDS = 'bsky.social';
 
-function xrpc(method, endpoint, body, token) {
+const IMAGE_MIME = {
+    '.png':  'image/png',
+    '.jpg':  'image/jpeg',
+    '.jpeg': 'image/jpeg',
+    '.webp': 'image/webp',
+    '.gif':  'image/gif',
+};
+
+function xrpc(method, endpoint, body, token, contentType = 'application/json') {
     return new Promise((resolve, reject) => {
-        const data    = body ? JSON.stringify(body) : null;
-        const headers = { 'Content-Type': 'application/json' };
+        const data    = Buffer.isBuffer(body) ? body : body ? JSON.stringify(body) : null;
+        const headers = { 'Content-Type': contentType };
         if (token) headers.Authorization = `Bearer ${token}`;
-        if (data)  headers['Content-Length'] = Buffer.byteLength(data);
+        if (data)  headers['Content-Length'] = Buffer.isBuffer(data) ? data.length : Buffer.byteLength(data);
 
         const options = {
             hostname: PDS,
@@ -50,6 +60,37 @@ function xrpc(method, endpoint, body, token) {
     });
 }
 
+function resolveImagePath(inputPath) {
+    if (!inputPath || /^https?:\/\//i.test(inputPath)) {
+        throw new Error('Bluesky image posts require a local image path');
+    }
+    return path.isAbsolute(inputPath) ? inputPath : path.resolve(process.cwd(), inputPath);
+}
+
+async function uploadImages(images = [], token) {
+    const uploads = [];
+    for (const item of images.slice(0, 4)) {
+        const fullPath = resolveImagePath(item.path);
+        if (!fs.existsSync(fullPath)) throw new Error(`Image not found: ${item.path}`);
+
+        const ext = path.extname(fullPath).toLowerCase();
+        const mime = IMAGE_MIME[ext];
+        if (!mime) throw new Error(`Unsupported Bluesky image type: ${ext || 'unknown'}`);
+
+        const data = fs.readFileSync(fullPath);
+        if (data.length > 1_000_000) {
+            throw new Error(`Bluesky image is too large (${Math.round(data.length / 1024)}KB). Keep images under 1MB.`);
+        }
+
+        const uploaded = await xrpc('POST', 'com.atproto.repo.uploadBlob', data, token, mime);
+        uploads.push({
+            alt: String(item.alt || '').slice(0, 1000),
+            image: uploaded.blob,
+        });
+    }
+    return uploads;
+}
+
 async function run() {
     let raw = '';
     for await (const chunk of process.stdin) raw += chunk;
@@ -76,6 +117,15 @@ async function run() {
             };
             if (task.facets?.length)  record.facets = task.facets;
             if (task.replyRef)        record.reply  = task.replyRef;
+            if (task.images?.length) {
+                const images = await uploadImages(task.images, task.token);
+                if (images.length) {
+                    record.embed = {
+                        $type: 'app.bsky.embed.images',
+                        images,
+                    };
+                }
+            }
             result = await xrpc('POST', 'com.atproto.repo.createRecord', {
                 repo: task.did, collection: 'app.bsky.feed.post', record
             }, task.token);

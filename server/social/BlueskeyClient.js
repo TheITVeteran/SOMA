@@ -108,6 +108,21 @@ function buildLinkFacets(text) {
     return facets;
 }
 
+function normalizeImages(images) {
+    const raw = Array.isArray(images) ? images : images ? [images] : [];
+    return raw
+        .map(item => {
+            if (typeof item === 'string') return { path: item, alt: '' };
+            if (!item || typeof item !== 'object') return null;
+            return {
+                path: item.path || item.imagePath || item.file || item.url,
+                alt:  item.alt || item.imageAlt || '',
+            };
+        })
+        .filter(item => item?.path)
+        .slice(0, 4);
+}
+
 export class BlueskeyClient {
     constructor() {
         this.session   = loadSession();
@@ -150,13 +165,14 @@ export class BlueskeyClient {
     }
 
     /** Post to Bluesky. Returns { uri, cid } on success. */
-    async post(text) {
+    async post(text, options = {}) {
         await this._ensureSession();
         const facets = [...buildFacets(text), ...buildLinkFacets(text)];
         return await runWorker({
             type:   'post',
             text:   text.slice(0, 300),
             facets: facets.length ? facets : undefined,
+            images: normalizeImages(options.images || options.imagePath),
             did:    this.session.did,
             token:  this.session.accessJwt,
         });

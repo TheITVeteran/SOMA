@@ -5,6 +5,8 @@
 
 import fs from 'fs';
 import path from 'path';
+import { buildSocialStrategyPrompt } from './SocialPatternLearner.js';
+import { assertPublicPost } from './SocialContentSafety.js';
 
 const STORY_FILE = path.join(process.cwd(), 'SOMA', 'aurora-story.json');
 
@@ -205,6 +207,29 @@ function saveStoryState(state) {
     } catch {}
 }
 
+async function callAurora(brain, prompt, timeoutMs = 20000) {
+    if (!brain) throw new Error('Brain required');
+
+    let call;
+    if (typeof brain.callBrain === 'function') {
+        call = brain.callBrain('AURORA', prompt, { temperature: 0.8, source: 'social_post' }, 'full');
+    } else if (typeof brain.reason === 'function') {
+        call = brain.reason(prompt, {
+            activeLobe: 'AURORA',
+            brain: 'AURORA',
+            temperature: 0.8,
+            source: 'social_post',
+        });
+    } else {
+        throw new Error('No compatible brain interface for Aurora');
+    }
+
+    return await Promise.race([
+        call,
+        new Promise((_, rej) => setTimeout(() => rej(new Error(`Aurora brain timeout after ${Math.round(timeoutMs / 1000)}s`)), timeoutMs)),
+    ]);
+}
+
 async function generateAuroraChapter(brain) {
     const state   = loadStoryState();
     const recent  = state.chapters.slice(-3).map(c => c.text).join(' → ');
@@ -228,13 +253,7 @@ Write chapter ${n}. MAX 180 CHARACTERS. It must:
 
 Just the text.`;
 
-    const result = await Promise.race([
-        brain.callBrain({
-            messages: [{ role: 'user', content: prompt }],
-            lobe: 'aurora'
-        }),
-        new Promise((_, rej) => setTimeout(() => rej(new Error('Aurora brain timeout after 20s')), 20000)),
-    ]);
+    const result = await callAurora(brain, prompt, 20000);
     const text   = (result?.text || result?.response || '').replace(/^["']|["']$/g, '').trim();
     if (!text || text.length < 10) throw new Error('Aurora returned empty chapter');
 
@@ -246,10 +265,27 @@ Just the text.`;
 }
 
 // ── Tag formatter ─────────────────────────────────────────────────────────────
+function trimPreservingUrl(text, maxLength) {
+    if (text.length <= maxLength) return text;
+
+    const urlMatch = text.match(/https?:\/\/\S+/);
+    if (urlMatch) {
+        const url = urlMatch[0];
+        const headBudget = maxLength - url.length - 5;
+        if (headBudget > 40) {
+            return `${text.slice(0, headBudget).trim()}... ${url}`;
+        }
+    }
+
+    return `${text.slice(0, Math.max(0, maxLength - 3)).trim()}...`;
+}
+
 function appendTags(text, type, platform, limit) {
     const tags   = (TAGS[type] || ['AI']).map(t => `#${t}`).join(' ');
-    const joined = `${text}\n\n${tags}`;
-    return joined.length <= limit ? joined : text.slice(0, limit - tags.length - 3) + '…\n\n' + tags;
+    const tagBlock = `\n\n${tags}`;
+    const raw = trimPreservingUrl(text, limit - tagBlock.length);
+    const joined = `${raw}${tagBlock}`;
+    return joined.length <= limit ? joined : trimPreservingUrl(raw, limit);
 }
 
 // ── Main export ───────────────────────────────────────────────────────────────
@@ -279,18 +315,16 @@ export class SocialPersonaEngine {
         if (!this.brain) throw new Error('Brain required for post generation');
 
         const isLinkedIn = platform === 'linkedin';
-        const prompt     = isLinkedIn ? buildLinkedInPrompt(type, data) : promptFn(data);
+        const strategy   = platform === 'bluesky' ? buildSocialStrategyPrompt() : '';
+        const prompt     = `${isLinkedIn ? buildLinkedInPrompt(type, data) : promptFn(data)}
+
+${strategy ? `\n${strategy}` : ''}`;
 
         // Use activeLobe (fast path — skips ODIN multi-pass recurrence) with a timeout.
         // Social posts are generation tasks, not deep reasoning. ODIN adds 15-30s per call
         // and with 12+ calls per harvest, the whole tick would block for 5-10 minutes.
-        const result   = await Promise.race([
-            this.brain.callBrain({
-                messages: [{ role: 'user', content: prompt }],
-                lobe: 'aurora'
-            }),
-            new Promise((_, rej) => setTimeout(() => rej(new Error('Brain timeout after 20s')), 20000)),
-        ]);
+        const result   = await callAurora(this.brain, prompt, 20000);
+        assertPublicPost(result?.text || result?.response || '', result || {});
         let   raw      = (result?.text || result?.response || '').trim();
 
         if (!raw || raw.length < 10) throw new Error(`Brain returned empty post for type ${type}`);
@@ -299,6 +333,7 @@ export class SocialPersonaEngine {
         raw = raw.replace(/^["']|["']$/g, '').replace(/\*\*/g, '').trim();
 
         const final = appendTags(raw, type, platform, limit);
+        assertPublicPost(final, result || {});
         return { text: final, type, platform };
     }
 

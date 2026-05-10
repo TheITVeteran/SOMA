@@ -6,6 +6,8 @@ import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
 const multer = require('multer');
 const _reflectionsUpload = multer({ dest: os.tmpdir() });
+const { buildQualityReport, verifyGoal } = require('../../core/GoalQualityGate.cjs');
+const workLedger = require('../../core/AutonomousWorkLedger.cjs');
 import { ContentExtractor } from '../utils/ContentExtractor.js';
 import financeRoutes from '../../server/finance/financeRoutes.js';
 import marketDataRoutes from '../../server/finance/marketDataRoutes.js';
@@ -22,6 +24,8 @@ import alertRoutes from '../../server/finance/alertRoutes.js';
 import createGuardianRoutes from '../../server/finance/guardianRoutes.js';
 import autonomousRoutes from '../../server/finance/autonomousRoutes.js';
 import gridBotRoutes from '../../server/finance/gridBotRoutes.js';
+import missionControlRoutes from '../../server/finance/missionControlRoutes.js';
+import marketEvidenceRoutes from '../../server/finance/marketEvidenceRoutes.js';
 import kevinRoutes from '../../server/routes/kevinRoutes.js';
 import pulseRoutes from '../../server/routes/pulseRoutes.js';
 import arbiteriumRoutes from '../../server/routes/arbiteriumRoutes.js';
@@ -42,6 +46,67 @@ import { buildReadinessReport } from '../../core/SomaReadinessScanner.js';
 
 export async function loadRoutes(app, system) {
     console.log('\n[Loader] ðŸ›£ï¸  Mounting Production API Routes...');
+
+    const commandBridgeSettingsPath = path.join(process.cwd(), 'SOMA', 'command-bridge-settings.json');
+    const defaultCommandBridgeSettings = {
+        authority: {
+            autonomousSelfReplication: false,
+            crossArbiterWrites: true,
+            humanInLoopOverride: true
+        },
+        cognition: {
+            temperature: 0.7,
+            factStrictness: 85
+        },
+        memory: {
+            ephemeralEnabled: true,
+            contextualEnabled: true,
+            canonicalEnabled: true
+        },
+        execution: {
+            fileSystemWriteAccess: true,
+            networkEgress: true,
+            localhostBinding: false
+        },
+        observability: {
+            verboseThinking: true,
+            stateSnapshots: false
+        },
+        evolution: {
+            recursiveSelfImprovement: true
+        },
+        network: {
+            peerDiscovery: true,
+            seasonalLearningExchange: false
+        }
+    };
+
+    const mergeSettings = (base, patch) => {
+        const next = { ...base };
+        for (const [section, values] of Object.entries(patch || {})) {
+            next[section] = {
+                ...(next[section] || {}),
+                ...(values && typeof values === 'object' && !Array.isArray(values) ? values : {})
+            };
+        }
+        return next;
+    };
+
+    const readCommandBridgeSettings = async () => {
+        try {
+            const raw = await fs.readFile(commandBridgeSettingsPath, 'utf8');
+            return mergeSettings(defaultCommandBridgeSettings, JSON.parse(raw));
+        } catch {
+            return defaultCommandBridgeSettings;
+        }
+    };
+
+    const writeCommandBridgeSettings = async (settings) => {
+        await fs.mkdir(path.dirname(commandBridgeSettingsPath), { recursive: true });
+        await fs.writeFile(commandBridgeSettingsPath, JSON.stringify(settings, null, 2));
+        system.commandBridgeSettings = settings;
+        return settings;
+    };
 
     const allowedRoots = (process.env.SOMA_ALLOWED_PATHS || '')
         .split(';')
@@ -782,6 +847,162 @@ export async function loadRoutes(app, system) {
         }
     });
 
+    // Pulse compatibility endpoints. The standalone Pulse IDE still speaks the
+    // older MAX-shaped API contract; keep these aliases wired to SOMA's brain,
+    // goals, shell, and filesystem so the tab works without fake demo stubs.
+    const textFromBrainResult = (result, fallback = 'Processed.') => (
+        result?.text || result?.response || result?.output || result?.message ||
+        (typeof result === 'string' ? result : fallback)
+    );
+
+    app.post('/api/chat', checkReady, async (req, res) => {
+        try {
+            const { message, context, tier, model } = req.body || {};
+            if (!message) return res.status(400).json({ success: false, error: 'message is required' });
+            const brain = system.quadBrain || system.somArbiter || system.steveArbiter;
+            if (!brain?.reason) return res.status(503).json({ success: false, error: 'SOMA brain not available' });
+            const result = await brain.reason(message, { ...(context || {}), source: 'pulse', tier, model, quickResponse: tier === 'fast' });
+            const reply = textFromBrainResult(result);
+            res.json({ success: true, reply, response: reply, persona: result?.persona || 'architect' });
+        } catch (error) {
+            res.status(500).json({ success: false, error: error.message });
+        }
+    });
+
+    app.post('/api/swarm', checkReady, async (req, res) => {
+        try {
+            const task = req.body?.task || req.body?.message || '';
+            if (!task) return res.status(400).json({ success: false, error: 'task is required' });
+            const brain = system.quadBrain || system.somArbiter;
+            if (!brain?.reason) return res.status(503).json({ success: false, error: 'SOMA brain not available' });
+            const result = await brain.reason(`Coordinate a concise engineering swarm plan for:\n${task}`, { source: 'pulse-swarm', preferredBrain: 'PROMETHEUS' });
+            const reply = textFromBrainResult(result);
+            res.json({ success: true, reply, response: reply, result: reply, synthesis: reply });
+        } catch (error) {
+            res.status(500).json({ success: false, error: error.message });
+        }
+    });
+
+    app.post('/api/debate', checkReady, async (req, res) => {
+        try {
+            const topic = req.body?.topic || req.body?.message || '';
+            if (!topic) return res.status(400).json({ success: false, error: 'topic is required' });
+            const brain = system.quadBrain || system.somArbiter;
+            if (!brain?.reason) return res.status(503).json({ success: false, error: 'SOMA brain not available' });
+            const result = await brain.reason(`Give a short adversarial engineering debate, then a verdict:\n${topic}`, { source: 'pulse-debate', preferredBrain: 'LOGOS' });
+            const reply = textFromBrainResult(result);
+            res.json({ success: true, reply, response: reply, result: reply, verdict: reply });
+        } catch (error) {
+            res.status(500).json({ success: false, error: error.message });
+        }
+    });
+
+    app.get('/api/goals', (req, res) => {
+        const gp = system.goalPlanner || system.goalPlannerArbiter;
+        if (!gp) return res.json([]);
+        const activeIds = Array.from(gp.activeGoals || []);
+        const activeGoals = activeIds.map(id => gp.goals?.get(id)).filter(Boolean);
+        const allGoals = Array.from(gp.goals?.values?.() || []);
+        res.json(activeGoals.length ? activeGoals : allGoals);
+    });
+
+    app.post('/api/goals', checkReady, async (req, res) => {
+        try {
+            const gp = system.goalPlanner || system.goalPlannerArbiter;
+            if (!gp?.createGoal) return res.status(503).json({ success: false, error: 'GoalPlanner not available' });
+            const title = req.body?.title;
+            if (!title) return res.status(400).json({ success: false, error: 'title is required' });
+            const result = await gp.createGoal({
+                title,
+                description: req.body?.description || title,
+                category: req.body?.category || 'pulse',
+                priority: req.body?.priority || 0.5
+            }, 'pulse');
+            res.json({ success: true, ...(result || {}) });
+        } catch (error) {
+            res.status(500).json({ success: false, error: error.message });
+        }
+    });
+
+    app.delete('/api/goals/:id', (req, res) => {
+        const gp = system.goalPlanner || system.goalPlannerArbiter;
+        if (gp?.goals) gp.goals.delete(req.params.id);
+        if (gp?.activeGoals) gp.activeGoals.delete(req.params.id);
+        res.json({ success: true, id: req.params.id });
+    });
+
+    app.post('/api/tools/shell/run', checkReady, async (req, res) => {
+        const command = req.body?.command;
+        if (!command || typeof command !== 'string') return res.status(400).json({ success: false, error: 'command is required' });
+        const blocked = ['rm -rf', ':(){:|:&};:', 'format c:', 'mkfs.', 'shutdown', 'reboot', 'halt'];
+        if (blocked.some(pattern => command.toLowerCase().includes(pattern))) {
+            return res.status(400).json({ success: false, error: 'Blocked potentially destructive command' });
+        }
+        exec(command, { cwd: process.cwd(), timeout: req.body?.timeoutMs || 30000, windowsHide: true, maxBuffer: 1024 * 1024 }, (error, stdout, stderr) => {
+            res.json({ success: !error, stdout, stderr, output: stdout || stderr, code: error?.code || 0, cwd: process.cwd() });
+        });
+    });
+
+    const safePulsePath = (target = '.') => {
+        if (!target || typeof target !== 'string') throw new Error('file path is required');
+        const root = process.cwd();
+        const resolved = path.resolve(root, target);
+        if (!resolved.startsWith(root)) throw new Error('Path outside workspace');
+        return resolved;
+    };
+
+    app.post('/api/tools/file/list', async (req, res) => {
+        try {
+            const base = req.body?.path || req.body?.dir || '.';
+            const resolved = safePulsePath(base);
+            const entries = await fs.readdir(resolved, { withFileTypes: true });
+            res.json({
+                success: true,
+                files: entries.map(entry => ({
+                    name: entry.name,
+                    path: path.join(base, entry.name),
+                    isDirectory: entry.isDirectory(),
+                    type: entry.isDirectory() ? 'directory' : 'file'
+                }))
+            });
+        } catch (error) {
+            res.status(500).json({ success: false, error: error.message });
+        }
+    });
+
+    app.post('/api/tools/file/read', async (req, res) => {
+        try {
+            const resolved = safePulsePath(req.body?.filePath || req.body?.path);
+            const content = await fs.readFile(resolved, 'utf8');
+            res.json({ success: true, content, result: content });
+        } catch (error) {
+            res.status(500).json({ success: false, error: error.message });
+        }
+    });
+
+    app.post('/api/tools/file/write', checkReady, async (req, res) => {
+        try {
+            const resolved = safePulsePath(req.body?.filePath || req.body?.path);
+            await fs.mkdir(path.dirname(resolved), { recursive: true });
+            await fs.writeFile(resolved, req.body?.content || '', 'utf8');
+            res.json({ success: true, path: resolved });
+        } catch (error) {
+            res.status(500).json({ success: false, error: error.message });
+        }
+    });
+
+    app.get('/api/events', (req, res) => {
+        res.setHeader('Content-Type', 'text/event-stream');
+        res.setHeader('Cache-Control', 'no-cache');
+        res.setHeader('Connection', 'keep-alive');
+        res.flushHeaders?.();
+        const memoryCount = () => system.mnemonic?.getMemoryStats?.()?.cold?.size || 0;
+        const send = (event) => res.write(`data: ${JSON.stringify(event)}\n\n`);
+        send({ type: 'status', persona: 'architect', tension: 0.35, memoryCount: memoryCount() });
+        const interval = setInterval(() => send({ type: 'status', persona: 'architect', tension: 0.35, memoryCount: memoryCount() }), 15000);
+        req.on('close', () => clearInterval(interval));
+    });
+
     // 2. ARBITERIUM (Fixing Empty Tab)
     app.get('/api/population', (req, res) => {
         const population = [];
@@ -825,6 +1046,56 @@ export async function loadRoutes(app, system) {
             }
             const result = await gp.createGoal(payload, 'user');
             res.json(result);
+        } catch (e) {
+            res.status(500).json({ success: false, error: e.message });
+        }
+    });
+    app.post('/api/goals/quality', checkReady, async (req, res) => {
+        const gp = system.goalPlanner;
+        if (!gp) return res.status(503).json({ success: false, error: 'GoalPlanner not available' });
+        try {
+            const quality = buildQualityReport(req.body || {}, Array.from(gp.goals?.values?.() || []));
+            res.json({ success: true, quality });
+        } catch (e) {
+            res.status(500).json({ success: false, error: e.message });
+        }
+    });
+    app.post('/api/goals/create-quality', checkReady, async (req, res) => {
+        const gp = system.goalPlanner;
+        if (!gp) return res.status(503).json({ success: false, error: 'GoalPlanner not available' });
+        try {
+            const payload = req.body || {};
+            if (!payload.title || !payload.category) {
+                return res.status(400).json({ success: false, error: 'title and category required' });
+            }
+            const result = await gp.createGoal({ ...payload, requireQuality: true }, payload.source || 'user');
+            res.status(result.success ? 200 : 422).json(result);
+        } catch (e) {
+            res.status(500).json({ success: false, error: e.message });
+        }
+    });
+    app.post('/api/goals/verify/:goalId', checkReady, async (req, res) => {
+        const gp = system.goalPlanner;
+        if (!gp?.goals) return res.status(503).json({ success: false, error: 'GoalPlanner not available' });
+        const goal = gp.goals.get(req.params.goalId);
+        if (!goal) return res.status(404).json({ success: false, error: 'Goal not found' });
+        try {
+            const verification = verifyGoal(goal, req.body || {}, { repoRoot: process.cwd() });
+            goal.metadata = goal.metadata || {};
+            goal.metadata.lastVerification = verification;
+            gp._dirty = true;
+            gp._saveToDisk?.();
+            res.status(verification.passed ? 200 : 422).json({ success: verification.passed, verification, goal });
+        } catch (e) {
+            res.status(500).json({ success: false, error: e.message });
+        }
+    });
+    app.post('/api/goals/complete/:goalId', checkReady, async (req, res) => {
+        const gp = system.goalPlanner;
+        if (!gp?.completeGoal) return res.status(503).json({ success: false, error: 'GoalPlanner not available' });
+        try {
+            const result = await gp.completeGoal(req.params.goalId, req.body || {});
+            res.status(result.success ? 200 : 422).json(result);
         } catch (e) {
             res.status(500).json({ success: false, error: e.message });
         }
@@ -1111,6 +1382,27 @@ export async function loadRoutes(app, system) {
     app.get('/api/beliefs/contradictions', (req, res) => res.json({ success: true, contradictions: system.beliefSystem?.contradictions ? Array.from(system.beliefSystem.contradictions.values()) : [] }));
     app.get('/api/analytics/summary', (req, res) => res.json({ success: true, summary: system.analytics?.getSummary?.() || {} }));
 
+    app.get('/api/settings/command-bridge', async (req, res) => {
+        try {
+            const settings = await readCommandBridgeSettings();
+            system.commandBridgeSettings = settings;
+            res.json({ success: true, settings });
+        } catch (error) {
+            res.status(500).json({ success: false, error: error.message });
+        }
+    });
+
+    app.post('/api/settings/command-bridge', async (req, res) => {
+        try {
+            const current = await readCommandBridgeSettings();
+            const settings = mergeSettings(current, req.body?.settings || req.body || {});
+            await writeCommandBridgeSettings(settings);
+            res.json({ success: true, settings });
+        } catch (error) {
+            res.status(500).json({ success: false, error: error.message });
+        }
+    });
+
 
     // 3b. APPROVAL SYSTEM ENDPOINTS
     app.get('/api/approval/pending', (req, res) => {
@@ -1287,8 +1579,16 @@ export async function loadRoutes(app, system) {
                 if (enabled) system.goalPlanner.resumeAutonomous?.(); else system.goalPlanner.pauseAutonomous?.();
             } else if (component === 'rhythms' && system.timekeeper) {
                 if (enabled) system.timekeeper.resumeAutonomousRhythms?.(); else system.timekeeper.pauseAutonomousRhythms?.();
-            } else if (component === 'social' && system.socialAutonomy) {
-                if (enabled) system.socialAutonomy.activate?.(); else system.socialAutonomy.deactivate?.();
+            } else if (component === 'social') {
+                if (system.socialAutonomy) {
+                    if (enabled) system.socialAutonomy.activate?.(); else system.socialAutonomy.deactivate?.();
+                } else {
+                    const socialDaemons = [system.socialIntel, system.socialScheduler, system.socialEngagement, system.socialImpulse].filter(Boolean);
+                    for (const daemon of socialDaemons) {
+                        if (enabled) daemon.start?.();
+                        else daemon.stop?.();
+                    }
+                }
             }
             return res.json({ success: true, ...getAutopilotStatus(system) });
         }
@@ -1345,10 +1645,108 @@ export async function loadRoutes(app, system) {
                         fm[line.slice(0, idx).trim()] = line.slice(idx + 1).trim().replace(/^["']|["']$/g, '');
                     }
                 }
-                return { name: f, status: fm.status || 'inbox', type: fm.type || null };
+                return {
+                    name: f,
+                    status: fm.status || 'inbox',
+                    type: fm.type || null,
+                    title: fm.title || f.replace(/\.md$/i, ''),
+                    workbook: fm.workbook || null,
+                    segment: fm.segment || null,
+                    parent: fm.parent || null
+                };
             }));
             res.json({ success: true, notes });
         } catch (error) { res.json({ success: false, error: error.message }); }
+    });
+
+    const reflectionSlug = (value = 'untitled') => String(value)
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        .slice(0, 80) || 'untitled';
+
+    const writeReflectionArtifact = async ({ type, title, workbook, segment, parent, body }) => {
+        const vaultPath = path.resolve(process.cwd(), 'data', 'vault', 'reflections');
+        await fs.mkdir(vaultPath, { recursive: true });
+        const slugParts = [type, workbook, segment, title].filter(Boolean).map(reflectionSlug);
+        const filename = `${slugParts.join('.')}.md`;
+        const filePath = path.resolve(vaultPath, filename);
+        if (!filePath.startsWith(vaultPath)) throw new Error('Forbidden path');
+        const now = new Date().toISOString();
+        const meta = [
+            '---',
+            `title: ${JSON.stringify(title)}`,
+            `type: ${type}`,
+            'status: inbox',
+            `createdAt: ${now}`,
+            workbook ? `workbook: ${JSON.stringify(workbook)}` : null,
+            segment ? `segment: ${JSON.stringify(segment)}` : null,
+            parent ? `parent: ${JSON.stringify(parent)}` : null,
+            `tags: [reflections, ${type}]`,
+            '---',
+            '',
+        ].filter(Boolean).join('\n');
+        await fs.writeFile(filePath, `${meta}${body}`, 'utf8');
+        return { success: true, filename, path: filePath };
+    };
+
+    app.post('/api/reflections/workbook', async (req, res) => {
+        try {
+            const { title, description = '' } = req.body || {};
+            if (!title?.trim()) return res.status(400).json({ success: false, error: 'title required' });
+            const body = `# ${title.trim()}\n\n${description.trim() || 'Workbook overview.'}\n\n## Segments\n\n`;
+            const result = await writeReflectionArtifact({ type: 'workbook', title: title.trim(), body });
+            workLedger.record({
+                type: 'reflection_workbook_created',
+                title: title.trim(),
+                summary: `Created workbook ${result.filename}`,
+                evidence: { filename: result.filename },
+                nextStep: 'Add segments when the workbook needs structure',
+                status: 'created',
+                source: 'Reflections',
+            });
+            res.json(result);
+        } catch (error) { res.status(500).json({ success: false, error: error.message }); }
+    });
+
+    app.post('/api/reflections/segment', async (req, res) => {
+        try {
+            const { title, workbook, description = '' } = req.body || {};
+            if (!title?.trim() || !workbook?.trim()) return res.status(400).json({ success: false, error: 'title and workbook required' });
+            const body = `# ${title.trim()}\n\nSegment of [[workbook.${reflectionSlug(workbook)}]].\n\n${description.trim() || 'Segment notes.'}\n\n## Folios\n\n`;
+            const result = await writeReflectionArtifact({ type: 'segment', title: title.trim(), workbook: workbook.trim(), parent: workbook.trim(), body });
+            workLedger.record({
+                type: 'reflection_segment_created',
+                title: title.trim(),
+                summary: `Created segment in workbook ${workbook.trim()}`,
+                evidence: { filename: result.filename, workbook: workbook.trim() },
+                nextStep: 'Add folios for individual pages',
+                status: 'created',
+                source: 'Reflections',
+            });
+            res.json(result);
+        } catch (error) { res.status(500).json({ success: false, error: error.message }); }
+    });
+
+    app.post('/api/reflections/folio', async (req, res) => {
+        try {
+            const { title, workbook, segment, content = '' } = req.body || {};
+            if (!title?.trim() || !workbook?.trim() || !segment?.trim()) {
+                return res.status(400).json({ success: false, error: 'title, workbook, and segment required' });
+            }
+            const body = `# ${title.trim()}\n\nPart of [[segment.${reflectionSlug(workbook)}.${reflectionSlug(segment)}]].\n\n${content.trim() || 'Start writing here.'}\n`;
+            const result = await writeReflectionArtifact({ type: 'folio', title: title.trim(), workbook: workbook.trim(), segment: segment.trim(), parent: segment.trim(), body });
+            workLedger.record({
+                type: 'reflection_folio_created',
+                title: title.trim(),
+                summary: `Created folio in ${workbook.trim()} / ${segment.trim()}`,
+                evidence: { filename: result.filename, workbook: workbook.trim(), segment: segment.trim() },
+                nextStep: 'Write or link supporting notes',
+                status: 'created',
+                source: 'Reflections',
+            });
+            res.json(result);
+        } catch (error) { res.status(500).json({ success: false, error: error.message }); }
     });
 
     app.post('/api/reflections/quick-note', async (req, res) => {
@@ -1703,6 +2101,39 @@ Return ONLY valid JSON (no markdown, no explanation):
                 }
             }
             res.json({ success: true, nodes, edges });
+        } catch (error) { res.status(500).json({ success: false, error: error.message }); }
+    });
+
+    app.get('/api/reflections/canvas-layout', async (req, res) => {
+        try {
+            const vaultPath = path.resolve(process.cwd(), 'data', 'vault', 'reflections');
+            await fs.mkdir(vaultPath, { recursive: true });
+            const layoutPath = path.join(vaultPath, '.canvas.json');
+            const layout = JSON.parse(await fs.readFile(layoutPath, 'utf8').catch(() => '{"positions":{}}'));
+            res.json({ success: true, layout: { positions: layout.positions || {} } });
+        } catch (error) { res.status(500).json({ success: false, error: error.message }); }
+    });
+
+    app.put('/api/reflections/canvas-layout', async (req, res) => {
+        try {
+            const { positions } = req.body || {};
+            if (!positions || typeof positions !== 'object') return res.status(400).json({ success: false, error: 'positions required' });
+            const vaultPath = path.resolve(process.cwd(), 'data', 'vault', 'reflections');
+            await fs.mkdir(vaultPath, { recursive: true });
+            const layoutPath = path.join(vaultPath, '.canvas.json');
+            const clean = {};
+            for (const [id, pos] of Object.entries(positions)) {
+                const x = Number(pos?.x);
+                const y = Number(pos?.y);
+                if (Number.isFinite(x) && Number.isFinite(y)) {
+                    clean[id] = {
+                        x: Math.max(3, Math.min(97, x)),
+                        y: Math.max(5, Math.min(95, y)),
+                    };
+                }
+            }
+            await fs.writeFile(layoutPath, JSON.stringify({ positions: clean, updatedAt: Date.now() }, null, 2), 'utf8');
+            res.json({ success: true, positions: clean });
         } catch (error) { res.status(500).json({ success: false, error: error.message }); }
     });
 
@@ -2241,6 +2672,8 @@ Return ONLY valid JSON (no markdown, no explanation):
     safeMount('/api/alerts', checkReady, alertRoutes);
     safeMount('/api/guardian', checkReady, createGuardianRoutes(system.guardian || null));
     safeMount('/api/autonomous', checkReady, autonomousRoutes);
+    safeMount('/api/mission-control', checkReady, missionControlRoutes);
+    safeMount('/api/market-evidence', checkReady, marketEvidenceRoutes);
     safeMount('/api/gridbot',   checkReady, gridBotRoutes);
     safeMount('/api/notifications', notificationRoutes);  // no checkReady — used during settings modal before system.ready
     safeMount('/api/perception', perceptionRoutes);        // no checkReady — COS daemons may load before system.ready

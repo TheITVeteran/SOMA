@@ -17,6 +17,25 @@ export class CommandBridgeInterface {
     constructor(baseUrl = 'http://localhost:3001', messageBroker = null) {
         this.baseUrl = baseUrl;
         this.messageBroker = messageBroker;
+        this.requestTimeoutMs = 2500;
+    }
+
+    async requestJson(endpoint, fallback, label) {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), this.requestTimeoutMs);
+
+        try {
+            const res = await fetch(`${this.baseUrl}${endpoint}`, { signal: controller.signal });
+            if (!res.ok) {
+                throw new Error(`HTTP ${res.status}`);
+            }
+            return await res.json();
+        } catch (e) {
+            logger.error(`[CommandBridge] Failed to get ${label}:`, e.message);
+            return fallback;
+        } finally {
+            clearTimeout(timeout);
+        }
     }
 
     // ═══════════════════════════════════════════════════════════
@@ -27,112 +46,69 @@ export class CommandBridgeInterface {
      * Get current system metrics (CPU, GPU, RAM, uptime)
      */
     async getSystemMetrics() {
-        try {
-            const res = await fetch(`${this.baseUrl}/api/status`);
-            const data = await res.json();
-            return data;
-        } catch (e) {
-            logger.error('[CommandBridge] Failed to get system metrics:', e.message);
-            return null;
-        }
+        return this.requestJson('/api/status', null, 'system metrics');
     }
 
     /**
      * Get all arbiters and their health status
      */
     async getArbiters() {
-        try {
-            const res = await fetch(`${this.baseUrl}/api/population`);
-            const data = await res.json();
-            return data.agents || [];
-        } catch (e) {
-            logger.error('[CommandBridge] Failed to get arbiters:', e.message);
-            return [];
-        }
+        const data = await this.requestJson('/api/population', { agents: [] }, 'arbiters');
+        return data.agents || [];
     }
 
     /**
      * Get shadow clone status
      */
     async getShadowClones() {
-        try {
-            const res = await fetch(`${this.baseUrl}/api/balancer/stats`);
-            const data = await res.json();
-            return data.stats || null;
-        } catch (e) {
-            logger.error('[CommandBridge] Failed to get shadow clones:', e.message);
-            return null;
-        }
+        const data = await this.requestJson('/api/balancer/stats', { stats: null }, 'shadow clones');
+        return data.stats || null;
     }
 
     /**
      * Get daemon/subconscious status
      */
     async getDaemonStatus() {
-        try {
-            const res = await fetch(`${this.baseUrl}/api/daemon/status`);
-            const data = await res.json();
-            return data.daemon || null;
-        } catch (e) {
-            logger.error('[CommandBridge] Failed to get daemon status:', e.message);
-            return null;
-        }
+        const data = await this.requestJson('/api/daemon/status', { daemon: null }, 'daemon status');
+        return data.daemon || null;
     }
 
     /**
      * Get memory tier statistics
      */
     async getMemoryStatus() {
-        try {
-            const res = await fetch(`${this.baseUrl}/api/memory/status`);
-            const data = await res.json();
-            return data;
-        } catch (e) {
-            logger.error('[CommandBridge] Failed to get memory status:', e.message);
-            return null;
-        }
+        return this.requestJson('/api/memory/status', null, 'memory status');
     }
 
     /**
      * Get active goals
      */
     async getActiveGoals() {
-        try {
-            const res = await fetch(`${this.baseUrl}/api/goals/active`);
-            const data = await res.json();
-            return data.goals || [];
-        } catch (e) {
-            logger.error('[CommandBridge] Failed to get active goals:', e.message);
-            return [];
-        }
+        const data = await this.requestJson('/api/goals/active', { goals: [] }, 'active goals');
+        return data.goals || [];
     }
 
     /**
      * Get current beliefs
      */
     async getBeliefs() {
-        try {
-            const res = await fetch(`${this.baseUrl}/api/beliefs`);
-            const data = await res.json();
-            return data.beliefs || [];
-        } catch (e) {
-            logger.error('[CommandBridge] Failed to get beliefs:', e.message);
-            return [];
-        }
+        const data = await this.requestJson('/api/beliefs', { beliefs: [] }, 'beliefs');
+        return data.beliefs || [];
     }
 
     /**
      * Get learning velocity metrics
      */
     async getLearningVelocity() {
-        try {
-            const res = await fetch(`${this.baseUrl}/api/velocity/status`);
-            const data = await res.json();
-            return data;
-        } catch (e) {
-            logger.error('[CommandBridge] Failed to get learning velocity:', e.message);
-            return null;
-        }
+        return this.requestJson('/api/velocity/status', null, 'learning velocity');
+    }
+
+    /**
+     * Get KEVIN security assistant status
+     */
+    async getKevinStatus() {
+        const data = await this.requestJson('/api/kevin/status', null, 'KEVIN status');
+        return data?.success ? data.status : null;
     }
 
     // ═══════════════════════════════════════════════════════════
@@ -327,7 +303,7 @@ export class CommandBridgeInterface {
      * Comprehensive system summary for SOMA's self-awareness
      */
     async getSelfAwareness() {
-        const [metrics, arbiters, clones, daemon, memory, goals, beliefs, velocity] = await Promise.all([
+        const [metrics, arbiters, clones, daemon, memory, goals, beliefs, velocity, kevin] = await Promise.all([
             this.getSystemMetrics(),
             this.getArbiters(),
             this.getShadowClones(),
@@ -335,7 +311,8 @@ export class CommandBridgeInterface {
             this.getMemoryStatus(),
             this.getActiveGoals(),
             this.getBeliefs(),
-            this.getLearningVelocity()
+            this.getLearningVelocity(),
+            this.getKevinStatus()
         ]);
 
         // Calculate memory health
@@ -368,6 +345,7 @@ export class CommandBridgeInterface {
                 total: CapabilityRegistry.list().length
             },
             shadowClones: clones,
+            kevin,
             daemon,
             memory,
             goals: {

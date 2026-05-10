@@ -1,5 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { X, Brain, Cpu, AlertTriangle, Terminal, Sparkles, TrendingUp, TrendingDown, Shield, BarChart3, MessageSquare } from 'lucide-react';
+import { X, Cpu, AlertTriangle, Terminal, Sparkles, TrendingUp, TrendingDown, Shield, BarChart3, MessageSquare, Database, Newspaper } from 'lucide-react';
+
+const SomaOutlineIcon = ({ className = "w-4 h-4" }) => (
+    <svg viewBox="0 0 24 24" className={className} fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M12 2C10.5 2 9 2.5 8 3.5C7 2.5 5.5 2 4 2C2.5 2 1 3 1 5C1 6.5 1.5 8 2.5 9C1.5 10 1 11.5 1 13C1 14.5 2 16 3.5 16.5C3 17.5 3 18.5 3.5 19.5C4 20.5 5 21 6 21.5C7 22 8.5 22 10 22H14C15.5 22 17 22 18 21.5C19 21 20 20.5 20.5 19.5C21 18.5 21 17.5 20.5 16.5C22 16 23 14.5 23 13C23 11.5 22.5 10 21.5 9C22.5 8 23 6.5 23 5C23 3 21.5 2 20 2C18.5 2 17 2.5 16 3.5C15 2.5 13.5 2 12 2Z" />
+    </svg>
+);
 
 export const AIAnalysisModal = ({
     isOpen,
@@ -9,7 +15,11 @@ export const AIAnalysisModal = ({
     chartData,
     allTickers,
     riskMetrics,
-    presets
+    presets,
+    activeProtocol,
+    assetType,
+    dataSource,
+    onAnalysisComplete
 }) => {
     const [analysis, setAnalysis] = useState(null);
     const [loading, setLoading] = useState(false);
@@ -42,10 +52,19 @@ export const AIAnalysisModal = ({
         setLoading(true);
         setError(null);
         try {
-            const response = await fetch('/api/finance/analyze', {
+            const response = await fetch('/api/finance/deep-scan', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ symbol })
+                body: JSON.stringify({
+                    symbol,
+                    activeProtocol,
+                    assetType,
+                    dataSource,
+                    tickerData,
+                    chartData,
+                    riskMetrics,
+                    presets
+                })
             });
 
             if (!response.ok) {
@@ -58,6 +77,7 @@ export const AIAnalysisModal = ({
             if (data.success && data.analysis) {
                 setAnalysis(data.analysis);
                 setDuration(data.analysis.duration);
+                onAnalysisComplete?.(data.analysis);
             } else {
                 throw new Error(data.error || 'No analysis returned');
             }
@@ -72,12 +92,12 @@ export const AIAnalysisModal = ({
     if (!isOpen) return null;
 
     const thinkingMessages = [
-        "DISPATCHING AI SWARM AGENTS...",
-        "RESEARCHER: FETCHING MARKET DATA...",
-        "QUANT: RUNNING TECHNICAL INDICATORS...",
-        "DEBATERS: BULL VS BEAR ARGUMENTS...",
-        "RISK AGENT: EVALUATING EXPOSURE...",
-        "STRATEGIST: SYNTHESIZING VERDICT..."
+        "FETCHING MULTI-TIMEFRAME BARS...",
+        "CHECKING DATA QUALITY...",
+        "READING ORDERBOOK PRESSURE...",
+        "SCANNING CONNECTED NEWS FEEDS...",
+        "RANKING UNIVERSE OPPORTUNITIES...",
+        "SYNTHESIZING SOMA VERDICT..."
     ];
 
     return (
@@ -87,7 +107,7 @@ export const AIAnalysisModal = ({
                 <div className="flex items-center justify-between p-4 border-b border-soma-800 bg-soma-900/50">
                     <div className="flex items-center gap-3">
                         <div className="p-2 bg-soma-accent/10 rounded-full border border-soma-accent/30">
-                            <Brain className={`w-5 h-5 text-soma-accent ${loading ? 'animate-pulse' : ''}`} />
+                            <SomaOutlineIcon className={`w-5 h-5 text-soma-accent ${loading ? 'animate-pulse' : ''}`} />
                         </div>
                         <div>
                             <h2 className="text-lg font-bold text-white tracking-wider flex items-center gap-2">
@@ -96,7 +116,7 @@ export const AIAnalysisModal = ({
                             <div className="text-[10px] text-soma-accent font-mono flex items-center gap-2">
                                 <span>TARGET: {symbol}</span>
                                 <span className="w-1 h-1 rounded-full bg-soma-accent"></span>
-                                <span>{loading ? 'AI SWARM ACTIVE' : duration ? `COMPLETED IN ${(duration / 1000).toFixed(1)}s` : 'READY'}</span>
+                                <span>{loading ? 'REAL DATA SCAN ACTIVE' : duration ? `COMPLETED IN ${(duration / 1000).toFixed(1)}s` : 'READY'}</span>
                             </div>
                         </div>
                     </div>
@@ -139,12 +159,103 @@ export const AIAnalysisModal = ({
                         <div className="space-y-5 animate-in fade-in slide-in-from-bottom-4 duration-500">
                             <div className="flex items-center gap-2 text-soma-success mb-4 pb-2 border-b border-soma-800/50">
                                 <Sparkles className="w-4 h-4" />
-                                <span className="text-xs font-bold tracking-widest">STRATEGIC DIRECTIVE GENERATED</span>
+                                <span className="text-xs font-bold tracking-widest">REAL DEEP SCAN GENERATED</span>
                             </div>
+
+                            {analysis.deepScan && (
+                                <Section icon={<Database className="w-4 h-4" />} title="DATA OUTLETS" color="text-cyan-400">
+                                    <div className="grid grid-cols-2 gap-2 mb-3">
+                                        {(analysis.deepScan.sources || []).map((source, i) => (
+                                            <div key={i} className="bg-black/30 border border-white/5 rounded p-2 text-[10px] text-slate-300">
+                                                {source}
+                                            </div>
+                                        ))}
+                                    </div>
+                                    <div className="grid grid-cols-2 gap-2">
+                                        {(analysis.deepScan.altSignals || []).map((signal, i) => (
+                                            <div key={i} className="bg-soma-900/50 p-2 rounded border border-soma-800/30">
+                                                <div className="flex items-center justify-between gap-2">
+                                                    <span className="text-[10px] text-slate-500 uppercase">{signal.label}</span>
+                                                    <span className="text-[9px] text-soma-accent font-bold">{signal.state}</span>
+                                                </div>
+                                                <div className="text-[10px] text-slate-400 mt-1">{signal.detail}</div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </Section>
+                            )}
+
+                            {analysis.deepScan?.timeframes && (
+                                <Section icon={<BarChart3 className="w-4 h-4" />} title="REAL MARKET FRAMES" color="text-blue-400">
+                                    <div className="grid grid-cols-3 gap-2">
+                                        {Object.entries(analysis.deepScan.timeframes).map(([name, frame]) => (
+                                            <div key={name} className="bg-soma-900/50 p-2 rounded border border-soma-800/30">
+                                                <div className="text-[10px] text-slate-500 uppercase">{name} / {frame.timeframe}</div>
+                                                <div className="text-sm font-bold text-white mt-1">
+                                                    {frame.summary?.changePct != null ? `${frame.summary.changePct >= 0 ? '+' : ''}${frame.summary.changePct}%` : 'N/A'}
+                                                </div>
+                                                <div className="text-[9px] text-slate-500 mt-1">
+                                                    RSI {frame.summary?.rsi ?? '--'} | Vol {frame.summary?.volumeRatio ?? '--'}x
+                                                </div>
+                                                <div className={`text-[9px] mt-1 ${frame.quality?.valid ? 'text-emerald-400' : 'text-amber-400'}`}>
+                                                    {frame.quality?.valid ? 'quality passed' : frame.quality?.issues?.[0] || 'quality unknown'}
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </Section>
+                            )}
+
+                            {analysis.deepScan?.news?.length > 0 && (
+                                <Section icon={<Newspaper className="w-4 h-4" />} title="HEADLINE FEED" color="text-green-400">
+                                    <div className="space-y-2">
+                                        {analysis.deepScan.news.slice(0, 4).map((item, i) => (
+                                            <div key={i} className="bg-black/30 border border-white/5 rounded p-2">
+                                                <div className="flex justify-between gap-2 text-[9px] text-slate-500 mb-1">
+                                                    <span>{item.source}</span>
+                                                    <span className={item.impact === 'HIGH' ? 'text-rose-400' : item.impact === 'LOW' ? 'text-slate-500' : 'text-amber-400'}>{item.impact}</span>
+                                                </div>
+                                                <div className="text-xs text-slate-300 leading-snug">{item.headline}</div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </Section>
+                            )}
+
+                            {analysis.deepScan?.marketSimulation && (
+                                <Section icon={<Database className="w-4 h-4" />} title="MARKET SIMULATION MEMORY" color="text-fuchsia-400">
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <Stat label="Matched Runs" value={analysis.deepScan.marketSimulation.context?.count ?? 0} />
+                                        <Stat label="Prior Scans" value={analysis.deepScan.marketSimulation.previousDeepScans?.count ?? 0} />
+                                        {analysis.deepScan.marketSimulation.context?.best && (
+                                            <>
+                                                <Stat label="Best Sim Strategy" value={analysis.deepScan.marketSimulation.context.best.strategy?.name || analysis.deepScan.marketSimulation.context.best.strategy?.id} highlight />
+                                                <Stat label="Sim Score" value={analysis.deepScan.marketSimulation.context.best.prometheusScore?.toFixed?.(3) || analysis.deepScan.marketSimulation.context.best.prometheusScore} />
+                                            </>
+                                        )}
+                                    </div>
+                                    {analysis.deepScan.feedbackRecord && (
+                                        <p className="text-[10px] text-slate-500 mt-3">
+                                            Stored feedback record {analysis.deepScan.feedbackRecord.id}; future scans and Sim Intel can reuse this evidence.
+                                        </p>
+                                    )}
+                                </Section>
+                            )}
+
+                            {analysis.deepScan?.evidenceId && (
+                                <Section icon={<Database className="w-4 h-4" />} title="EVIDENCE CHAIN" color="text-cyan-400">
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <Stat label="Market Data Evidence" value={analysis.deepScan.feedbackRecord?.parentEvidenceIds?.[0] || 'N/A'} />
+                                        <Stat label="Deep Scan Evidence" value={analysis.deepScan.evidenceId} highlight />
+                                        <Stat label="Feedback Record" value={analysis.deepScan.feedbackRecord?.id || 'N/A'} />
+                                        <Stat label="Ledger" value="market-evidence" />
+                                    </div>
+                                </Section>
+                            )}
 
                             {/* Thesis */}
                             {analysis.thesis && (
-                                <Section icon={<Brain className="w-4 h-4" />} title="DIRECTOR THESIS" color="text-purple-400">
+                                <Section icon={<SomaOutlineIcon className="w-4 h-4" />} title="DIRECTOR THESIS" color="text-purple-400">
                                     <p className="text-sm text-slate-300 leading-relaxed whitespace-pre-line">{analysis.thesis}</p>
                                 </Section>
                             )}
@@ -257,7 +368,7 @@ const Section = ({ icon, title, color, children }) => (
 const Stat = ({ label, value, highlight }) => (
     <div className="bg-soma-900/50 p-2 rounded border border-soma-800/30">
         <div className="text-[10px] text-slate-500 uppercase tracking-wider">{label}</div>
-        <div className={`text-sm font-bold ${highlight ? 'text-soma-accent' : 'text-white'} mt-0.5`}>
+        <div className={`text-sm font-bold ${highlight ? 'text-soma-accent' : 'text-white'} mt-0.5 break-words`}>
             {value || 'N/A'}
         </div>
     </div>

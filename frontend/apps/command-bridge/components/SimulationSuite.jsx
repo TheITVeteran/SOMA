@@ -1,16 +1,15 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { 
   TrendingUp, Globe, Database, Code2, 
-  ChevronRight, ChevronDown, FlaskConical, Brain, Swords, Zap, Radio,
+  ChevronRight, ChevronDown, FlaskConical, Brain, Swords, Radio,
   BarChart3, Code, Activity, Terminal, Share2, Twitter, Linkedin, MessageSquare,
   Search, Eye, MousePointer2, Layout, Clock, Calendar, Image as ImageIcon,
-  Box, Cpu, Trophy, TrendingDown, DollarSign, BarChart2, Shield, Compass, BookOpen, Microscope, Sparkles,
-  Plus, Save, Trash2, ClipboardCheck
+  Box, Cpu, Trophy, TrendingDown, DollarSign, BarChart2, Shield, Compass, BookOpen, Microscope,
+  ClipboardCheck, Play, Square
 } from 'lucide-react';
 
-// Import full simulations
-import MarketSim from './simulations/MarketSim';
 import CodeSandboxView from './CodeSandboxView';
+import SocialModule from './SocialModule';
 
 /**
  * SimulationSuite.jsx — SOMA's Autonomous Reality Modeling Suite
@@ -72,23 +71,76 @@ function MlInternCardBody() {
   );
 }
 
+function SocialCardBody() {
+  const [cockpit, setCockpit] = useState(null);
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const r = await fetch('/api/social/cockpit');
+        if (r.ok) setCockpit(await r.json());
+      } catch {}
+    };
+    load();
+    const t = setInterval(load, 12000);
+    return () => clearInterval(t);
+  }, []);
+
+  const queue = cockpit?.queue || {};
+  const daemons = cockpit?.daemons || {};
+  const activeDaemons = Object.values(daemons).filter(d => d?.active).length;
+  const blueskyReady = cockpit?.platforms?.bluesky?.configured;
+
+  return (
+    <div className="flex h-full flex-col gap-2 p-2.5">
+      <div className="flex items-center justify-between shrink-0">
+        <span className="text-[9px] text-zinc-600 uppercase tracking-wider font-bold">Public Presence</span>
+        <span className={`flex items-center gap-1 text-[9px] font-mono ${blueskyReady ? 'text-sky-300' : 'text-zinc-500'}`}>
+          <span className={`h-1.5 w-1.5 rounded-full ${blueskyReady ? 'bg-sky-300 animate-pulse' : 'bg-zinc-600'}`} />
+          {blueskyReady ? 'bluesky live' : 'not configured'}
+        </span>
+      </div>
+      <div className="grid grid-cols-3 gap-1.5">
+        {[
+          ['queue', queue.pending || 0],
+          ['posted', queue.posted || 0],
+          ['learn', cockpit?.growth?.pending?.length || 0],
+        ].map(([label, value]) => (
+          <div key={label} className="rounded border border-white/5 bg-white/[0.03] p-2 text-center">
+            <div className="font-mono text-sm font-bold text-white">{value}</div>
+            <div className="text-[8px] uppercase tracking-widest text-zinc-600">{label}</div>
+          </div>
+        ))}
+      </div>
+      <div className="mt-auto rounded border border-violet-400/10 bg-violet-400/5 px-2 py-1.5">
+        <div className="flex items-center justify-between text-[10px] font-mono">
+          <span className="text-zinc-500">daemons</span>
+          <span className="text-violet-300">{activeDaemons}/4 active</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── ML Intern View (Full Screen) ───────────────────────────────────────────
 function MlInternView() {
     const [findings, setFindings] = useState([]);
+    const [status, setStatus] = useState(null);
     
     useEffect(() => {
-        // In a real run, SOMA would populate this via tool use.
-        // We poll the status for any new data if available.
         const poll = async () => {
             try {
                 const r = await fetch('/api/soma/ml-intern/status');
                 if (r.ok) {
                     const data = await r.json();
+                    setStatus(data);
                     if (data.latestFindings) setFindings(data.latestFindings);
                 }
             } catch {}
         };
         poll();
+        const t = setInterval(poll, 8000);
+        return () => clearInterval(t);
     }, []);
 
     return (
@@ -100,6 +152,12 @@ function MlInternView() {
                 <div>
                     <h2 className="text-xl font-bold text-white tracking-tight italic uppercase">ML INTERN RESEARCH HUB</h2>
                     <p className="text-xs text-blue-500/60 font-medium tracking-widest uppercase">Autonomous Paper Extraction · Recursive Learning</p>
+                </div>
+                <div className="ml-auto text-right">
+                    <div className="text-[10px] text-zinc-500 uppercase tracking-widest mb-1">Learning Mode</div>
+                    <div className={`text-xs font-mono ${status?.busy ? 'text-blue-300' : 'text-emerald-300'}`}>
+                        {status?.busy ? 'researching' : 'autopilot'}
+                    </div>
                 </div>
             </div>
 
@@ -125,15 +183,19 @@ function MlInternView() {
                 </div>
 
                 <div className="flex flex-col rounded-2xl border border-blue-500/20 bg-zinc-900/40 p-6 shadow-2xl">
-                    <h3 className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-4">Intern Parameters</h3>
+                    <h3 className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-4">Learning Autopilot</h3>
                     <div className="space-y-4">
                         <div className="p-4 rounded-xl bg-black/40 border border-white/5">
-                            <div className="text-[8px] text-zinc-600 uppercase font-bold mb-1">Target Models</div>
-                            <div className="text-xs text-blue-400 font-mono">Llama-3, Gemma-3, Qwen-2.5</div>
+                            <div className="text-[8px] text-zinc-600 uppercase font-bold mb-1">Cadence</div>
+                            <div className="text-xs text-blue-400 font-mono">{status?.autopilot?.cadenceMinutes || 45} min cycle</div>
                         </div>
                         <div className="p-4 rounded-xl bg-black/40 border border-white/5">
-                            <div className="text-[8px] text-zinc-600 uppercase font-bold mb-1">LoRA Alpha</div>
-                            <div className="text-xs text-emerald-400 font-mono">0.125 (Optimized)</div>
+                            <div className="text-[8px] text-zinc-600 uppercase font-bold mb-1">Latest Cycle</div>
+                            <div className="text-xs text-emerald-400 font-mono line-clamp-3">{status?.autopilot?.latestCycle?.title || 'Waiting for first autonomous pass'}</div>
+                        </div>
+                        <div className="p-4 rounded-xl bg-black/40 border border-white/5">
+                            <div className="text-[8px] text-zinc-600 uppercase font-bold mb-1">Ledger Status</div>
+                            <div className="text-xs text-zinc-300 font-mono">{status?.autopilot?.latestCycle?.status || 'idle'}</div>
                         </div>
                         <div className="mt-auto pt-6 opacity-30">
                             <Brain className="w-full h-24 text-blue-900/20" />
@@ -152,7 +214,7 @@ function BiotechCardBody() {
   useEffect(() => {
     const load = async () => {
       try {
-        const r = await fetch('/api/soma/biotech/status');
+        const r = await fetch('/api/soma/medical-lab/status');
         if (r.ok) setLab(await r.json());
       } catch {}
     };
@@ -168,55 +230,107 @@ function BiotechCardBody() {
     </div>
   );
 
+  const biotech = lab.biotech || {};
+  const chemistry = lab.chemistry || {};
+  const status = biotech.status || {};
+  const confidence = Number.isFinite(Number(biotech.confidence)) ? Number(biotech.confidence) : null;
+
   return (
     <div className="flex flex-col h-full p-2.5 gap-2">
       <div className="flex items-center justify-between shrink-0">
-        <span className="text-[9px] text-zinc-600 uppercase tracking-wider font-bold">Sovereign Lab</span>
-        <span className={`flex items-center gap-1 text-[9px] font-mono text-emerald-400`}>
-          <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
-          active
-        </span>
+        <span className="text-[9px] text-zinc-600 uppercase tracking-wider font-bold">Medical Lab</span>
+        <div className="flex items-center gap-2">
+          <span className={`flex items-center gap-1 text-[9px] font-mono ${lab.ready ? 'text-emerald-400' : 'text-zinc-500'}`}>
+            <span className={`w-1.5 h-1.5 rounded-full ${lab.ready ? 'bg-emerald-400 animate-pulse' : 'bg-zinc-600'}`} />
+            {lab.ready ? 'online' : 'offline'}
+          </span>
+        </div>
       </div>
       <div className="px-2 py-1 rounded bg-emerald-500/10 border border-emerald-500/20 shrink-0">
-        <div className="text-[9px] text-emerald-400 font-bold truncate">{lab.project || 'Initiative'}</div>
-        <div className="text-[10px] text-zinc-300 font-mono text-[8px]">Target: {lab.target || 'None'}</div>
+        <div className="text-[9px] text-emerald-400 font-bold truncate">{status.currentPhase || (chemistry.online ? 'CHEMISTRY' : 'IDLE')} phase</div>
+        <div className="text-[8px] text-zinc-300 font-mono truncate">Target: {biotech.target || status.target || (chemistry.online ? 'STOICHIOMETRY' : 'None')}</div>
       </div>
       <div className="flex-1 flex flex-col justify-end min-h-0">
-        <div className="text-[9px] text-zinc-600 uppercase tracking-wider mb-1 font-bold">Poseidon Certainty</div>
-        <div className="h-1.5 bg-zinc-800 rounded-full overflow-hidden border border-white/5">
-          <div 
-            className="h-full bg-emerald-500 rounded-full transition-all duration-1000" 
-            style={{ width: `${(lab.confidence || 0) * 100}%` }}
-          />
+        <div className="text-[9px] text-zinc-600 uppercase tracking-wider mb-1 font-bold">Simulation Pulse</div>
+        <div className="flex items-center justify-between text-[10px] font-mono">
+            <span className="text-zinc-500">biotech</span>
+            <span className={biotech.online ? 'text-emerald-400' : 'text-zinc-600'}>{biotech.online ? 'online' : 'offline'}</span>
         </div>
-        <div className="mt-1 text-[9px] text-zinc-500 font-mono">{(lab.confidence || 0) * 100}% Poseidon Verified</div>
+        <div className="flex items-center justify-between text-[10px] font-mono">
+            <span className="text-zinc-500">chemistry</span>
+            <span className={chemistry.online ? 'text-blue-400' : 'text-zinc-600'}>{chemistry.online ? 'online' : 'offline'}</span>
+        </div>
       </div>
     </div>
   );
 }
 
-// ── Medical Lab View (Steel City RESTORED) ──────────────────────────────────
+// ── Medical Lab View ───────────────────────────────────────────────────────
 function MedicalLabView() {
   const [lab, setLab] = useState(null);
-  const [logs, setLogs] = useState([]);
+  const [selectedMedEntry, setSelectedMedEntry] = useState(null);
+  const [paperQuery, setPaperQuery] = useState('KRAS G12D resistance bypass mechanisms');
+  const [paperIngestBusy, setPaperIngestBusy] = useState(false);
+  const [paperIngestResult, setPaperIngestResult] = useState(null);
 
-  useEffect(() => {
-    const poll = async () => {
+  const poll = useCallback(async () => {
       try {
-        const r = await fetch('/api/soma/biotech/status');
+        const r = await fetch('/api/soma/medical-lab/status');
         if (r.ok) {
-            const data = await r.json();
-            setLab(data);
-            if (data.latestFindings && data.latestFindings.length > 0) {
-                setLogs(data.latestFindings);
-            }
+          setLab(await r.json());
         }
       } catch {}
-    };
+  }, []);
+
+  useEffect(() => {
     poll();
     const t = setInterval(poll, 5000);
     return () => clearInterval(t);
-  }, []);
+  }, [poll]);
+
+  const biotech = lab?.biotech || {};
+  const chemistry = lab?.chemistry || {};
+  const status = biotech.status || {};
+  const discovery = lab?.discovery || {};
+  const architecture = lab?.architecture || {};
+  const paperCorpus = lab?.paperCorpus || {};
+  const ledger = lab?.ledger || [];
+  const findings = biotech.findings || status.latestFindings || [];
+  const activeMission = ledger.find(entry => entry.status === 'running') || ledger[0] || null;
+  const phases = ['DISCOVERY', 'STATS', 'PHYSICS', 'PHARM', 'TRIAL', 'IP', 'DOSSIER'];
+  const completed = new Set(status.completedPhases || []);
+  const discoveryQueue = status.discoveryQueue || [];
+  const selectedCandidate = status.selectedCandidate || discoveryQueue[0] || null;
+  const whyThisMission = status.whyThisMission || selectedCandidate?.why || [];
+  const learningMemory = status.learningMemory || {};
+
+  const statusClass = (value) => {
+    if (value === 'completed') return 'text-emerald-300 border-emerald-500/20 bg-emerald-500/10';
+    if (value === 'running') return 'text-blue-300 border-blue-500/20 bg-blue-500/10';
+    if (value === 'failed') return 'text-red-300 border-red-500/20 bg-red-500/10';
+    return 'text-zinc-400 border-white/10 bg-white/5';
+  };
+
+  const ingestPapers = async () => {
+    const query = paperQuery.trim();
+    if (!query || paperIngestBusy) return;
+    setPaperIngestBusy(true);
+    setPaperIngestResult(null);
+    try {
+      const r = await fetch('/api/soma/medical-lab/papers/ingest', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ query, limit: 5 })
+      });
+      const data = await r.json();
+      setPaperIngestResult(data);
+      await poll();
+    } catch (error) {
+      setPaperIngestResult({ success: false, error: error.message });
+    } finally {
+      setPaperIngestBusy(false);
+    }
+  };
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden min-h-0 p-5 bg-black/40">
@@ -225,111 +339,494 @@ function MedicalLabView() {
           <FlaskConical className="w-5 h-5 text-emerald-400" />
         </div>
         <div>
-          <h2 className="text-lg font-bold text-white tracking-tight italic uppercase tracking-widest">Sovereign Medical Lab</h2>
-          <p className="text-xs text-emerald-500/60 font-medium tracking-widest uppercase">Phased Industrial Research · Local Modeling</p>
+          <h2 className="text-lg font-bold text-white italic uppercase tracking-widest">Sovereign Medical Lab</h2>
+          <p className="text-xs text-emerald-500/60 font-medium tracking-widest uppercase">Research hypotheses · dry-lab modeling · evidence ledger</p>
         </div>
 
-        {lab && (
-            <div className="ml-auto flex items-center gap-6">
-                <div className="text-right">
-                    <div className="text-[10px] text-zinc-500 uppercase tracking-widest mb-1">Target Molecule</div>
-                    <div className="text-sm font-mono font-bold text-white">{lab.target || '—'}</div>
-                </div>
-                <div className="text-right">
-                    <div className="text-[10px] text-zinc-500 uppercase tracking-widest mb-1">Testing Round</div>
-                    <div className="text-sm font-mono font-bold text-orange-400">{lab.testingRound || 1} / 3</div>
-                </div>
-                <div className="w-48 text-right">
-                    <div className="text-[10px] text-zinc-500 uppercase tracking-widest mb-1">Mission Progress</div>
-                    <div className="flex items-center gap-2">
-                        <div className="flex-1 h-2 bg-zinc-800 rounded-full overflow-hidden border border-white/5">
-                            <div className="h-full bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]" style={{ width: `${(lab.progress || 0) * 100}%` }} />
-                        </div>
-                        <span className="text-xs font-mono text-emerald-400 font-bold">{(lab.progress || 0) * 100}%</span>
-                    </div>
-                </div>
-            </div>
-        )}
+        <div className="ml-auto text-right">
+          <div className="text-[10px] text-zinc-500 uppercase tracking-widest mb-1">Observation Mode</div>
+          <div className="flex items-center justify-end gap-2 text-xs font-mono text-emerald-300">
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+            {status.stale ? 'recovering' : 'autonomous'}
+          </div>
+        </div>
       </div>
 
-      <div className="flex-1 grid grid-cols-2 gap-4 overflow-hidden">
-        <div className="flex flex-col rounded-xl border border-emerald-500/20 bg-zinc-900/40 overflow-hidden">
-          <div className="px-4 py-2 border-b border-emerald-500/20 bg-emerald-500/5 flex items-center gap-2">
-            <Zap className="w-4 h-4 text-emerald-400" />
-            <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest">Recent Discoveries</span>
+      <div className="grid grid-cols-4 gap-3 mb-4">
+        <div className="rounded-xl border border-emerald-500/20 bg-zinc-900/40 p-4">
+          <div className="text-[9px] text-zinc-500 uppercase tracking-widest font-bold mb-1">Biotech Arbiter</div>
+          <div className={`text-sm font-bold ${biotech.online ? 'text-emerald-300' : 'text-zinc-500'}`}>{biotech.online ? 'Online' : 'Offline'}</div>
+          <div className="mt-2 text-[10px] text-zinc-500 font-mono truncate">{status.currentPhase || 'IDLE'} / {biotech.target || status.target || 'No target'}</div>
+        </div>
+        <div className="rounded-xl border border-blue-500/20 bg-zinc-900/40 p-4">
+          <div className="text-[9px] text-zinc-500 uppercase tracking-widest font-bold mb-1">Chemistry Lab</div>
+          <div className={`text-sm font-bold ${chemistry.online ? 'text-blue-300' : 'text-zinc-500'}`}>{chemistry.online ? 'Online' : 'Offline'}</div>
+          <div className="mt-2 text-[10px] text-zinc-500 font-mono truncate">{chemistry.status?.engine || 'SOMA-Stoich-V1'} / Notebook active</div>
+        </div>
+        <div className="rounded-xl border border-orange-500/20 bg-zinc-900/40 p-4">
+          <div className="text-[9px] text-zinc-500 uppercase tracking-widest font-bold mb-1">Testing Round</div>
+          <div className="text-sm font-bold text-orange-300 font-mono">{status.testingRound ?? 0} / {status.maxTestingRounds || 3}</div>
+          <div className="mt-2 text-[10px] text-zinc-500 font-mono">{Math.round((status.progress || 0) * 100)}% mission progress</div>
+          {status.lastFailure && (
+            <div className="mt-1 text-[9px] text-red-300 font-mono truncate" title={status.lastFailure.reason}>
+              Last veto: {status.lastFailure.attempts}/{status.maxTestingRounds || 3}
+            </div>
+          )}
+        </div>
+        <div className="rounded-xl border border-fuchsia-500/20 bg-zinc-900/40 p-4">
+          <div className="text-[9px] text-zinc-500 uppercase tracking-widest font-bold mb-1">Research Ledger</div>
+          <div className="text-sm font-bold text-fuchsia-300 font-mono">{lab?.summary?.total || 0} missions</div>
+          <div className="mt-2 text-[10px] text-zinc-500 font-mono truncate">{lab?.summary?.lastUpdated ? `Updated ${formatTime(lab.summary.lastUpdated)}` : 'No runs yet'}</div>
+        </div>
+      </div>
+
+      <div className="flex-1 grid grid-cols-5 gap-4 overflow-hidden">
+        <div className="col-span-2 flex flex-col rounded-xl border border-blue-500/20 bg-zinc-900/40 overflow-hidden">
+          <div className="px-4 py-3 border-b border-blue-500/20 bg-blue-500/5 flex items-center gap-2">
+            <Eye className="w-4 h-4 text-blue-400" />
+            <span className="text-[10px] font-bold text-blue-400 uppercase tracking-widest">Autonomous Research Stream</span>
           </div>
-          <div className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-4">
-            {logs.length === 0 ? (
-                <div className="flex items-center justify-center h-full text-zinc-600 italic text-sm">
-                    Awaiting 99.9% consensus...
+          <div className="p-4 border-b border-white/10 bg-black/20">
+            <div className="text-[9px] text-zinc-500 uppercase tracking-widest font-bold mb-2">Current Thought Window</div>
+            <div className="rounded-lg border border-blue-500/20 bg-blue-500/5 p-3 min-h-[88px]">
+              {activeMission ? (
+                <>
+                  <div className="flex items-center justify-between gap-3 mb-2">
+                    <div className="text-xs text-blue-200 font-bold truncate">{activeMission.title}</div>
+                    <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[8px] font-bold uppercase ${statusClass(activeMission.status)}`}>{activeMission.status}</span>
+                  </div>
+                  <div className="text-[10px] text-zinc-400 leading-relaxed font-mono">{activeMission.topic}</div>
+                  {selectedCandidate && (
+                    <div className="mt-2 rounded border border-cyan-500/20 bg-cyan-500/10 px-2 py-1 text-[9px] font-mono text-cyan-200">
+                      Queue pick: {selectedCandidate.target}/{selectedCandidate.strand} · score {Math.round((selectedCandidate.score || 0) * 100)}%
+                    </div>
+                  )}
+                  {Number.isFinite(Number(selectedCandidate?.learningAdjustment)) && Number(selectedCandidate.learningAdjustment) !== 0 && (
+                    <div className="mt-2 rounded border border-purple-500/20 bg-purple-500/10 px-2 py-1 text-[9px] font-mono text-purple-200">
+                      Memory adjustment: {Number(selectedCandidate.learningAdjustment) > 0 ? '+' : ''}{Number(selectedCandidate.learningAdjustment).toFixed(2)}
+                    </div>
+                  )}
+                  {whyThisMission.length > 0 && (
+                    <div className="mt-2 space-y-1">
+                      {whyThisMission.slice(0, 3).map((why, idx) => (
+                        <div key={idx} className="text-[9px] text-zinc-500 font-mono leading-snug">• {why}</div>
+                      ))}
+                    </div>
+                  )}
+                  <div className="mt-2 text-[9px] text-zinc-600 font-mono uppercase tracking-wider">
+                    Source: {activeMission.source || 'autonomous'}
+                  </div>
+                  {status.stale && (
+                    <div className="mt-2 rounded border border-amber-500/20 bg-amber-500/10 px-2 py-1 text-[9px] font-mono text-amber-300">
+                      Mission safety window expired; backend will release and retry on the next cycle.
+                    </div>
+                  )}
+                  {status.lastFailure && !status.stale && (
+                    <div className="mt-2 rounded border border-red-500/20 bg-red-500/10 px-2 py-1 text-[9px] font-mono text-red-300">
+                      Last physics veto after {status.lastFailure.attempts}/{status.maxTestingRounds || 3} rounds: {status.lastFailure.reason}
+                    </div>
+                  )}
+                  {status.lastReflectionPath && (
+                    <div className="mt-2 rounded border border-purple-500/20 bg-purple-500/10 px-2 py-1 text-[9px] font-mono text-purple-300 truncate">
+                      Latest dossier filed to Reflections.
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="h-full flex items-center justify-center text-zinc-600 italic text-sm">
+                  Waiting for SOMA's next lab cycle...
                 </div>
-            ) : (
-                logs.map((log, i) => (
-                    <div key={i} className="p-4 rounded-lg bg-black/40 border border-white/5 animate-in slide-in-from-top duration-500 shadow-xl">
-                        <div className="text-xs font-bold text-emerald-400 mb-2 uppercase tracking-wide">🔬 {log.target} + {log.strand}</div>
-                        <div className="text-[11px] text-zinc-300 leading-relaxed font-mono line-clamp-3">{log.dossierSummary}</div>
-                        <div className="mt-3 flex items-center justify-between border-t border-white/5 pt-2">
-                            <span className="text-[9px] text-zinc-600 font-mono tracking-tighter">Affinity: {log.affinity?.toFixed(2)} kcal/mol</span>
-                            <span className="text-[9px] text-zinc-500 italic">Confidence: {(log.confidence * 100).toFixed(1)}%</span>
+              )}
+            </div>
+          </div>
+          <div className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-3">
+            {ledger.length === 0 ? (
+              <div className="h-full flex items-center justify-center text-zinc-600 italic text-sm">No medical research missions recorded.</div>
+            ) : ledger.map((entry) => (
+              <button
+                type="button"
+                key={entry.id}
+                onClick={() => setSelectedMedEntry(entry)}
+                className="w-full text-left rounded-lg border border-white/10 bg-black/40 p-3 transition-colors hover:border-blue-400/40 hover:bg-blue-500/5"
+                title="Open mission output"
+              >
+                <div className="flex items-center justify-between gap-3 mb-2">
+                  <div className="text-xs font-bold text-white truncate">{entry.title}</div>
+                  <span className={`shrink-0 rounded-full border px-2 py-0.5 text-[8px] font-bold uppercase ${statusClass(entry.status)}`}>{entry.status}</span>
+                </div>
+                <div className="text-[10px] text-zinc-500 font-mono truncate">{entry.topic}</div>
+                {entry.error && <div className="mt-2 text-[10px] text-red-300 font-mono line-clamp-2">{entry.error}</div>}
+                {entry.result && <div className="mt-2 text-[10px] text-zinc-300 leading-relaxed line-clamp-4">{entry.result}</div>}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="col-span-3 grid grid-rows-2 gap-4 overflow-hidden">
+          <div className="flex flex-col rounded-xl border border-emerald-500/20 bg-zinc-900/40 overflow-hidden">
+            <div className="px-4 py-3 border-b border-emerald-500/20 bg-emerald-500/5 flex items-center gap-2">
+              <Activity className="w-4 h-4 text-emerald-400" />
+              <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest">Medical Simulation Architecture</span>
+            </div>
+            <div className="p-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-3">
+                   <div className="rounded-lg border border-white/10 bg-black/30 p-3">
+                    <div className="text-[9px] text-zinc-500 uppercase tracking-widest font-bold mb-2">Biotech Phase Pipeline</div>
+                    <div className="flex items-center gap-2 overflow-x-auto pb-2 custom-scrollbar">
+                        {phases.map((phase) => {
+                        const isCurrent = status.currentPhase === phase;
+                        const isDone = completed.has(phase);
+                        return (
+                            <div key={phase} className={`shrink-0 rounded-lg border px-2 py-1.5 min-w-[70px] text-center ${isCurrent ? 'border-emerald-400/50 bg-emerald-500/15' : isDone ? 'border-emerald-500/20 bg-emerald-500/10' : 'border-white/10 bg-black/30'}`}>
+                            <div className={`text-[8px] font-bold uppercase tracking-widest ${isCurrent || isDone ? 'text-emerald-300' : 'text-zinc-600'}`}>{phase}</div>
+                            </div>
+                        );
+                        })}
+                    </div>
+                  </div>
+                  <div className="rounded-lg border border-white/10 bg-black/30 p-3">
+                    <div className="text-[9px] text-zinc-500 uppercase tracking-widest font-bold">Discovery Priority Queue</div>
+                    <div className="mt-2 space-y-1.5">
+                      {discoveryQueue.slice(0, 4).map((item) => (
+                        <div key={item.id} className="rounded border border-white/5 bg-black/25 px-2 py-1.5">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-[10px] text-zinc-100 font-mono truncate">{item.target}/{item.strand}</span>
+                            <span className="text-[9px] text-cyan-300 font-mono">{Math.round((item.score || 0) * 100)}%</span>
+                          </div>
+                          <div className="mt-0.5 text-[8px] text-zinc-600 font-mono truncate">{item.humanNeed || item.category}</div>
+                          {Number.isFinite(Number(item.learningAdjustment)) && Number(item.learningAdjustment) !== 0 && (
+                            <div className="mt-0.5 text-[8px] text-purple-300 font-mono">
+                              learned {Number(item.learningAdjustment) > 0 ? '+' : ''}{Number(item.learningAdjustment).toFixed(2)}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                      {discoveryQueue.length === 0 && (
+                        <div className="text-[10px] text-zinc-600 italic">Queue will populate after restart.</div>
+                      )}
+                    </div>
+                  </div>
+                  <div className="rounded-lg border border-purple-500/20 bg-purple-500/5 p-3">
+                    <div className="mb-2 flex items-center justify-between">
+                      <div className="text-[9px] text-purple-300 uppercase tracking-widest font-bold">Learning Memory</div>
+                      <Brain className="w-3 h-3 text-purple-300/70" />
+                    </div>
+                    <div className="grid grid-cols-3 gap-2 text-center font-mono">
+                      <div className="rounded border border-white/5 bg-black/25 px-2 py-1">
+                        <div className="text-[11px] text-white">{learningMemory.totalEvents || 0}</div>
+                        <div className="text-[8px] uppercase text-zinc-600">events</div>
+                      </div>
+                      <div className="rounded border border-white/5 bg-black/25 px-2 py-1">
+                        <div className="text-[11px] text-emerald-300">{learningMemory.positives || 0}</div>
+                        <div className="text-[8px] uppercase text-zinc-600">signals</div>
+                      </div>
+                      <div className="rounded border border-white/5 bg-black/25 px-2 py-1">
+                        <div className="text-[11px] text-red-300">{learningMemory.negatives || 0}</div>
+                        <div className="text-[8px] uppercase text-zinc-600">vetoes</div>
+                      </div>
+                    </div>
+                    <div className="mt-2 text-[9px] leading-snug text-zinc-500 font-mono line-clamp-2">
+                      {learningMemory.lastLesson || 'Pass/fail lessons will persist after the next MedLab cycle.'}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  <div className="rounded-lg border border-blue-500/20 bg-blue-500/5 p-3">
+                    <div className="flex items-center justify-between mb-2">
+                        <div className="text-[9px] text-blue-400 uppercase tracking-widest font-bold">Chemistry Stoichiometry</div>
+                        <span className={`text-[8px] px-1.5 py-0.5 rounded-full ${chemistry.online ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30' : 'bg-zinc-800 text-zinc-500'}`}>
+                            {chemistry.online ? 'ACTIVE' : 'OFFLINE'}
+                        </span>
+                    </div>
+                    <div className="space-y-1.5 text-[10px] font-mono">
+                        <div className="flex justify-between items-center text-zinc-400">
+                            <span>Equation Parser</span>
+                            <span className="text-emerald-500 text-[8px]">✓ Ready</span>
+                        </div>
+                        <div className="flex justify-between items-center text-zinc-400">
+                            <span>Molar Mass Eng</span>
+                            <span className="text-emerald-500 text-[8px]">✓ Ready</span>
+                        </div>
+                        <div className="flex justify-between items-center text-zinc-400">
+                            <span>Safety Gate</span>
+                            <span className="text-blue-400 text-[8px]">Armed</span>
                         </div>
                     </div>
-                ))
-            )}
-          </div>
-        </div>
-
-        <div className="flex flex-col rounded-xl border border-blue-500/20 bg-zinc-900/40 overflow-hidden">
-          <div className="px-4 py-2 border-b border-blue-500/20 bg-blue-500/5 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-                <Sparkles className="w-4 h-4 text-blue-400" />
-                <span className="text-[10px] font-bold text-blue-400 uppercase tracking-widest">Hypothesis Stream</span>
+                    <div className="mt-2 pt-2 border-t border-white/5 flex justify-between items-center">
+                         <div className="text-[8px] text-zinc-500 uppercase font-bold">Lab Notebook</div>
+                         <div className="text-[9px] text-blue-300 truncate max-w-[120px]">{chemistry.notebook?.split(/[\\/]/).pop() || 'notebook.jsonl'}</div>
+                    </div>
+                  </div>
+                  
+                  <div className="rounded-lg border border-white/10 bg-black/30 p-3">
+                    <div className="mb-1 text-[9px] text-zinc-500 uppercase tracking-widest font-bold flex items-center justify-between">
+                        <span>Dry Lab Boundary</span>
+                        <Shield className="w-3 h-3 text-emerald-500/50" />
+                    </div>
+                    <div className="text-[9px] leading-relaxed text-zinc-500 italic">
+                        {architecture.workspace?.safetyBoundary || 'Research-only simulation boundary active.'}
+                    </div>
+                  </div>
+                  <div className="rounded-lg border border-white/10 bg-black/30 p-3">
+                    <div className="mb-1 text-[9px] text-zinc-500 uppercase tracking-widest font-bold flex items-center justify-between">
+                        <span>Literature Intake</span>
+                        <BookOpen className="w-3 h-3 text-blue-400/60" />
+                    </div>
+                    <div className="text-[9px] leading-relaxed text-zinc-500">
+                      PubMed metadata, abstracts, and PMC open-access full text can be ingested into the SOMA Research workbook.
+                    </div>
+                    <div className="mt-3 flex gap-2">
+                      <input
+                        value={paperQuery}
+                        onChange={(e) => setPaperQuery(e.target.value)}
+                        className="min-w-0 flex-1 rounded border border-white/10 bg-black/40 px-2 py-1.5 text-[10px] font-mono text-zinc-200 outline-none focus:border-blue-400/40"
+                        placeholder="Research question..."
+                      />
+                      <button
+                        type="button"
+                        onClick={ingestPapers}
+                        disabled={paperIngestBusy || !paperQuery.trim()}
+                        className="inline-flex items-center gap-1 rounded border border-blue-500/20 bg-blue-500/10 px-2 py-1.5 text-[9px] font-bold uppercase tracking-widest text-blue-300 hover:border-blue-400/40 disabled:opacity-40"
+                      >
+                        <Search className="h-3 w-3" />
+                        {paperIngestBusy ? 'Ingesting' : 'Ingest'}
+                      </button>
+                    </div>
+                    <div className="mt-2 grid grid-cols-3 gap-1.5 text-center font-mono">
+                      <div className="rounded border border-white/5 bg-black/25 px-2 py-1">
+                        <div className="text-[11px] text-white">{paperCorpus.paperCount || 0}</div>
+                        <div className="text-[8px] uppercase text-zinc-600">papers</div>
+                      </div>
+                      <div className="rounded border border-white/5 bg-black/25 px-2 py-1">
+                        <div className="text-[11px] text-emerald-300">{paperCorpus.fullTextCount || 0}</div>
+                        <div className="text-[8px] uppercase text-zinc-600">full text</div>
+                      </div>
+                      <div className="rounded border border-white/5 bg-black/25 px-2 py-1">
+                        <div className="text-[11px] text-cyan-300">{paperCorpus.findingCount || 0}</div>
+                        <div className="text-[8px] uppercase text-zinc-600">findings</div>
+                      </div>
+                    </div>
+                    {paperIngestResult && (
+                      <div className={`mt-2 rounded border px-2 py-1.5 text-[9px] font-mono ${paperIngestResult.success ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-300' : 'border-red-500/20 bg-red-500/10 text-red-300'}`}>
+                        {paperIngestResult.success
+                          ? `Filed ${paperIngestResult.papers?.length || 0} papers to SOMA Research.`
+                          : `Ingestion failed: ${paperIngestResult.error || 'unknown error'}`}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
             </div>
-            <button 
-                onClick={async () => {
-                    await fetch('/api/soma/medical-discovery/deduce', { method: 'POST' });
-                }}
-                className="p-1 hover:bg-blue-500/10 rounded transition-colors"
-                title="Trigger Deduction"
-            >
-                <TrendingUp className="w-3 h-3 text-blue-500" />
-            </button>
           </div>
-          <div className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-4">
-             <div className="p-3 rounded bg-black/40 border border-white/5">
-                <div className="text-[8px] text-blue-400 font-bold uppercase mb-1">Mechanistic Correlation</div>
-                <div className="text-[10px] text-zinc-400 leading-snug">Analyzing unlikely pairing: [Vitamin B2] x [Seamoss]. Searching for mitochondrial ATP synergy...</div>
-             </div>
-             <div className="p-3 rounded bg-black/40 border border-white/5">
-                <div className="text-[8px] text-fuchsia-400 font-bold uppercase mb-1">Anomaly Detected</div>
-                <div className="text-[10px] text-zinc-400 leading-snug">Psilocybin substrate depletion (Choline) identified as primary metabolic bottleneck for neurogenesis.</div>
-             </div>
-             <div className="animate-pulse flex items-center gap-2 text-[10px] text-zinc-600 italic">
-                <div className="w-1.5 h-1.5 rounded-full bg-blue-500" />
-                Wandering Mind exploring enzymatic bridges...
-             </div>
+
+          <div className="flex flex-col rounded-xl border border-emerald-500/20 bg-zinc-900/40 overflow-hidden">
+            <div className="px-4 py-3 border-b border-emerald-500/20 bg-emerald-500/5 flex items-center gap-2">
+              <ClipboardCheck className="w-4 h-4 text-emerald-400" />
+              <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest">Recent Findings & Virtual Experiments</span>
+            </div>
+            <div className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-3">
+              {findings.length === 0 ? (
+                <div className="h-full flex items-center justify-center text-zinc-600 italic text-sm">Awaiting completed research findings.</div>
+              ) : findings.map((log, i) => (
+                <div key={i} className={`p-4 rounded-lg bg-black/40 border shadow-xl group hover:border-emerald-500/30 transition-all ${log.type === 'chemistry' ? 'border-blue-500/20' : 'border-white/5'}`}>
+                  <div className="flex items-center justify-between mb-2">
+                    <div className={`text-xs font-bold uppercase tracking-wide ${log.type === 'chemistry' ? 'text-blue-400' : 'text-emerald-400'}`}>
+                        {log.type === 'chemistry' ? (log.title || 'Chemical Analysis') : (log.target + ' + ' + log.strand)}
+                    </div>
+                    <span className="text-[8px] text-zinc-600 font-mono">{formatTime(log.timestamp)}</span>
+                  </div>
+                  <div className="text-[11px] text-zinc-300 leading-relaxed font-mono line-clamp-3">
+                    {log.type === 'chemistry' 
+                        ? (log.hypothesis || `Molar mass analysis of ${log.reaction ? Object.keys(log.reaction.reactants).join(' + ') : 'compound'}`)
+                        : (log.dossierSummary || log.summary || 'Finding recorded without summary.')
+                    }
+                  </div>
+                  <div className="mt-3 flex items-center justify-between border-t border-white/5 pt-2">
+                    <div className="flex gap-4">
+                        {log.type === 'chemistry' ? (
+                            <>
+                                <span className="text-[9px] text-zinc-600 font-mono">Limit: <span className="text-white">{log.result?.limitingReagent}</span></span>
+                                <span className="text-[9px] text-zinc-600 font-mono">Yield: <span className="text-white">{log.result?.theoreticalYield ? Object.values(log.result.theoreticalYield)[0].grams.toFixed(1) + 'g' : 'n/a'}</span></span>
+                            </>
+                        ) : (
+                            <>
+                                <span className="text-[9px] text-zinc-600 font-mono">Affinity: <span className="text-white">{Number.isFinite(log.affinity) ? log.affinity.toFixed(2) : 'n/a'}</span></span>
+                                <span className="text-[9px] text-zinc-600 font-mono">Confidence: <span className="text-white">{Number.isFinite(log.confidence) ? `${(log.confidence * 100).toFixed(1)}%` : 'n/a'}</span></span>
+                            </>
+                        )}
+                    </div>
+                    <span className={`text-[8px] px-1.5 py-0.5 rounded uppercase font-bold ${log.type === 'chemistry' ? 'bg-blue-500/10 text-blue-400' : 'bg-white/5 text-zinc-500'}`}>
+                        {log.type === 'chemistry' ? 'In Silico' : 'Verified'}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
-
       </div>
+      {selectedMedEntry && (
+        <div className="fixed inset-0 z-[220] flex items-center justify-center bg-black/80 p-6 backdrop-blur-sm">
+          <div className="flex max-h-[86vh] w-full max-w-4xl flex-col overflow-hidden rounded-xl border border-blue-500/25 bg-zinc-950 shadow-2xl">
+            <div className="flex items-start justify-between gap-4 border-b border-white/10 bg-blue-500/5 px-5 py-4">
+              <div>
+                <div className="text-[10px] font-bold uppercase tracking-widest text-blue-400">MedLab Mission Output</div>
+                <h3 className="mt-1 text-lg font-bold text-white">{selectedMedEntry.title}</h3>
+                <div className="mt-1 text-[10px] font-mono text-zinc-500">{selectedMedEntry.topic}</div>
+              </div>
+              <button
+                onClick={() => setSelectedMedEntry(null)}
+                className="rounded border border-white/10 px-3 py-1.5 text-xs font-bold text-zinc-400 hover:border-white/20 hover:text-white"
+              >
+                Close
+              </button>
+            </div>
+            <div className="grid min-h-0 flex-1 grid-cols-3 overflow-hidden">
+              <div className="border-r border-white/10 p-4 text-[11px] font-mono text-zinc-400">
+                <div className="mb-3 rounded border border-white/10 bg-black/30 p-3">
+                  <div className="text-[9px] uppercase tracking-widest text-zinc-600">Status</div>
+                  <div className={`mt-1 inline-flex rounded border px-2 py-0.5 text-[9px] font-bold uppercase ${statusClass(selectedMedEntry.status)}`}>{selectedMedEntry.status}</div>
+                </div>
+                <div className="space-y-2">
+                  <div><span className="text-zinc-600">Source:</span> {selectedMedEntry.source || 'autonomous'}</div>
+                  <div><span className="text-zinc-600">Created:</span> {formatTime(selectedMedEntry.createdAt)}</div>
+                  <div><span className="text-zinc-600">Updated:</span> {formatTime(selectedMedEntry.updatedAt)}</div>
+                  {selectedMedEntry.stack?.length > 0 && (
+                    <div><span className="text-zinc-600">Stack:</span> {selectedMedEntry.stack.join(', ')}</div>
+                  )}
+                </div>
+              </div>
+              <div className="col-span-2 min-h-0 overflow-y-auto custom-scrollbar p-5">
+                {selectedMedEntry.error && (
+                  <div className="mb-4 rounded border border-red-500/20 bg-red-500/10 p-3 text-xs text-red-200">
+                    {selectedMedEntry.error}
+                  </div>
+                )}
+                <pre className="whitespace-pre-wrap break-words text-xs leading-relaxed text-zinc-200 font-mono">
+                  {selectedMedEntry.result || selectedMedEntry.error || 'No full output has been recorded for this mission yet.'}
+                </pre>
+                {selectedMedEntry.why?.length > 0 && (
+                  <div className="mt-4 rounded border border-cyan-500/20 bg-cyan-500/10 p-3">
+                    <div className="mb-2 text-[10px] font-bold uppercase tracking-widest text-cyan-300">Why SOMA picked this</div>
+                    <div className="space-y-1">
+                      {selectedMedEntry.why.map((why, idx) => (
+                        <div key={idx} className="text-[10px] font-mono text-zinc-300">• {why}</div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-// ── Market Panel (Steel City RESTORED) ─────────────────────────────────────
+// ── Market Panel ───────────────────────────────────────────────────────────
 function MarketSimulationView() {
-  const [data, setData] = useState(null);
-  
-  useEffect(() => {
-    const poll = async () => {
-      try {
-        const r = await fetch('/api/soma/market/status');
-        if (r.ok) setData(await r.json());
-      } catch {}
-    };
-    poll();
-    const t = setInterval(poll, 5000);
-    return () => clearInterval(t);
+  const [lab, setLab] = useState(null);
+  const [training, setTraining] = useState(null);
+  const [promotion, setPromotion] = useState(null);
+  const [trainingIterations, setTrainingIterations] = useState(1000000);
+  const [trainingBusy, setTrainingBusy] = useState(false);
+
+  const fmtPct = (value, digits = 1) => Number.isFinite(Number(value)) ? `${(Number(value) * 100).toFixed(digits)}%` : 'n/a';
+  const fmtNum = (value, digits = 2) => Number.isFinite(Number(value)) ? Number(value).toFixed(digits) : 'n/a';
+  const fmtDollar = (value) => {
+    const n = Number(value);
+    if (!Number.isFinite(n)) return 'n/a';
+    return `${n >= 0 ? '+' : '-'}$${Math.abs(n).toFixed(2)}`;
+  };
+  const statusTone = (status) => status === 'promoted'
+    ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
+    : status === 'candidate'
+      ? 'border-orange-500/30 bg-orange-500/10 text-orange-300'
+      : 'border-rose-500/30 bg-rose-500/10 text-rose-300';
+
+  const loadLab = useCallback(async () => {
+    try {
+      const r = await fetch('/api/soma/market-lab/status');
+      if (r.ok) setLab(await r.json());
+    } catch {}
   }, []);
+
+  const loadTraining = useCallback(async () => {
+    try {
+      const [trainingRes, promotionRes] = await Promise.all([
+        fetch('/api/mission-control/training'),
+        fetch('/api/mission-control/promotion')
+      ]);
+      if (trainingRes.ok) setTraining(await trainingRes.json());
+      if (promotionRes.ok) {
+        const data = await promotionRes.json();
+        setPromotion(data.promotion || null);
+      }
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    loadLab();
+    loadTraining();
+    const t = setInterval(() => {
+      loadLab();
+      loadTraining();
+    }, 7000);
+    return () => clearInterval(t);
+  }, [loadLab, loadTraining]);
+
+  const startTraining = async () => {
+    if (trainingBusy) return;
+    setTrainingBusy(true);
+    try {
+      await fetch('/api/mission-control/training/start', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          objective: 'five_to_five_hundred',
+          symbols: ['BTC-USD', 'ETH-USD', 'SOL-USD', 'SPY', 'QQQ', 'TLT', 'TSLA'],
+          strategyIds: ['standard_portfolio', 'swarm_architecture', 'micro_compounder', 'micro_scalper', 'full_aggression', 'yield_harvester'],
+          iterations: trainingIterations,
+          initialCapital: 5,
+          targetCapital: 500,
+          timeframe: '5Min',
+          bars: 500
+        })
+      });
+      await loadTraining();
+    } catch {
+      // Keep the sim view usable if the backend is temporarily busy.
+    } finally {
+      setTrainingBusy(false);
+    }
+  };
+
+  const stopTraining = async (jobId) => {
+    if (!jobId || trainingBusy) return;
+    setTrainingBusy(true);
+    try {
+      await fetch(`/api/mission-control/training/${jobId}/stop`, { method: 'POST' });
+      await loadTraining();
+    } catch {
+    } finally {
+      setTrainingBusy(false);
+    }
+  };
+
+  const strategies = lab?.strategies || [];
+  const entries = lab?.ledger || [];
+  const autopilot = lab?.autopilot;
+  const best = lab?.summary?.best;
+  const latest = entries[0] || null;
+  const activeJob = training?.jobs?.find(job => job.status === 'running') || null;
+  const latestJob = activeJob || training?.jobs?.[0] || null;
+  const jobProgress = latestJob?.iterationsTarget ? Math.min(100, (latestJob.iterationsDone / latestJob.iterationsTarget) * 100) : 0;
+  const failedPromotionChecks = promotion?.checks
+    ? Object.entries(promotion.checks).filter(([, ok]) => !ok).map(([key]) => key)
+    : [];
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden min-h-0 p-5 bg-black/40">
@@ -337,75 +834,236 @@ function MarketSimulationView() {
         <div className="p-2 rounded-lg bg-orange-500/10 border border-orange-500/20">
           <TrendingUp className="w-5 h-5 text-orange-400" />
         </div>
-        <div>
-          <h2 className="text-lg font-bold text-white tracking-tight italic">QUANT ENGINE SIMULATION</h2>
-          <p className="text-xs text-orange-500/60 font-medium tracking-widest uppercase">Predictive Alpha · Volatility Arbitrage</p>
+        <div className="min-w-0">
+          <h2 className="text-lg font-bold text-white tracking-tight italic">PROMETHEUS MARKET LAB</h2>
+          <p className="text-xs text-orange-500/60 font-medium tracking-widest uppercase">Autonomous Paper Strategy Research · Explore / Exploit · Mission Control Ready</p>
+        </div>
+        <div className="ml-auto rounded-xl border border-emerald-500/20 bg-emerald-500/[0.06] px-4 py-2">
+          <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-emerald-300">
+            <span className={`h-2 w-2 rounded-full ${autopilot?.running ? 'bg-orange-300 animate-pulse' : autopilot?.enabled ? 'bg-emerald-300 animate-pulse' : 'bg-zinc-600'}`} />
+            {autopilot?.running ? 'SOMA Simulating' : autopilot?.enabled ? 'Autonomy Active' : 'Autonomy Paused'}
+          </div>
+          <div className="mt-1 font-mono text-[9px] text-zinc-500">
+            {autopilot?.totalCycles || 0} cycles · {autopilot?.totalRuns || 0} runs · next loop ~{Math.round((autopilot?.intervalMs || 120000) / 1000)}s
+          </div>
         </div>
       </div>
 
-      <div className="flex-1 grid grid-cols-3 gap-4 overflow-hidden">
-        {/* Perception */}
-        <div className="flex flex-col rounded-xl border border-white/10 bg-zinc-900/40 p-4">
-          <div className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-4 flex items-center gap-2">
-            <Eye className="w-3 h-3" /> PERCEPTION
+      <div className="mb-4 grid grid-cols-4 gap-3">
+        {[
+          ['Paper Runs', lab?.summary?.total || 0, 'text-orange-300'],
+          ['Promoted', lab?.summary?.promoted || 0, 'text-emerald-300'],
+          ['Candidates', lab?.summary?.candidates || 0, 'text-blue-300'],
+          ['Rejected', lab?.summary?.rejected || 0, 'text-rose-300'],
+        ].map(([label, value, tone]) => (
+          <div key={label} className="rounded-xl border border-white/10 bg-zinc-900/40 p-3">
+            <div className="text-[9px] uppercase tracking-widest text-zinc-600 font-bold">{label}</div>
+            <div className={`mt-1 font-mono text-2xl font-bold ${tone}`}>{value}</div>
           </div>
-          <div className="space-y-4 overflow-y-auto custom-scrollbar">
-             <div className="flex flex-col gap-3">
-                <div className="text-[8px] text-zinc-500 uppercase">Sentiment</div>
-                <div className="text-2xl font-bold font-mono text-orange-400">{(data?.sentiment * 100 || 42).toFixed(1)}%</div>
-             </div>
-             <div className="flex flex-col gap-3">
-                <div className="text-[8px] text-zinc-500 uppercase">Volatility</div>
-                <div className="text-2xl font-bold font-mono text-blue-400">{(data?.volatility || 0.42).toFixed(3)}</div>
-             </div>
-            <div className="pt-2 border-t border-white/5 font-mono text-[9px] space-y-1">
-                {data?.signals?.map((s, i) => (
-                    <div key={i} className="flex items-center gap-2 text-zinc-500">
-                        <span className={`w-1 h-1 rounded-full ${s.type === 'BULL' ? 'bg-emerald-500' : 'bg-red-500'}`} />
-                        {s.msg}
-                    </div>
+        ))}
+      </div>
+
+      <div className="flex-1 grid grid-cols-3 gap-4 overflow-hidden">
+        <div className="flex flex-col rounded-xl border border-white/10 bg-zinc-900/40 p-4 min-h-0">
+          <div className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-4 flex items-center gap-2">
+            <Compass className="w-3 h-3" /> AUTONOMOUS SEARCH
+          </div>
+          <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar pr-1">
+            <div className="mb-3 rounded-xl border border-fuchsia-500/10 bg-fuchsia-500/[0.04] p-3">
+              <div className="mb-1 text-[9px] font-bold uppercase tracking-widest text-fuchsia-300">Selection Policy</div>
+                <div className="space-y-1 font-mono text-[10px] text-zinc-500">
+                  <div>Explore: random assets, compatible strategies</div>
+                  <div>Exploit: rerun best pairs with deeper trials</div>
+                  <div>Mutate: swap nearby assets or strategy family</div>
+                  <div>Bankroll: up to $1,000 paper capital per run</div>
+                  <div>Promote: paper playbook only after gates clear</div>
+                </div>
+              </div>
+            <div className="mb-3 rounded-xl border border-orange-500/10 bg-orange-500/[0.04] p-3">
+              <div className="mb-1 text-[9px] font-bold uppercase tracking-widest text-orange-300">Promotion Gate</div>
+              <div className="space-y-1 font-mono text-[10px] text-zinc-500">
+                <div>Runtime: {promotion?.mode || 'paper_only'}</div>
+                <div>Closed trades: {promotion?.stats?.totalTrades || 0}</div>
+                <div>Win rate: {fmtNum(promotion?.stats?.winRate || 0, 1)}%</div>
+                <div>Waiting on: {failedPromotionChecks.length ? failedPromotionChecks.slice(0, 3).join(', ') : 'none'}</div>
+              </div>
+            </div>
+            <div className="mb-3 rounded-xl border border-cyan-500/20 bg-cyan-500/[0.05] p-3">
+              <div className="mb-2 flex items-center justify-between gap-2">
+                <div>
+                  <div className="text-[9px] font-bold uppercase tracking-widest text-cyan-300">Manual Paper Training</div>
+                  <div className="mt-0.5 text-[9px] font-mono text-zinc-600">$5 → $500 objective · paper only</div>
+                </div>
+                <span className={`rounded border px-2 py-0.5 text-[8px] font-bold uppercase tracking-widest ${activeJob ? 'border-cyan-400/30 bg-cyan-400/10 text-cyan-300' : 'border-white/10 bg-white/5 text-zinc-500'}`}>
+                  {activeJob ? 'running' : latestJob?.status || 'idle'}
+                </span>
+              </div>
+              <div className="mb-2 grid grid-cols-4 gap-1">
+                {[1000, 10000, 100000, 1000000].map(value => (
+                  <button
+                    key={value}
+                    onClick={() => setTrainingIterations(value)}
+                    className={`rounded border px-1.5 py-1 text-[9px] font-bold transition-all ${trainingIterations === value ? 'border-cyan-400/40 bg-cyan-400/15 text-cyan-200' : 'border-white/10 bg-black/20 text-zinc-500 hover:text-zinc-300'}`}
+                  >
+                    {value >= 1000000 ? '1M' : value >= 1000 ? `${value / 1000}K` : value}
+                  </button>
                 ))}
+              </div>
+              <div className="mb-2 h-1.5 overflow-hidden rounded-full bg-zinc-800">
+                <div className="h-full rounded-full bg-cyan-400 transition-all duration-700" style={{ width: `${jobProgress}%` }} />
+              </div>
+              <div className="mb-2 flex items-center justify-between font-mono text-[9px] text-zinc-500">
+                <span>{latestJob ? `${latestJob.iterationsDone}/${latestJob.iterationsTarget}` : 'no job yet'}</span>
+                <span>{latestJob?.best ? `${latestJob.best.strategyName} · ${fmtDollar(latestJob.best.pnl)}` : 'no champion'}</span>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  onClick={startTraining}
+                  disabled={trainingBusy}
+                  className="flex flex-1 items-center justify-center gap-1.5 rounded border border-emerald-400/30 bg-emerald-400/10 px-2 py-1.5 text-[9px] font-bold uppercase tracking-widest text-emerald-300 transition-all hover:bg-emerald-400/20 disabled:opacity-40"
+                >
+                  <Play className="h-3 w-3" /> Run
+                </button>
+                <button
+                  onClick={() => stopTraining(activeJob?.id)}
+                  disabled={!activeJob || trainingBusy}
+                  className="flex flex-1 items-center justify-center gap-1.5 rounded border border-rose-400/30 bg-rose-400/10 px-2 py-1.5 text-[9px] font-bold uppercase tracking-widest text-rose-300 transition-all hover:bg-rose-400/20 disabled:opacity-30"
+                >
+                  <Square className="h-3 w-3" /> Stop
+                </button>
+              </div>
+            </div>
+            {autopilot?.lastSelection?.length > 0 && (
+              <div className="mb-3 rounded-xl border border-white/5 bg-black/30 p-3">
+                <div className="mb-2 text-[9px] font-bold uppercase tracking-widest text-zinc-600">Last Autonomous Picks</div>
+                <div className="space-y-1 font-mono text-[10px] text-zinc-500">
+                  {autopilot.lastSelection.slice(0, 6).map(pick => (
+                    <div key={pick.id} className="flex items-center gap-2">
+                      <span className={pick.status === 'candidate' || pick.status === 'promoted' ? 'text-emerald-400' : 'text-rose-400'}>{pick.symbol}</span>
+                      <span>{pick.strategyId}</span>
+                      <span className="ml-auto text-orange-400">{fmtDollar(pick.pnl)}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            <div className="space-y-2 pb-1">
+              {strategies.map(strategy => (
+                <div key={strategy.id} className="rounded-lg border border-white/5 bg-black/30 p-3">
+                  <div className="text-[10px] font-bold text-zinc-300">{strategy.name}</div>
+                  <div className="mt-1 text-[10px] leading-snug text-zinc-600">{strategy.premise}</div>
+                </div>
+              ))}
             </div>
           </div>
         </div>
 
-        {/* Cognition */}
-        <div className="flex flex-col rounded-xl border border-white/10 bg-zinc-900/40 p-4">
+        <div className="flex flex-col rounded-xl border border-white/10 bg-zinc-900/40 p-4 min-h-0">
           <div className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-4 flex items-center gap-2">
             <Brain className="w-3 h-3" /> COGNITION
           </div>
-          <div className="flex-1 overflow-y-auto custom-scrollbar space-y-3">
-             <div className="p-3 rounded bg-black/40 border border-white/5">
-                <div className="text-[8px] text-fuchsia-400 font-bold uppercase mb-1">PROMETHEUS</div>
-                <div className="text-[10px] text-zinc-400 leading-snug">Protocol consensus reached. Executing {data?.protocol || 'SCALP'} on {data?.asset || 'BTC/USD'}.</div>
-             </div>
-             <div className="p-3 rounded bg-black/40 border border-white/5">
-                <div className="text-[8px] text-emerald-400 font-bold uppercase mb-1">THALAMUS</div>
-                <div className="text-[10px] text-zinc-400 leading-snug">Risk bounds verified. Confidence factor: {((data?.confidence || 0.85) * 100).toFixed(1)}%.</div>
-             </div>
-             <div className="p-3 rounded bg-black/40 border border-white/5">
-                <div className="text-[8px] text-blue-400 font-bold uppercase mb-1">AURORA</div>
-                <div className="text-[10px] text-zinc-400 leading-snug">Market sentiment aligns with bullish momentum. Smart money flows confirmed.</div>
-             </div>
-          </div>
+          {best ? (
+            <div className="flex-1 overflow-y-auto custom-scrollbar space-y-3">
+              <div className="rounded-xl border border-fuchsia-500/20 bg-fuchsia-500/[0.04] p-4">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-[8px] text-fuchsia-400 font-bold uppercase tracking-widest mb-1">PROMETHEUS SCORE</div>
+                    <div className="text-4xl font-mono font-bold text-fuchsia-200">{fmtPct(best.prometheusScore, 1)}</div>
+                  </div>
+                  <Trophy className="h-8 w-8 text-fuchsia-400/70" />
+                </div>
+                <div className="mt-3 text-xs leading-relaxed text-zinc-400">{best.lesson}</div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                {[
+                  ['Win Rate', fmtPct(best.metrics?.winRate, 1), 'text-emerald-300'],
+                  ['$ P&L / Run', fmtDollar(best.paperAccount?.averageDollarPnl ?? best.metrics?.averageDollarPnl), 'text-orange-300'],
+                  ['Max DD', fmtPct(best.metrics?.maxDrawdown, 1), 'text-rose-300'],
+                  ['Profit Factor', fmtNum(best.metrics?.profitFactor, 2), 'text-blue-300'],
+                  ['Ending Value', best.paperAccount?.averageEndingValue ? `$${best.paperAccount.averageEndingValue.toFixed(2)}` : 'n/a', 'text-cyan-300'],
+                  ['Sharpe', fmtNum(best.metrics?.sharpe, 2), 'text-violet-300'],
+                ].map(([label, value, tone]) => (
+                  <div key={label} className="rounded-lg border border-white/5 bg-black/35 p-3">
+                    <div className="text-[8px] uppercase tracking-widest text-zinc-600 font-bold">{label}</div>
+                    <div className={`mt-1 font-mono text-lg font-bold ${tone}`}>{value}</div>
+                  </div>
+                ))}
+              </div>
+              {latestJob?.best && (
+                <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/[0.04] p-3">
+                  <div className="mb-2 flex items-center justify-between">
+                    <div className="text-[9px] font-bold uppercase tracking-widest text-cyan-300">Training Champion</div>
+                    <div className="font-mono text-[9px] text-zinc-500">{latestJob.status}</div>
+                  </div>
+                  <div className="text-sm font-bold text-white">{latestJob.best.symbol} · {latestJob.best.strategyName}</div>
+                  <div className="mt-2 grid grid-cols-3 gap-2 font-mono text-[10px]">
+                    <span className={latestJob.best.pnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}>{fmtDollar(latestJob.best.pnl)}</span>
+                    <span className="text-cyan-300">${fmtNum(latestJob.best.finalCapital, 4)}</span>
+                    <span className="text-orange-300">{fmtPct(latestJob.best.winRate, 0)}</span>
+                  </div>
+                  <div className="mt-2 text-[10px] leading-relaxed text-zinc-500">
+                    {latestJob.best.trades} trades · {fmtNum(latestJob.best.maxDrawdownPct, 2)}% max drawdown · score {fmtNum(latestJob.best.score, 3)}
+                  </div>
+                </div>
+              )}
+              <div className="rounded-xl border border-white/5 bg-black/35 p-3">
+                <div className="mb-2 flex items-center gap-2 text-[9px] font-bold uppercase tracking-widest text-zinc-600">
+                  <Shield className="w-3 h-3" /> Thalamus Risk
+                </div>
+                <div className="h-2 rounded-full bg-zinc-800 overflow-hidden">
+                  <div className="h-full rounded-full bg-gradient-to-r from-emerald-500 via-orange-500 to-rose-500" style={{ width: `${Math.min(100, (best.thalamusRisk || 0) * 100)}%` }} />
+                </div>
+                <div className="mt-2 font-mono text-[10px] text-zinc-500">{fmtPct(best.thalamusRisk, 1)} risk pressure · {best.status}</div>
+              </div>
+              {best.missionCouncil && (
+                <div className="rounded-xl border border-white/5 bg-black/35 p-3">
+                  <div className="mb-2 text-[9px] font-bold uppercase tracking-widest text-zinc-600">Mission Control Council Learning</div>
+                  <div className="space-y-1.5 font-mono text-[10px]">
+                    {Object.entries(best.missionCouncil).map(([agentId, agent]) => (
+                      <div key={agentId} className="flex items-center gap-2">
+                        <span className="w-24 truncate text-zinc-500">{agent.name}</span>
+                        <span className={agent.learned ? 'text-emerald-400' : 'text-orange-400'}>{fmtPct(agent.confidence, 0)}</span>
+                        <span className="ml-auto text-zinc-600">{agent.learned ? 'learned' : 'watching'}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="flex flex-1 items-center justify-center text-zinc-700 text-xs font-bold uppercase tracking-widest">No market lab runs yet</div>
+          )}
         </div>
 
-        {/* Execution */}
-        <div className="flex flex-col rounded-xl border border-white/10 bg-zinc-900/40 p-4">
+        <div className="flex flex-col rounded-xl border border-white/10 bg-zinc-900/40 p-4 min-h-0">
           <div className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-4 flex items-center gap-2">
-            <BarChart2 className="w-3 h-3" /> EXECUTION
+            <BarChart2 className="w-3 h-3" /> PAPER LEDGER
           </div>
-          <div className="flex-1 flex flex-col gap-4">
-             <div className="bg-black/60 p-4 rounded-lg border border-white/5">
-                <div className="text-[9px] text-zinc-500 uppercase mb-1">Active Target</div>
-                <div className="text-xl font-mono font-bold text-orange-400">{data?.asset || 'BTC/USD'}</div>
-             </div>
-             <div className="flex-1 bg-black/40 rounded p-3 font-mono text-[9px] text-zinc-600 overflow-hidden">
-                <div className="text-emerald-500 mb-1">[ORDER] Market Buy @ NODE-01</div>
-                <div className="mb-1 text-zinc-400">[STRATEGY] {data?.protocol || 'SCALP'} ({data?.episodes || 0} eps)</div>
-                <div className="mb-1 text-zinc-500">[TRACE] TxID: 0x8a2...{Math.random().toString(16).slice(2, 6)}</div>
-                <div className="animate-pulse">_</div>
-             </div>
+          {latest && (
+            <div className={`mb-3 rounded-xl border p-3 ${statusTone(latest.status)}`}>
+              <div className="text-[9px] font-bold uppercase tracking-widest opacity-80">Latest Run</div>
+              <div className="mt-1 text-sm font-bold text-white">{latest.asset?.symbol} · {latest.strategy?.name}</div>
+              <div className="mt-1 font-mono text-[10px] opacity-80">{fmtDollar(latest.paperAccount?.averageDollarPnl ?? latest.metrics?.averageDollarPnl)} avg · {fmtPct(latest.metrics?.winRate, 1)} win · {latest.trialBudget?.executed || 0} trials</div>
+            </div>
+          )}
+          <div className="flex-1 overflow-y-auto custom-scrollbar space-y-2">
+            {entries.length === 0 ? (
+              <div className="flex h-full items-center justify-center text-zinc-700 text-xs font-bold uppercase tracking-widest">Awaiting first sweep</div>
+            ) : entries.map(entry => (
+              <div key={entry.id} className="rounded-lg border border-white/5 bg-black/35 p-3">
+                <div className="flex items-center gap-2">
+                  <span className={`rounded border px-2 py-0.5 text-[8px] font-bold uppercase tracking-widest ${statusTone(entry.status)}`}>{entry.status}</span>
+                  <span className="font-mono text-[10px] text-zinc-500">{entry.asset?.symbol}</span>
+                  <span className="ml-auto font-mono text-[10px] text-zinc-600">{formatTime(entry.updatedAt || entry.createdAt)}</span>
+                </div>
+                <div className="mt-2 text-xs font-bold text-zinc-200">{entry.strategy?.name}</div>
+                <div className="mt-1 grid grid-cols-3 gap-2 font-mono text-[10px]">
+                  <span className={(entry.paperAccount?.averageDollarPnl ?? entry.metrics?.averageDollarPnl ?? 0) >= 0 ? 'text-emerald-400' : 'text-rose-400'}>{fmtDollar(entry.paperAccount?.averageDollarPnl ?? entry.metrics?.averageDollarPnl)}</span>
+                  <span className="text-fuchsia-400">{fmtPct(entry.prometheusScore, 0)}</span>
+                  <span className="text-rose-400">{fmtPct(entry.metrics?.maxDrawdown, 0)} DD</span>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       </div>
@@ -446,23 +1104,9 @@ function ExperimentLedgerCardBody({ status }) {
 }
 
 function ExperimentLedgerView() {
-  const emptyDraft = {
-    title: '',
-    domain: 'general',
-    status: 'planned',
-    hypothesis: '',
-    setup: '',
-    result: '',
-    lesson: '',
-    reusableRule: '',
-    confidence: 0.7,
-    tags: ''
-  };
   const [ledger, setLedger] = useState([]);
   const [summary, setSummary] = useState(null);
-  const [draft, setDraft] = useState(emptyDraft);
   const [activeFilter, setActiveFilter] = useState('all');
-  const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
   const loadLedger = useCallback(async () => {
@@ -480,49 +1124,13 @@ function ExperimentLedgerView() {
 
   useEffect(() => {
     loadLedger();
+    const t = setInterval(loadLedger, 6000);
+    return () => clearInterval(t);
   }, [loadLedger]);
-
-  const saveDraft = async () => {
-    if (!draft.title.trim() || !draft.hypothesis.trim() || saving) return;
-    setSaving(true);
-    setError('');
-    try {
-      const res = await fetch('/api/soma/simulations/experiments', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...draft,
-          tags: draft.tags.split(',').map(tag => tag.trim()).filter(Boolean)
-        })
-      });
-      const data = await res.json();
-      if (!res.ok || !data.success) throw new Error(data.error || `Save failed (${res.status})`);
-      setDraft(emptyDraft);
-      await loadLedger();
-    } catch (e) {
-      setError(e.message);
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const updateEntry = async (id, patch) => {
-    const res = await fetch(`/api/soma/simulations/experiments/${encodeURIComponent(id)}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(patch)
-    });
-    if (res.ok) await loadLedger();
-  };
-
-  const deleteEntry = async (id) => {
-    if (!window.confirm('Delete this experiment record?')) return;
-    const res = await fetch(`/api/soma/simulations/experiments/${encodeURIComponent(id)}`, { method: 'DELETE' });
-    if (res.ok) await loadLedger();
-  };
 
   const filtered = ledger.filter(entry => activeFilter === 'all' || entry.status === activeFilter);
   const statuses = ['all', 'planned', 'running', 'observed', 'learned'];
+  const latest = ledger[0] || null;
 
   return (
     <div className="flex-1 overflow-hidden bg-black/40 p-5">
@@ -532,7 +1140,7 @@ function ExperimentLedgerView() {
         </div>
         <div>
           <h2 className="text-xl font-bold uppercase italic tracking-tight text-white">Experiment Ledger</h2>
-          <p className="text-xs font-medium uppercase tracking-widest text-emerald-500/60">Hypothesis to setup to result to lesson to reusable rule</p>
+          <p className="text-xs font-medium uppercase tracking-widest text-emerald-500/60">Autonomous trials, lessons, and reusable rules</p>
         </div>
         <div className="ml-auto grid grid-cols-3 gap-3 text-right">
           <div>
@@ -553,60 +1161,33 @@ function ExperimentLedgerView() {
       <div className="grid h-[calc(100%-84px)] grid-cols-5 gap-5 overflow-hidden">
         <div className="col-span-2 overflow-y-auto rounded-2xl border border-white/10 bg-zinc-900/40 p-5 custom-scrollbar">
           <div className="mb-4 flex items-center justify-between">
-            <h3 className="text-xs font-bold uppercase tracking-widest text-zinc-300">Log New Experiment</h3>
-            <Plus className="h-4 w-4 text-emerald-400" />
+            <h3 className="text-xs font-bold uppercase tracking-widest text-zinc-300">Live Learning Window</h3>
+            <span className="flex items-center gap-2 text-[10px] font-mono uppercase text-emerald-300">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+              autonomous
+            </span>
           </div>
-          <div className="space-y-3">
-            {[
-              ['title', 'Title', 'One-line experiment name'],
-              ['hypothesis', 'Hypothesis', 'If SOMA tries X, then Y should happen'],
-              ['setup', 'Setup', 'Environment, inputs, constraints'],
-              ['result', 'Result', 'What actually happened'],
-              ['lesson', 'Lesson', 'What changed in SOMA’s understanding'],
-              ['reusableRule', 'Reusable Rule', 'Rule SOMA can apply later']
-            ].map(([key, label, placeholder]) => (
-              <label key={key} className="block">
-                <span className="mb-1 block text-[9px] font-bold uppercase tracking-widest text-zinc-600">{label}</span>
-                <textarea
-                  value={draft[key]}
-                  onChange={e => setDraft(prev => ({ ...prev, [key]: e.target.value }))}
-                  placeholder={placeholder}
-                  rows={key === 'title' ? 1 : 3}
-                  className="w-full resize-none rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-xs leading-relaxed text-zinc-200 outline-none transition-all placeholder:text-zinc-700 focus:border-emerald-500/40"
-                />
-              </label>
-            ))}
-            <div className="grid grid-cols-3 gap-3">
-              <label>
-                <span className="mb-1 block text-[9px] font-bold uppercase tracking-widest text-zinc-600">Domain</span>
-                <input value={draft.domain} onChange={e => setDraft(prev => ({ ...prev, domain: e.target.value }))}
-                  className="w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-xs text-zinc-200 outline-none focus:border-emerald-500/40" />
-              </label>
-              <label>
-                <span className="mb-1 block text-[9px] font-bold uppercase tracking-widest text-zinc-600">Status</span>
-                <select value={draft.status} onChange={e => setDraft(prev => ({ ...prev, status: e.target.value }))}
-                  className="w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-xs text-zinc-200 outline-none focus:border-emerald-500/40">
-                  {statuses.filter(s => s !== 'all').map(status => <option key={status}>{status}</option>)}
-                </select>
-              </label>
-              <label>
-                <span className="mb-1 block text-[9px] font-bold uppercase tracking-widest text-zinc-600">Confidence</span>
-                <input type="number" min="0" max="1" step="0.05" value={draft.confidence}
-                  onChange={e => setDraft(prev => ({ ...prev, confidence: e.target.value }))}
-                  className="w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-xs text-zinc-200 outline-none focus:border-emerald-500/40" />
-              </label>
+          {error && <p className="mb-3 rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs text-red-300">{error}</p>}
+          <div className="space-y-4">
+            <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 p-4">
+              <p className="mb-1 text-[9px] font-bold uppercase tracking-widest text-emerald-400">Current Trial</p>
+              <h3 className="text-sm font-bold text-white">{latest?.title || 'Waiting for SOMA to begin a trial...'}</h3>
+              <p className="mt-2 text-[10px] font-mono uppercase tracking-wider text-zinc-600">
+                {latest ? `${latest.domain} / ${latest.status} / ${latest.source || 'system'}` : 'idle'}
+              </p>
             </div>
-            <label className="block">
-              <span className="mb-1 block text-[9px] font-bold uppercase tracking-widest text-zinc-600">Tags</span>
-              <input value={draft.tags} onChange={e => setDraft(prev => ({ ...prev, tags: e.target.value }))}
-                placeholder="simulation, autonomy, memory"
-                className="w-full rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-xs text-zinc-200 outline-none placeholder:text-zinc-700 focus:border-emerald-500/40" />
-            </label>
-            {error && <p className="rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2 text-xs text-red-300">{error}</p>}
-            <button onClick={saveDraft} disabled={saving || !draft.title.trim() || !draft.hypothesis.trim()}
-              className="flex w-full items-center justify-center gap-2 rounded-xl border border-emerald-500/20 bg-emerald-500/15 py-3 text-xs font-black uppercase tracking-widest text-emerald-300 transition-all hover:bg-emerald-500/25 disabled:cursor-not-allowed disabled:opacity-40">
-              <Save className="h-4 w-4" /> {saving ? 'Saving...' : 'Save Experiment'}
-            </button>
+            {[
+              ['Hypothesis', latest?.hypothesis],
+              ['Setup', latest?.setup],
+              ['Result', latest?.result],
+              ['Lesson', latest?.lesson],
+              ['Reusable Rule', latest?.reusableRule]
+            ].map(([label, value]) => (
+              <div key={label} className="rounded-xl border border-white/5 bg-black/25 p-3">
+                <p className="mb-1 text-[9px] font-bold uppercase tracking-widest text-zinc-600">{label}</p>
+                <p className="text-xs leading-relaxed text-zinc-300">{value || 'Awaiting observation...'}</p>
+              </div>
+            ))}
           </div>
         </div>
 
@@ -641,13 +1222,6 @@ function ExperimentLedgerView() {
                         <h3 className="truncate text-base font-bold text-white">{entry.title}</h3>
                         <p className="text-[10px] font-mono text-zinc-600">Updated {formatTime(entry.updatedAt || entry.createdAt)}</p>
                       </div>
-                      <select value={entry.status} onChange={e => updateEntry(entry.id, { status: e.target.value })}
-                        className="rounded-lg border border-white/10 bg-black/40 px-2 py-1 text-[10px] text-zinc-300 outline-none">
-                        {statuses.filter(s => s !== 'all').map(status => <option key={status}>{status}</option>)}
-                      </select>
-                      <button onClick={() => deleteEntry(entry.id)} className="rounded-lg p-2 text-zinc-600 hover:bg-red-500/10 hover:text-red-400">
-                        <Trash2 className="h-4 w-4" />
-                      </button>
                     </div>
                     <div className="grid gap-3 md:grid-cols-2">
                       {[
@@ -754,7 +1328,7 @@ function SimulationSuite() {
       {expandedId === 'scraper' && <ExperimentLedgerView />}
       {expandedId === 'code' && <CodeSandboxView />}
       {expandedId === 'cc' && <CcSimulationView suiteStatus={suiteStatus} />}
-      {expandedId === 'social' && <div className="p-10 text-center text-zinc-500 uppercase font-bold tracking-widest opacity-40">Social Substrate active. Monitoring gallery...</div>}
+      {expandedId === 'social' && <SocialModule isConnected />}
     </div>
   );
 }
@@ -957,6 +1531,36 @@ function CcSimulationView({ suiteStatus }) {
   );
 }
 
+function MarketCardBody({ status }) {
+  const ledger = status?.status?.ledger;
+  const best = ledger?.best;
+  return (
+    <div className="h-full p-4 flex flex-col justify-between">
+      <div className="grid grid-cols-3 gap-2">
+        <div className="rounded-lg border border-white/5 bg-black/25 p-2">
+          <div className="text-[8px] uppercase tracking-widest text-zinc-600 font-bold">Runs</div>
+          <div className="font-mono text-lg font-bold text-orange-300">{ledger?.total || 0}</div>
+        </div>
+        <div className="rounded-lg border border-white/5 bg-black/25 p-2">
+          <div className="text-[8px] uppercase tracking-widest text-zinc-600 font-bold">Pro</div>
+          <div className="font-mono text-lg font-bold text-emerald-300">{ledger?.promoted || 0}</div>
+        </div>
+        <div className="rounded-lg border border-white/5 bg-black/25 p-2">
+          <div className="text-[8px] uppercase tracking-widest text-zinc-600 font-bold">Cand</div>
+          <div className="font-mono text-lg font-bold text-blue-300">{ledger?.candidates || 0}</div>
+        </div>
+      </div>
+      <div className="rounded-lg border border-orange-500/10 bg-orange-500/[0.04] p-3">
+        <div className="text-[8px] uppercase tracking-widest text-orange-400 font-bold">Best Paper Strategy</div>
+        <div className="mt-1 truncate text-xs font-bold text-zinc-200">{best ? `${best.asset?.symbol} · ${best.strategy?.name}` : 'Awaiting sweep'}</div>
+        <div className="mt-1 font-mono text-[10px] text-zinc-500">
+          {best ? `${Number(best.paperAccount?.averageDollarPnl ?? best.metrics?.averageDollarPnl ?? 0) >= 0 ? '+' : ''}$${Number(best.paperAccount?.averageDollarPnl ?? best.metrics?.averageDollarPnl ?? 0).toFixed(2)} avg · ${((best.prometheusScore || 0) * 100).toFixed(1)} score` : 'No strategy ledger yet'}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function SimCard({ sim, status, onExpand }) {
   const COLORS = {
     market: { border:'border-orange-500/20', dot:'bg-orange-400', icon:'text-orange-400', hover:'hover:border-orange-500/50' },
@@ -993,11 +1597,11 @@ function SimCard({ sim, status, onExpand }) {
       </div>
       <div className="flex-1 min-h-0">
         {sim.type === 'biotech' && <BiotechCardBody />}
-        {sim.type === 'market' && <div className="p-4 flex items-center justify-center h-full text-zinc-700 italic text-[10px] uppercase font-bold tracking-widest opacity-40">Quant Engine Active</div>}
+        {sim.type === 'market' && <MarketCardBody status={status} />}
         {sim.type === 'code' && <div className="p-4 flex items-center justify-center h-full text-zinc-700 italic text-[10px] uppercase font-bold tracking-widest opacity-40">Pattern Engine Active</div>}
         {sim.type === 'scraper' && <ExperimentLedgerCardBody status={status} />}
         {sim.type === 'ml-intern' && <MlInternCardBody />}
-        {sim.type === 'social' && <div className="p-4 flex items-center justify-center h-full text-zinc-700 italic text-[10px] uppercase font-bold tracking-widest opacity-40">Social Substrate Active</div>}
+        {sim.type === 'social' && <SocialCardBody />}
         {sim.type !== 'biotech' && sim.type !== 'market' && sim.type !== 'code' && sim.type !== 'scraper' && sim.type !== 'ml-intern' && sim.type !== 'social' && (
             <div className="p-4 flex items-center justify-center h-full text-zinc-700 italic text-[10px] uppercase font-bold tracking-widest opacity-40">
                 Active Simulation Module

@@ -4,13 +4,22 @@
  */
 
 import express from 'express';
+import fs from 'fs';
+import path from 'path';
 import alpacaService from './AlpacaService.js';
 import { FinanceAgentArbiter } from '../../arbiters/FinanceAgentArbiter.js';
 import TradingGuardrails from './TradingGuardrails.js';
 import slippageTracker from './SlippageTracker.js';
 import tradeLogger from './TradeLogger.js';
+import marketDataService from './marketDataService.js';
+import opportunityScanner from './OpportunityScanner.js';
+import binanceService from './BinanceService.js';
+import marketEvidenceStore from './MarketEvidenceStore.js';
 
 const router = express.Router();
+const MARKET_LAB_DIR = path.join(process.cwd(), 'data', 'market-lab');
+const MARKET_LAB_LEDGER_PATH = path.join(MARKET_LAB_DIR, 'strategy-ledger.json');
+const DEEP_SCAN_LEDGER_PATH = path.join(MARKET_LAB_DIR, 'deep-scan-ledger.json');
 
 // Use shared guardrails from bootstrap (global.SOMA_TRADING) or create fallback
 function getGuardrails() {
@@ -62,6 +71,49 @@ function checkAnalysisRateLimit(ip, symbol) {
     }
 
     return { allowed: true };
+}
+
+function compactDeepScanContext(body = {}) {
+    const context = body.context && typeof body.context === 'object' ? body.context : {};
+    const chartData = Array.isArray(body.chartData) ? body.chartData : [];
+    const recentBars = chartData.slice(-30).map(bar => ({
+        timestamp: bar.timestamp || bar.time || null,
+        open: Number(bar.open ?? bar.o ?? 0),
+        high: Number(bar.high ?? bar.h ?? 0),
+        low: Number(bar.low ?? bar.l ?? 0),
+        close: Number(bar.close ?? bar.c ?? bar.price ?? 0),
+        volume: Number(bar.volume ?? bar.v ?? 0)
+    }));
+    return {
+        activeProtocol: body.activeProtocol || context.activeProtocol || null,
+        assetType: body.assetType || context.assetType || null,
+        rangeId: body.rangeId || context.rangeId || null,
+        dataSource: body.dataSource || context.dataSource || null,
+        ticker: body.tickerData ? {
+            price: body.tickerData.price,
+            change: body.tickerData.change,
+            changePercent: body.tickerData.changePercent,
+            momentum: body.tickerData.momentum,
+            sentiment: body.tickerData.sentiment
+        } : null,
+        risk: body.riskMetrics ? {
+            equity: body.riskMetrics.equity,
+            dailyPnL: body.riskMetrics.dailyPnL,
+            dailyDrawdown: body.riskMetrics.dailyDrawdown,
+            maxDrawdown: body.riskMetrics.maxDrawdown,
+            activeTier: body.riskMetrics.activeTier
+        } : null,
+        presets: Array.isArray(body.presets)
+            ? body.presets.slice(0, 12).map(preset => ({
+                id: preset.id,
+                name: preset.name,
+                active: preset.active,
+                allocation: preset.allocation,
+                confidence: preset.confidence
+            }))
+            : [],
+        recentBars
+    };
 }
 
 // Initialize SOMA's Finance Arbiter (Lazy-loaded)
@@ -212,6 +264,318 @@ router.post('/analyze', async (req, res) => {
 });
 
 /**
+ * POST /api/finance/deep-scan
+ * Real multi-source market scan for Mission Control.
+ *
+ * Pulls:
+ * - multi-timeframe market bars + quality
+ * - orderbook pressure for crypto where available
+ * - Alpaca news where connected
+ * - opportunity scanner context across the asset universe
+ * - SOMA finance swarm synthesis when available
+ */
+router.post('/deep-scan', async (req, res) => {
+    const startedAt = Date.now();
+    try {
+        const { symbol } = req.body;
+        if (!symbol) {
+            return res.status(400).json({ success: false, error: 'Symbol is required' });
+        }
+
+        const sym = String(symbol).toUpperCase();
+        const requestContext = compactDeepScanContext(req.body || {});
+        const rateCheck = checkAnalysisRateLimit(req.ip, `deep:${sym}`);
+        if (!rateCheck.allowed) {
+            return res.status(429).json({ success: false, error: rateCheck.reason });
+        }
+
+        const frames = [
+            { id: 'intraday', timeframe: '5Min', limit: 96 },
+            { id: 'swing', timeframe: '1H', limit: 120 },
+            { id: 'macro', timeframe: '1D', limit: 180 }
+        ];
+
+        const frameResults = await Promise.allSettled(
+            frames.map(async frame => {
+                const bars = await marketDataService.getBars(sym, frame.timeframe, frame.limit);
+                return {
+                    ...frame,
+                    bars,
+                    summary: summarizeBars(bars),
+                    quality: marketDataService.validateDataQuality(
+                        bars,
+                        frame.timeframe === '1D'
+                            ? 3 * 24 * 60 * 60 * 1000
+                            : frame.timeframe === '1H'
+                                ? 6 * 60 * 60 * 1000
+                                : 45 * 60 * 1000
+                    )
+                };
+            })
+        );
+
+        const timeframes = {};
+        frameResults.forEach((result, index) => {
+            const frame = frames[index];
+            if (result.status === 'fulfilled') {
+                timeframes[frame.id] = result.value;
+            } else {
+                timeframes[frame.id] = {
+                    ...frame,
+                    bars: [],
+                    summary: null,
+                    quality: { valid: false, issues: [result.reason?.message || 'Data unavailable'] }
+                };
+            }
+        });
+
+        const latestBars = timeframes.intraday?.bars?.length ? timeframes.intraday.bars : timeframes.swing?.bars || [];
+        const latestPrice = latestBars.at(-1)?.close || null;
+
+        let orderbook = null;
+        if (isCryptoSymbol(sym)) {
+            try {
+                const book = await binanceService.getOrderBook(toBinanceSymbol(sym), 20);
+                const metrics = binanceService.calculateOrderBookMetrics(book);
+                orderbook = {
+                    bidLevels: book.bids?.slice(0, 5) || [],
+                    askLevels: book.asks?.slice(0, 5) || [],
+                    metrics
+                };
+            } catch (e) {
+                orderbook = { error: e.message };
+            }
+        }
+
+        const [newsItems, opportunities] = await Promise.all([
+            fetchNewsItems(sym, 6),
+            opportunityScanner.scan(isCryptoSymbol(sym) ? 'CRYPTO' : 'STOCKS')
+        ]);
+
+        const matchingOpportunity = opportunities.find(o => o.symbol === sym) || null;
+        const marketLabContext = getMarketLabContext(sym);
+        const previousDeepScans = getDeepScanContext(sym);
+        const intraday = timeframes.intraday?.summary;
+        const swing = timeframes.swing?.summary;
+        const macro = timeframes.macro?.summary;
+        const highImpactNews = newsItems.filter(item => item.impact === 'HIGH').length;
+        const volumeAnomaly = intraday?.volumeRatio ? intraday.volumeRatio >= 1.4 : false;
+        const alignmentScore = [intraday, swing, macro]
+            .filter(Boolean)
+            .reduce((score, tf) => score + (tf.direction === 'bullish' ? 1 : tf.direction === 'bearish' ? -1 : 0), 0);
+        const orderbookAvailable = !!orderbook?.metrics && !orderbook?.error;
+        const orderbookPressure = orderbookAvailable ? Number(orderbook.metrics.imbalance || 0) : 0;
+
+        const altSignals = [
+            {
+                label: 'Volume anomaly',
+                state: volumeAnomaly ? 'ACTIVE' : 'NORMAL',
+                detail: intraday?.volumeRatio != null ? `${intraday.volumeRatio.toFixed(2)}x recent baseline` : 'No volume baseline'
+            },
+            {
+                label: 'Orderbook pressure',
+                state: orderbookAvailable ? (orderbookPressure > 0.08 ? 'BID STACKED' : orderbookPressure < -0.08 ? 'ASK STACKED' : 'BALANCED') : (orderbook?.error ? 'ERROR' : 'N/A'),
+                detail: orderbookAvailable ? `${(orderbookPressure * 100).toFixed(1)}% imbalance` : (orderbook?.error || 'Not available for this asset')
+            },
+            {
+                label: 'News impact',
+                state: highImpactNews > 0 ? 'HIGH' : newsItems.length ? 'LOW/MED' : 'QUIET',
+                detail: newsItems.length ? `${newsItems.length} headlines, ${highImpactNews} high impact` : 'No connected headline feed returned items'
+            },
+            {
+                label: 'Universe rank',
+                state: matchingOpportunity ? `SCORE ${matchingOpportunity.score}` : 'UNRANKED',
+                detail: matchingOpportunity
+                    ? `${matchingOpportunity.strategy}; ${matchingOpportunity.change24h?.toFixed?.(2) ?? matchingOpportunity.change24h}% change`
+                    : 'Not in current top opportunity set'
+            },
+            {
+                label: 'Simulation memory',
+                state: marketLabContext.best ? `SIM ${Number(marketLabContext.best.prometheusScore || 0).toFixed(3)}` : 'NO MATCH',
+                detail: marketLabContext.best
+                    ? `${marketLabContext.best.strategy?.name || marketLabContext.best.strategy?.id} ${marketLabContext.best.status}; ${((marketLabContext.best.metrics?.winRate || 0) * 100).toFixed(1)}% WR`
+                    : 'No market simulation evidence matched this symbol yet'
+            },
+            {
+                label: 'Prior deep scans',
+                state: previousDeepScans.count ? `${previousDeepScans.count} STORED` : 'FIRST SCAN',
+                detail: previousDeepScans.latest
+                    ? `${previousDeepScans.latest.verdict?.recommendation || 'scan'} at ${Math.round((previousDeepScans.latest.verdict?.confidence || 0) * 100)}%`
+                    : 'This scan will seed future simulation context'
+            }
+        ];
+
+        const deterministicRecommendation = (() => {
+            let score = 0.5;
+            score += alignmentScore * 0.08;
+            if (volumeAnomaly) score += 0.06;
+            score += Math.max(-0.08, Math.min(0.08, orderbookPressure * 0.2));
+            if (highImpactNews > 0) score -= 0.03;
+            const confidence = Math.max(0.15, Math.min(0.92, score));
+            const recommendation = confidence >= 0.62 ? 'BUY WATCH'
+                : confidence <= 0.38 ? 'SELL WATCH'
+                    : 'HOLD / WAIT';
+            return {
+                recommendation,
+            confidence,
+            rationale: `Timeframe alignment ${alignmentScore}; volume ${volumeAnomaly ? 'above baseline' : 'normal'}; orderbook ${orderbookAvailable ? 'observed' : 'unavailable'}; news ${highImpactNews ? 'contains high-impact items' : 'quiet/normal'}; simulation memory ${marketLabContext.best ? 'matched' : 'not yet available'}.`
+        };
+        })();
+
+        const marketDataEvidence = marketEvidenceStore.append('market_data', {
+            symbol: sym,
+            timeframes: Object.fromEntries(Object.entries(timeframes).map(([key, value]) => [
+                key,
+                { timeframe: value.timeframe, summary: value.summary, quality: value.quality }
+            ])),
+            orderbook: orderbook?.metrics || null,
+            newsCount: newsItems.length,
+            opportunity: matchingOpportunity,
+            requestContext
+        }, { source: 'FinanceDeepScan', symbol: sym });
+
+        let swarmAnalysis = null;
+        try {
+            const arbiter = await getFinanceArbiter();
+            const fullAnalysis = await arbiter.analyzeStock(sym);
+            swarmAnalysis = {
+                thesis: fullAnalysis.thesis || null,
+                quant: fullAnalysis.quant || null,
+                risk: fullAnalysis.risk || null,
+                sentiment: fullAnalysis.sentiment || null,
+                strategy: fullAnalysis.strategy || null,
+                debate: fullAnalysis.debate || null
+            };
+        } catch (e) {
+            console.warn('[Finance/DeepScan] Swarm synthesis unavailable:', e.message);
+        }
+
+        const analysis = {
+            thesis: swarmAnalysis?.thesis || `${sym} deep scan completed across intraday, swing, and macro bars. ${deterministicRecommendation.rationale}`,
+            quant: {
+                strategy: matchingOpportunity?.strategy || 'Multi-timeframe real-data scan',
+                technical_indicators: {
+                    intraday_rsi: intraday?.rsi,
+                    swing_rsi: swing?.rsi,
+                    macro_rsi: macro?.rsi,
+                    volume_ratio: intraday?.volumeRatio,
+                    volatility_pct: intraday?.volatilityPct
+                },
+                backtest_results: {
+                    opportunity_score: matchingOpportunity?.score || null,
+                    timeframe_alignment: alignmentScore
+                }
+            },
+            risk: {
+                score: Math.round((1 - Math.min(0.9, intraday?.volatilityPct || 0) / 0.9) * 100),
+                max_drawdown_limit: 'Use active guardrails',
+                position_size_recommendation: deterministicRecommendation.confidence >= 0.62 ? 'Small paper probe only' : 'No new entry until gate clears',
+                notes: timeframes.intraday?.quality?.valid ? 'Market data quality passed for active intraday frame.' : timeframes.intraday?.quality?.issues?.join('; ')
+            },
+            sentiment: {
+                score: highImpactNews ? 0.45 : 0.5 + Math.max(-0.15, Math.min(0.15, alignmentScore * 0.05)),
+                label: highImpactNews ? 'Event-sensitive' : 'Data-led neutral',
+                social_volume: newsItems.length ? `${newsItems.length} connected headlines` : 'No headline feed'
+            },
+            strategy: swarmAnalysis?.strategy ? {
+                recommendation: swarmAnalysis.strategy.recommendation || deterministicRecommendation.recommendation,
+                confidence: swarmAnalysis.strategy.confidence || deterministicRecommendation.confidence,
+                rationale: swarmAnalysis.strategy.rationale || deterministicRecommendation.rationale,
+                entry_price: latestPrice,
+                stop_loss: swarmAnalysis.strategy.action_plan?.stop_loss || null,
+                take_profit: swarmAnalysis.strategy.action_plan?.target || null
+            } : {
+                ...deterministicRecommendation,
+                entry_price: latestPrice,
+                stop_loss: null,
+                take_profit: null
+            },
+            debate: swarmAnalysis?.debate || null,
+            duration: Date.now() - startedAt,
+            deepScan: {
+                sources: [
+                    'SOMA marketDataService bars',
+                    isCryptoSymbol(sym) ? 'Binance orderbook' : 'Alpaca/Yahoo stock bars',
+                    'OpportunityScanner universe ranking',
+                    newsItems.length ? 'Alpaca News' : 'News feed quiet/unavailable'
+                ],
+                timeframes: Object.fromEntries(Object.entries(timeframes).map(([key, value]) => [
+                    key,
+                    { timeframe: value.timeframe, summary: value.summary, quality: value.quality }
+                ])),
+                orderbook,
+                news: newsItems,
+                altSignals,
+                requestContext,
+                opportunities: opportunities.slice(0, 5),
+                marketSimulation: {
+                    context: marketLabContext,
+                    previousDeepScans
+                }
+            }
+        };
+
+        const scanRecord = {
+            id: `deep-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+            parentEvidenceIds: [marketDataEvidence.evidenceId],
+            symbol: sym,
+            marketLabSymbol: marketLabContext.best?.asset?.symbol || sym.replace('-USD', ''),
+            createdAt: new Date().toISOString(),
+            verdict: {
+                recommendation: analysis.strategy.recommendation,
+                confidence: analysis.strategy.confidence,
+                rationale: analysis.strategy.rationale
+            },
+            quality: Object.fromEntries(Object.entries(analysis.deepScan.timeframes).map(([key, value]) => [
+                key,
+                { valid: value.quality?.valid, issues: value.quality?.issues || [] }
+            ])),
+            altSignals,
+            simulationContext: {
+                matchedRuns: marketLabContext.count,
+                bestStrategy: marketLabContext.best ? {
+                    id: marketLabContext.best.strategy?.id,
+                    name: marketLabContext.best.strategy?.name,
+                    status: marketLabContext.best.status,
+                    prometheusScore: marketLabContext.best.prometheusScore,
+                    winRate: marketLabContext.best.metrics?.winRate,
+                    averageDollarPnl: marketLabContext.best.paperAccount?.averageDollarPnl ?? marketLabContext.best.metrics?.averageDollarPnl
+                } : null
+            },
+            marketSnapshot: {
+                price: latestPrice,
+                intraday,
+                swing,
+                macro,
+                orderbook: orderbook?.metrics || null,
+                newsCount: newsItems.length
+            },
+            requestContext
+        };
+        const evidence = marketEvidenceStore.append('deep_scan', scanRecord, {
+            source: 'FinanceDeepScan',
+            symbol: sym,
+            strategyId: requestContext.activeProtocol || matchingOpportunity?.strategy || analysis.strategy?.recommendation || null,
+            parentEvidenceIds: [marketDataEvidence.evidenceId]
+        });
+        scanRecord.evidenceId = evidence.evidenceId;
+        recordDeepScan(scanRecord);
+        analysis.deepScan.feedbackRecord = scanRecord;
+        analysis.deepScan.evidenceId = evidence.evidenceId;
+
+        res.json({
+            success: true,
+            symbol: sym,
+            timestamp: new Date().toISOString(),
+            analysis
+        });
+    } catch (error) {
+        console.error('[Finance] Deep scan error:', error);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+/**
  * POST /api/finance/execute
  * Execute a manual trade
  *
@@ -345,6 +709,7 @@ router.post('/execute', async (req, res) => {
             const slippagePct = (order.filled_avg_price && estimatedPrice)
                 ? ((order.filled_avg_price - estimatedPrice) / estimatedPrice) * 100
                 : null;
+            const isPaperBroker = alpacaService.isPaperTrading !== false;
             tradeLogger.logTradeEntry({
                 orderId: order.id,
                 symbol,
@@ -355,7 +720,10 @@ router.post('/execute', async (req, res) => {
                 expectedPrice: estimatedPrice,
                 slippagePct,
                 strategy: req.body.strategy || 'manual',
-                regime: req.body.regime || null
+                regime: req.body.regime || null,
+                evidenceType: isPaperBroker ? 'paper_trade' : 'manual_broker_order',
+                mode: isPaperBroker ? 'paper' : 'broker',
+                broker: 'alpaca'
             });
         } catch (logErr) {
             console.warn('[Finance] Trade logged to broker but SQLite log failed:', logErr.message);
@@ -433,6 +801,160 @@ function classifyNewsImpact(headline) {
     if (HIGH_NEWS_WORDS.some(w => h.includes(w))) return 'HIGH';
     if (LOW_NEWS_WORDS.some(w => h.includes(w))) return 'LOW';
     return 'MED';
+}
+
+const isCryptoSymbol = (symbol = '') => symbol.includes('-USD') || symbol.toUpperCase().endsWith('USDT');
+
+const toBinanceSymbol = (symbol = '') => {
+    const upper = symbol.toUpperCase();
+    if (upper.endsWith('USDT')) return upper;
+    if (upper.includes('-USD')) return upper.replace('-USD', 'USDT');
+    if (upper.includes('-')) return upper.replace('-', '') + 'USDT';
+    return `${upper}USDT`;
+};
+
+const marketLabSymbolAliases = (symbol = '') => {
+    const upper = symbol.toUpperCase();
+    const base = upper.replace('-USD', '').replace('USDT', '');
+    const aliases = new Set([upper, base]);
+    if (base === 'BTC') aliases.add('BTC-USD');
+    if (base === 'ETH') aliases.add('ETH-USD');
+    if (base === 'SOL') aliases.add('SOL-USD');
+    return aliases;
+};
+
+function readJsonArray(filePath) {
+    try {
+        if (!fs.existsSync(filePath)) return [];
+        const parsed = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+        return Array.isArray(parsed) ? parsed : [];
+    } catch {
+        return [];
+    }
+}
+
+function writeJsonArray(filePath, entries, limit = 500) {
+    fs.mkdirSync(path.dirname(filePath), { recursive: true });
+    fs.writeFileSync(filePath, JSON.stringify(entries.slice(0, limit), null, 2), 'utf8');
+}
+
+function getMarketLabContext(symbol) {
+    const aliases = marketLabSymbolAliases(symbol);
+    const entries = readJsonArray(MARKET_LAB_LEDGER_PATH)
+        .filter(entry => aliases.has(String(entry.asset?.symbol || entry.symbol || '').toUpperCase()))
+        .sort((a, b) => new Date(b.updatedAt || b.createdAt || 0) - new Date(a.updatedAt || a.createdAt || 0));
+    const best = [...entries].sort((a, b) => (b.prometheusScore || 0) - (a.prometheusScore || 0))[0] || null;
+    return {
+        count: entries.length,
+        latest: entries[0] || null,
+        best,
+        recent: entries.slice(0, 5).map(entry => ({
+            id: entry.id,
+            status: entry.status,
+            symbol: entry.asset?.symbol || entry.symbol,
+            strategy: entry.strategy?.name || entry.strategy?.id,
+            prometheusScore: entry.prometheusScore,
+            winRate: entry.metrics?.winRate,
+            sharpe: entry.metrics?.sharpe,
+            averageDollarPnl: entry.paperAccount?.averageDollarPnl ?? entry.metrics?.averageDollarPnl,
+            updatedAt: entry.updatedAt || entry.createdAt
+        }))
+    };
+}
+
+function getDeepScanContext(symbol) {
+    const aliases = marketLabSymbolAliases(symbol);
+    const entries = readJsonArray(DEEP_SCAN_LEDGER_PATH)
+        .filter(entry => aliases.has(String(entry.symbol || '').toUpperCase()) || aliases.has(String(entry.marketLabSymbol || '').toUpperCase()))
+        .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+    return {
+        count: entries.length,
+        latest: entries[0] || null,
+        recent: entries.slice(0, 8)
+    };
+}
+
+function recordDeepScan(entry) {
+    const entries = readJsonArray(DEEP_SCAN_LEDGER_PATH);
+    entries.unshift(entry);
+    writeJsonArray(DEEP_SCAN_LEDGER_PATH, entries, 500);
+}
+
+const pct = (value, base) => base ? (value / base) * 100 : 0;
+
+function calculateRsi(closes, period = 14) {
+    if (!Array.isArray(closes) || closes.length < period + 1) return null;
+    let gains = 0;
+    let losses = 0;
+    for (let i = closes.length - period; i < closes.length; i++) {
+        const diff = closes[i] - closes[i - 1];
+        if (diff >= 0) gains += diff;
+        else losses -= diff;
+    }
+    if (losses === 0) return 100;
+    const rs = gains / losses;
+    return 100 - (100 / (1 + rs));
+}
+
+function summarizeBars(bars = []) {
+    if (!bars.length) return null;
+    const first = bars[0];
+    const last = bars[bars.length - 1];
+    const closes = bars.map(b => Number(b.close)).filter(Number.isFinite);
+    const recent = bars.slice(-20);
+    const older = bars.slice(-60, -20);
+    const recentVolume = recent.reduce((sum, b) => sum + Number(b.volume || 0), 0) / Math.max(recent.length, 1);
+    const olderVolume = older.length
+        ? older.reduce((sum, b) => sum + Number(b.volume || 0), 0) / older.length
+        : recentVolume;
+    const ranges = recent.map(b => Number(b.high || b.close) - Number(b.low || b.close));
+    const avgRange = ranges.reduce((sum, r) => sum + r, 0) / Math.max(ranges.length, 1);
+    const changePct = pct(last.close - first.close, first.close);
+    const rsi = calculateRsi(closes);
+    const volumeRatio = olderVolume > 0 ? recentVolume / olderVolume : 1;
+    const volatilityPct = pct(avgRange, last.close);
+    const direction = changePct > 0.35 ? 'bullish' : changePct < -0.35 ? 'bearish' : 'sideways';
+
+    return {
+        bars: bars.length,
+        price: Number(last.close),
+        changePct: Number(changePct.toFixed(3)),
+        rsi: rsi == null ? null : Number(rsi.toFixed(2)),
+        volumeRatio: Number(volumeRatio.toFixed(3)),
+        volatilityPct: Number(volatilityPct.toFixed(3)),
+        direction,
+        lastTimestamp: last.timestamp || null
+    };
+}
+
+async function fetchNewsItems(symbol, limit = 6) {
+    const alpacaSymbol = symbol.includes('-USD') ? symbol.replace('-USD', '/USD') : symbol;
+    try {
+        if (alpacaService.isConnected && alpacaService.apiKey) {
+            const url = `https://data.alpaca.markets/v1beta1/news?symbols=${encodeURIComponent(alpacaSymbol)}&limit=${parseInt(limit)}&sort=desc`;
+            const resp = await fetch(url, {
+                headers: {
+                    'APCA-API-KEY-ID': alpacaService.apiKey,
+                    'APCA-API-SECRET-KEY': alpacaService.secretKey
+                },
+                signal: AbortSignal.timeout(5000)
+            });
+
+            if (resp.ok) {
+                const data = await resp.json();
+                return (data.news || []).map(n => ({
+                    time: n.created_at,
+                    source: (n.source || 'ALPACA NEWS').toUpperCase().slice(0, 18),
+                    headline: n.headline,
+                    url: n.url || null,
+                    impact: classifyNewsImpact(n.headline)
+                }));
+            }
+        }
+    } catch (e) {
+        console.warn('[Finance/DeepScan] News unavailable:', e.message);
+    }
+    return [];
 }
 
 router.get('/news', async (req, res) => {

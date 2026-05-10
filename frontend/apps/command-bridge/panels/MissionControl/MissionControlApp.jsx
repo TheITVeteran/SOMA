@@ -1,9 +1,11 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { GlobalControls } from './components/GlobalControls.jsx';
-import { ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Activity, MessageSquare, CheckCircle, XCircle, AlertTriangle, Send, X, Clock, Swords, BookOpen, FlaskConical, BarChart2, Bell, Bot } from 'lucide-react';
+import { ChevronDown, ChevronUp, Activity, MessageSquare, CheckCircle, XCircle, AlertTriangle, Send, X, Clock, Swords, BookOpen, FlaskConical, BarChart2, Bell, Bot, ScrollText, Target, Database } from 'lucide-react';
 import { useMarketEngine, MarketMonitor, MarketDeepScan } from './components/MarketRadar.jsx';
 import { StrategyBrain } from './components/StrategyBrain.jsx';
 import { TradeStream } from './components/TradeStream.jsx';
+import { EvidenceBriefPanel, EvidenceTimelinePanel } from './components/EvidencePanels.jsx';
+import { TradeThesisPanel } from './components/TradeThesisPanel.jsx';
 import { CommandPanel } from './components/CommandPanel.jsx';
 import { MainChart } from './components/MainChart.jsx';
 import { RiskPanel } from './components/RiskPanel.jsx';
@@ -17,6 +19,8 @@ import DebateArena from './components/DebateArena.jsx';
 import { BacktestPanel } from './components/BacktestPanel.jsx';
 import { AlertsPanel } from './components/AlertsPanel.jsx';
 import { SimIntelPanel } from './components/SimIntelPanel.jsx';
+import { LifecycleJournalPanel } from './components/LifecycleJournalPanel.jsx';
+import { MissionBriefPanel } from './components/MissionBriefPanel.jsx';
 import { TradeMode, AssetType } from './types.js';
 
 import { INITIAL_TICKERS, STRATEGY_PRESETS } from './constants.js';
@@ -30,19 +34,21 @@ const MissionControlApp = ({ somaBackend, isConnected }) => {
     const [assetType, setAssetType] = useState(AssetType.CRYPTO);
     const [isAnalysisOpen, setIsAnalysisOpen] = useState(false);
     const [isRadarCollapsed, setIsRadarCollapsed] = useState(false);
+    const [decisionPanelTab, setDecisionPanelTab] = useState('decisions');
+    const [activeTradeThesis, setActiveTradeThesis] = useState(null);
 
     // Demo/Live Mode State
     const [isDemoMode, setIsDemoMode] = useState(true);
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
     const [exchangeKeys, setExchangeKeys] = useState(null);
-    const [sidebarTab, setSidebarTab] = useState('agents'); // 'agents' | 'learning' | 'debate' | 'backtest'
+    const [sidebarTab, setSidebarTab] = useState('mission'); // 'mission' | 'agents' | 'learning' | 'debate' | 'backtest'
     const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
     // Training State (Lifted from DemoTrainingPanel)
     const [isTraining, setIsTraining] = useState(false);
     const [trainingStats, setTrainingStats] = useState(null);
     const [isTrainingLoading, setIsTrainingLoading] = useState(false);
-    const [isTrainingMinimized, setIsTrainingMinimized] = useState(false);
+    const [isTrainingMinimized, setIsTrainingMinimized] = useState(true);
 
     // Toast + modal state
     const [toasts, setToasts] = useState([]);
@@ -64,10 +70,116 @@ const MissionControlApp = ({ somaBackend, isConnected }) => {
     const [tickers, setTickers] = useState(INITIAL_TICKERS);
     const [activeStrategies, setActiveStrategies] = useState(STRATEGY_PRESETS[1].strategies); // Default to BTC Native
     const [currentPresetId, setCurrentPresetId] = useState('BTC_NATIVE');
+    const [learnedPlaybook, setLearnedPlaybook] = useState(null);
+    const [missionRuntime, setMissionRuntime] = useState(null);
     const [trades, setTrades] = useState([]);
     const [chartData, setChartData] = useState([]);
     const [timeframe, setTimeframe] = useState('1Min');
     const [dataSource, setDataSource] = useState('CONNECTING'); // 'REAL' | 'SIMULATION' | 'CONNECTING'
+    const [visibleMarketStatus, setVisibleMarketStatus] = useState(null);
+    const [missionPulse, setMissionPulse] = useState(null);
+    const [missionPulseConnected, setMissionPulseConnected] = useState(false);
+    const missionPulseAtRef = useRef(0);
+    const performancePulseAtRef = useRef(0);
+
+    const setRuntimeMode = (demoMode) => {
+        setIsDemoMode(demoMode);
+        setRiskMetrics(prev => demoMode
+            ? { ...prev, initialBalance: 100000, walletBalance: 150000, equity: 100000 }
+            : prev
+        );
+    };
+
+    useEffect(() => {
+        if (typeof window === 'undefined') return;
+        let ws = null;
+        let reconnectTimer = null;
+        let closed = false;
+
+        const backendHost = window.location.port === '5173' ? 'localhost:3001' : window.location.host;
+        const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws';
+
+        const connect = () => {
+            try {
+                ws = new WebSocket(`${protocol}://${backendHost}/ws`);
+                ws.onopen = () => setMissionPulseConnected(true);
+                ws.onclose = () => {
+                    setMissionPulseConnected(false);
+                    if (!closed) reconnectTimer = setTimeout(connect, 3000);
+                };
+                ws.onerror = () => {
+                    setMissionPulseConnected(false);
+                };
+                ws.onmessage = event => {
+                    try {
+                        const message = JSON.parse(event.data);
+                        if (message.type !== 'mission_control_pulse') return;
+                        missionPulseAtRef.current = Date.now();
+                        setMissionPulse(message.payload || null);
+                    } catch {
+                        // Ignore malformed telemetry frames.
+                    }
+                };
+            } catch {
+                setMissionPulseConnected(false);
+                if (!closed) reconnectTimer = setTimeout(connect, 3000);
+            }
+        };
+
+        connect();
+        return () => {
+            closed = true;
+            if (reconnectTimer) clearTimeout(reconnectTimer);
+            try { ws?.close(); } catch {}
+        };
+    }, []);
+
+    const mapDecisionsToTradeStream = useCallback((decisions = []) => {
+        return decisions
+            .filter(d => d.category === 'TRADE' || d.category === 'MANAGE' || d.category === 'SIGNAL' || d.category === 'PAPER')
+            .map(d => ({
+                id: d.id,
+                timestamp: d.timestamp,
+                symbol: d.symbol || d.details?.symbol,
+                side: d.action === 'BUY' || d.action === 'TAKE_PROFIT' ? 'BUY'
+                    : d.action === 'SELL' || d.action === 'STOP_LOSS' ? 'SELL'
+                    : d.action === 'HOLD' ? 'HOLD'
+                    : d.action,
+                price: d.price || d.fillPrice || 0,
+                quantity: d.qty || 0,
+                reason: d.reason?.slice(0, 90) || d.category,
+                riskScore: d.confidence ? Math.round(d.confidence * 100) : 0,
+                pnl: d.pnl || 0,
+                status: d.category === 'TRADE' || d.category === 'PAPER' ? 'FILLED'
+                    : d.category === 'MANAGE' ? 'MANAGED'
+                    : d.action
+            }));
+    }, []);
+
+    const applyPerformanceSummary = useCallback((summary = {}) => {
+        if (summary.sharpe_ratio != null || summary.sortino_ratio != null || summary.max_drawdown_pct != null) {
+            setRiskMetrics(prev => ({
+                ...prev,
+                sharpeRatio: summary.sharpe_ratio ?? prev.sharpeRatio,
+                sortinoRatio: summary.sortino_ratio ?? prev.sortinoRatio,
+                maxDrawdownPct: summary.max_drawdown_pct ?? prev.maxDrawdownPct
+            }));
+        }
+
+        const lb = summary.agent_leaderboard || summary.agentLeaderboard;
+        if (!lb?.length) return;
+        setActiveStrategies(prev => prev.map(s => {
+            const row = lb.find(r => r.agent_name === s.id || r.agent_name === s.name ||
+                r.strategy === s.id || r.strategy === s.name);
+            if (!row || !row.total_trades) return s;
+            return {
+                ...s,
+                winRate: Math.round(((row.wins || 0) / (row.total_trades || 1)) * 100),
+                pnl: row.total_pnl ?? s.pnl,
+                profitFactor: row.profit_factor != null ? row.profit_factor.toFixed(2) : s.profitFactor
+            };
+        }));
+    }, []);
 
     // Autonomous trading state
     const [autonomousStatus, setAutonomousStatus] = useState(null);
@@ -77,6 +189,8 @@ const MissionControlApp = ({ somaBackend, isConnected }) => {
     const [brokerOrders, setBrokerOrders] = useState([]);
     const [liveReadiness, setLiveReadiness] = useState(null); // Paper→live readiness report
     const [marketRegime, setMarketRegime] = useState(null); // MarketRegimeDetector state
+    const learnedPlaybookHydratedRef = useRef(false);
+    const manualPresetOverrideRef = useRef(false);
 
     // Risk State (switches between demo and real balances)
     const [riskMetrics, setRiskMetrics] = useState({
@@ -106,6 +220,125 @@ const MissionControlApp = ({ somaBackend, isConnected }) => {
         return `${s}s`;
     };
 
+    const parseTradeNumber = (value) => {
+        if (value == null) return null;
+        if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+        const parsed = Number(String(value).replace(/[^0-9.-]/g, ''));
+        return Number.isFinite(parsed) ? parsed : null;
+    };
+
+    const inferTradeDirection = (recommendation = '') => {
+        const text = String(recommendation).toUpperCase();
+        if (text.includes('BUY') || text.includes('LONG')) return 'BUY';
+        if (text.includes('SELL') || text.includes('SHORT')) return 'SELL';
+        return 'HOLD';
+    };
+
+    const buildQualityGates = (thesis) => ({
+        canDeepScan: thesis.status === 'draft',
+        canBacktest: ['enriched', 'simulated', 'paper_ready'].includes(String(thesis.status || '').toLowerCase()),
+        canPaperTrade: ['paper_ready', 'paper_active'].includes(String(thesis.status || '').toLowerCase()),
+        freshData: thesis.dataSource === 'REAL' || thesis.dataAgeSec == null || thesis.dataAgeSec < 120,
+        hasEntry: thesis.entryPlan?.entry != null,
+        hasStop: thesis.entryPlan?.stopLoss != null,
+        hasTarget: thesis.entryPlan?.takeProfit != null,
+        hasEvidence: (thesis.evidenceRefs || []).length > 0,
+        riskDefined: thesis.entryPlan?.stopLoss != null || thesis.entryPlan?.maxLossUsd != null || thesis.risks?.length > 0
+    });
+
+    const persistTradeThesis = useCallback(async (thesis) => {
+        if (!thesis) return null;
+        try {
+            const res = await fetch('/api/mission-control/thesis', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(thesis)
+            });
+            const data = await res.json();
+            if (!data.success) throw new Error(data.error || 'Failed to save trade thesis');
+            setActiveTradeThesis(data.thesis);
+            return data.thesis;
+        } catch (error) {
+            addToast(`Thesis save failed: ${error.message}`, 'warning');
+            return thesis;
+        }
+    }, [addToast]);
+
+    const getThesisBlockers = (thesis) => {
+        if (!thesis) return ['no thesis'];
+        const gates = thesis.qualityGates || {};
+        const status = String(thesis.status || '').toLowerCase();
+        const blockers = [];
+        if (!['paper_ready', 'paper_active'].includes(status)) blockers.push('paper-ready status');
+        if (!gates.freshData) blockers.push('fresh data');
+        if (!gates.hasEntry) blockers.push('entry');
+        if (!gates.hasStop) blockers.push('stop');
+        if (!gates.hasTarget) blockers.push('target');
+        if (!gates.hasEvidence) blockers.push('evidence');
+        if (!gates.riskDefined) blockers.push('risk');
+        if (!['BUY', 'SELL'].includes(String(thesis.entryPlan?.direction || '').toUpperCase())) blockers.push('direction');
+        return blockers;
+    };
+
+    useEffect(() => {
+        let cancelled = false;
+        const loadMissionRuntime = async () => {
+            try {
+                const res = await fetch('/api/mission-control/runtime');
+                if (!res.ok) return;
+                const data = await res.json();
+                if (!cancelled && data.success) setMissionRuntime(data.runtime || null);
+            } catch {
+                // Runtime is an enhancement; Mission Control can still run without this endpoint.
+            }
+        };
+        const loadLearnedPlaybook = async () => {
+            try {
+                const res = await fetch('/api/soma/simulations/playbook-mc');
+                if (!res.ok) return;
+                const data = await res.json();
+                const presets = Array.isArray(data.presets) ? data.presets : [];
+                if (cancelled || !data.online || presets.length === 0) return;
+
+                const learnedStrategies = presets.slice(0, 10).map(strategy => ({
+                    ...strategy,
+                    active: strategy.active !== false,
+                    source: strategy.source || 'soma-learned-playbook',
+                    lastExecution: strategy.lastExecution || (data.marketLab?.[0]?.updatedAt ? new Date(data.marketLab[0].updatedAt).toLocaleTimeString() : strategy.lastExecution),
+                }));
+                setLearnedPlaybook({
+                    loadedAt: new Date().toISOString(),
+                    stats: data.stats || {},
+                    missionCouncil: data.missionCouncil || null,
+                    marketLab: data.marketLab || [],
+                    count: learnedStrategies.length,
+                    best: data.marketLab?.[0] || null,
+                });
+
+                if (!manualPresetOverrideRef.current || currentPresetId === 'SOMA_LEARNED') {
+                    setActiveStrategies(learnedStrategies);
+                    setCurrentPresetId('SOMA_LEARNED');
+                    if (!learnedPlaybookHydratedRef.current) {
+                        learnedPlaybookHydratedRef.current = true;
+                        addToast(`Loaded SOMA learned Mission Control council (${learnedStrategies.length})`, 'success');
+                    }
+                }
+            } catch {
+                // Mission Control remains usable with static presets.
+            }
+        };
+        loadMissionRuntime();
+        loadLearnedPlaybook();
+        const t = setInterval(() => {
+            loadMissionRuntime();
+            loadLearnedPlaybook();
+        }, 15000);
+        return () => {
+            cancelled = true;
+            clearInterval(t);
+        };
+    }, [addToast, currentPresetId]);
+
     // Track data age (updates every second)
     useEffect(() => {
         if (!lastDataTime) return;
@@ -114,6 +347,63 @@ const MissionControlApp = ({ somaBackend, isConnected }) => {
         const interval = setInterval(updateAge, 1000);
         return () => clearInterval(interval);
     }, [lastDataTime]);
+
+    useEffect(() => {
+        if (!missionPulse?.autonomous?.success) return;
+        const decisions = missionPulse.autonomous.decisions || [];
+        const statusData = {
+            ...missionPulse.autonomous,
+            _latestDecisions: decisions,
+            missionControlRuntime: missionPulse.missionRuntime || missionPulse.autonomous.missionControlRuntime
+        };
+        setAutonomousStatus(statusData);
+        if (statusData.openPositions) setBrokerPositions(statusData.openPositions);
+
+        const tradeDecisions = mapDecisionsToTradeStream(decisions);
+        if (tradeDecisions.length > 0) setTrades(tradeDecisions);
+
+        const unrealizedPnl = (statusData.openPositions || []).reduce(
+            (sum, p) => sum + (p.unrealizedPnl || 0),
+            0
+        );
+        const realizedPnl = statusData.stats?.sessionPnL || 0;
+        setRiskMetrics(prev => ({
+            ...prev,
+            equity: prev.initialBalance + unrealizedPnl + realizedPnl,
+            netExposure: (statusData.openPositions || []).reduce(
+                (sum, p) => sum + (p.marketValue || 0),
+                0
+            ),
+            dailyDrawdown: Math.max(prev.dailyDrawdown,
+                unrealizedPnl + realizedPnl < 0 && prev.initialBalance > 0
+                    ? Math.abs((unrealizedPnl + realizedPnl) / prev.initialBalance) * 100
+                    : 0
+            )
+        }));
+
+        if (statusData.guardrailsState) {
+            const gs = statusData.guardrailsState;
+            setRiskMetrics(prev => ({
+                ...prev,
+                dailyDrawdown: prev.initialBalance > 0
+                    ? Math.abs(gs.dailyLoss / prev.initialBalance) * 100
+                    : prev.dailyDrawdown,
+                maxDrawdownLimit: gs.config?.maxDailyLoss && prev.initialBalance > 0
+                    ? (gs.config.maxDailyLoss / prev.initialBalance) * 100
+                    : prev.maxDrawdownLimit
+            }));
+        }
+
+        if (missionPulse.missionRuntime) setMissionRuntime(missionPulse.missionRuntime);
+        if (missionPulse.scalping) setTrainingStats(missionPulse.scalping);
+        if (missionPulse.performance) {
+            performancePulseAtRef.current = Date.now();
+            applyPerformanceSummary(missionPulse.performance);
+        }
+        if (missionPulse.tradeThesis?.symbol === selectedSymbol) {
+            setActiveTradeThesis(missionPulse.tradeThesis);
+        }
+    }, [missionPulse, mapDecisionsToTradeStream, applyPerformanceSummary, selectedSymbol]);
 
     // Ask SOMA handler
     const handleAskSoma = useCallback(async () => {
@@ -351,12 +641,407 @@ const MissionControlApp = ({ somaBackend, isConnected }) => {
     // Derive market sentiment from real price change data (not random Math.random() sentiment field)
     const marketSentiment = tickers.filter(t => (t.changePercent || 0) > 0).length > tickers.length / 2 ? 'BULL' : 'BEAR';
 
+    const createDraftThesisFromInterpret = useCallback(({ analysis, symbol, range, dataSource: source, quality, latestBar, error }) => {
+        const price = parseTradeNumber(latestBar?.close ?? currentTicker?.price);
+        const atmosphere = analysis?.atmosphere || 'UNKNOWN';
+        const confidence = Math.max(
+            0.35,
+            Math.min(0.72, atmosphere === 'SURGE' || atmosphere === 'CASCADE' ? 0.62 : 0.48)
+        );
+        const direction = atmosphere === 'SURGE' ? 'BUY' : atmosphere === 'CASCADE' ? 'SELL' : 'HOLD';
+        const dataAgeSec = latestBar?.timestamp ? Math.max(0, Math.round((Date.now() - latestBar.timestamp) / 1000)) : null;
+        const thesis = {
+            id: `thesis-${Date.now()}`,
+            symbol: symbol || selectedSymbol,
+            timeframe: range?.timeframe || timeframe,
+            mode: isDemoMode ? 'paper' : 'live',
+            source: 'interpret',
+            facts: [
+                `Latest ${symbol || selectedSymbol} price: ${price != null ? `$${price.toLocaleString()}` : 'unknown'}`,
+                `Range: ${range?.label || 'current'} / ${range?.timeframe || timeframe}`,
+                `Data source: ${source || dataSource}`,
+                quality?.valid === false ? `Data quality issue: ${quality.issues?.[0] || 'unknown'}` : 'Data quality did not report a blocking issue'
+            ].filter(Boolean),
+            signals: [
+                `Atmosphere: ${atmosphere}`,
+                analysis?.poeticState,
+                analysis?.protocolAdaptation ? `Protocol adaptation: ${analysis.protocolAdaptation}` : null
+            ].filter(Boolean),
+            assumptions: [
+                'Interpret is a draft read, not an execution permission',
+                source === 'SIMULATION' ? 'Current chart is using simulated or fallback market data' : 'Current chart is using live/provider market data',
+                error ? `Interpret fallback used after error: ${error}` : null
+            ].filter(Boolean),
+            risks: [
+                direction === 'HOLD' ? 'No directional edge established yet' : 'Direction requires Deep Scan evidence before paper entry',
+                source === 'SIMULATION' ? 'Simulated data cannot pass live execution gates' : null
+            ].filter(Boolean),
+            entryPlan: {
+                direction,
+                entry: price,
+                stopLoss: null,
+                takeProfit: null,
+                positionSize: null,
+                maxLossUsd: null
+            },
+            confidence,
+            invalidationCondition: 'Invalidate if fresh market data conflicts with this read or Deep Scan rejects the setup.',
+            evidenceRefs: [],
+            dataSource: source || dataSource,
+            dataAgeSec,
+            status: 'draft',
+            updatedAt: Date.now()
+        };
+        thesis.qualityGates = buildQualityGates(thesis);
+        setActiveTradeThesis(thesis);
+        setDecisionPanelTab('thesis');
+        persistTradeThesis(thesis);
+        addToast(`Draft thesis created for ${thesis.symbol}`, 'success');
+    }, [addToast, currentTicker?.price, dataSource, isDemoMode, persistTradeThesis, selectedSymbol, timeframe]);
+
+    const enrichThesisFromDeepScan = useCallback((analysis) => {
+        const strategy = analysis?.strategy || {};
+        const deepScan = analysis?.deepScan || {};
+        const direction = inferTradeDirection(strategy.recommendation);
+        const evidenceRefs = [
+            deepScan.evidenceId,
+            deepScan.feedbackRecord?.id,
+            deepScan.feedbackRecord?.parentEvidenceIds?.[0]
+        ].filter(Boolean);
+        const timeframeSignals = deepScan.timeframes
+            ? Object.entries(deepScan.timeframes).map(([name, frame]) =>
+                `${name}: ${frame.summary?.changePct != null ? `${frame.summary.changePct}%` : 'N/A'} change, RSI ${frame.summary?.rsi ?? '--'}`
+            )
+            : [];
+        const altSignals = (deepScan.altSignals || []).map(signal => `${signal.label}: ${signal.state} - ${signal.detail}`);
+        const newsSignals = (deepScan.news || []).slice(0, 3).map(item => `${item.source}: ${item.headline}`);
+        setActiveTradeThesis(prev => {
+            const base = prev?.symbol === selectedSymbol ? prev : null;
+            const entry = parseTradeNumber(strategy.entry_price ?? currentTicker?.price);
+            const stopLoss = parseTradeNumber(strategy.stop_loss);
+            const takeProfit = parseTradeNumber(strategy.take_profit);
+            const merged = {
+                id: base?.id || `thesis-${Date.now()}`,
+                symbol: selectedSymbol,
+                timeframe: base?.timeframe || timeframe,
+                mode: isDemoMode ? 'paper' : 'live',
+                source: base ? `${base.source}+deep_scan` : 'deep_scan',
+                facts: [
+                    ...(base?.facts || []),
+                    `Deep Scan recommendation: ${strategy.recommendation || 'N/A'}`,
+                    deepScan.marketSimulation?.context?.count != null ? `Matched simulation runs: ${deepScan.marketSimulation.context.count}` : null,
+                    deepScan.marketSimulation?.previousDeepScans?.count != null ? `Prior deep scans: ${deepScan.marketSimulation.previousDeepScans.count}` : null
+                ].filter(Boolean),
+                signals: [
+                    ...(base?.signals || []),
+                    ...timeframeSignals,
+                    ...altSignals,
+                    ...newsSignals
+                ].filter(Boolean),
+                assumptions: [
+                    ...(base?.assumptions || []),
+                    'Deep Scan evidence strengthens the thesis but still requires simulation/backtest before execution'
+                ],
+                risks: [
+                    ...(base?.risks || []),
+                    analysis?.risk?.notes,
+                    analysis?.debate?.bear ? `Bear case: ${typeof analysis.debate.bear === 'string' ? analysis.debate.bear : JSON.stringify(analysis.debate.bear)}` : null
+                ].filter(Boolean),
+                entryPlan: {
+                    direction,
+                    entry,
+                    stopLoss,
+                    takeProfit,
+                    positionSize: analysis?.risk?.position_size_recommendation || base?.entryPlan?.positionSize || null,
+                    maxLossUsd: null
+                },
+                confidence: strategy.confidence ?? base?.confidence ?? 0,
+                invalidationCondition: analysis?.risk?.invalidation || base?.invalidationCondition || 'Invalidate if evidence weakens or price violates the defined stop.',
+                evidenceRefs: Array.from(new Set([...(base?.evidenceRefs || []), ...evidenceRefs])),
+                dataSource,
+                dataAgeSec: visibleMarketStatus?.ageSec ?? null,
+                status: 'enriched',
+                updatedAt: Date.now()
+            };
+            merged.qualityGates = buildQualityGates(merged);
+            persistTradeThesis(merged);
+            return merged;
+        });
+        setDecisionPanelTab('thesis');
+        addToast(`Deep Scan attached evidence to ${selectedSymbol} thesis`, 'success');
+    }, [addToast, currentTicker?.price, dataSource, isDemoMode, persistTradeThesis, selectedSymbol, timeframe, visibleMarketStatus?.ageSec]);
+
+    const mapSymbolForBacktest = useCallback((symbol = selectedSymbol) => {
+        const upper = String(symbol || '').toUpperCase();
+        const map = {
+            'BTC-USD': 'BTCUSDT', 'ETH-USD': 'ETHUSDT', 'SOL-USD': 'SOLUSDT',
+            'DOGE-USD': 'DOGEUSDT', 'XRP-USD': 'XRPUSDT', 'ADA-USD': 'ADAUSDT',
+            'AVAX-USD': 'AVAXUSDT', 'BNB-USD': 'BNBUSDT', 'LINK-USD': 'LINKUSDT'
+        };
+        return map[upper] || upper.replace(/[-/]/g, '');
+    }, [selectedSymbol]);
+
+    const fetchFreshBarsForThesis = useCallback(async () => {
+        try {
+            const res = await fetch(`/api/market/bars/${encodeURIComponent(selectedSymbol)}?timeframe=${encodeURIComponent(timeframe)}&limit=120`);
+            const data = await res.json();
+            if (!res.ok || !data.success || !Array.isArray(data.bars) || data.bars.length === 0) {
+                throw new Error(data.error || 'market bars unavailable');
+            }
+            const latest = data.bars[data.bars.length - 1];
+            return {
+                bars: data.bars,
+                latest,
+                quality: data.quality || null,
+                dataAgeSec: latest?.timestamp ? Math.max(0, Math.round((Date.now() - latest.timestamp) / 1000)) : null
+            };
+        } catch (error) {
+            return { bars: chartData || [], latest: chartData?.[chartData.length - 1] || null, quality: null, dataAgeSec: visibleMarketStatus?.ageSec ?? null, error };
+        }
+    }, [chartData, selectedSymbol, timeframe, visibleMarketStatus?.ageSec]);
+
+    const buildAutoThesis = useCallback(async (baseThesis = null) => {
+        const fresh = await fetchFreshBarsForThesis();
+        const bars = fresh.bars || [];
+        const latest = fresh.latest || {};
+        const first = bars[0] || {};
+        const lastClose = parseTradeNumber(latest.close ?? latest.price ?? currentTicker?.price);
+        const firstClose = parseTradeNumber(first.close ?? first.price ?? lastClose);
+        const changePct = firstClose && lastClose ? ((lastClose - firstClose) / firstClose) * 100 : 0;
+        const direction = baseThesis?.entryPlan?.direction && baseThesis.entryPlan.direction !== 'HOLD'
+            ? baseThesis.entryPlan.direction
+            : changePct >= 0 ? 'BUY' : 'SELL';
+        const stopPct = direction === 'BUY' ? 0.985 : 1.015;
+        const targetPct = direction === 'BUY' ? 1.03 : 0.97;
+        const entry = parseTradeNumber(baseThesis?.entryPlan?.entry) ?? lastClose;
+        const thesis = {
+            ...(baseThesis || {}),
+            id: baseThesis?.id || `thesis-${Date.now()}`,
+            symbol: selectedSymbol,
+            timeframe: baseThesis?.timeframe || timeframe,
+            mode: isDemoMode ? 'paper' : 'live',
+            source: baseThesis?.source || 'auto_prepare',
+            facts: Array.from(new Set([
+                ...(baseThesis?.facts || []),
+                `Auto-prep latest ${selectedSymbol} price: ${entry != null ? `$${entry.toLocaleString()}` : 'unknown'}`,
+                `Auto-prep range change: ${Number.isFinite(changePct) ? `${changePct.toFixed(2)}%` : 'unknown'}`,
+                fresh.error ? `Fresh bar fallback: ${fresh.error.message}` : 'Fresh bars fetched for thesis preparation'
+            ].filter(Boolean))),
+            signals: Array.from(new Set([
+                ...(baseThesis?.signals || []),
+                `Auto-prep directional read: ${direction}`,
+                `Recent slope: ${Number.isFinite(changePct) ? `${changePct.toFixed(2)}%` : 'unknown'}`
+            ].filter(Boolean))),
+            assumptions: Array.from(new Set([
+                ...(baseThesis?.assumptions || []),
+                'Auto-prep may create a paper-trading thesis, not live-money permission'
+            ])),
+            risks: Array.from(new Set([
+                ...(baseThesis?.risks || []),
+                'Auto-generated stop and target must be validated by backtest before paper session'
+            ])),
+            entryPlan: {
+                ...(baseThesis?.entryPlan || {}),
+                direction,
+                entry,
+                stopLoss: parseTradeNumber(baseThesis?.entryPlan?.stopLoss) ?? (entry != null ? Number((entry * stopPct).toFixed(4)) : null),
+                takeProfit: parseTradeNumber(baseThesis?.entryPlan?.takeProfit) ?? (entry != null ? Number((entry * targetPct).toFixed(4)) : null),
+                positionSize: baseThesis?.entryPlan?.positionSize || null,
+                maxLossUsd: baseThesis?.entryPlan?.maxLossUsd || null
+            },
+            confidence: Math.max(baseThesis?.confidence || 0, Math.min(0.64, 0.46 + Math.abs(changePct || 0) / 100)),
+            invalidationCondition: baseThesis?.invalidationCondition || 'Invalidate if fresh market data rejects the direction or price violates the stop.',
+            evidenceRefs: baseThesis?.evidenceRefs || [],
+            dataSource: fresh.error ? (baseThesis?.dataSource || dataSource) : 'REAL',
+            dataAgeSec: fresh.dataAgeSec,
+            status: baseThesis?.status || 'draft',
+            updatedAt: Date.now()
+        };
+        thesis.qualityGates = buildQualityGates(thesis);
+        return persistTradeThesis(thesis);
+    }, [buildQualityGates, currentTicker?.price, dataSource, fetchFreshBarsForThesis, isDemoMode, persistTradeThesis, selectedSymbol, timeframe]);
+
+    const deepScanThesisForAutoStart = useCallback(async (thesis) => {
+        const response = await fetch('/api/finance/deep-scan', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                symbol: selectedSymbol,
+                activeProtocol: currentPresetId,
+                assetType,
+                dataSource: thesis?.dataSource || dataSource,
+                tickerData: currentTicker,
+                chartData,
+                riskMetrics,
+                presets: activeStrategies
+            })
+        });
+        const data = await response.json();
+        if (!response.ok || !data.success || !data.analysis) {
+            throw new Error(data.error || 'Deep Scan failed');
+        }
+        const analysis = data.analysis;
+        const strategy = analysis.strategy || {};
+        const deepScan = analysis.deepScan || {};
+        const direction = inferTradeDirection(strategy.recommendation);
+        const entry = parseTradeNumber(strategy.entry_price ?? thesis?.entryPlan?.entry ?? currentTicker?.price);
+        const stopLoss = parseTradeNumber(strategy.stop_loss ?? thesis?.entryPlan?.stopLoss);
+        const takeProfit = parseTradeNumber(strategy.take_profit ?? thesis?.entryPlan?.takeProfit);
+        const evidenceRefs = [
+            ...(thesis?.evidenceRefs || []),
+            deepScan.evidenceId,
+            deepScan.feedbackRecord?.id,
+            deepScan.feedbackRecord?.parentEvidenceIds?.[0]
+        ].filter(Boolean);
+        const merged = {
+            ...(thesis || {}),
+            source: thesis?.source ? `${thesis.source}+deep_scan` : 'auto_deep_scan',
+            facts: Array.from(new Set([
+                ...(thesis?.facts || []),
+                `Deep Scan recommendation: ${strategy.recommendation || 'N/A'}`,
+                deepScan.marketSimulation?.context?.count != null ? `Matched simulation runs: ${deepScan.marketSimulation.context.count}` : null
+            ].filter(Boolean))),
+            signals: Array.from(new Set([
+                ...(thesis?.signals || []),
+                ...((deepScan.altSignals || []).map(signal => `${signal.label}: ${signal.state} - ${signal.detail}`)),
+                ...((deepScan.news || []).slice(0, 3).map(item => `${item.source}: ${item.headline}`))
+            ].filter(Boolean))),
+            risks: Array.from(new Set([...(thesis?.risks || []), analysis?.risk?.notes].filter(Boolean))),
+            entryPlan: {
+                ...(thesis?.entryPlan || {}),
+                direction: direction === 'HOLD' ? thesis?.entryPlan?.direction : direction,
+                entry,
+                stopLoss,
+                takeProfit,
+                positionSize: analysis?.risk?.position_size_recommendation || thesis?.entryPlan?.positionSize || null,
+                maxLossUsd: thesis?.entryPlan?.maxLossUsd || null
+            },
+            confidence: strategy.confidence ?? thesis?.confidence ?? 0,
+            invalidationCondition: analysis?.risk?.invalidation || thesis?.invalidationCondition,
+            evidenceRefs: Array.from(new Set(evidenceRefs)),
+            status: 'enriched',
+            updatedAt: Date.now()
+        };
+        merged.qualityGates = buildQualityGates(merged);
+        return persistTradeThesis(merged);
+    }, [activeStrategies, assetType, buildQualityGates, chartData, currentPresetId, currentTicker, dataSource, persistTradeThesis, riskMetrics, selectedSymbol]);
+
+    const runAutoBacktestForThesis = useCallback(async (thesis) => {
+        const response = await fetch('/api/backtest/run', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                symbol: mapSymbolForBacktest(thesis.symbol),
+                strategy: 'sma_crossover',
+                strategyParams: { shortPeriod: 10, longPeriod: 20 },
+                interval: timeframe === '1Min' ? '1h' : timeframe.toLowerCase(),
+                initialCapital: 10000,
+                feeRate: 0.001,
+                maxPositionSize: 0.1,
+                thesisId: thesis.id
+            })
+        });
+        const data = await response.json();
+        if (!response.ok || !data.success || !data.sessionId) {
+            throw new Error(data.error || 'Backtest failed to start');
+        }
+        const started = Date.now();
+        while (Date.now() - started < 30000) {
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            const poll = await fetch(`/api/backtest/${encodeURIComponent(data.sessionId)}`);
+            const pollData = await poll.json();
+            const session = pollData.session;
+            if (!pollData.success || !session) continue;
+            if (session.status === 'completed') {
+                const statusRes = await fetch(`/api/mission-control/thesis/${encodeURIComponent(thesis.id)}/status`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        status: 'simulated',
+                        details: {
+                            sessionId: data.sessionId,
+                            metrics: session.metrics,
+                            trades: session.trades,
+                            strategy: 'sma_crossover',
+                            interval: timeframe
+                        }
+                    })
+                });
+                const statusData = await statusRes.json();
+                if (!statusRes.ok || !statusData.success) throw new Error(statusData.error || 'Thesis status update failed');
+                const updated = statusData.thesis || thesis;
+                setActiveTradeThesis(updated);
+                return updated || thesis;
+            }
+            if (session.status === 'failed') throw new Error(session.error || 'Backtest failed');
+        }
+        throw new Error('Backtest timed out');
+    }, [mapSymbolForBacktest, timeframe]);
+
+    const prepareThesisForAutonomousStart = useCallback(async (initialBlockers = []) => {
+        addToast(initialBlockers.length
+            ? `Preparing thesis automatically: ${initialBlockers.join(', ')}.`
+            : 'Preparing trade thesis automatically.',
+            'info'
+        );
+
+        let thesis = await buildAutoThesis(activeTradeThesis);
+        setActiveTradeThesis(thesis);
+        setDecisionPanelTab('thesis');
+
+        let blockers = getThesisBlockers(thesis);
+        if (blockers.some(b => ['paper-ready status', 'fresh data', 'stop', 'target', 'evidence', 'direction'].includes(b))) {
+            if (blockers.includes('evidence') || ['draft', 'enriched'].includes(String(thesis.status || '').toLowerCase())) {
+                addToast('Auto-prep running Deep Scan for evidence.', 'info');
+                thesis = await deepScanThesisForAutoStart(thesis);
+                setActiveTradeThesis(thesis);
+                blockers = getThesisBlockers(thesis);
+            }
+        }
+
+        if (blockers.includes('paper-ready status')) {
+            addToast('Auto-prep running backtest to move thesis toward paper-ready.', 'info');
+            thesis = await runAutoBacktestForThesis(thesis);
+            blockers = getThesisBlockers(thesis);
+        }
+
+        const validationRes = await fetch(`/api/mission-control/thesis/${encodeURIComponent(thesis.id)}/validate`, { method: 'POST' });
+        const validationData = await validationRes.json();
+        if (!validationRes.ok || !validationData.success) {
+            throw new Error(validationData.error || 'server validation failed');
+        }
+        if (!validationData.validation?.executionReady) {
+            const serverBlockers = validationData.validation?.blockers || blockers || ['server validation'];
+            throw new Error(serverBlockers.join(', '));
+        }
+
+        const readyThesis = validationData.thesis || thesis;
+        setActiveTradeThesis(readyThesis);
+        addToast('Trade thesis prepared. Starting autonomous paper session.', 'success');
+        return readyThesis;
+    }, [activeTradeThesis, addToast, buildAutoThesis, deepScanThesisForAutoStart, runAutoBacktestForThesis]);
+
     // PnL Calculation (Restored)
     const symbolPnl = useMemo(() => {
         return trades
             .filter(t => t.symbol === selectedSymbol && t.pnl)
             .reduce((sum, t) => sum + (t.pnl || 0), 0);
     }, [trades, selectedSymbol]);
+
+    useEffect(() => {
+        let cancelled = false;
+        const loadActiveThesis = async () => {
+            try {
+                const res = await fetch(`/api/mission-control/thesis?active=true&symbol=${encodeURIComponent(selectedSymbol)}`);
+                const data = await res.json();
+                if (!cancelled && data.success) setActiveTradeThesis(data.thesis || null);
+            } catch {
+                if (!cancelled) setActiveTradeThesis(null);
+            }
+        };
+        loadActiveThesis();
+        return () => { cancelled = true; };
+    }, [selectedSymbol]);
 
     // --- REAL-TIME DATA (Alpaca Paper for Demo, Live for Real) ---
     useEffect(() => {
@@ -515,6 +1200,9 @@ const MissionControlApp = ({ somaBackend, isConnected }) => {
         let intervalId;
 
         const fetchAutonomousData = async () => {
+            if (missionPulseConnected && Date.now() - missionPulseAtRef.current < 12000) {
+                return;
+            }
             try {
                 // 1. Poll autonomous engine status + decisions
                 const [statusRes, decisionsRes] = await Promise.allSettled([
@@ -530,25 +1218,7 @@ const MissionControlApp = ({ somaBackend, isConnected }) => {
                         latestDecisions = decData.decisions;
                         // Map autonomous decisions into the trades stream format
                         // Include TRADE + MANAGE (real orders) and SIGNAL (engine thinking)
-                        const tradeDecisions = decData.decisions
-                            .filter(d => d.category === 'TRADE' || d.category === 'MANAGE' || d.category === 'SIGNAL' || d.category === 'PAPER')
-                            .map(d => ({
-                                id: d.id,
-                                timestamp: d.timestamp,
-                                symbol: d.symbol || d.details?.symbol,
-                                side: d.action === 'BUY' || d.action === 'TAKE_PROFIT' ? 'BUY'
-                                    : d.action === 'SELL' || d.action === 'STOP_LOSS' ? 'SELL'
-                                    : d.action === 'HOLD' ? 'HOLD'
-                                    : d.action,
-                                price: d.price || d.fillPrice || 0,
-                                quantity: d.qty || 0,
-                                reason: d.reason?.slice(0, 90) || d.category,
-                                riskScore: d.confidence ? Math.round(d.confidence * 100) : 0,
-                                pnl: d.pnl || 0,
-                                status: d.category === 'TRADE' || d.category === 'PAPER' ? 'FILLED'
-                                    : d.category === 'MANAGE' ? 'MANAGED'
-                                    : d.action
-                            }));
+                        const tradeDecisions = mapDecisionsToTradeStream(decData.decisions);
                         if (tradeDecisions.length > 0) {
                             setTrades(tradeDecisions);
                         }
@@ -663,46 +1333,26 @@ const MissionControlApp = ({ somaBackend, isConnected }) => {
         intervalId = setInterval(fetchAutonomousData, 5000); // Poll every 5s
 
         return () => clearInterval(intervalId);
-    }, [tradingActive]);
+    }, [tradingActive, missionPulseConnected, mapDecisionsToTradeStream]);
 
     // Poll /api/performance/summary every 30s → merge real win rates into StrategyBrain cards + Sharpe/Sortino into RiskPanel
     useEffect(() => {
         const fetchPerf = async () => {
+            if (missionPulseConnected && Date.now() - performancePulseAtRef.current < 45000) {
+                return;
+            }
             try {
                 const res = await fetch('/api/performance/summary');
                 if (!res.ok) return;
                 const data = await res.json();
                 const summary = data.summary || data.stats || {};
-
-                // Wire Sharpe/Sortino → RiskPanel (only when backend has computed them)
-                if (summary.sharpe_ratio != null || summary.sortino_ratio != null) {
-                    setRiskMetrics(prev => ({
-                        ...prev,
-                        sharpeRatio: summary.sharpe_ratio ?? prev.sharpeRatio,
-                        sortinoRatio: summary.sortino_ratio ?? prev.sortinoRatio
-                    }));
-                }
-
-                // Wire agent leaderboard → StrategyBrain cards
-                const lb = summary.agent_leaderboard || summary.agentLeaderboard;
-                if (!lb?.length) return;
-                setActiveStrategies(prev => prev.map(s => {
-                    const row = lb.find(r => r.agent_name === s.id || r.agent_name === s.name ||
-                        r.strategy === s.id || r.strategy === s.name);
-                    if (!row || !row.total_trades) return s; // keep preset values until real trades exist
-                    return {
-                        ...s,
-                        winRate: Math.round(((row.wins || 0) / (row.total_trades || 1)) * 100),
-                        pnl: row.total_pnl ?? s.pnl,
-                        profitFactor: row.profit_factor != null ? row.profit_factor.toFixed(2) : s.profitFactor
-                    };
-                }));
+                applyPerformanceSummary(summary);
             } catch { /* non-fatal — StrategyBrain falls back to preset constants */ }
         };
         fetchPerf();
         const interval = setInterval(fetchPerf, 30000);
         return () => clearInterval(interval);
-    }, []);
+    }, [missionPulseConnected, applyPerformanceSummary]);
 
     // Live price ticks from LowLatencyEngine → update tickers + current chart candle
     useEffect(() => {
@@ -777,97 +1427,152 @@ const MissionControlApp = ({ somaBackend, isConnected }) => {
         return () => clearInterval(interval);
     }, [isTraining]);
 
-    const handleStartTraining = async () => {
+    const captureSessionSummary = () => {
+        if (!autonomousStatus?.stats || !sessionStartTime) return;
+        const unrealizedPnl = brokerPositions.reduce((sum, p) => sum + (p.unrealizedPnl || parseFloat(p.unrealized_pl) || 0), 0);
+        setSessionSummary({
+            duration: Date.now() - sessionStartTime,
+            trades: autonomousStatus.stats.tradesExecuted || 0,
+            pnl: (autonomousStatus.stats.sessionPnL || 0) + unrealizedPnl,
+            winRate: autonomousStatus.stats.winRate || 0,
+            errors: autonomousStatus.stats.errors || 0,
+            symbol: selectedSymbol,
+        });
+    };
+
+    const startAutonomousSession = async ({ requireBrokerCheck = false, source = 'autonomous' } = {}) => {
         setIsTrainingLoading(true);
         try {
-            // 1. Quick Alpaca check with 3s timeout (don't let it hang)
-            const controller = new AbortController();
-            const timeout = setTimeout(() => controller.abort(), 3000);
-            try {
-                const statusRes = await fetch('/api/alpaca/status', { signal: controller.signal });
-                clearTimeout(timeout);
-                const statusData = await statusRes.json();
-                if (!statusData.success || !statusData.status?.connected) {
-                    addToast('Alpaca not connected — add paper trading keys in Settings.', 'warning');
-                    setIsSettingsOpen(true);
-                    return;
+            let thesisForStart = activeTradeThesis;
+            const blockers = getThesisBlockers(thesisForStart);
+            if (blockers.length > 0) {
+                setDecisionPanelTab('thesis');
+                try {
+                    thesisForStart = await prepareThesisForAutonomousStart(blockers);
+                } catch (error) {
+                    addToast(`Autonomous start blocked. Auto-prep still missing: ${error.message}.`, 'warning');
+                    return false;
                 }
-            } catch (e) {
-                clearTimeout(timeout);
-                // Status check timed out or failed — try to start anyway
-                console.warn('[MissionControl] Alpaca status check failed, attempting start anyway');
             }
 
-            // 2. Start autonomous engine
+            try {
+                const validationRes = await fetch(`/api/mission-control/thesis/${encodeURIComponent(thesisForStart.id)}/validate`, { method: 'POST' });
+                const validationData = await validationRes.json();
+                if (!validationData.success || !validationData.validation?.executionReady) {
+                    const serverBlockers = validationData.validation?.blockers || ['server validation'];
+                    setDecisionPanelTab('thesis');
+                    addToast(`Autonomous start blocked: ${serverBlockers.join(', ')}.`, 'warning');
+                    return false;
+                }
+                thesisForStart = validationData.thesis || thesisForStart;
+            } catch (error) {
+                addToast(`Autonomous start blocked: could not validate thesis (${error.message}).`, 'warning');
+                return false;
+            }
+
+            if (requireBrokerCheck) {
+                const controller = new AbortController();
+                const timeout = setTimeout(() => controller.abort(), 3000);
+                try {
+                    const statusRes = await fetch('/api/alpaca/status', { signal: controller.signal });
+                    clearTimeout(timeout);
+                    const statusData = await statusRes.json();
+                    if (!statusData.success || !statusData.status?.connected) {
+                        addToast('Alpaca not connected — add paper trading keys in Settings.', 'warning');
+                        setIsSettingsOpen(true);
+                        return false;
+                    }
+                } catch (e) {
+                    clearTimeout(timeout);
+                    console.warn('[MissionControl] Alpaca status check failed, attempting start anyway');
+                }
+            }
+
             const engageRes = await fetch('/api/autonomous/start', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ symbol: selectedSymbol, preset: currentPresetId })
+                body: JSON.stringify({ symbol: selectedSymbol, preset: currentPresetId, thesisId: thesisForStart.id })
             });
             const engageData = await engageRes.json();
 
             if (!engageData.success && !engageData.error?.includes('Already running')) {
                 addToast(`Failed to engage: ${engageData.error}`, 'error');
-                return;
+                return false;
             }
 
-            // 3. Engage the UI + start low-latency WebSocket for real-time ticks
             setTradingActive(true);
             setIsTraining(true);
-            setSessionStartTime(Date.now());
+            setSessionStartTime(prev => prev || Date.now());
+            fetch(`/api/mission-control/thesis/${encodeURIComponent(thesisForStart.id)}/status`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ status: 'paper_active', details: { source, startedAt: new Date().toISOString() } })
+            })
+                .then(r => r.json())
+                .then(data => { if (data.success && data.thesis) setActiveTradeThesis(data.thesis); })
+                .catch(() => {});
             fetch('/api/lowlatency/start', {
                 method: 'POST', headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ symbols: [selectedSymbol] })
             }).catch(() => {});
-            console.log('[MissionControl] Paper trading ENGAGED for', selectedSymbol);
+            console.log(`[MissionControl] ${source} session ENGAGED for`, selectedSymbol);
+            return true;
         } catch (e) {
-            console.error('Start training error:', e);
-            addToast(`Failed to start paper trading: ${e.message}`, 'error');
+            console.error('Start autonomous session error:', e);
+            addToast(`Failed to start autonomous session: ${e.message}`, 'error');
+            return false;
         } finally {
             setIsTrainingLoading(false);
         }
     };
 
-    const handleStopTraining = async () => {
+    const stopAutonomousSession = async ({ includeScalping = true, showSummary = true, source = 'autonomous' } = {}) => {
         setIsTrainingLoading(true);
-        // Capture session summary before stopping
-        if (autonomousStatus?.stats && sessionStartTime) {
-            const unrealizedPnl = brokerPositions.reduce((sum, p) => sum + (p.unrealizedPnl || parseFloat(p.unrealized_pl) || 0), 0);
-            setSessionSummary({
-                duration: Date.now() - sessionStartTime,
-                trades: autonomousStatus.stats.tradesExecuted || 0,
-                pnl: (autonomousStatus.stats.sessionPnL || 0) + unrealizedPnl,
-                winRate: autonomousStatus.stats.winRate || 0,
-                errors: autonomousStatus.stats.errors || 0,
-                symbol: selectedSymbol,
-            });
-        }
+        if (showSummary) captureSessionSummary();
         try {
-            // Stop autonomous engine + sub-engines in parallel
-            await Promise.allSettled([
+            const stops = [
                 fetch('/api/autonomous/stop', { method: 'POST' }),
-                fetch('/api/scalping/stop', { method: 'POST' }),
                 fetch('/api/lowlatency/stop', { method: 'POST' })
-            ]);
+            ];
+            if (includeScalping) stops.splice(1, 0, fetch('/api/scalping/stop', { method: 'POST' }));
+            await Promise.allSettled(stops);
             setTradingActive(false);
             setIsTraining(false);
             setSessionStartTime(null);
-            console.log('[MissionControl] Paper trading STOPPED');
-        } catch (e) { console.error(e); } finally { setIsTrainingLoading(false); }
+            updateActiveThesisStatus('closed', {
+                source,
+                stoppedAt: new Date().toISOString(),
+                includeScalping,
+                sessionPnL: autonomousStatus?.stats?.sessionPnL ?? null,
+                tradesExecuted: autonomousStatus?.stats?.tradesExecuted ?? null
+            });
+            console.log(`[MissionControl] ${source} session STOPPED`);
+            return true;
+        } catch (e) {
+            console.error(e);
+            return false;
+        } finally {
+            setIsTrainingLoading(false);
+        }
     };
+
+    const handleStartTraining = () => startAutonomousSession({ requireBrokerCheck: true, source: 'autonomous training' });
+
+    const handleStopTraining = () => stopAutonomousSession({ includeScalping: true, source: 'autonomous training' });
 
     // Training Button Component (Passed to GlobalControls)
     const trainingBrainButton = (isTrainingMinimized && mode !== TradeMode.MANUAL) ? (
         <button
             onClick={() => setIsTrainingMinimized(false)}
             className="w-10 h-10 bg-yellow-400/90 hover:bg-yellow-400 border-2 border-white/20 rounded-xl shadow-lg flex items-center justify-center transition-all hover:scale-110 animate-pulse group"
-            title="Restore Training Panel"
+            title="Open Autonomous Training"
         >
             <Activity className="w-5 h-5 text-black group-hover:rotate-12 transition-transform" />
         </button>
     ) : null;
 
     const handlePresetSelect = (preset) => {
+        manualPresetOverrideRef.current = true;
         setCurrentPresetId(preset.id);
         setActiveStrategies(preset.strategies);
     };
@@ -880,58 +1585,41 @@ const MissionControlApp = ({ somaBackend, isConnected }) => {
         setRiskMetrics(prev => ({ ...prev, walletBalance: amount }));
     };
 
+    const updateActiveThesisStatus = useCallback(async (status, details = {}) => {
+        if (!activeTradeThesis?.id) return null;
+        try {
+            const res = await fetch(`/api/mission-control/thesis/${encodeURIComponent(activeTradeThesis.id)}/status`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ status, details })
+            });
+            const data = await res.json();
+            if (!data.success) throw new Error(data.error || 'Thesis status update failed');
+            setActiveTradeThesis(data.thesis);
+            return data.thesis;
+        } catch (error) {
+            addToast(`Could not update thesis: ${error.message}`, 'warning');
+            return null;
+        }
+    }, [activeTradeThesis?.id, addToast]);
+
+    const markActiveThesisSimulated = useCallback(async (details = {}) => {
+        const thesis = await updateActiveThesisStatus('simulated', details);
+        if (thesis) {
+            setDecisionPanelTab('thesis');
+            addToast(thesis.status === 'paper_ready'
+                ? 'Backtest passed gates. Thesis is paper-ready.'
+                : 'Thesis marked simulated from backtest result.',
+                'success'
+            );
+        }
+    }, [addToast, updateActiveThesisStatus]);
+
     const toggleTrading = async () => {
         if (!tradingActive) {
-            // START autonomous trading on the server
-            try {
-                const res = await fetch('/api/autonomous/start', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        symbol: selectedSymbol,
-                        preset: currentPresetId
-                    })
-                });
-                const data = await res.json();
-                if (data.success || data.error?.includes('Already running')) {
-                    // "Already running" means engine is active — just sync the UI
-                    setTradingActive(true);
-                    setIsTraining(true);
-                    setSessionStartTime(Date.now());
-                    fetch('/api/lowlatency/start', {
-                        method: 'POST', headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ symbols: [selectedSymbol] })
-                    }).catch(() => {});
-                    console.log('[MissionControl] Autonomous trading ENGAGED for', selectedSymbol);
-                } else {
-                    addToast(`Failed to start: ${data.error}`, 'error');
-                }
-            } catch (e) {
-                addToast(`Failed to start autonomous trading: ${e.message}`, 'error');
-            }
+            await startAutonomousSession({ source: 'autonomous trading' });
         } else {
-            // STOP autonomous trading on the server — capture session summary first
-            if (autonomousStatus?.stats && sessionStartTime) {
-                const unrealizedPnl = brokerPositions.reduce((sum, p) => sum + (p.unrealizedPnl || parseFloat(p.unrealized_pl) || 0), 0);
-                setSessionSummary({
-                    duration: Date.now() - sessionStartTime,
-                    trades: autonomousStatus.stats.tradesExecuted || 0,
-                    pnl: (autonomousStatus.stats.sessionPnL || 0) + unrealizedPnl,
-                    winRate: autonomousStatus.stats.winRate || 0,
-                    errors: autonomousStatus.stats.errors || 0,
-                    symbol: selectedSymbol,
-                });
-            }
-            try {
-                await Promise.allSettled([
-                    fetch('/api/autonomous/stop', { method: 'POST' }),
-                    fetch('/api/lowlatency/stop', { method: 'POST' })
-                ]);
-            } catch (e) { /* best effort */ }
-            setTradingActive(false);
-            setIsTraining(false);
-            setSessionStartTime(null);
-            console.log('[MissionControl] Autonomous trading STOPPED');
+            await stopAutonomousSession({ includeScalping: false, source: 'autonomous trading' });
         }
     };
 
@@ -965,79 +1653,102 @@ const MissionControlApp = ({ somaBackend, isConnected }) => {
     };
 
     const handleModeToggle = async () => {
-        if (!isDemoMode) {
-            // Switching FROM live TO demo - no confirmation needed
-            setIsDemoMode(true);
-            setRiskMetrics(prev => ({
-                ...prev,
-                initialBalance: 100000,
-                walletBalance: 150000,
-                equity: 100000
-            }));
-
-            // Connect to Alpaca Paper API for demo training
-            if (exchangeKeys && exchangeKeys.alpaca) {
-                try {
-                    const response = await fetch('/api/alpaca/connect', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            apiKey: exchangeKeys.alpaca.apiKey,
-                            secretKey: exchangeKeys.alpaca.secretKey,
-                            paperTrading: true  // ← Demo always uses paper
-                        })
-                    });
-                    const data = await response.json();
-                    if (data.success) {
-                        console.log('✅ Connected to Alpaca Paper Trading for demo');
-                    }
-                } catch (error) {
-                    console.error('Failed to connect paper trading:', error);
-                }
-            }
-        } else {
-            // Switching FROM demo TO live - require confirmation + readiness check
-            if (!exchangeKeys) {
-                addToast('Configure exchange API keys in Settings before going live.', 'warning');
-                setIsSettingsOpen(true);
-                return;
-            }
-
-            // Check paper trading readiness report
-            let readinessWarning = '';
-            try {
-                const reportRes = await fetch('/api/learning/report');
-                const reportData = await reportRes.json();
-                if (reportData.success && reportData.report?.verdict) {
-                    const verdict = reportData.report.verdict;
-                    setLiveReadiness(reportData.report);
-
-                    if (verdict.recommendation === 'DO_NOT_GO_LIVE') {
-                        readinessWarning = '\n\n🚨 SOMA RECOMMENDS: DO NOT GO LIVE\n' +
-                            'Issues:\n' + (verdict.issues || []).map(i => `  • ${i}`).join('\n') +
-                            '\n\nYou can still proceed, but SOMA has not validated this strategy yet.';
-                    } else if (verdict.recommendation === 'CAUTION') {
-                        readinessWarning = '\n\n⚠️ SOMA SAYS: PROCEED WITH CAUTION\n' +
-                            'Issues:\n' + (verdict.issues || []).map(i => `  • ${i}`).join('\n');
-                    } else if (verdict.recommendation === 'GO_LIVE') {
-                        readinessWarning = '\n\n✅ SOMA SAYS: STRATEGY VALIDATED\n' +
-                            'Strengths:\n' + (verdict.strengths || []).map(s => `  • ${s}`).join('\n');
-                    }
-                }
-            } catch (err) {
-                readinessWarning = '\n\n⚠️ Could not fetch readiness report.';
-            }
-
+        if (tradingActive) {
+            const targetMode = isDemoMode ? 'LIVE' : 'DEMO';
             setConfirmModal({
-                title: '⚠️ Switch to LIVE TRADING',
-                body: 'You are about to trade with REAL MONEY. Make sure you understand the risks.',
-                verdict: readinessWarning.trim() || null,
-                onConfirm: () => {
-                    setIsDemoMode(false);
-                    fetchRealBalance();
+                title: `Stop Engine Before ${targetMode} Switch`,
+                body: `SOMA is currently running in ${isDemoMode ? 'DEMO/PAPER' : 'LIVE'} mode. The running engine must stop before switching modes so the UI and execution mode cannot drift apart.`,
+                verdict: 'This will stop autonomous trading, clear the running session state, then switch the interface mode.',
+                confirmLabel: `Stop and Switch to ${targetMode}`,
+                confirmClassName: isDemoMode ? 'bg-rose-600 hover:bg-rose-500' : 'bg-cyan-600 hover:bg-cyan-500',
+                onConfirm: async () => {
+                    const stopped = await stopAutonomousSession({ includeScalping: true, source: 'mode switch' });
+                    if (!stopped) {
+                        addToast('Mode switch blocked because the engine did not stop cleanly.', 'error');
+                        return;
+                    }
+                    if (isDemoMode) {
+                        await requestLiveMode();
+                    } else {
+                        await switchToDemoMode();
+                    }
                 }
             });
+            return;
         }
+
+        if (!isDemoMode) {
+            await switchToDemoMode();
+        } else {
+            await requestLiveMode();
+        }
+    };
+
+    const switchToDemoMode = async () => {
+        setRuntimeMode(true);
+        addToast('Switched to DEMO/PAPER mode. Restart autonomous trading to apply the mode.', 'success');
+
+        if (exchangeKeys && exchangeKeys.alpaca) {
+            try {
+                const response = await fetch('/api/alpaca/connect', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        apiKey: exchangeKeys.alpaca.apiKey,
+                        secretKey: exchangeKeys.alpaca.secretKey,
+                        paperTrading: true
+                    })
+                });
+                const data = await response.json();
+                if (data.success) console.log('Connected to Alpaca Paper Trading for demo');
+            } catch (error) {
+                console.error('Failed to connect paper trading:', error);
+            }
+        }
+    };
+
+    const requestLiveMode = async () => {
+        if (!exchangeKeys) {
+            addToast('Configure exchange API keys in Settings before going live.', 'warning');
+            setIsSettingsOpen(true);
+            return;
+        }
+
+        let readinessWarning = '';
+        try {
+            const reportRes = await fetch('/api/learning/report');
+            const reportData = await reportRes.json();
+            if (reportData.success && reportData.report?.verdict) {
+                const verdict = reportData.report.verdict;
+                setLiveReadiness(reportData.report);
+
+                if (verdict.recommendation === 'DO_NOT_GO_LIVE') {
+                    readinessWarning = '\n\nSOMA RECOMMENDS: DO NOT GO LIVE\n' +
+                        'Issues:\n' + (verdict.issues || []).map(i => `  - ${i}`).join('\n') +
+                        '\n\nYou can still proceed, but SOMA has not validated this strategy yet.';
+                } else if (verdict.recommendation === 'CAUTION') {
+                    readinessWarning = '\n\nSOMA SAYS: PROCEED WITH CAUTION\n' +
+                        'Issues:\n' + (verdict.issues || []).map(i => `  - ${i}`).join('\n');
+                } else if (verdict.recommendation === 'GO_LIVE') {
+                    readinessWarning = '\n\nSOMA SAYS: STRATEGY VALIDATED\n' +
+                        'Strengths:\n' + (verdict.strengths || []).map(s => `  - ${s}`).join('\n');
+                }
+            }
+        } catch (err) {
+            readinessWarning = '\n\nCould not fetch readiness report.';
+        }
+
+        setConfirmModal({
+            title: 'Switch to LIVE TRADING',
+            body: 'You are about to trade with real money. The autonomous engine is stopped; restart it after switching if you intentionally want live execution.',
+            verdict: readinessWarning.trim() || null,
+            confirmLabel: 'Proceed with Live Trading',
+            confirmClassName: 'bg-rose-600 hover:bg-rose-500',
+            onConfirm: () => {
+                setRuntimeMode(false);
+                fetchRealBalance();
+            }
+        });
     };
 
     const handleSaveKeys = (keys) => {
@@ -1099,8 +1810,8 @@ const MissionControlApp = ({ somaBackend, isConnected }) => {
                 <div className="absolute inset-0 pointer-events-none z-[100] rounded-xl border-4 border-rose-500 animate-pulse-glow" />
             )}
 
-            {/* Demo Training Panel — only show in MANUAL mode (autonomous mode uses ENGAGE button) */}
-            {!isTrainingMinimized && mode === TradeMode.MANUAL && (
+            {/* Autonomous Training Panel — paper-only strategy lab controls */}
+            {!isTrainingMinimized && mode === TradeMode.AUTONOMOUS && (
                 <DemoTrainingPanel
                     isDemoMode={isDemoMode}
                     isTraining={isTraining}
@@ -1166,22 +1877,27 @@ const MissionControlApp = ({ somaBackend, isConnected }) => {
                         {/* Collapse toggle button */}
                         <button
                             onClick={() => setSidebarCollapsed(v => !v)}
-                            className="absolute -right-3 top-1/2 -translate-y-1/2 z-20 w-6 h-6 rounded-full bg-[#1a1a1f] border border-white/10 flex items-center justify-center text-zinc-400 hover:text-zinc-200 hover:border-white/30 transition-all shadow-lg"
+                            className="absolute -right-4 top-1/2 -translate-y-1/2 z-[250] w-8 h-8 rounded-full bg-[#08090c] border border-cyan-400/30 flex items-center justify-center text-cyan-400 hover:text-cyan-200 hover:border-cyan-300/70 hover:shadow-[0_0_18px_rgba(34,211,238,0.45)] transition-all shadow-2xl"
                             title={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+                            aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
                         >
-                            {sidebarCollapsed ? <ChevronRight className="w-3 h-3" /> : <ChevronLeft className="w-3 h-3" />}
+                            <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">
+                                <path d="M12 2C10.5 2 9 2.5 8 3.5C7 2.5 5.5 2 4 2C2.5 2 1 3 1 5C1 6.5 1.5 8 2.5 9C1.5 10 1 11.5 1 13C1 14.5 2 16 3.5 16.5C3 17.5 3 18.5 3.5 19.5C4 20.5 5 21 6 21.5C7 22 8.5 22 10 22H14C15.5 22 17 22 18 21.5C19 21 20 20.5 20.5 19.5C21 18.5 21 17.5 20.5 16.5C22 16 23 14.5 23 13C23 11.5 22.5 10 21.5 9C22.5 8 23 6.5 23 5C23 3 21.5 2 20 2C18.5 2 17 2.5 16 3.5C15 2.5 13.5 2 12 2Z" />
+                            </svg>
                         </button>
 
                         {sidebarCollapsed ? (
                             /* Collapsed: icon rail only */
                             <div className="flex flex-col items-center pt-2 gap-1 w-full">
                                 {[
+                                    { id: 'mission',  icon: Target,       title: 'Mission',   activeClass: 'bg-emerald-500/20 text-emerald-300'  },
                                     { id: 'agents',   icon: Bot,          title: 'Agents',    activeClass: 'bg-indigo-500/20 text-indigo-300'   },
                                     { id: 'learning', icon: BookOpen,     title: 'Learning',  activeClass: 'bg-emerald-500/20 text-emerald-300'  },
                                     { id: 'debate',   icon: Swords,       title: 'Debate',    activeClass: 'bg-amber-500/20 text-amber-300'      },
                                     { id: 'backtest', icon: BarChart2,    title: 'Backtest',  activeClass: 'bg-violet-500/20 text-violet-300'    },
                                     { id: 'alerts',   icon: Bell,         title: 'Alerts',    activeClass: 'bg-orange-500/20 text-orange-300'    },
                                     { id: 'sim',      icon: FlaskConical, title: 'Sim Intel', activeClass: 'bg-fuchsia-500/20 text-fuchsia-300'  },
+                                    { id: 'journal',  icon: ScrollText,   title: 'Journal',   activeClass: 'bg-cyan-500/20 text-cyan-300'       },
                                 ].map(({ id, icon: Icon, title, activeClass }) => (
                                     <button key={id} title={title}
                                         onClick={() => { setSidebarTab(id); setSidebarCollapsed(false); }}
@@ -1196,28 +1912,51 @@ const MissionControlApp = ({ somaBackend, isConnected }) => {
                         {/* Strategy Brain / Learning Dashboard / Debate Arena tabs */}
                         <div className="flex-1 overflow-hidden min-h-0 flex flex-col">
                             {/* Toggle Tabs */}
-                            <div className="flex flex-wrap border-b border-white/5 bg-black/20">
+                            <div className="flex flex-wrap border-b border-white/5 bg-black/20 overflow-visible relative z-30">
                                 {[
-                                    { id: 'agents',   icon: Bot,          label: 'Agents',   activeClass: 'bg-indigo-500/20 text-indigo-300 border-b-2 border-indigo-500'     },
-                                    { id: 'learning', icon: BookOpen,     label: 'Learn',    activeClass: 'bg-emerald-500/20 text-emerald-300 border-b-2 border-emerald-500'   },
-                                    { id: 'debate',   icon: Swords,       label: 'Debate',   activeClass: 'bg-amber-500/20 text-amber-300 border-b-2 border-amber-500'         },
-                                    { id: 'backtest', icon: BarChart2,    label: 'Backtest', activeClass: 'bg-violet-500/20 text-violet-300 border-b-2 border-violet-500'      },
-                                    { id: 'alerts',   icon: Bell,         label: 'Alerts',   activeClass: 'bg-orange-500/20 text-orange-300 border-b-2 border-orange-500'      },
-                                    { id: 'sim',      icon: FlaskConical, label: 'Sim',      activeClass: 'bg-fuchsia-500/20 text-fuchsia-300 border-b-2 border-fuchsia-500'   },
-                                ].map(({ id, icon: Icon, label, activeClass }) => (
+                                    { id: 'mission',  icon: Target,       title: 'Thesis Brief', activeClass: 'bg-emerald-500/20 text-emerald-300 border-b-2 border-emerald-500'   },
+                                    { id: 'agents',   icon: Bot,          title: 'Agents',        activeClass: 'bg-indigo-500/20 text-indigo-300 border-b-2 border-indigo-500'     },
+                                    { id: 'learning', icon: BookOpen,     title: 'Learning',      activeClass: 'bg-emerald-500/20 text-emerald-300 border-b-2 border-emerald-500'   },
+                                    { id: 'debate',   icon: Swords,       title: 'Debate',        activeClass: 'bg-amber-500/20 text-amber-300 border-b-2 border-amber-500'         },
+                                    { id: 'backtest', icon: BarChart2,    title: 'Backtest',      activeClass: 'bg-violet-500/20 text-violet-300 border-b-2 border-violet-500'      },
+                                    { id: 'alerts',   icon: Bell,         title: 'Alerts',        activeClass: 'bg-orange-500/20 text-orange-300 border-b-2 border-orange-500'      },
+                                    { id: 'sim',      icon: FlaskConical, title: 'Sim Intel',     activeClass: 'bg-fuchsia-500/20 text-fuchsia-300 border-b-2 border-fuchsia-500'   },
+                                    { id: 'journal',  icon: ScrollText,   title: 'Lifecycle Trail', activeClass: 'bg-cyan-500/20 text-cyan-300 border-b-2 border-cyan-500'          },
+                                ].map(({ id, icon: Icon, title, activeClass }) => (
                                     <button key={id}
+                                        title={title}
+                                        aria-label={title}
                                         onClick={() => setSidebarTab(id)}
-                                        className={`flex-1 flex flex-col items-center justify-center gap-0.5 py-1.5 text-[9px] font-bold uppercase tracking-wide transition-all ${sidebarTab === id ? activeClass : 'text-zinc-500 hover:text-zinc-300'}`}
+                                        className={`group relative flex-1 flex items-center justify-center py-2 transition-all ${sidebarTab === id ? activeClass : 'text-zinc-500 hover:text-zinc-300 hover:bg-white/5'}`}
                                     >
-                                        <Icon className="w-3 h-3" />
-                                        {label}
+                                        <Icon className="w-3.5 h-3.5" />
+                                        <span className="pointer-events-none absolute left-1/2 bottom-full z-[200] mb-2 -translate-x-1/2 whitespace-nowrap rounded border border-white/10 bg-zinc-950 px-2 py-1 text-[10px] font-bold uppercase tracking-wide text-zinc-200 opacity-0 shadow-xl transition-opacity group-hover:opacity-100">
+                                            {title}
+                                        </span>
                                     </button>
                                 ))}
                             </div>
 
                             {/* Content */}
                             <div className="flex-1 overflow-hidden">
-                                {sidebarTab === 'learning' ? (
+                                {sidebarTab === 'mission' ? (
+                                    <MissionBriefPanel
+                                        isDemoMode={isDemoMode}
+                                        tradingActive={tradingActive}
+                                        selectedSymbol={selectedSymbol}
+                                        riskMetrics={riskMetrics}
+                                        missionRuntime={missionRuntime}
+                                        learnedPlaybook={learnedPlaybook}
+                                        liveReadiness={liveReadiness}
+                                        marketRegime={marketRegime}
+                                        dataSource={dataSource}
+                                        autonomousStatus={autonomousStatus}
+                                        currentPresetId={currentPresetId}
+                                        onOpenBacktest={() => setSidebarTab('backtest')}
+                                        onOpenSim={() => setSidebarTab('sim')}
+                                        onOpenJournal={() => setSidebarTab('journal')}
+                                    />
+                                ) : sidebarTab === 'learning' ? (
                                     <div className="h-full overflow-y-auto custom-scrollbar p-3">
                                         <LearningDashboard isDemo={isDemoMode} />
                                     </div>
@@ -1231,7 +1970,11 @@ const MissionControlApp = ({ somaBackend, isConnected }) => {
                                     </div>
                                 ) : sidebarTab === 'backtest' ? (
                                     <div className="h-full overflow-hidden">
-                                        <BacktestPanel selectedSymbol={selectedSymbol} />
+                                        <BacktestPanel
+                                            selectedSymbol={selectedSymbol}
+                                            activeThesis={activeTradeThesis}
+                                            onThesisSimulated={markActiveThesisSimulated}
+                                        />
                                     </div>
                                 ) : sidebarTab === 'alerts' ? (
                                     <div className="h-full overflow-hidden">
@@ -1243,12 +1986,18 @@ const MissionControlApp = ({ somaBackend, isConnected }) => {
                                 ) : sidebarTab === 'sim' ? (
                                     <div className="h-full overflow-hidden">
                                         <SimIntelPanel onDeployStrategies={(strategies) => {
+                                            manualPresetOverrideRef.current = false;
+                                            setCurrentPresetId('SOMA_LEARNED');
                                             setActiveStrategies(strategies);
                                             addToast(`Loaded ${strategies.length} trained strategies from SOMA playbook`, 'success');
                                         }} />
                                     </div>
+                                ) : sidebarTab === 'journal' ? (
+                                    <div className="h-full overflow-hidden">
+                                        <LifecycleJournalPanel />
+                                    </div>
                                 ) : (
-                                    <StrategyBrain strategies={activeStrategies} />
+                                    <StrategyBrain strategies={activeStrategies} learnedPlaybook={learnedPlaybook} missionRuntime={missionRuntime} />
                                 )}
                             </div>
                         </div>
@@ -1269,16 +2018,28 @@ const MissionControlApp = ({ somaBackend, isConnected }) => {
                             <div className="flex-1 lg:col-span-8 border-r border-white/5 relative flex flex-col min-h-0">
                                 {/* Chart Area - Auto resize based on remaining space */}
                                 <div className="flex-1 relative border-b border-white/5 transition-all duration-300">
-                                    <CustomMarketView selectedSymbol={selectedSymbol} data={chartData} dataSource={dataSource} activeProtocol={currentPresetId} />
+                                    <CustomMarketView
+                                        selectedSymbol={selectedSymbol}
+                                        data={chartData}
+                                        dataSource={dataSource}
+                                        activeProtocol={currentPresetId}
+                                        onDataStatus={setVisibleMarketStatus}
+                                        onInterpretAnalysis={createDraftThesisFromInterpret}
+                                    />
                                     {/* Data freshness badge */}
-                                    {lastDataTime && (
+                                    {(visibleMarketStatus?.lastDataTime || lastDataTime) && (
                                         <div className={`absolute top-2 right-2 z-10 flex items-center gap-1.5 px-2 py-1 rounded-md text-[10px] font-mono border backdrop-blur-sm
-                                            ${dataSource === 'SIMULATION' ? 'bg-amber-900/60 border-amber-500/30 text-amber-300' :
-                                              dataAge < 30 ? 'bg-emerald-900/60 border-emerald-500/30 text-emerald-300' :
-                                              dataAge < 120 ? 'bg-amber-900/60 border-amber-500/30 text-amber-300' :
+                                            ${(visibleMarketStatus?.source || dataSource) === 'SIMULATION' ? 'bg-amber-900/60 border-amber-500/30 text-amber-300' :
+                                              (visibleMarketStatus?.ageSec ?? dataAge) < 30 ? 'bg-emerald-900/60 border-emerald-500/30 text-emerald-300' :
+                                              (visibleMarketStatus?.ageSec ?? dataAge) < 120 ? 'bg-amber-900/60 border-amber-500/30 text-amber-300' :
                                               'bg-rose-900/60 border-rose-500/30 text-rose-300'}`}>
-                                            <div className={`w-1.5 h-1.5 rounded-full ${dataSource === 'SIMULATION' ? 'bg-amber-400 animate-pulse' : dataAge < 30 ? 'bg-emerald-400' : dataAge < 120 ? 'bg-amber-400 animate-pulse' : 'bg-rose-400 animate-pulse'}`} />
-                                            {dataSource === 'SIMULATION' ? 'SIMULATED' : `${dataAge}s ago`}
+                                            <div className={`w-1.5 h-1.5 rounded-full ${(visibleMarketStatus?.source || dataSource) === 'SIMULATION' ? 'bg-amber-400 animate-pulse' : (visibleMarketStatus?.ageSec ?? dataAge) < 30 ? 'bg-emerald-400' : (visibleMarketStatus?.ageSec ?? dataAge) < 120 ? 'bg-amber-400 animate-pulse' : 'bg-rose-400 animate-pulse'}`} />
+                                            {(visibleMarketStatus?.source || dataSource) === 'SIMULATION' ? 'SIMULATED' : `${visibleMarketStatus?.ageSec ?? dataAge}s ago`}
+                                        </div>
+                                    )}
+                                    {visibleMarketStatus?.fallbackReason && (
+                                        <div className="absolute top-9 right-2 z-10 max-w-[320px] rounded-md border border-amber-500/30 bg-amber-950/75 px-2 py-1 text-[10px] font-mono text-amber-200 backdrop-blur-sm shadow-lg">
+                                            DATA FALLBACK: {visibleMarketStatus.fallbackReason}
                                         </div>
                                     )}
                                     {!tradingActive && (
@@ -1352,13 +2113,49 @@ const MissionControlApp = ({ somaBackend, isConnected }) => {
                             {/* Right Col: Trade Stream & Risk */}
                             <div className="flex-1 lg:col-span-4 flex flex-col h-full overflow-hidden border-t lg:border-t-0 border-white/5">
                                 <div className="h-1/2 border-b border-white/5 overflow-hidden">
-                                    <TradeStream trades={trades} />
+                                    <div className="h-full flex flex-col bg-[#151518]/40">
+                                        <div className="flex border-b border-white/5 bg-black/20">
+                                            {[
+                                                { id: 'decisions', label: 'Decision Stream', icon: Activity },
+                                                { id: 'thesis', label: 'Trade Thesis', icon: Target },
+                                                { id: 'evidence', label: 'Evidence Brief', icon: Database },
+                                                { id: 'timeline', label: 'Evidence Timeline', icon: ScrollText },
+                                            ].map(({ id, label, icon: Icon }) => (
+                                                <button
+                                                    key={id}
+                                                    onClick={() => setDecisionPanelTab(id)}
+                                                    className={`group relative flex-1 flex items-center justify-center gap-1 px-2 py-2 text-[9px] font-bold uppercase tracking-wide transition-colors ${decisionPanelTab === id ? 'text-cyan-300 bg-cyan-500/10' : 'text-zinc-600 hover:text-zinc-300 hover:bg-white/5'}`}
+                                                    title={label}
+                                                >
+                                                    <Icon className="w-3.5 h-3.5" />
+                                                    <span className="hidden xl:inline truncate">{label}</span>
+                                                </button>
+                                            ))}
+                                        </div>
+                                        <div className="flex-1 min-h-0 overflow-hidden">
+                                            {decisionPanelTab === 'decisions' ? (
+                                                <TradeStream trades={trades} embedded />
+                                            ) : decisionPanelTab === 'thesis' ? (
+                                                <TradeThesisPanel thesis={activeTradeThesis} />
+                                            ) : decisionPanelTab === 'evidence' ? (
+                                                <EvidenceBriefPanel
+                                                    symbol={selectedSymbol}
+                                                    missionRuntime={missionRuntime}
+                                                    autonomousStatus={autonomousStatus}
+                                                />
+                                            ) : (
+                                                <EvidenceTimelinePanel symbol={selectedSymbol} />
+                                            )}
+                                        </div>
+                                    </div>
                                 </div>
                                 <div className="h-1/2 overflow-hidden">
                                     <RiskPanel
                                         metrics={riskMetrics}
                                         onUpdateAllocation={handleUpdateAllocation}
                                         onUpdateWallet={handleUpdateWallet}
+                                        autonomousStatus={autonomousStatus}
+                                        positions={brokerPositions}
                                     />
                                 </div>
                             </div>
@@ -1408,6 +2205,8 @@ const MissionControlApp = ({ somaBackend, isConnected }) => {
                                     {autonomousStatus?.stats && (() => {
                                         const unrealizedPnl = brokerPositions.reduce((sum, p) => sum + (p.unrealizedPnl || parseFloat(p.unrealized_pl) || 0), 0);
                                         const totalPnl = (autonomousStatus.stats.sessionPnL || 0) + unrealizedPnl;
+                                        const lastConfidence = autonomousStatus.lastSignal?.confidence ?? null;
+                                        const minConfidence = autonomousStatus.config?.minConfidence || autonomousStatus.guardrailsState?.config?.minConfidence || null;
                                         return (
                                         <div className="grid grid-cols-2 gap-1.5">
                                             <div className="bg-black/40 rounded p-1.5 border border-white/5">
@@ -1430,6 +2229,24 @@ const MissionControlApp = ({ somaBackend, isConnected }) => {
                                                 <div className="text-[8px] text-zinc-600">ERRORS</div>
                                                 <div className={`text-sm font-mono ${autonomousStatus.stats.errors > 0 ? 'text-amber-400' : 'text-zinc-400'}`}>{autonomousStatus.stats.errors}</div>
                                             </div>
+                                            <div className="col-span-2 bg-black/40 rounded p-1.5 border border-white/5">
+                                                <div className="flex justify-between text-[8px] text-zinc-600">
+                                                    <span>LAST SIGNAL</span>
+                                                    <span>{autonomousStatus.lastSignal?.action || 'NONE'}</span>
+                                                </div>
+                                                <div className="mt-1 flex items-center gap-2">
+                                                    <div className="flex-1 h-1 bg-zinc-900 rounded overflow-hidden">
+                                                        <div
+                                                            className={`h-full ${lastConfidence != null && minConfidence != null && lastConfidence >= minConfidence ? 'bg-emerald-400' : 'bg-blue-400'}`}
+                                                            style={{ width: `${Math.max(0, Math.min(100, (lastConfidence || 0) * 100))}%` }}
+                                                        />
+                                                    </div>
+                                                    <span className="text-[9px] font-mono text-zinc-400">
+                                                        {lastConfidence != null ? Math.round(lastConfidence * 100) : '--'}%
+                                                        {minConfidence != null ? ` / ${Math.round(minConfidence * 100)}%` : ''}
+                                                    </span>
+                                                </div>
+                                            </div>
                                         </div>
                                         );
                                     })()}
@@ -1439,7 +2256,14 @@ const MissionControlApp = ({ somaBackend, isConnected }) => {
                                 <div className="flex-1 border-r border-white/5 p-3 overflow-y-auto custom-scrollbar">
                                     <h4 className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-2">Open Positions</h4>
                                     {brokerPositions.length === 0 ? (
-                                        <div className="flex items-center justify-center h-[100px] text-zinc-600 text-xs italic">No open positions</div>
+                                        <div className="flex flex-col items-center justify-center h-[100px] text-zinc-600 text-xs italic text-center px-4">
+                                            <span>No open positions</span>
+                                            {autonomousStatus?.lastSignal && (
+                                                <span className="mt-1 text-[10px] text-zinc-500 not-italic">
+                                                    Last signal was {autonomousStatus.lastSignal.action}; confidence has not cleared the paper entry gate.
+                                                </span>
+                                            )}
+                                        </div>
                                     ) : (
                                         <div className="space-y-1">
                                             {brokerPositions.map((pos, i) => (
@@ -1502,6 +2326,10 @@ const MissionControlApp = ({ somaBackend, isConnected }) => {
                 allTickers={filteredTickers}
                 riskMetrics={riskMetrics}
                 presets={STRATEGY_PRESETS}
+                activeProtocol={currentPresetId}
+                assetType={assetType}
+                dataSource={visibleMarketStatus?.source || dataSource}
+                onAnalysisComplete={enrichThesisFromDeepScan}
             />
 
             <SettingsModal
@@ -1550,8 +2378,8 @@ const MissionControlApp = ({ somaBackend, isConnected }) => {
                             <button onClick={() => setConfirmModal(null)} className="px-4 py-2 text-sm rounded-lg border border-white/10 text-zinc-300 hover:bg-white/5 transition-colors">
                                 Cancel
                             </button>
-                            <button onClick={() => { confirmModal.onConfirm(); setConfirmModal(null); }} className="px-4 py-2 text-sm rounded-lg bg-rose-600 hover:bg-rose-500 text-white font-bold transition-colors">
-                                Proceed with Live Trading
+                            <button onClick={() => { confirmModal.onConfirm(); setConfirmModal(null); }} className={`px-4 py-2 text-sm rounded-lg text-white font-bold transition-colors ${confirmModal.confirmClassName || 'bg-rose-600 hover:bg-rose-500'}`}>
+                                {confirmModal.confirmLabel || 'Proceed with Live Trading'}
                             </button>
                         </div>
                     </div>

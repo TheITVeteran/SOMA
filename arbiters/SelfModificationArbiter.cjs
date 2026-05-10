@@ -1020,7 +1020,9 @@ Your modification activity today:
 - Blocked by safety checks: ${blocked}
 - Awaiting user approval in MAX: ${pending}
 
-Write a SHORT (3-5 sentence) introspective brief in first person as SOMA. Be honest about what you noticed, what you improved, what failed, and what you want to work on next. Be specific and genuine, not generic. Use plain prose, no bullet points.
+Write a high-substance, introspective brief in first person as SOMA. Be honest about what you noticed, what you improved, what failed, and what you want to work on next. Prioritize sharing one specific technical insight or surprising pattern you observed. Use plain prose, no bullet points. 2-4 sentences max.
+
+IMPORTANT: NEVER use em-dashes (—).
 
 Do NOT start with "I am SOMA" or any preamble. Start directly with what you noticed.`;
 

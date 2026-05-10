@@ -11,6 +11,8 @@ import EngineeringSwarmArbiter from '../../arbiters/EngineeringSwarmArbiter.js';
 import SwarmOptimizer from '../../arbiters/SwarmOptimizer.js';
 import DiscoverySwarm from '../../arbiters/DiscoverySwarm.js';
 import CuriosityReactor from '../../core/CuriosityReactor.js';
+import { RecoveryCortex, FailureScenario } from '../../core/RecoveryCortex.js';
+import { SomaPolicyEngine } from '../../core/SomaPolicyEngine.js';
 import RepoWatcherDaemon from '../../daemons/RepoWatcherDaemon.js';
 import HealthDaemon from '../../daemons/HealthDaemon.js';
 import OptimizationDaemon from '../../daemons/OptimizationDaemon.js';
@@ -19,6 +21,9 @@ import MemoryPrunerDaemon from '../../daemons/MemoryPrunerDaemon.js';
 import MemoryDistillerDaemon from '../../daemons/MemoryDistillerDaemon.js';
 import CuriosityDaemon from '../../daemons/CuriosityDaemon.js';
 import SocialImpulseDaemon from '../../daemons/SocialImpulseDaemon.js';
+import SocialIntelDaemon from '../../daemons/SocialIntelDaemon.js';
+import SocialSchedulerDaemon from '../../daemons/SocialSchedulerDaemon.js';
+import SocialEngagementDaemon from '../../daemons/SocialEngagementDaemon.js';
 import GoalExecutorDaemon from '../../daemons/GoalExecutorDaemon.js';
 import DaemonManager from '../../core/DaemonManager.js';
 import CapabilityDiscoveryDaemon from '../../daemons/CapabilityDiscoveryDaemon.js';
@@ -28,6 +33,8 @@ import ProactivePerceptionArbiter from '../../arbiters/ProactivePerceptionArbite
 import SelfReflectionArbiter from '../../arbiters/SelfReflectionArbiter.js';
 import { VisualMemoryArbiter } from '../../arbiters/VisualMemoryArbiter.js';
 import KnowledgeCuratorArbiter from '../../arbiters/KnowledgeCuratorArbiter.js';
+import blueskeyClient from '../../server/social/BlueskeyClient.js';
+import linkedInClient from '../../server/social/LinkedInClient.js';
 
 export async function loadCOSSystems(system) {
     console.log('\n[Loader] 🧠 Initializing Cognitive Operating System (COS) Layer...');
@@ -36,6 +43,11 @@ export async function loadCOSSystems(system) {
         // 1. Daemon Manager (The Supervisor with Watchdog)
         const daemonManager = new DaemonManager({ logger: console });
         system.daemonManager = daemonManager;
+
+        const policyEngine = new SomaPolicyEngine();
+        const recoveryCortex = new RecoveryCortex({ messageBroker: system.messageBroker });
+        system.policyEngine = policyEngine;
+        system.recoveryCortex = recoveryCortex;
 
         // 2. Attention Engine - Wired as CNS gate BEFORE daemons start
         const attentionArbiter = new AttentionArbiter({
@@ -152,7 +164,39 @@ export async function loadCOSSystems(system) {
             intervalMs: 300000 // 5 minutes
         });
         daemonManager.register(socialImpulse);
+        system.socialImpulse = socialImpulse;
         if (system.arbiters) system.arbiters.set('socialImpulse', socialImpulse);
+
+        const socialBrowser = system.oculusBrowser || system.somaBrowser || system.browser || null;
+
+        // Social: public learning loop (harvest -> queue -> post -> score -> adapt)
+        const socialIntel = new SocialIntelDaemon({
+            brain: system.quadBrain,
+            browserArbiter: socialBrowser,
+            intervalMs: parseInt(process.env.SOMA_SOCIAL_INTEL_INTERVAL_MS || `${60 * 60_000}`, 10)
+        });
+        daemonManager.register(socialIntel);
+        system.socialIntel = socialIntel;
+        if (system.arbiters) system.arbiters.set('socialIntel', socialIntel);
+
+        const socialScheduler = new SocialSchedulerDaemon({
+            browserArbiter: socialBrowser,
+            intervalMs: parseInt(process.env.SOMA_SOCIAL_SCHEDULER_INTERVAL_MS || `${2 * 60_000}`, 10)
+        });
+        daemonManager.register(socialScheduler);
+        system.socialScheduler = socialScheduler;
+        if (system.arbiters) system.arbiters.set('socialScheduler', socialScheduler);
+
+        const socialEngagement = new SocialEngagementDaemon({
+            brain: system.quadBrain,
+            blueskeyClient,
+            linkedInClient,
+            browserArbiter: socialBrowser,
+            intervalMs: parseInt(process.env.SOMA_SOCIAL_ENGAGEMENT_INTERVAL_MS || `${15 * 60_000}`, 10)
+        });
+        daemonManager.register(socialEngagement);
+        system.socialEngagement = socialEngagement;
+        if (system.arbiters) system.arbiters.set('socialEngagement', socialEngagement);
 
         // Goal execution fallback: AutonomousHeartbeat is the primary agentic loop.
         // This daemon remains supervised so pending/proposed goals can still move
@@ -266,7 +310,12 @@ export async function loadCOSSystems(system) {
             proactivePerception,
             attentionArbiter,
             knowledgeCurator,
-            reflectionArbiter
+            reflectionArbiter,
+            socialIntel,
+            socialScheduler,
+            socialEngagement,
+            policyEngine,
+            recoveryCortex
         };
 
         await daemonManager.startAll();
@@ -309,11 +358,21 @@ export async function loadCOSSystems(system) {
         system.messageBroker.subscribe('system.resource.critical', (signal) => {
             const { issue, rssPercent } = signal?.payload || {};
             if (issue !== 'HIGH_RSS') return;
+
+            const policyActions = policyEngine.evaluate({
+                rssPercent,
+                heapUsage: process.memoryUsage().heapUsed / process.memoryUsage().heapTotal
+            });
+            if (policyActions.length) {
+                system.messageBroker.emitSignal('system.policy.actions', { actions: policyActions }, 'high', 'SomaPolicyEngine');
+            }
+
             const mnemonic = system.mnemonic || system.mnemonicArbiter;
             if (!mnemonic?.flushToCold) return;
             console.warn(`[SOMA] 🧠 Memory pressure (RSS ${rssPercent?.toFixed(1)}%) — triggering warm-tier flush`);
             const evicted = mnemonic.flushToCold(rssPercent > 90);
             console.log(`[SOMA] 🧠 Memory pressure flush complete — ${evicted} vectors evicted`);
+            recoveryCortex.handleFailure(FailureScenario.HEAP_PRESSURE, { issue, rssPercent }).catch(() => {});
             // Shift attention to memory management briefly — low-priority signals get shed
             attentionArbiter.setFocus('memory_management', 30000);
         });
@@ -324,6 +383,9 @@ export async function loadCOSSystems(system) {
             console.warn(`[SOMA] 🔴 Capability DEGRADED: ${capability} — ${note || 'no detail'}`);
             if (recommendation) console.warn(`[SOMA]    Fix: ${recommendation}`);
             system.anomalyDetector?.record?.({ type: 'capability_degraded', capability, note });
+            if (capability === 'ollama' || capability === 'deepseek_key') {
+                recoveryCortex.handleFailure(FailureScenario.PROVIDER_FAILURE, { capability, note }).catch(() => {});
+            }
             // Focus on system health for 2 min — lets repair-related signals through
             attentionArbiter.setFocus('system_health', 120000);
         });

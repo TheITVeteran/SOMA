@@ -23,6 +23,7 @@ class MuseEngine extends EventEmitter {
     // Dependencies
     this.broker = opts.broker || opts.messageBroker;
     this.ideaCapture = opts.ideaCapture; // IdeaCaptureArbiter for context fetching
+    this.reflections = opts.reflections; // ReflectionsArbiter for durable concept artifacts
     this.quadBrain = opts.quadBrain; // SOMArbiterV2_QuadBrain for AURORA access
     this.learningPipeline = opts.learningPipeline; // UniversalLearningPipeline for learning
 
@@ -157,6 +158,25 @@ class MuseEngine extends EventEmitter {
         this.sparks = this.sparks.slice(0, this.maxSparks);
       }
 
+      if (msg.persistReflection !== false && this.reflections?.saveMuseSessionArtifact) {
+        this.reflections.saveMuseSessionArtifact({
+          title: this._titleFromContext(contexts[0], nodeId),
+          chatLog: contexts.map(c => c.originalText || c.summary || '').filter(Boolean).join('\n\n---\n\n'),
+          structured: {
+            spark: payload.responses.spark,
+            variant: payload.responses.variant,
+            critique: payload.responses.critique,
+            crystallize: payload.responses.variant || payload.responses.spark
+          },
+          metadata: {
+            source: 'MuseEngine',
+            nodeId,
+            contextIds: relatedIds,
+            tags: ['idea-capture', 'muse', 'autonomous-reflection']
+          }
+        }).catch(e => console.warn(`[${this.name}] Reflection save failed: ${e.message}`));
+      }
+
       // Update stats
       this.stats.totalResponses++;
       this.stats.responsesByType.spark++;
@@ -254,6 +274,11 @@ Emotion: ${n.emotion || 'neutral'}
 ${(n.relatedIds && n.relatedIds.length) ? `Related: ${n.relatedIds.slice(0, 3).join(', ')}` : ''}
 `;
     }).join('\n---\n');
+  }
+
+  _titleFromContext(node, fallback = 'Muse Reflection') {
+    const raw = node?.summary || node?.originalText || fallback;
+    return String(raw).replace(/\s+/g, ' ').trim().slice(0, 80) || fallback;
   }
 
   /**

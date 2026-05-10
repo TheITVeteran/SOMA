@@ -103,6 +103,9 @@ class KevinThreatDatabase {
         // Blocked senders
         this.blockedSenders = new Set();
 
+        // Decision audit trail for reversible security actions
+        this.trustDecisions = [];
+
         // Load persisted data
         this._loadData();
     }
@@ -226,14 +229,132 @@ class KevinThreatDatabase {
     }
 
     /**
+     * Build a structured, defensible security verdict for an email.
+     */
+    buildEmailVerdict(email = {}) {
+        const evidence = [];
+        const riskFactors = [];
+        const mitigations = [];
+        let score = 0;
+
+        const sender = this._extractEmail(email.from || '').toLowerCase();
+        const subject = String(email.subject || '');
+        const body = String(email.body || '');
+        const text = `${subject} ${body}`;
+
+        if (sender && this.blockedSenders.has(sender)) {
+            score = 100;
+            riskFactors.push('Sender is blocked');
+            evidence.push({ type: 'sender_blocked', severity: 'critical', detail: sender, score: 100 });
+        } else if (sender && this.safeSenders.has(sender)) {
+            mitigations.push('Sender is on the safe list');
+            evidence.push({ type: 'sender_safe', severity: 'info', detail: sender, score: -20 });
+            score -= 20;
+        }
+
+        const phishing = this.checkPhishing(email);
+        if (phishing.indicators.length) {
+            score += phishing.threatScore;
+            riskFactors.push(...phishing.indicators.map(i => `Phishing pattern: ${i}`));
+            evidence.push(...phishing.indicators.map(indicator => ({
+                type: 'phishing_pattern',
+                severity: phishing.threatScore >= 60 ? 'high' : 'medium',
+                detail: indicator,
+                score: 20
+            })));
+        }
+
+        if (/\burgent\b|\bimmediately\b|\bact now\b/i.test(text)) {
+            score += 20;
+            riskFactors.push('Urgency or pressure language');
+            evidence.push({ type: 'pressure_language', severity: 'medium', detail: 'Urgency wording detected', score: 20 });
+        }
+
+        if (/\b(password|login|verify your account|credential|2fa|mfa)\b/i.test(text)) {
+            score += 30;
+            riskFactors.push('Credential or account verification request');
+            evidence.push({ type: 'credential_request', severity: 'high', detail: 'Credential/account wording detected', score: 30 });
+        }
+
+        if (/\b(wire|transfer|payment|bank|invoice|gift card|crypto)\b/i.test(text)) {
+            score += 25;
+            riskFactors.push('Financial action requested');
+            evidence.push({ type: 'financial_request', severity: 'high', detail: 'Payment/transfer wording detected', score: 25 });
+        }
+
+        const urls = body.match(/https?:\/\/[^\s<>"{}|\\^`\[\]]+/g) || [];
+        if (urls.length > 3) {
+            score += 10;
+            riskFactors.push(`Many links present (${urls.length})`);
+            evidence.push({ type: 'link_volume', severity: 'low', detail: `${urls.length} URLs found`, score: 10 });
+        }
+
+        for (const url of urls.slice(0, 5)) {
+            try {
+                const hostname = new URL(url).hostname.toLowerCase();
+                if (/^\d+\.\d+\.\d+\.\d+$/.test(hostname)) {
+                    score += 35;
+                    riskFactors.push('IP-address URL present');
+                    evidence.push({ type: 'ip_url', severity: 'high', detail: url, score: 35 });
+                }
+                if (['.xyz', '.top', '.buzz', '.click', '.loan', '.work'].some(tld => hostname.endsWith(tld))) {
+                    score += 20;
+                    riskFactors.push(`Suspicious URL TLD: ${hostname}`);
+                    evidence.push({ type: 'suspicious_tld', severity: 'medium', detail: hostname, score: 20 });
+                }
+            } catch {
+                score += 20;
+                riskFactors.push('Malformed URL present');
+                evidence.push({ type: 'malformed_url', severity: 'medium', detail: url, score: 20 });
+            }
+        }
+
+        const category = this.categorizeEmail(email);
+        score = Math.max(0, Math.min(100, score));
+        const verdict = score >= 80 ? 'block' : score >= 55 ? 'high_risk' : score >= 30 ? 'caution' : 'allow';
+        const confidence = evidence.length >= 4 ? 0.9 : evidence.length >= 2 ? 0.78 : evidence.length === 1 ? 0.66 : 0.58;
+        const requiresApproval = verdict !== 'allow' || /\b(send|reply|schedule|pay|transfer|approve)\b/i.test(text);
+
+        return {
+            success: true,
+            verdict,
+            confidence,
+            score,
+            category: category.category,
+            riskFactors,
+            mitigations,
+            evidence,
+            recommendedAction: this._recommendedAction(verdict),
+            reversible: true,
+            requiresApproval,
+            subject,
+            sender
+        };
+    }
+
+    _recommendedAction(verdict) {
+        switch (verdict) {
+            case 'block':
+                return 'Do not interact. Block or report after operator approval.';
+            case 'high_risk':
+                return 'Do not click links or send data. Verify through a known-good channel.';
+            case 'caution':
+                return 'Proceed only after checking sender identity and request context.';
+            default:
+                return 'No obvious threat. Use normal caution.';
+        }
+    }
+
+    /**
      * Add a sender to safe list
      */
     markSenderSafe(sender) {
         const email = this._extractEmail(sender);
         this.safeSenders.add(email.toLowerCase());
         this.blockedSenders.delete(email.toLowerCase());
+        this._recordDecision('safe_sender', email, { reversible: true });
         this._saveData();
-        return { success: true, sender: email };
+        return { success: true, sender: email, reversible: true, action: 'safe_sender' };
     }
 
     /**
@@ -243,8 +364,25 @@ class KevinThreatDatabase {
         const email = this._extractEmail(sender);
         this.blockedSenders.add(email.toLowerCase());
         this.safeSenders.delete(email.toLowerCase());
+        this._recordDecision('block_sender', email, { reversible: true });
         this._saveData();
-        return { success: true, sender: email };
+        return { success: true, sender: email, reversible: true, action: 'block_sender' };
+    }
+
+    unblockSender(sender) {
+        const email = this._extractEmail(sender);
+        this.blockedSenders.delete(email.toLowerCase());
+        this._recordDecision('unblock_sender', email, { reversible: true });
+        this._saveData();
+        return { success: true, sender: email, reversible: true, action: 'unblock_sender' };
+    }
+
+    unmarkSenderSafe(sender) {
+        const email = this._extractEmail(sender);
+        this.safeSenders.delete(email.toLowerCase());
+        this._recordDecision('unmark_safe_sender', email, { reversible: true });
+        this._saveData();
+        return { success: true, sender: email, reversible: true, action: 'unmark_safe_sender' };
     }
 
     /**
@@ -280,7 +418,17 @@ class KevinThreatDatabase {
             phishingPatterns: this.phishingPatterns.length,
             safeSenders: this.safeSenders.size,
             blockedSenders: this.blockedSenders.size,
+            decisions: this.trustDecisions.length,
             categories: Object.keys(this.categoryKeywords).length
+        };
+    }
+
+    getTrustState() {
+        return {
+            success: true,
+            safeSenders: [...this.safeSenders],
+            blockedSenders: [...this.blockedSenders],
+            recentDecisions: this.trustDecisions.slice(-25).reverse()
         };
     }
 
@@ -301,6 +449,7 @@ class KevinThreatDatabase {
                 const data = JSON.parse(fs.readFileSync(this.dataPath, 'utf8'));
                 if (data.safeSenders) this.safeSenders = new Set(data.safeSenders);
                 if (data.blockedSenders) this.blockedSenders = new Set(data.blockedSenders);
+                if (data.trustDecisions) this.trustDecisions = data.trustDecisions.slice(-200);
                 if (data.customHashes) {
                     data.customHashes.forEach(h => this.maliciousHashes.add(h));
                 }
@@ -323,11 +472,25 @@ class KevinThreatDatabase {
             const data = {
                 safeSenders: [...this.safeSenders],
                 blockedSenders: [...this.blockedSenders],
+                trustDecisions: this.trustDecisions.slice(-200),
                 updatedAt: new Date().toISOString()
             };
             fs.writeFileSync(this.dataPath, JSON.stringify(data, null, 2));
         } catch (error) {
             console.error('[KevinThreatDB] Save error:', error.message);
+        }
+    }
+
+    _recordDecision(action, target, metadata = {}) {
+        this.trustDecisions.push({
+            id: `decision_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+            action,
+            target,
+            metadata,
+            timestamp: new Date().toISOString()
+        });
+        if (this.trustDecisions.length > 200) {
+            this.trustDecisions = this.trustDecisions.slice(-200);
         }
     }
 }

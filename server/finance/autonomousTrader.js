@@ -17,6 +17,9 @@ import notificationService from '../services/NotificationService.js';
 import { signalLibrary } from './SignalLibrary.js';
 import { vwapExecutor } from './VWAPExecutor.js';
 import { altDataService } from './AltDataService.js';
+import missionControlRuntime from './MissionControlRuntime.js';
+import paperExecutionSimulator from './PaperExecutionSimulator.js';
+import marketEvidenceStore from './MarketEvidenceStore.js';
 // Flush hook wired by routes.js after both modules load (avoids circular import)
 // autonomousTrader → performanceRoutes → scalpingEngine was a potential cycle
 let flushPerformanceSummaryCache = () => {};
@@ -53,6 +56,8 @@ class AutonomousTrader {
         this._positionCacheTTL = 30_000; // 30s TTL for position cache
 
         this._lastSignal = null;         // Latest signal with agent confidences
+        this._runtimeProfile = null;     // Learned Mission Control execution profile
+        this._runtimeSessionId = null;   // Lifecycle journal session id
         this._lastStreamPrice = 0;       // Real-time price from WebSocket
         this._analysisTimeoutMs = 15_000; // 15s timeout for AI analysis
         this._signalScoresAtEntry = new Map(); // symbol → signal scores at open (for adaptive learning)
@@ -83,7 +88,8 @@ class AutonomousTrader {
             return { success: false, error: 'Already running. Stop first.' };
         }
 
-        if (!alpacaService.isConnected) {
+        const brokerConnected = !!alpacaService.isConnected;
+        if (!brokerConnected) {
             this.paperMode = true;
             this._paperPortfolio = { balance: 100000, positions: {}, trades: [] };
             console.log('[AutonomousTrader] 📄 Alpaca not connected — starting in PAPER MODE ($100k virtual)');
@@ -117,13 +123,41 @@ class AutonomousTrader {
             console.log(`[AutonomousTrader] 🎛️ Preset "${preset}" applied:`, PRESET_CONFIGS[preset]);
         }
 
+        this._runtimeProfile = missionControlRuntime.getActiveExecutionProfile({
+            symbol,
+            preset,
+            baseConfig: this.config
+        });
+        this.config = { ...this.config, ...this._runtimeProfile.config };
+        global.SOMA_TRADING?.guardrails?.applyTierProfile?.(this.config);
+
+        if (brokerConnected && !this._runtimeProfile.liveTradingEnabled) {
+            this.paperMode = true;
+            this._paperPortfolio = {
+                balance: this._runtimeProfile.paperCapital || 1000,
+                initialBalance: this._runtimeProfile.paperCapital || 1000,
+                positions: {},
+                trades: []
+            };
+            console.warn(`[AutonomousTrader] 🔒 Broker connected, but tier ${this._runtimeProfile.activeTier} is not live-enabled. Forcing PAPER MODE.`);
+        }
+        if (this.paperMode && this._paperPortfolio) {
+            this._paperPortfolio.balance = this._runtimeProfile.paperCapital || 1000;
+            this._paperPortfolio.initialBalance = this._paperPortfolio.balance;
+        }
+        this._runtimeSessionId = missionControlRuntime.startSession({
+            symbol,
+            preset: preset || 'SOMA_LEARNED',
+            config: this.config
+        });
+
         this.isRunning = true;
         this._stats.sessionStartTime = Date.now();
         this._stats.sessionPnL = 0;
         global.__SOMA_TRADING_ACTIVE = true; // Signal to background tasks to yield Gemini quota
 
         this._logDecision('SYSTEM', 'START', `Autonomous trading started for ${symbol}`, {
-            preset, config: this.config
+            preset, config: this.config, runtime: this._runtimeProfile
         });
 
         console.log(`[AutonomousTrader] 🚀 Started for ${symbol} (interval: ${this.config.analysisIntervalMs}ms)`);
@@ -156,7 +190,7 @@ class AutonomousTrader {
             this._checkHeartbeat();
         }, this.config.analysisIntervalMs * 2);
 
-        return { success: true, symbol, config: this.config };
+        return { success: true, symbol, config: this.config, runtime: this._runtimeProfile };
     }
 
     /**
@@ -282,6 +316,7 @@ class AutonomousTrader {
 
             if (!quality.valid) {
                 this._logDecision('DATA', 'SKIP', `Data quality check failed: ${quality.issues.join('; ')}`, { quality });
+                this._recordRuntimeLifecycle('data_quality', 'blocked', { quality });
                 return;
             }
 
@@ -294,6 +329,12 @@ class AutonomousTrader {
 
             const latestBar = bars[bars.length - 1];
             const currentPrice = latestBar.close;
+            this._recordRuntimeLifecycle('data_quality', 'passed', {
+                bars: bars.length,
+                price: currentPrice,
+                cached: hasCachedBars,
+                regime: currentRegime
+            });
 
             // 3. Find existing position (already synced in parallel step)
             const existingPosition = this._openPositions.find(p => p.symbol === this.symbol);
@@ -309,11 +350,25 @@ class AutonomousTrader {
 
             if (!analysis) {
                 this._logDecision('ANALYSIS', 'SKIP', 'AI analysis unavailable or rate-limited');
+                this._recordRuntimeLifecycle('analysis', 'blocked', { reason: 'analysis_unavailable' });
                 return;
             }
+            this._recordRuntimeLifecycle('analysis', 'completed', {
+                recommendation: analysis.strategy?.recommendation,
+                confidence: analysis.strategy?.confidence,
+                risk: analysis.risk?.score,
+                sentiment: analysis.sentiment?.score
+            });
 
             // 6. Generate signal (Regime-Aware)
             signal = this._generateSignal(analysis, currentPrice, bars, currentRegime);
+            this._recordRuntimeLifecycle('signal', signal.action === 'HOLD' ? 'held' : 'candidate', {
+                action: signal.action,
+                confidence: signal.confidence,
+                recommendation: signal.recommendation,
+                agents: signal.agents,
+                runtime: signal.runtime
+            });
 
             // 7. Act on signal
             if (signal.action === 'HOLD') {
@@ -360,8 +415,10 @@ class AutonomousTrader {
             const sizing = await this._calculatePositionSize(currentPrice, currentRegime);
             if (!sizing || sizing.qty <= 0) {
                 this._logDecision('SIZING', 'SKIP', 'Position size too small or account insufficient', { sizing });
+                this._recordRuntimeLifecycle('sizing', 'blocked', { sizing });
                 return;
             }
+            this._recordRuntimeLifecycle('sizing', 'approved', { sizing, price: currentPrice });
 
             // 12. Validate against guardrails
             const guardrails = global.SOMA_TRADING?.guardrails;
@@ -374,6 +431,11 @@ class AutonomousTrader {
                 if (!guardrailResult.allowed) {
                     this._logDecision('GUARDRAIL', 'BLOCKED', `Guardrail: ${guardrailResult.reason}`, {
                         signal: signal.action, checks: guardrailResult.checks
+                    });
+                    this._recordRuntimeLifecycle('guardrail', 'blocked', {
+                        signal: signal.action,
+                        reason: guardrailResult.reason,
+                        checks: guardrailResult.checks
                     });
                     return;
                 }
@@ -392,6 +454,10 @@ class AutonomousTrader {
                     const violation = riskResult.violations.find(v => v.action === 'REJECT' || v.action === 'HALT_TRADING');
                     this._logDecision('RISK', 'BLOCKED', `Risk: ${violation?.message || 'Trade rejected'}`, {
                         signal: signal.action, violations: riskResult.violations
+                    });
+                    this._recordRuntimeLifecycle('risk', 'blocked', {
+                        signal: signal.action,
+                        violations: riskResult.violations
                     });
                     return;
                 }
@@ -608,10 +674,17 @@ class AutonomousTrader {
             regime // store for logging
         };
 
-        // Store latest signal so status endpoint can expose agent confidences
-        this._lastSignal = signalResult;
+        const adaptedSignal = missionControlRuntime.adaptSignal(signalResult, analysis, {
+            symbol: this.symbol,
+            price: currentPrice,
+            regime,
+            minConfidence: threshold
+        });
 
-        return signalResult;
+        // Store latest signal so status endpoint can expose agent confidences
+        this._lastSignal = adaptedSignal;
+
+        return adaptedSignal;
     }
 
     /**
@@ -671,7 +744,10 @@ class AutonomousTrader {
             if (regime === 'TRENDING_BULL' || regime === 'TRENDING_BEAR') maxPct *= 1.2; // Increase size in strong trends
 
             // Position = maxPositionPct of equity
-            const maxValue = equity * maxPct;
+            let maxValue = equity * maxPct;
+            if (this.paperMode && this.config.maxPaperTradeValue) {
+                maxValue = Math.min(maxValue, this.config.maxPaperTradeValue);
+            }
             const maxQty = Math.floor(maxValue / currentPrice);
 
             // Also check buying power
@@ -723,6 +799,14 @@ class AutonomousTrader {
 
             console.log(`[AutonomousTrader] 📊 Executing ${side.toUpperCase()} ${sizing.qty} ${this.symbol} @ ~$${currentPrice.toFixed(2)}`);
             console.log(`[AutonomousTrader] SL: $${stopLossPrice.toFixed(2)}, TP: $${takeProfitPrice.toFixed(2)}`);
+            this._recordRuntimeLifecycle('order_submit', 'started', {
+                side,
+                qty: sizing.qty,
+                expectedPrice: currentPrice,
+                stopLoss: stopLossPrice,
+                takeProfit: takeProfitPrice,
+                confidence: signal.confidence
+            });
 
             // TWAP/VWAP institutional execution — slices large orders to minimize market impact
             // Small orders (<$500 notional) fall through as single shots automatically
@@ -765,6 +849,15 @@ class AutonomousTrader {
                 agents: signal.agents,
                 status: order.status
             });
+            this._recordRuntimeLifecycle('order_fill', order.status || 'filled', {
+                orderId: order.id,
+                side,
+                qty: sizing.qty,
+                fillPrice,
+                mode: execResult.mode,
+                confidence: signal.confidence,
+                agents: signal.agents
+            });
 
             // Record in guardrails
             const guardrails = global.SOMA_TRADING?.guardrails;
@@ -777,7 +870,7 @@ class AutonomousTrader {
 
             // Log to SQLite (initial entry — fill price updated async below)
             try {
-                tradeLogger.logTradeEntry({
+                const tradeId = tradeLogger.logTradeEntry({
                     orderId: order.id,
                     symbol: this.symbol,
                     side: side,
@@ -789,6 +882,7 @@ class AutonomousTrader {
                     strategy: this.preset || 'autonomous',
                     regime: this._lastSignal?.regime || null
                 });
+                this._recordRuntimeLifecycle('trade_journaled', 'open', { tradeId, orderId: order.id, side, qty: sizing.qty });
             } catch (logErr) {
                 console.warn('[AutonomousTrader] SQLite log failed:', logErr.message);
             }
@@ -808,6 +902,12 @@ class AutonomousTrader {
             this._logDecision('TRADE', 'FAILED', `Execution failed: ${error.message}`, {
                 signal: signal.action, qty: sizing.qty, price: currentPrice, error: error.message
             });
+            this._recordRuntimeLifecycle('order_submit', 'failed', {
+                signal: signal.action,
+                qty: sizing.qty,
+                price: currentPrice,
+                error: error.message
+            });
             console.error(`[AutonomousTrader] ❌ Trade execution failed:`, error.message);
             return null;
         }
@@ -818,38 +918,158 @@ class AutonomousTrader {
      */
     async _executePaperOrder(signal, sizing, currentPrice) {
         const side = signal.action.toLowerCase();
-        // Apply tiny simulated slippage (0.1%)
-        const fillPrice = side === 'buy'
-            ? currentPrice * 1.001
-            : currentPrice * 0.999;
-        const cost = fillPrice * sizing.qty;
+        const fill = paperExecutionSimulator.simulateFill({
+            symbol: this.symbol,
+            side,
+            qty: sizing.qty,
+            referencePrice: currentPrice
+        });
+        if (!fill.accepted) {
+            this._logDecision('PAPER', 'REJECTED', `Paper broker rejected order: ${fill.reason}`, { fill });
+            this._recordRuntimeLifecycle('paper_order_reject', 'rejected', fill);
+            return null;
+        }
+        const mockOrder = { id: fill.orderId, status: fill.status, filled_avg_price: fill.filledPrice.toFixed(2) };
+        const fillPrice = fill.filledPrice;
+        const filledQty = fill.filledQty;
+        const cost = fillPrice * filledQty + fill.fee;
+        const existingPaperPosition = this._paperPortfolio.positions[this.symbol];
 
-        if (side === 'buy' && cost > this._paperPortfolio.balance) {
+        if (side === 'buy' && existingPaperPosition?.side !== 'short' && cost > this._paperPortfolio.balance) {
             this._logDecision('PAPER', 'SKIP', `Insufficient virtual balance ($${this._paperPortfolio.balance.toFixed(2)} < $${cost.toFixed(2)})`);
             return null;
         }
 
         // Update paper portfolio
         if (side === 'buy') {
-            this._paperPortfolio.balance -= cost;
-            this._paperPortfolio.positions[this.symbol] = { side: 'long', qty: sizing.qty, entryPrice: fillPrice };
+            const pos = this._paperPortfolio.positions[this.symbol];
+            if (pos && pos.side === 'short') {
+                const pnl = (pos.entryPrice - fillPrice) * pos.qty - (pos.fees || 0) - fill.fee;
+                const pnlPct = pnl / (pos.entryPrice * pos.qty);
+                this._paperPortfolio.balance -= fillPrice * pos.qty + fill.fee;
+                this._stats.sessionPnL += pnl;
+                delete this._paperPortfolio.positions[this.symbol];
+                try {
+                    tradeLogger.logTradeExit(pos.tradeId || this.symbol, {
+                        exitPrice: fillPrice,
+                        pnl,
+                        pnlPct,
+                        reason: 'paper_signal_close'
+                    });
+                } catch (logErr) {
+                    console.warn('[AutonomousTrader] Paper SQLite exit failed:', logErr.message);
+                }
+                this._recordRuntimeLifecycle('paper_order_fill', 'closed', {
+                    tradeId: pos.tradeId || null,
+                    orderId: mockOrder.id,
+                    side,
+                    qty: pos.qty,
+                    fillPrice,
+                    fee: fill.fee,
+                    latencyMs: fill.latencyMs,
+                    pnl,
+                    pnlPct
+                });
+            } else {
+                this._paperPortfolio.balance -= cost;
+                let tradeId = null;
+                try {
+                    tradeId = tradeLogger.logTradeEntry({
+                        orderId: mockOrder.id,
+                        symbol: this.symbol,
+                        side,
+                        qty: filledQty,
+                        entryPrice: fillPrice,
+                        filledPrice: fillPrice,
+                        expectedPrice: currentPrice,
+                        slippagePct: fill.slippagePct,
+                        strategy: this.preset || this._runtimeProfile?.activeStrategy?.strategyName || 'SOMA_LEARNED',
+                        regime: this._lastSignal?.regime || null
+                    });
+                } catch (logErr) {
+                    console.warn('[AutonomousTrader] Paper SQLite entry failed:', logErr.message);
+                }
+                this._paperPortfolio.positions[this.symbol] = { side: 'long', qty: filledQty, entryPrice: fillPrice, tradeId, fees: fill.fee };
+                this._recordRuntimeLifecycle('paper_order_fill', 'open', {
+                    tradeId,
+                    orderId: mockOrder.id,
+                    side,
+                    qty: filledQty,
+                    fillPrice,
+                    fee: fill.fee,
+                    latencyMs: fill.latencyMs,
+                    requestedQty: sizing.qty,
+                    status: fill.status,
+                    confidence: signal.confidence
+                });
+            }
         } else {
             const pos = this._paperPortfolio.positions[this.symbol];
             if (pos && pos.side === 'long') {
                 // Close long
-                const pnl = (fillPrice - pos.entryPrice) * pos.qty;
-                this._paperPortfolio.balance += fillPrice * pos.qty;
+                const pnl = (fillPrice - pos.entryPrice) * pos.qty - (pos.fees || 0) - fill.fee;
+                const pnlPct = pnl / (pos.entryPrice * pos.qty);
+                this._paperPortfolio.balance += fillPrice * pos.qty - fill.fee;
                 this._stats.sessionPnL += pnl;
                 delete this._paperPortfolio.positions[this.symbol];
+                try {
+                    tradeLogger.logTradeExit(pos.tradeId || this.symbol, {
+                        exitPrice: fillPrice,
+                        pnl,
+                        pnlPct,
+                        reason: 'paper_signal_close'
+                    });
+                } catch (logErr) {
+                    console.warn('[AutonomousTrader] Paper SQLite exit failed:', logErr.message);
+                }
+                this._recordRuntimeLifecycle('paper_order_fill', 'closed', {
+                    tradeId: pos.tradeId || null,
+                    orderId: mockOrder.id,
+                    side,
+                    qty: pos.qty,
+                    fillPrice,
+                    fee: fill.fee,
+                    latencyMs: fill.latencyMs,
+                    pnl,
+                    pnlPct
+                });
             } else {
                 // Open short
-                this._paperPortfolio.balance += fillPrice * sizing.qty;
-                this._paperPortfolio.positions[this.symbol] = { side: 'short', qty: sizing.qty, entryPrice: fillPrice };
+                this._paperPortfolio.balance += fillPrice * filledQty - fill.fee;
+                let tradeId = null;
+                try {
+                    tradeId = tradeLogger.logTradeEntry({
+                        orderId: mockOrder.id,
+                        symbol: this.symbol,
+                        side,
+                        qty: filledQty,
+                        entryPrice: fillPrice,
+                        filledPrice: fillPrice,
+                        expectedPrice: currentPrice,
+                        slippagePct: fill.slippagePct,
+                        strategy: this.preset || this._runtimeProfile?.activeStrategy?.strategyName || 'SOMA_LEARNED',
+                        regime: this._lastSignal?.regime || null
+                    });
+                } catch (logErr) {
+                    console.warn('[AutonomousTrader] Paper SQLite entry failed:', logErr.message);
+                }
+                this._paperPortfolio.positions[this.symbol] = { side: 'short', qty: filledQty, entryPrice: fillPrice, tradeId, fees: fill.fee };
+                this._recordRuntimeLifecycle('paper_order_fill', 'open', {
+                    tradeId,
+                    orderId: mockOrder.id,
+                    side,
+                    qty: filledQty,
+                    fillPrice,
+                    fee: fill.fee,
+                    latencyMs: fill.latencyMs,
+                    requestedQty: sizing.qty,
+                    status: fill.status,
+                    confidence: signal.confidence
+                });
             }
         }
 
-        const mockOrder = { id: `paper_${Date.now()}`, status: 'filled', filled_avg_price: fillPrice.toFixed(2) };
-        this._paperPortfolio.trades.push({ symbol: this.symbol, side, qty: sizing.qty, price: fillPrice, timestamp: Date.now() });
+        this._paperPortfolio.trades.push({ symbol: this.symbol, side, qty: filledQty, requestedQty: sizing.qty, price: fillPrice, fee: fill.fee, latencyMs: fill.latencyMs, timestamp: Date.now() });
 
         this._stats.tradesExecuted++;
         this._stats.totalDecisions++;
@@ -860,21 +1080,23 @@ class AutonomousTrader {
 
         this._logDecision('TRADE', signal.action, `[PAPER] ${signal.reason}`, {
             orderId: mockOrder.id, symbol: this.symbol, side,
-            qty: sizing.qty, price: fillPrice,
+            qty: filledQty, requestedQty: sizing.qty, price: fillPrice,
+            fee: fill.fee, latencyMs: fill.latencyMs, slippagePct: fill.slippagePct,
             paperBalance: this._paperPortfolio.balance.toFixed(2),
-            confidence: signal.confidence, agents: signal.agents, status: 'filled'
+            confidence: signal.confidence, agents: signal.agents, status: fill.status
         });
 
         // Keep _openPositions in sync
         this._openPositions = Object.entries(this._paperPortfolio.positions).map(([sym, pos]) => ({
             symbol: sym, side: pos.side, qty: pos.qty,
+            tradeId: pos.tradeId || null,
             entryPrice: pos.entryPrice, currentPrice: fillPrice,
             unrealizedPnl: 0, unrealizedPnlPct: 0,
             marketValue: pos.qty * fillPrice
         }));
         this._positionCacheTime = 0;
 
-        console.log(`[AutonomousTrader] 📄 PAPER ${side.toUpperCase()} ${sizing.qty} ${this.symbol} @ $${fillPrice.toFixed(2)} | Balance: $${this._paperPortfolio.balance.toFixed(2)}`);
+        console.log(`[AutonomousTrader] 📄 PAPER ${side.toUpperCase()} ${filledQty} ${this.symbol} @ $${fillPrice.toFixed(2)} | Balance: $${this._paperPortfolio.balance.toFixed(2)}`);
         return mockOrder;
     }
 
@@ -888,6 +1110,7 @@ class AutonomousTrader {
                 symbol: sym,
                 side: pos.side,
                 qty: pos.qty,
+                tradeId: pos.tradeId || null,
                 entryPrice: pos.entryPrice,
                 currentPrice: pos.entryPrice,  // Updated live by _onTradeUpdate when stream available
                 unrealizedPnl: 0,
@@ -985,6 +1208,26 @@ class AutonomousTrader {
                 this._stats.sessionPnL += pnl;
                 delete this._paperPortfolio.positions[position.symbol];
                 this._openPositions = this._openPositions.filter(p => p.symbol !== position.symbol);
+                try {
+                    tradeLogger.logTradeExit(pos.tradeId || position.symbol, {
+                        exitPrice: fillPrice,
+                        pnl,
+                        pnlPct,
+                        reason
+                    });
+                } catch (logErr) {
+                    console.warn('[AutonomousTrader] Paper SQLite exit failed:', logErr.message);
+                }
+                this._recordRuntimeLifecycle('position_close', 'closed', {
+                    tradeId: pos.tradeId || null,
+                    symbol: position.symbol,
+                    side: pos.side,
+                    qty: pos.qty,
+                    exitPrice: fillPrice,
+                    pnl,
+                    pnlPct,
+                    reason
+                });
                 this._logDecision('TRADE', pos.side === 'long' ? 'SELL' : 'BUY',
                     `[PAPER] Closed ${pos.side} ${pos.qty} ${position.symbol} — ${reason} (P&L: $${pnl.toFixed(2)})`, {
                         symbol: position.symbol, pnl, reason,
@@ -1032,11 +1275,20 @@ class AutonomousTrader {
 
             // Log exit to SQLite
             try {
-                tradeLogger.logTradeExit({
-                    symbol: position.symbol,
+                tradeLogger.logTradeExit(position.symbol, {
                     exitPrice: position.currentPrice,
                     pnl: position.unrealizedPnl,
                     reason
+                });
+                this._recordRuntimeLifecycle('position_close', 'closed', {
+                    symbol: position.symbol,
+                    side: position.side,
+                    qty: position.qty,
+                    exitPrice: position.currentPrice,
+                    pnl: position.unrealizedPnl,
+                    pnlPct: position.unrealizedPnlPct,
+                    reason,
+                    orderId: order.id
                 });
             } catch (e) { /* non-critical */ }
 
@@ -1143,6 +1395,17 @@ class AutonomousTrader {
         }
     }
 
+    _recordRuntimeLifecycle(stage, status = 'info', payload = {}) {
+        missionControlRuntime.recordLifecycle({
+            lifecycleId: this._runtimeSessionId,
+            symbol: this.symbol,
+            stage,
+            actor: 'AutonomousTrader',
+            status,
+            payload
+        });
+    }
+
     /**
      * Log a decision to the ring buffer (O(1) insert)
      */
@@ -1160,6 +1423,17 @@ class AutonomousTrader {
         this._decisions[this._decisionHead] = decision;
         this._decisionHead = (this._decisionHead + 1) % this._decisions.length;
         this._decisionCount++;
+        try {
+            const evidence = marketEvidenceStore.append('autonomous_decision', decision, {
+                source: 'AutonomousTrader',
+                symbol: this.symbol,
+                strategyId: this.preset || data.strategy || null,
+                parentEvidenceIds: data.evidenceIds || data.parentEvidenceIds || []
+            });
+            decision.evidenceId = evidence.evidenceId;
+        } catch {
+            // Evidence logging must never block trading decisions.
+        }
     }
 
     /**
@@ -1189,6 +1463,8 @@ class AutonomousTrader {
                 recommendation: this._lastSignal.recommendation,
                 timestamp: this._lastSignal.timestamp
             } : null,
+            missionControlRuntime: missionControlRuntime.getStatus(),
+            runtimeProfile: this._runtimeProfile,
             guardrailsState: global.SOMA_TRADING?.guardrails?.getStatus() || null
         };
     }

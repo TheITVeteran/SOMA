@@ -1,16 +1,49 @@
-import React, { useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import './SkullToggle.css';
 import './LightMode.css'; // Global Light Mode overrides
 import {
     Shield, Brain, Database, Zap, Users, Globe, Eye, GitBranch,
     AlertTriangle, Lock, Unlock, Activity, Cpu, Trash2, Save,
-    RotateCcw, AlertOctagon, Power, Terminal, Layers, Search, Network
+    RotateCcw, AlertOctagon, Power, Terminal, Layers, Search, Network, Server
 } from 'lucide-react';
 import SkullToggle from './SkullToggle';
 
 import UnifiedAgentSettings from './UnifiedAgentSettings';
 import AutopilotToggle from './AutopilotToggle';
 import CharacterCard from './CharacterCard';
+
+const DEFAULT_BRIDGE_SETTINGS = {
+    authority: {
+        autonomousSelfReplication: false,
+        crossArbiterWrites: true,
+        humanInLoopOverride: true
+    },
+    cognition: {
+        temperature: 0.7,
+        factStrictness: 85
+    },
+    memory: {
+        ephemeralEnabled: true,
+        contextualEnabled: true,
+        canonicalEnabled: true
+    },
+    execution: {
+        fileSystemWriteAccess: true,
+        networkEgress: true,
+        localhostBinding: false
+    },
+    observability: {
+        verboseThinking: true,
+        stateSnapshots: false
+    },
+    evolution: {
+        recursiveSelfImprovement: true
+    },
+    network: {
+        peerDiscovery: true,
+        seasonalLearningExchange: false
+    }
+};
 
 const SettingsModule = ({
     somaBackend,
@@ -26,6 +59,58 @@ const SettingsModule = ({
 }) => {
     const [activeDomain, setActiveDomain] = useState(() => localStorage.getItem('settings_active_domain') || 'authority');
     const [isSettingsLocked, setIsSettingsLocked] = useState(() => localStorage.getItem('settings_locked') !== 'false');
+    const [bridgeSettings, setBridgeSettings] = useState(DEFAULT_BRIDGE_SETTINGS);
+    const [settingsStatus, setSettingsStatus] = useState('loading');
+
+    useEffect(() => {
+        let cancelled = false;
+        const loadSettings = async () => {
+            try {
+                const res = await fetch('/api/settings/command-bridge');
+                const data = await res.json();
+                if (!cancelled && data.success && data.settings) {
+                    setBridgeSettings(prev => ({ ...prev, ...data.settings }));
+                    setSettingsStatus('saved');
+                }
+            } catch {
+                if (!cancelled) setSettingsStatus('offline');
+            }
+        };
+        loadSettings();
+        return () => { cancelled = true; };
+    }, []);
+
+    const persistBridgeSettings = useCallback(async (nextSettings) => {
+        setSettingsStatus('saving');
+        try {
+            const res = await fetch('/api/settings/command-bridge', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ settings: nextSettings })
+            });
+            const data = await res.json();
+            if (!res.ok || !data.success) throw new Error(data.error || `HTTP ${res.status}`);
+            setBridgeSettings(data.settings);
+            setSettingsStatus('saved');
+        } catch {
+            setSettingsStatus('error');
+        }
+    }, []);
+
+    const updateBridgeSetting = useCallback((section, key, value) => {
+        if (isSettingsLocked) return;
+        setBridgeSettings(prev => {
+            const next = {
+                ...prev,
+                [section]: {
+                    ...(prev[section] || {}),
+                    [key]: value
+                }
+            };
+            persistBridgeSettings(next);
+            return next;
+        });
+    }, [isSettingsLocked, persistBridgeSettings]);
 
     const setActiveDomainPersist = (id) => { localStorage.setItem('settings_active_domain', id); setActiveDomain(id); };
     const setIsSettingsLockedPersist = (v) => { const next = typeof v === 'function' ? v(isSettingsLocked) : v; localStorage.setItem('settings_locked', String(next)); setIsSettingsLocked(next); };
@@ -113,23 +198,23 @@ const SettingsModule = ({
             case 'agents':
                 return <UnifiedAgentSettings somaBackend={somaBackend} />;
             case 'authority':
-                return <AuthorityDomain arbiters={arbiters} isLocked={isSettingsLocked} onChange={handleSettingChange} isConnected={isConnected} />;
+                return <AuthorityDomain arbiters={arbiters} isLocked={isSettingsLocked} onChange={handleSettingChange} isConnected={isConnected} settings={bridgeSettings.authority} updateSetting={updateBridgeSetting} />;
             case 'cognition':
-                return <CognitionDomain personality={personality} setPersonality={setPersonality} isLocked={isSettingsLocked} onChange={handleSettingChange} isConnected={isConnected} wakeWordActive={wakeWordActive} onWakeWordToggle={onWakeWordToggle} />;
+                return <CognitionDomain personality={personality} setPersonality={setPersonality} isLocked={isSettingsLocked} settings={bridgeSettings.cognition} updateSetting={updateBridgeSetting} isConnected={isConnected} wakeWordActive={wakeWordActive} onWakeWordToggle={onWakeWordToggle} />;
             case 'memory':
-                return <MemoryDomain isLocked={isSettingsLocked} onChange={handleSettingChange} />;
+                return <MemoryDomain isLocked={isSettingsLocked} settings={bridgeSettings.memory} updateSetting={updateBridgeSetting} somaBackend={somaBackend} />;
             case 'safety':
                 return <SafetyDomain emergencyStop={emergencyStop} setEmergencyStop={setEmergencyStop} auditLogs={auditLogs} somaBackend={somaBackend} isLocked={isSettingsLocked} onChange={handleSettingChange} />;
             case 'ecology':
                 return <EcologyDomain arbiters={arbiters} isLocked={isSettingsLocked} onChange={handleSettingChange} somaBackend={somaBackend} />;
             case 'execution':
-                return <ExecutionDomain isLocked={isSettingsLocked} onChange={handleSettingChange} />;
+                return <ExecutionDomain isLocked={isSettingsLocked} settings={bridgeSettings.execution} updateSetting={updateBridgeSetting} />;
             case 'observability':
-                return <ObservabilityDomain isLocked={isSettingsLocked} onChange={handleSettingChange} />;
+                return <ObservabilityDomain isLocked={isSettingsLocked} settings={bridgeSettings.observability} updateSetting={updateBridgeSetting} />;
             case 'network':
-                return <NetworkDomain somaBackend={somaBackend} />;
+                return <NetworkDomain somaBackend={somaBackend} settings={bridgeSettings.network} updateSetting={updateBridgeSetting} isLocked={isSettingsLocked} />;
             case 'evolution':
-                return <EvolutionDomain isLocked={isSettingsLocked} setIsLocked={setIsSettingsLockedPersist} />;
+                return <EvolutionDomain isLocked={isSettingsLocked} setIsLocked={setIsSettingsLockedPersist} settings={bridgeSettings.evolution} updateSetting={updateBridgeSetting} />;
             default:
                 return <div className="p-8 text-center text-zinc-500">Select a domain to configure</div>;
         }
@@ -205,6 +290,22 @@ const SettingsModule = ({
                         <p className="text-zinc-400 text-sm">
                             {domains.find(d => d.id === activeDomain)?.description}
                         </p>
+                        <div className={`mt-3 inline-flex items-center gap-2 rounded-md border px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.22em] ${
+                            settingsStatus === 'saved' ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-400' :
+                            settingsStatus === 'saving' ? 'border-blue-500/20 bg-blue-500/10 text-blue-400' :
+                            settingsStatus === 'loading' ? 'border-zinc-500/20 bg-zinc-500/10 text-zinc-400' :
+                            'border-rose-500/20 bg-rose-500/10 text-rose-400'
+                        }`}>
+                            <span className={`h-1.5 w-1.5 rounded-full ${
+                                settingsStatus === 'saved' ? 'bg-emerald-400' :
+                                settingsStatus === 'saving' || settingsStatus === 'loading' ? 'bg-blue-400 animate-pulse' :
+                                'bg-rose-400'
+                            }`} />
+                            {settingsStatus === 'saved' ? 'Settings Connected' :
+                             settingsStatus === 'saving' ? 'Saving Settings' :
+                             settingsStatus === 'loading' ? 'Loading Settings' :
+                             settingsStatus === 'offline' ? 'Settings API Offline' : 'Settings Save Failed'}
+                        </div>
                     </header>
 
                     <div className="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -218,7 +319,7 @@ const SettingsModule = ({
 
 // --- Sub-Components (Domains) ---
 
-const AuthorityDomain = ({ arbiters, isLocked, onChange, isConnected }) => (
+const AuthorityDomain = ({ arbiters, isLocked, onChange, isConnected, settings, updateSetting }) => (
     <div className="space-y-6">
         <SectionCard title="Autopilot Orchestration" description="High-level control of goal/rhythm/social automation loops.">
             <AutopilotToggle enabled={isConnected} />
@@ -231,25 +332,25 @@ const AuthorityDomain = ({ arbiters, isLocked, onChange, isConnected }) => (
                 <ToggleControl
                     label="Autonomous Self-Replication"
                     description="Allow agents to spawn new instances without explicit approval."
-                    active={false}
+                    active={!!settings?.autonomousSelfReplication}
                     danger
                     disabled={isLocked}
-                    onToggle={() => onChange && onChange(() => console.log("Toggle Replication"))}
+                    onToggle={() => updateSetting('authority', 'autonomousSelfReplication', !settings?.autonomousSelfReplication)}
                 />
                 <ToggleControl
                     label="Cross-Arbiter Writes"
                     description="Allow arbiters to modify each other's state."
-                    active={true}
+                    active={!!settings?.crossArbiterWrites}
                     warning
                     disabled={isLocked}
-                    onToggle={() => onChange && onChange(() => console.log("Toggle Writes"))}
+                    onToggle={() => updateSetting('authority', 'crossArbiterWrites', !settings?.crossArbiterWrites)}
                 />
                 <ToggleControl
                     label="Human-in-the-Loop Override"
                     description="Require human approval for high-stakes actions."
-                    active={true}
+                    active={!!settings?.humanInLoopOverride}
                     disabled={isLocked}
-                    onToggle={() => onChange && onChange(() => console.log("Toggle Override"))}
+                    onToggle={() => updateSetting('authority', 'humanInLoopOverride', !settings?.humanInLoopOverride)}
                 />
             </div>
         </SectionCard>
@@ -287,7 +388,7 @@ const AuthorityDomain = ({ arbiters, isLocked, onChange, isConnected }) => (
     </div>
 );
 
-const CognitionDomain = ({ personality, setPersonality, isConnected, wakeWordActive, onWakeWordToggle }) => (
+const CognitionDomain = ({ personality, setPersonality, isLocked, settings, updateSetting, isConnected, wakeWordActive, onWakeWordToggle }) => (
     <div className="space-y-6">
         <SectionCard title="Voice Interface" description="Configure SOMA's listening and speech activation behaviour.">
             <div className="space-y-4">
@@ -355,32 +456,62 @@ const CognitionDomain = ({ personality, setPersonality, isConnected, wakeWordAct
                 <div className="p-4 bg-black/20 rounded-lg border border-white/5">
                     <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-2">Temperature</label>
                     <div className="flex items-center justify-between">
-                        <span className="text-2xl font-mono text-zinc-300">0.7</span>
+                        <span className="text-2xl font-mono text-zinc-300">{Number(settings?.temperature ?? 0.7).toFixed(1)}</span>
                         <span className="text-xs text-amber-500 bg-amber-500/10 px-2 py-1 rounded border border-amber-500/20">Creative</span>
                     </div>
-                    <input type="range" className="w-full mt-3 h-1 bg-zinc-700 rounded-lg appearance-none cursor-pointer" />
+                    <input
+                        type="range"
+                        min="0"
+                        max="1"
+                        step="0.1"
+                        disabled={isLocked}
+                        value={settings?.temperature ?? 0.7}
+                        onChange={(e) => updateSetting('cognition', 'temperature', Number(e.target.value))}
+                        className="w-full mt-3 h-1 bg-zinc-700 rounded-lg appearance-none cursor-pointer disabled:opacity-50"
+                    />
                 </div>
                 <div className="p-4 bg-black/20 rounded-lg border border-white/5">
                     <label className="block text-xs font-bold text-zinc-500 uppercase tracking-wider mb-2">Fact Strictness</label>
                     <div className="flex items-center justify-between">
-                        <span className="text-2xl font-mono text-zinc-300">High</span>
+                        <span className="text-2xl font-mono text-zinc-300">{settings?.factStrictness ?? 85}%</span>
                         <span className="text-xs text-blue-500 bg-blue-500/10 px-2 py-1 rounded border border-blue-500/20">Academic</span>
                     </div>
-                    <input type="range" className="w-full mt-3 h-1 bg-zinc-700 rounded-lg appearance-none cursor-pointer" />
+                    <input
+                        type="range"
+                        min="0"
+                        max="100"
+                        disabled={isLocked}
+                        value={settings?.factStrictness ?? 85}
+                        onChange={(e) => updateSetting('cognition', 'factStrictness', Number(e.target.value))}
+                        className="w-full mt-3 h-1 bg-zinc-700 rounded-lg appearance-none cursor-pointer disabled:opacity-50"
+                    />
                 </div>
             </div>
         </SectionCard>
     </div>
 );
 
-const MemoryDomain = () => (
+const MemoryDomain = ({ isLocked, settings, updateSetting, somaBackend }) => {
+    const purgeEphemeral = async () => {
+        if (isLocked) return;
+        try {
+            await somaBackend?.fetch?.('/api/command', {
+                method: 'POST',
+                body: JSON.stringify({ action: 'clear_cache' })
+            });
+        } catch (error) {
+            console.error('Memory purge failed', error);
+        }
+    };
+
+    return (
     <div className="space-y-6">
         <SectionCard title="Persistence Tiers" description="Manage data retention policies.">
             <div className="space-y-3">
                 {[
-                    { tier: 'Ephemeral (Working Memory)', retention: 'Session Only', size: '256MB', active: true },
-                    { tier: 'Contextual (Short-Term)', retention: '7 Days', size: '1GB', active: true },
-                    { tier: 'Canonical (Long-Term)', retention: 'Permanent', size: 'Start at infinity', active: true },
+                    { key: 'ephemeralEnabled', tier: 'Ephemeral (Working Memory)', retention: 'Session Only', size: '256MB', active: settings?.ephemeralEnabled },
+                    { key: 'contextualEnabled', tier: 'Contextual (Short-Term)', retention: '7 Days', size: '1GB', active: settings?.contextualEnabled },
+                    { key: 'canonicalEnabled', tier: 'Canonical (Long-Term)', retention: 'Permanent', size: 'Start at infinity', active: settings?.canonicalEnabled },
                 ].map((tier, i) => (
                     <div key={i} className="flex items-center justify-between p-3 bg-white/5 rounded-lg border border-white/5">
                         <div>
@@ -389,19 +520,28 @@ const MemoryDomain = () => (
                         </div>
                         <div className="flex items-center space-x-4">
                             <div className="text-xs font-mono text-zinc-400">{tier.size}</div>
-                            <CheckStatus active={tier.active} />
+                            <ToggleControl
+                                active={!!tier.active}
+                                disabled={isLocked}
+                                onToggle={() => updateSetting('memory', tier.key, !tier.active)}
+                            />
                         </div>
                     </div>
                 ))}
             </div>
         </SectionCard>
         <div className="flex justify-end">
-            <button className="flex items-center px-4 py-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 rounded-lg text-xs font-bold uppercase tracking-wider transition-all">
+            <button
+                disabled={isLocked}
+                onClick={purgeEphemeral}
+                className="flex items-center px-4 py-2 bg-rose-500/10 hover:bg-rose-500/20 text-rose-400 border border-rose-500/20 rounded-lg text-xs font-bold uppercase tracking-wider transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+            >
                 <Trash2 className="w-4 h-4 mr-2" /> Purge Ephemeral Memory
             </button>
         </div>
     </div>
-);
+    );
+};
 
 const SafetyDomain = ({ emergencyStop, setEmergencyStop, auditLogs, somaBackend, isLocked, onChange }) => (
     <div className="space-y-6">
@@ -517,19 +657,19 @@ const EcologyDomain = ({ arbiters, isLocked, onChange, somaBackend }) => (
     </div>
 );
 
-const ExecutionDomain = ({ isLocked, onChange }) => (
+const ExecutionDomain = ({ isLocked, settings, updateSetting }) => (
     <div className="space-y-6">
         <SectionCard title="Sandbox Boundaries">
             <div className="grid grid-cols-1 gap-4">
-                <ToggleControl label="File System Write Access" description="Allow agents to write to non-temporary directories." active={true} warning disabled={isLocked} onToggle={() => onChange && onChange(() => console.log("FS Write"))} />
-                <ToggleControl label="Network Egress (Public Internet)" description="Allow agents to make unrestricted HTTP requests." active={true} warning disabled={isLocked} onToggle={() => onChange && onChange(() => console.log("Net Egress"))} />
-                <ToggleControl label="Localhost Binding" description="Allow agents to bind to local ports." active={false} disabled={isLocked} onToggle={() => onChange && onChange(() => console.log("Localhost"))} />
+                <ToggleControl label="File System Write Access" description="Allow agents to write to non-temporary directories." active={!!settings?.fileSystemWriteAccess} warning disabled={isLocked} onToggle={() => updateSetting('execution', 'fileSystemWriteAccess', !settings?.fileSystemWriteAccess)} />
+                <ToggleControl label="Network Egress (Public Internet)" description="Allow agents to make unrestricted HTTP requests." active={!!settings?.networkEgress} warning disabled={isLocked} onToggle={() => updateSetting('execution', 'networkEgress', !settings?.networkEgress)} />
+                <ToggleControl label="Localhost Binding" description="Allow agents to bind to local ports." active={!!settings?.localhostBinding} disabled={isLocked} onToggle={() => updateSetting('execution', 'localhostBinding', !settings?.localhostBinding)} />
             </div>
         </SectionCard>
     </div>
 );
 
-const ObservabilityDomain = ({ isLocked, onChange }) => (
+const ObservabilityDomain = ({ isLocked, settings, updateSetting }) => (
     <div className="space-y-6">
         <SectionCard title="Telemetry Depth">
             <div className="flex items-center justify-between p-4 bg-white/5 rounded-lg border border-white/5 mb-4">
@@ -537,20 +677,20 @@ const ObservabilityDomain = ({ isLocked, onChange }) => (
                     <div className="text-sm font-medium text-zinc-200">Verbose Thinking</div>
                     <div className="text-xs text-zinc-500">Log every intermediate cognitive step. Significant performance impact.</div>
                 </div>
-                <ToggleControl label="" active={true} disabled={isLocked} onToggle={() => onChange && onChange(() => console.log("Verbose"))} />
+                <ToggleControl label="" active={!!settings?.verboseThinking} disabled={isLocked} onToggle={() => updateSetting('observability', 'verboseThinking', !settings?.verboseThinking)} />
             </div>
             <div className="flex items-center justify-between p-4 bg-white/5 rounded-lg border border-white/5">
                 <div>
                     <div className="text-sm font-medium text-zinc-200">Full State Snapshots</div>
                     <div className="text-xs text-zinc-500">Save complete agent state every 60s.</div>
                 </div>
-                <ToggleControl label="" active={false} disabled={isLocked} onToggle={() => onChange && onChange(() => console.log("Snapshots"))} />
+                <ToggleControl label="" active={!!settings?.stateSnapshots} disabled={isLocked} onToggle={() => updateSetting('observability', 'stateSnapshots', !settings?.stateSnapshots)} />
             </div>
         </SectionCard>
     </div>
 );
 
-const EvolutionDomain = ({ isLocked, setIsLocked }) => (
+const EvolutionDomain = ({ isLocked, setIsLocked, settings, updateSetting }) => (
     <div className="space-y-6">
         <SectionCard title="Master Control Lock" danger>
             <div className="p-2 bg-black/40 border border-zinc-800 rounded-xl mb-2 flex flex-col items-center justify-center text-center">
@@ -577,17 +717,17 @@ const EvolutionDomain = ({ isLocked, setIsLocked }) => (
                 </p>
                 <ToggleControl
                     label="Enable Recursive Self-Improvement"
-                    active={true}
+                    active={!!settings?.recursiveSelfImprovement}
                     danger
                     disabled={isLocked}
-                    onToggle={() => console.log("Self improvement toggle")}
+                    onToggle={() => updateSetting('evolution', 'recursiveSelfImprovement', !settings?.recursiveSelfImprovement)}
                 />
             </div>
         </SectionCard>
     </div>
 );
 
-const NetworkDomain = ({ somaBackend }) => {
+const NetworkDomain = ({ somaBackend, settings, updateSetting, isLocked }) => {
     const [nodes, setNodes] = React.useState([]);
     const [isLoading, setIsLoading] = React.useState(true);
     const [peerInput, setPeerInput] = React.useState('');
@@ -705,12 +845,16 @@ const NetworkDomain = ({ somaBackend }) => {
                     <ToggleControl 
                         label="Peer Discovery" 
                         description="Allow this node to be discovered by other Command Bridges." 
-                        active={true}
+                        active={!!settings?.peerDiscovery}
+                        disabled={isLocked}
+                        onToggle={() => updateSetting('network', 'peerDiscovery', !settings?.peerDiscovery)}
                     />
                     <ToggleControl 
                         label="Seasonal Learning Exchange" 
                         description="Participate in global knowledge sharing during off-peak cycles." 
-                        active={false}
+                        active={!!settings?.seasonalLearningExchange}
+                        disabled={isLocked}
+                        onToggle={() => updateSetting('network', 'seasonalLearningExchange', !settings?.seasonalLearningExchange)}
                         warning
                     />
                 </div>

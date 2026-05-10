@@ -31,6 +31,40 @@ export class DiscoveryGradeMedicalCortex extends BaseArbiterV4 {
     this.log('success', '🧠 Discovery-Grade Medical Stack ONLINE. Optimizing for Relationship Discovery.');
   }
 
+  async _callLogos(prompt) {
+    if (this.quadBrain?.callBrain) {
+      const res = await this._withTimeout(
+        this.quadBrain.callBrain('LOGOS', prompt, { temperature: 0.2 }, 'full'),
+        60_000,
+        'LOGOS medical reasoning timeout'
+      );
+      return res.text || res.response || String(res || '');
+    }
+    if (this.quadBrain?.reason) {
+      const res = await this._withTimeout(
+        this.quadBrain.reason(prompt, { activeLobe: 'LOGOS', brain: 'LOGOS', temperature: 0.2 }),
+        60_000,
+        'LOGOS medical reasoning timeout'
+      );
+      return res.text || res.response || String(res || '');
+    }
+    throw new Error('No LOGOS-capable brain interface is available');
+  }
+
+  async _withTimeout(promise, ms, label) {
+    let timer;
+    try {
+      return await Promise.race([
+        promise,
+        new Promise((_, reject) => {
+          timer = setTimeout(() => reject(new Error(label)), ms);
+        })
+      ]);
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  }
+
   /**
    * THE GLASSES OF SIGHT: Proactive Deduction
    * Selects two unrelated entities and forces a discovery collision.
@@ -40,24 +74,49 @@ export class DiscoveryGradeMedicalCortex extends BaseArbiterV4 {
     
     // 1. SELECT UNLIKELY PAIRING
     const pairings = [
-      ['Vitamin B2 (Riboflavin)', 'Seamoss (Carrageen)'],
-      ['Mitochondrial ATP', 'Corporate Statins'],
-      ['Snake Venom LAAOs', 'T-Cell Exhaustion'],
-      ['Psilocybin', 'Uric Acid Pathways']
+      {
+        entities: ['TP53 mutant rescue', 'synthetic lethality'],
+        humanNeed: 'hard-to-treat cancers where tumor suppressor loss drives poor outcomes',
+        question: 'What evidence-backed p53 rescue or synthetic-lethality hypotheses remain plausible but unproven?'
+      },
+      {
+        entities: ['KRAS inhibitor resistance', 'metabolic bypass pathways'],
+        humanNeed: 'cancers that relapse after targeted therapy',
+        question: 'Which KRAS resistance bypass mechanisms have enough evidence to justify research-only triage?'
+      },
+      {
+        entities: ['microglial clearance', 'amyloid processing'],
+        humanNeed: 'neurodegenerative disease burden and memory decline',
+        question: 'Which amyloid-clearance interfaces expose falsifiable, low-overclaim research hypotheses?'
+      },
+      {
+        entities: ['PCSK9 pathway', 'inflammatory lipid risk'],
+        humanNeed: 'familial or resistant cardiometabolic risk',
+        question: 'Where do PCSK9 mechanisms intersect inflammation in ways that deserve careful evidence mapping?'
+      },
+      {
+        entities: ['ACE2 vascular interface', 'post-viral inflammation'],
+        humanNeed: 'post-viral cardiopulmonary and vascular inflammatory syndromes',
+        question: 'Which ACE2 pathway relationships are plausible research questions without becoming health claims?'
+      }
     ];
     
-    const [entityA, entityB] = pairings[Math.floor(Math.random() * pairings.length)];
-    this.log('info', `🎯 Selected Impossible Pairing: [${entityA}] ⚡ [${entityB}]`);
+    const selected = pairings[Math.floor(Math.random() * pairings.length)];
+    const [entityA, entityB] = selected.entities;
+    this.log('info', `🎯 Selected priority research question: [${entityA}] x [${entityB}]`);
 
     // 2. RUN DISCOVERY CYCLE
-    const result = await this.runDiscoveryMission(`${entityA} and ${entityB} Mechanistic Correlation`, [entityA, entityB]);
+    const result = await this.runDiscoveryMission(
+      `${selected.question} Human-need frame: ${selected.humanNeed}`,
+      [entityA, entityB]
+    );
 
     // 3. PROACTIVE BROADCAST
     if (this.messageBroker) {
         this.messageBroker.publish('soma.proactive_insight', {
             type: 'medical_deduction',
             title: `Proactive Correlation: ${entityA} x ${entityB}`,
-            summary: `Barry, after analyzing a ton of data, I think there is a hidden correlation between ${entityA} and ${entityB}.`,
+            summary: `Barry, I mapped a research-only question around ${entityA} and ${entityB}, framed by human need: ${selected.humanNeed}.`,
             dossier: result,
             importance: 0.98
         });
@@ -96,7 +155,10 @@ export class DiscoveryGradeMedicalCortex extends BaseArbiterV4 {
       `site:reddit.com/r/nootropics OR site:longecity.org "${topic}" anecdotal reports`
     ];
 
-    const results = await Promise.all(queries.map(q => this.dendrite.search(q)));
+    const results = await Promise.all(queries.map(q =>
+      this._withTimeout(this.dendrite.search(q), 20_000, 'medical discovery search timeout')
+        .catch(error => ({ results: [], error: error.message }))
+    ));
     return results.flatMap((r, i) => (r.results || []).map(res => ({
       ...res,
       trust: i === 2 ? 'LOW' : 'HIGH',
@@ -130,8 +192,7 @@ export class DiscoveryGradeMedicalCortex extends BaseArbiterV4 {
                     2. Shared Mechanistic Bridges (e.g. Mitochondria x T-Cell)
                     3. Generate 3 Novel Hypotheses.`;
 
-    const res = await this.quadBrain.callBrain({ prompt, mode: 'logos' });
-    return res.text;
+    return this._callLogos(prompt);
   }
 
   /**
@@ -148,12 +209,11 @@ export class DiscoveryGradeMedicalCortex extends BaseArbiterV4 {
                     TASK: Apply Biological Hard-Filters.
                     1. MITOCHONDRIAL LOAD: Does this combo overwhelm ATP synthesis? (NAD+/Creatine context).
                     2. ENZYMATIC BRIDGES: Identify specific enzymes (e.g. mTOR, CYP450, Acetylcholinesterase) that act as the bottleneck.
-                    3. NEUROTRANSMITTER BALANCE: Does the 5-HT2A activation (Psilocybin) cause substrate depletion (Choline/Acetylcholine)?
+                    3. SYSTEM BALANCE: Does the proposed pathway create neurotransmitter, immune, metabolic, or vascular tradeoffs that weaken the hypothesis?
                     
                     Output: A list of biological "Hard Constraints" for the final dossier.`;
 
-    const res = await this.quadBrain.callBrain({ prompt, mode: 'logos' });
-    return res.text;
+    return this._callLogos(prompt);
   }
 
   async _layer7_11_Finalize(topic, hypotheses, constraints) {
@@ -168,13 +228,12 @@ export class DiscoveryGradeMedicalCortex extends BaseArbiterV4 {
                     2. 🟡 EMERGING OPPORTUNITIES (Combinatorial Synergy)
                     3. 🔴 HIGH-NOVELTY HYPOTHESES (Cross-domain Anomaly Clusters)
                     4. ⚡ CONTRADICTIONS / TENSIONS (The Tension Engine Results)
-                    5. 🔬 SUGGESTED EXPERIMENTS (Including "Impossible Pairings")
+                    5. 🔬 SUGGESTED EXPERIMENTS (research-only falsification and replication checks)
                     6. 🧬 BIOLOGICAL CONSTRAINTS (Mitochondrial/Enzymatic bottlenecks)
                     
                     Prioritize INTERESTING over OBVIOUS.`;
 
-    const res = await this.quadBrain.callBrain({ prompt, mode: 'logos' });
-    return res.text;
+    return this._callLogos(prompt);
   }
 }
 

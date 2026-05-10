@@ -7,11 +7,58 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { FlaskConical, Trophy, Dna, TrendingUp, TrendingDown, BarChart2, Zap, Activity, ChevronDown, ChevronUp } from 'lucide-react';
+import { CheckCircle2, FlaskConical, Trophy, Dna, Zap, ChevronDown, ChevronUp, XCircle, Database } from 'lucide-react';
 
 const fmt = (n, d = 3) => n == null ? '—' : typeof n === 'number' ? n.toFixed(d) : n;
 const pct  = n => n == null ? '—' : `${(n * 100).toFixed(1)}%`;
 const scoreColor = s => s >= 0.75 ? 'text-emerald-400' : s >= 0.60 ? 'text-amber-400' : 'text-zinc-400';
+
+function ReportCardBadge({ card }) {
+    if (!card) return null;
+    const color = card.graduateEligible
+        ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
+        : card.grade === 'B' || card.grade === 'C'
+            ? 'border-amber-500/30 bg-amber-500/10 text-amber-300'
+            : 'border-rose-500/30 bg-rose-500/10 text-rose-300';
+    return (
+        <span className={`rounded border px-1.5 py-0.5 text-[8px] font-bold ${color}`}>
+            {card.grade} · {card.passedGates}/{card.totalGates}
+        </span>
+    );
+}
+
+function ReportCardDetails({ card }) {
+    const [open, setOpen] = useState(false);
+    if (!card) return null;
+
+    return (
+        <div className="mt-1.5">
+            <button
+                onClick={() => setOpen(v => !v)}
+                className="flex w-full items-center justify-between rounded border border-white/5 bg-black/20 px-2 py-1 text-left hover:bg-white/5"
+            >
+                <span className="text-[9px] text-zinc-500">{card.summary}</span>
+                {open ? <ChevronUp className="h-3 w-3 text-zinc-500" /> : <ChevronDown className="h-3 w-3 text-zinc-500" />}
+            </button>
+            {open && (
+                <div className="mt-1.5 space-y-1">
+                    {(card.gates || []).map(gate => (
+                        <div key={gate.id} className="flex items-center gap-1.5 rounded bg-black/25 px-2 py-1">
+                            {gate.passed
+                                ? <CheckCircle2 className="h-3 w-3 shrink-0 text-emerald-400" />
+                                : <XCircle className="h-3 w-3 shrink-0 text-amber-400" />}
+                            <span className="min-w-[82px] text-[8px] font-bold uppercase text-zinc-500">{gate.label}</span>
+                            <span className="truncate text-[8px] text-zinc-400">{gate.detail}</span>
+                        </div>
+                    ))}
+                    <div className="rounded border border-cyan-500/10 bg-cyan-500/5 px-2 py-1 text-[9px] leading-snug text-cyan-200">
+                        {card.nextAction}
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
 
 function CorrelationHeatmap({ matrix }) {
     const ids = Object.keys(matrix).slice(0, 8);
@@ -129,8 +176,11 @@ export function SimIntelPanel({ onDeployStrategies }) {
 
     const stats = data.stats || {};
     const playbook = data.playbook || [];
+    const presets = data.presets || [];
     const evolved  = data.evolved || [];
     const corrMatrix = data.correlation || {};
+    const deepScans = data.deepScans || [];
+    const deepScanSummary = data.deepScanSummary || {};
 
     return (
         <div className="p-3 space-y-4 text-xs overflow-y-auto h-full custom-scrollbar">
@@ -151,20 +201,61 @@ export function SimIntelPanel({ onDeployStrategies }) {
             </div>
 
             {/* Deploy button */}
-            {playbook.length > 0 && (
+            {presets.length > 0 && (
                 <div>
                     <button
                         onClick={handleDeploy}
                         className="w-full py-2 rounded bg-gradient-to-r from-emerald-600/80 to-teal-600/80 hover:from-emerald-500 hover:to-teal-500 transition-all text-white text-[11px] font-bold tracking-wide flex items-center justify-center gap-1.5"
                     >
                         <Zap className="w-3.5 h-3.5" />
-                        Deploy Top {Math.min(playbook.length, 10)} Strategies
+                        Deploy Top {Math.min(presets.length, 10)} Strategies
                     </button>
                     {deployMsg && (
                         <div className="mt-1.5 text-center text-[10px] text-emerald-400 animate-pulse">{deployMsg}</div>
                     )}
                 </div>
             )}
+
+            {/* Deep scan feedback loop */}
+            <div>
+                <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-1.5">
+                        <Database className="w-3.5 h-3.5 text-cyan-400" />
+                        <span className="text-[9px] font-bold uppercase tracking-widest text-zinc-500">
+                            Deep Scan Feedback
+                        </span>
+                    </div>
+                    <span className="text-[8px] text-zinc-600">{deepScanSummary.total || 0} stored</span>
+                </div>
+                {deepScans.length === 0 ? (
+                    <div className="text-[10px] text-zinc-600 text-center py-3 border border-dashed border-zinc-800 rounded">
+                        Run Deep Scan to seed simulation memory
+                    </div>
+                ) : (
+                    <div className="space-y-1.5">
+                        {deepScans.slice(0, 5).map(scan => (
+                            <div key={scan.id} className="rounded border border-cyan-500/10 bg-cyan-950/10 px-2.5 py-1.5">
+                                <div className="flex items-center justify-between gap-2">
+                                    <span className="font-mono font-bold text-white text-[10px]">{scan.symbol}</span>
+                                    <span className={`text-[9px] font-bold ${/BUY/i.test(scan.verdict?.recommendation || '') ? 'text-emerald-400' : /SELL/i.test(scan.verdict?.recommendation || '') ? 'text-rose-400' : 'text-zinc-400'}`}>
+                                        {scan.verdict?.recommendation || 'SCAN'}
+                                    </span>
+                                </div>
+                                <div className="mt-0.5 flex items-center justify-between text-[8px] text-zinc-600">
+                                    <span>{scan.simulationContext?.matchedRuns || 0} sim matches</span>
+                                    <span>{Math.round((scan.verdict?.confidence || 0) * 100)}% confidence</span>
+                                </div>
+                                {scan.simulationContext?.bestStrategy && (
+                                    <div className="mt-1 text-[8px] text-cyan-300/80 truncate">
+                                        sim: {scan.simulationContext.bestStrategy.name || scan.simulationContext.bestStrategy.id}
+                                        {' '}score {fmt(scan.simulationContext.bestStrategy.prometheusScore)}
+                                    </div>
+                                )}
+                            </div>
+                        ))}
+                    </div>
+                )}
+            </div>
 
             {/* Graduated playbook */}
             <div>
@@ -196,6 +287,14 @@ export function SimIntelPanel({ onDeployStrategies }) {
                                         {fmt(entry.score)}
                                     </span>
                                 </div>
+                                <div className="mt-1 flex items-center justify-between gap-2">
+                                    <ReportCardBadge card={entry.reportCard} />
+                                    {entry.reportCard && (
+                                        <span className={`text-[8px] font-bold uppercase ${entry.reportCard.graduateEligible ? 'text-emerald-400' : 'text-amber-400'}`}>
+                                            {entry.reportCard.graduateEligible ? 'paper candidate' : 'blocked'}
+                                        </span>
+                                    )}
+                                </div>
                                 <div className="flex gap-3 mt-0.5 text-[8px] font-mono text-zinc-600">
                                     <span>WR {pct(entry.winRate)}</span>
                                     <span>SR {fmt(entry.sharpe, 2)}</span>
@@ -207,6 +306,7 @@ export function SimIntelPanel({ onDeployStrategies }) {
                                         corr: {entry.correlatedWith.map(c => `${c.id}(${c.correlation > 0 ? '+' : ''}${c.correlation})`).join(' ')}
                                     </div>
                                 )}
+                                <ReportCardDetails card={entry.reportCard} />
                             </div>
                         ))}
                     </div>

@@ -1,13 +1,20 @@
 import React, { useState, useEffect } from 'react';
 import { ShieldAlert, TrendingDown, Wallet, Briefcase, CreditCard, AlertOctagon } from 'lucide-react';
 
-export const RiskPanel = ({ metrics, onUpdateAllocation, onUpdateWallet }) => {
+export const RiskPanel = ({ metrics, onUpdateAllocation, onUpdateWallet, autonomousStatus = null, positions = [] }) => {
     const [allocationInput, setAllocationInput] = useState(metrics.initialBalance.toString());
     const [walletInput, setWalletInput] = useState(metrics.walletBalance.toString());
 
     const exposurePercent = (metrics.netExposure / metrics.equity) * 100;
     const pnl = metrics.equity - metrics.initialBalance;
     const pnlPercent = (pnl / metrics.initialBalance) * 100;
+    const realizedPnl = autonomousStatus?.stats?.sessionPnL || 0;
+    const unrealizedPnl = positions.reduce((sum, p) => sum + (p.unrealizedPnl || parseFloat(p.unrealized_pl) || 0), 0);
+    const tradeCount = autonomousStatus?.stats?.tradesExecuted || 0;
+    const holdCount = autonomousStatus?.stats?.signalsHold || 0;
+    const lastSignal = autonomousStatus?.lastSignal || null;
+    const minConfidence = autonomousStatus?.config?.minConfidence || autonomousStatus?.guardrailsState?.config?.minConfidence || null;
+    const lastConfidence = lastSignal?.confidence ?? null;
 
     // Calculate unallocated funds
     const unallocated = metrics.walletBalance - metrics.initialBalance;
@@ -152,8 +159,46 @@ export const RiskPanel = ({ metrics, onUpdateAllocation, onUpdateWallet }) => {
                                     {pnl >= 0 ? '+' : ''}{pnlPercent.toFixed(2)}%
                                 </div>
                             </div>
+                            <div>
+                                <div className="text-slate-500">DOLLARS</div>
+                                <div className={`text-base font-mono font-bold ${pnl >= 0 ? 'text-soma-success' : 'text-soma-danger'}`}>
+                                    {pnl >= 0 ? '+' : ''}${pnl.toFixed(2)}
+                                </div>
+                            </div>
                         </div>
                     </div>
+
+                    {autonomousStatus?.stats && (
+                        <div className="p-2 rounded bg-black/40 border border-white/5">
+                            <div className="flex items-center justify-between mb-2">
+                                <div className="text-[9px] text-slate-500 uppercase">Paper P&L State</div>
+                                <div className={`text-[9px] font-bold ${tradeCount > 0 ? 'text-emerald-400' : 'text-blue-400'}`}>
+                                    {tradeCount > 0 ? `${tradeCount} fill${tradeCount === 1 ? '' : 's'}` : 'No fills yet'}
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-2 text-[10px]">
+                                <div>
+                                    <div className="text-slate-600">REALIZED</div>
+                                    <div className={`font-mono font-bold ${realizedPnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                        {realizedPnl >= 0 ? '+' : ''}${realizedPnl.toFixed(2)}
+                                    </div>
+                                </div>
+                                <div>
+                                    <div className="text-slate-600">UNREALIZED</div>
+                                    <div className={`font-mono font-bold ${unrealizedPnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                        {unrealizedPnl >= 0 ? '+' : ''}${unrealizedPnl.toFixed(2)}
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="mt-2 text-[9px] leading-snug text-zinc-500">
+                                {tradeCount === 0
+                                    ? `Waiting for first paper entry. Last signal: ${lastSignal?.action || 'NONE'}${lastConfidence != null && minConfidence != null ? ` (${Math.round(lastConfidence * 100)}% vs ${Math.round(minConfidence * 100)}% gate)` : ''}. Holds: ${holdCount}.`
+                                    : positions.length > 0
+                                        ? 'Position is open. Unrealized P&L moves with live price; realized P&L updates after exit.'
+                                        : 'No open position. Realized P&L reflects closed paper trades.'}
+                            </div>
+                        </div>
+                    )}
 
                     {/* METRICS GRID - SCARY MODE */}
                     <div className="space-y-3 pt-2">

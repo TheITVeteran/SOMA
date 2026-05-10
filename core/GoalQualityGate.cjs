@@ -1,0 +1,163 @@
+const { execFileSync } = require('child_process');
+const fs = require('fs');
+const path = require('path');
+
+const DEFAULT_STOPWORDS = new Set([
+  'the', 'and', 'for', 'with', 'that', 'this', 'from', 'into', 'goal',
+  'task', 'soma', 'system', 'review', 'analyze', 'improve'
+]);
+
+function normalizeText(value = '') {
+  return String(value)
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .split(/\s+/)
+    .filter(Boolean);
+}
+
+function overlapScore(a = '', b = '') {
+  const left = new Set(normalizeText(a).filter(w => !DEFAULT_STOPWORDS.has(w)));
+  const right = new Set(normalizeText(b).filter(w => !DEFAULT_STOPWORDS.has(w)));
+  if (!left.size || !right.size) return 0;
+  let hits = 0;
+  for (const word of left) if (right.has(word)) hits++;
+  return hits / Math.min(left.size, right.size);
+}
+
+function buildQualityReport(goalData = {}, existingGoals = []) {
+  const issues = [];
+  const warnings = [];
+  const title = String(goalData.title || '').trim();
+  const description = String(goalData.description || '').trim();
+  const category = String(goalData.category || '').trim();
+  const successCriteria = Array.isArray(goalData.successCriteria)
+    ? goalData.successCriteria.filter(Boolean)
+    : Array.isArray(goalData.metadata?.successCriteria)
+      ? goalData.metadata.successCriteria.filter(Boolean)
+      : [];
+  const verification = goalData.verification || goalData.metadata?.verification || null;
+
+  if (!title) issues.push('Missing title');
+  if (!category) issues.push('Missing category');
+  if (title && title.length < 12) warnings.push('Title is very short');
+  if (!description || description.length < 40) warnings.push('Description should explain why the goal matters');
+  if (!successCriteria.length) warnings.push('No success criteria provided');
+  if (!verification) warnings.push('No verification method provided');
+
+  const duplicate = existingGoals.find(g => {
+    if (!g || ['completed', 'failed', 'deferred', 'cancelled'].includes(g.status)) return false;
+    return overlapScore(`${title} ${description}`, `${g.title || ''} ${g.description || ''}`) >= 0.62;
+  });
+  if (duplicate) issues.push(`Likely duplicate of active goal "${duplicate.title}"`);
+
+  const score = Math.max(0, Math.min(100, 100 - issues.length * 35 - warnings.length * 10));
+  return {
+    approved: issues.length === 0,
+    score,
+    issues,
+    warnings,
+    duplicateGoalId: duplicate?.id || null,
+    successCriteria,
+    verification
+  };
+}
+
+function safeResolve(repoRoot, target) {
+  const resolved = path.resolve(repoRoot, target || '');
+  if (!resolved.startsWith(repoRoot)) throw new Error(`Path outside workspace: ${target}`);
+  return resolved;
+}
+
+function runCommand(command, repoRoot) {
+  const [shell, shellFlag] = process.platform === 'win32' ? ['cmd.exe', '/c'] : ['/bin/sh', '-c'];
+  try {
+    const output = execFileSync(shell, [shellFlag, command], {
+      cwd: repoRoot,
+      timeout: 120000,
+      maxBuffer: 1024 * 1024,
+      windowsHide: true,
+      encoding: 'utf8'
+    });
+    return { command, passed: true, output: String(output || '').slice(-2000) };
+  } catch (error) {
+    return {
+      command,
+      passed: false,
+      output: String((error.stdout || '') + (error.stderr || '') || error.message).slice(-2000)
+    };
+  }
+}
+
+function verifyGoal(goal = {}, result = {}, options = {}) {
+  const repoRoot = options.repoRoot || process.cwd();
+  const metadata = goal.metadata || {};
+  const verification = result.verification || metadata.verification || goal.verification || null;
+  const evidence = result.evidence || metadata.evidence || {};
+  const checks = [];
+
+  const criteria = result.successCriteria || metadata.successCriteria || goal.successCriteria || [];
+  for (const criterion of criteria) {
+    checks.push({
+      type: 'success_criterion',
+      label: String(criterion),
+      passed: Boolean(result.force || evidence[String(criterion)] || result.summary || result.result)
+    });
+  }
+
+  if (verification?.commands && Array.isArray(verification.commands)) {
+    for (const command of verification.commands) checks.push({ type: 'command', ...runCommand(command, repoRoot) });
+  }
+
+  if (verification?.filesExist && Array.isArray(verification.filesExist)) {
+    for (const file of verification.filesExist) {
+      let passed = false;
+      let output = '';
+      try {
+        passed = fs.existsSync(safeResolve(repoRoot, file));
+      } catch (error) {
+        output = error.message;
+      }
+      checks.push({ type: 'file_exists', file, passed, output });
+    }
+  }
+
+  if (verification?.contains && Array.isArray(verification.contains)) {
+    for (const item of verification.contains) {
+      const file = item.file;
+      const text = item.text;
+      let passed = false;
+      let output = '';
+      try {
+        const content = fs.readFileSync(safeResolve(repoRoot, file), 'utf8');
+        passed = content.includes(text);
+      } catch (error) {
+        output = error.message;
+      }
+      checks.push({ type: 'contains', file, text, passed, output });
+    }
+  }
+
+  if (!checks.length) {
+    const hasEvidence = Boolean(result.result || result.summary || result.completedBy || result.force);
+    checks.push({
+      type: 'evidence',
+      label: 'Completion evidence supplied',
+      passed: hasEvidence,
+      output: hasEvidence ? 'Result/evidence present' : 'No verifier or evidence supplied'
+    });
+  }
+
+  const passed = checks.every(check => check.passed);
+  return {
+    passed,
+    checkedAt: Date.now(),
+    checks,
+    score: checks.length ? Math.round((checks.filter(c => c.passed).length / checks.length) * 100) : 0
+  };
+}
+
+module.exports = {
+  buildQualityReport,
+  verifyGoal,
+  overlapScore
+};

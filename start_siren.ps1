@@ -3,8 +3,12 @@
 
 $SirenDir = Join-Path $PSScriptRoot "siren-bridge"
 $VenvPython = Join-Path $SirenDir ".venv\Scripts\python.exe"
+$FFmpegBin = Join-Path $PSScriptRoot "ffmpeg_shared\ffmpeg-master-latest-win64-gpl-shared\bin"
 
-Write-Host "[Siren] Starting Project Siren Stack..." -ForegroundColor Cyan
+# Add FFmpeg to PATH for this session
+$env:PATH = "$FFmpegBin;$env:PATH"
+
+Write-Host "[Siren] Starting Project Siren Stack (with FFmpeg at $FFmpegBin)..." -ForegroundColor Cyan
 
 # 1. Start Fish-Speech (Port 8080)
 Write-Host "   [1/2] Launching Fish-Speech Core on :8080..." -ForegroundColor Gray
@@ -19,7 +23,7 @@ while ($elapsed -lt $maxWait) {
     Start-Sleep -Seconds 2
     $elapsed += 2
     try {
-        $r = Invoke-WebRequest -Uri "http://localhost:8080/v1/health" -TimeoutSec 2 -EA Stop
+        $r = Invoke-WebRequest -Uri "http://localhost:8080/v1/health" -Method Post -TimeoutSec 2 -EA Stop
         if ($r.StatusCode -eq 200) { $ready = $true; break }
     } catch {}
     Write-Host "   ...still loading ($elapsed`s)" -ForegroundColor DarkGray

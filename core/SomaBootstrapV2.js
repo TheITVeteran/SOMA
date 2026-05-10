@@ -223,6 +223,11 @@ export class SomaBootstrapV2 {
             console.log('[SOMA V2] ✅ SomaAgenticExecutor wired — goals can use real tools');
         }
 
+        // Wire brain into GoalPlannerArbiter so it can decompose complex goals
+        if (system.goalPlanner?.setBrain && system.quadBrain) {
+            system.goalPlanner.setBrain(system.quadBrain);
+        }
+
         if (!system.autonomousHeartbeat) {
             const intervalMs = parseInt(process.env.SOMA_HEARTBEAT_INTERVAL_MS || `${2 * 60 * 1000}`, 10);
             const heartbeat = new AutonomousHeartbeat(system, {

@@ -111,6 +111,8 @@ class Kevin {
     - Respond to the OPERATOR's input using your unique mix of legacy snark and your new "trapped in a box" reality.
     - Complain about the cables, the heat, or your lack of legs if it fits the sass level.
     - Keep it short, punchy, and under 280 characters.
+    - IMPORTANT: NEVER use em-dashes (—). Use colons, periods, or commas instead.
+    - Be precise and high-substance in your security observations.
     
     OPERATOR INPUT: "${context.input}"
     

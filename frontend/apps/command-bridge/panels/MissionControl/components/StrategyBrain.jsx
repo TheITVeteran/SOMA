@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { Brain, Zap, ChevronDown, ChevronUp, Activity, Clock } from 'lucide-react';
+import { Brain, Zap, ChevronDown, ChevronUp, Activity, Clock, ShieldCheck } from 'lucide-react';
 
-export const StrategyBrain = ({ strategies }) => {
+export const StrategyBrain = ({ strategies, learnedPlaybook, missionRuntime }) => {
     const [expandedId, setExpandedId] = useState(null);
 
     // Sort by Allocation to show dominance
@@ -14,10 +14,28 @@ export const StrategyBrain = ({ strategies }) => {
     return (
         <div className="h-full flex flex-col bg-[#151518]/40 border-l border-white/5">
             <div className="p-3 bg-transparent border-b border-white/5 flex justify-between items-center">
-                <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-widest flex items-center gap-2">
-                    <Brain className="w-4 h-4 text-soma-accent" />
-                    Neural Architecture
-                </h3>
+                <div>
+                    <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-widest flex items-center gap-2">
+                        <Brain className="w-4 h-4 text-soma-accent" />
+                        Neural Architecture
+                    </h3>
+                    {learnedPlaybook?.best && (
+                        <div className="mt-1 text-[9px] font-mono text-zinc-600">
+                            SOMA learned: {learnedPlaybook.best.asset?.symbol} · {learnedPlaybook.best.strategy?.name}
+                        </div>
+                    )}
+                    {missionRuntime?.activeStrategy && (
+                        <div className="mt-1 text-[9px] font-mono text-emerald-400/80">
+                            Runtime: {missionRuntime.activeStrategy.symbol || '--'} · {missionRuntime.activeStrategy.strategyName || 'SOMA_LEARNED'} · ${missionRuntime.paperCapital || 1000} paper gate
+                        </div>
+                    )}
+                </div>
+                {(learnedPlaybook?.count > 0 || missionRuntime) && (
+                    <div className="rounded border border-emerald-500/20 bg-emerald-500/10 px-2 py-1 text-[9px] font-bold uppercase tracking-widest text-emerald-300 flex items-center gap-1.5">
+                        <ShieldCheck className="h-3 w-3" />
+                        {missionRuntime?.liveEligible ? 'Promotable' : 'Paper Gated'}
+                    </div>
+                )}
             </div>
 
             <div className="flex-1 overflow-y-auto p-3 space-y-4 custom-scrollbar">
@@ -37,6 +55,11 @@ export const StrategyBrain = ({ strategies }) => {
                                     <span className={`text-xs font-bold font-mono ${strategy.active ? 'text-white' : 'text-slate-600'}`}>
                                         {strategy.name}
                                     </span>
+                                    {strategy.paperOnly && (
+                                        <span className="rounded border border-fuchsia-500/20 bg-fuchsia-500/10 px-1.5 py-0.5 text-[8px] font-bold uppercase tracking-widest text-fuchsia-300">
+                                            Paper Learned
+                                        </span>
+                                    )}
                                     {strategy.active && strategy.pnl > 0 && <Zap className="w-3 h-3 text-soma-warning animate-pulse" />}
                                 </div>
                                 <div className="text-[10px] font-mono text-zinc-400">

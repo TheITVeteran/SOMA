@@ -67,7 +67,7 @@ export async function loadCoreSystems() {
         core.kevinArbiter.initialize()
     ]);
 
-    core.commandBridge = new CommandBridgeInterface();
+    core.commandBridge = new CommandBridgeInterface('http://localhost:3001', messageBroker);
     console.log('      ✅ Security Ecology Fully Integrated (Local & Global Active)');
 
     return core;

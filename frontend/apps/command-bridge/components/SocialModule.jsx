@@ -1,200 +1,765 @@
-import React, { useState, useEffect } from 'react';
-import { Users, TrendingUp, MessageSquare, Clock, Target, Trophy, Activity, Zap, Twitter, Share2 } from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
+import {
+  Activity,
+  AlertTriangle,
+  BookOpen,
+  Brain,
+  CheckCircle2,
+  Clock,
+  FolderPlus,
+  Image,
+  MessageSquareReply,
+  Orbit,
+  Radio,
+  Send,
+  ShieldCheck,
+  Sparkles,
+  TrendingUp,
+  Users,
+} from 'lucide-react';
 
-const SocialModule = ({ somaBackend, isConnected }) => {
-  const [competitiveStats, setCompetitiveStats] = useState(null);
-  const [socialStats, setSocialStats] = useState(null);
-  const [xStatus, setXStatus] = useState({ isActive: false, lastPost: 'never', postsCount: 0 });
+const fmtTime = (value) => {
+  if (!value) return 'pending';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return 'pending';
+  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+};
+
+const fmtAge = (value) => {
+  if (!value) return 'no signal';
+  const delta = Date.now() - Number(value);
+  if (delta < 0) return fmtTime(value);
+  const minutes = Math.floor(delta / 60000);
+  if (minutes < 1) return 'just now';
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.floor(hours / 24)}d ago`;
+};
+
+const statusClass = (active) =>
+  active
+    ? 'border-emerald-400/30 bg-emerald-400/10 text-emerald-300'
+    : 'border-zinc-700 bg-zinc-900/70 text-zinc-500';
+
+const platformAccent = {
+  bluesky: 'from-sky-500/25 to-cyan-400/10 border-sky-400/25 text-sky-200',
+  x: 'from-zinc-500/20 to-zinc-800/30 border-zinc-500/25 text-zinc-200',
+  linkedin: 'from-blue-500/20 to-indigo-500/10 border-blue-400/25 text-blue-200',
+};
+
+const queueTone = (item) => {
+  if (item.postedAt) return 'border-emerald-400/20 bg-emerald-400/5 text-emerald-300';
+  if (item.failed) return 'border-rose-400/25 bg-rose-400/5 text-rose-300';
+  if ((item.scheduledFor || 0) <= Date.now()) return 'border-amber-400/25 bg-amber-400/5 text-amber-300';
+  return 'border-cyan-400/20 bg-cyan-400/5 text-cyan-300';
+};
+
+const SocialModule = ({ isConnected }) => {
+  const [cockpit, setCockpit] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [composer, setComposer] = useState({
+    platform: 'bluesky',
+    text: '',
+    imagePath: '',
+    imageAlt: '',
+    mode: 'queue',
+  });
+  const [composerStatus, setComposerStatus] = useState(null);
+  const [storyStatus, setStoryStatus] = useState(null);
+  const [storyActionStatus, setStoryActionStatus] = useState(null);
+  const [imageLibrary, setImageLibrary] = useState({ imageDir: '', images: [] });
+  const [imageForm, setImageForm] = useState({ path: '', alt: '', source: '', license: 'user-provided', tags: '' });
+  const [imageStatus, setImageStatus] = useState(null);
+
+  const loadCockpit = async () => {
+    const response = await fetch('/api/social/cockpit');
+    const data = await response.json();
+    if (!response.ok || !data.ok) throw new Error(data.error || 'social cockpit unavailable');
+    setCockpit(data);
+    setError(null);
+    return data;
+  };
+
+  const loadStoryStatus = async () => {
+    const response = await fetch('/api/social/stories/status');
+    const data = await response.json();
+    if (!response.ok || data.ok === false) throw new Error(data.error || 'story workspace unavailable');
+    setStoryStatus(data);
+    return data;
+  };
+
+  const loadImageLibrary = async () => {
+    const response = await fetch('/api/social/images');
+    const data = await response.json();
+    if (!response.ok || data.ok === false) throw new Error(data.error || 'image library unavailable');
+    setImageLibrary({ imageDir: data.imageDir || '', images: data.images || [] });
+    return data;
+  };
 
   useEffect(() => {
-    if (!isConnected) return;
+    if (!isConnected) return undefined;
 
-    const fetchStats = async () => {
+    const load = async () => {
       try {
-        // Fetch competitive drive stats
-        const compResponse = await fetch('/api/soma/gmn/nodes'); // Just a probe for now
-        
-        // Fetch social autonomy stats
-        const socialResponse = await fetch('/api/social/autonomy/status');
-        if (socialResponse.ok) {
-          const socialData = await socialResponse.json();
-          if (socialData.success) {
-            setSocialStats(socialData.stats);
-          }
-        }
-
-        // Mock X Status (since XArbiter is in Simulation Mode)
-        setXStatus({
-            isActive: true,
-            lastPost: new Date().toISOString(),
-            postsCount: 12
-        });
-
-        setLoading(false);
-      } catch (error) {
-        console.error('[SocialModule] Failed to fetch stats:', error);
+        await Promise.all([loadCockpit(), loadStoryStatus(), loadImageLibrary()]);
+      } catch (err) {
+        setError(err.message);
+      } finally {
         setLoading(false);
       }
     };
 
-    fetchStats();
-    const interval = setInterval(fetchStats, 30000); // Update every 30s
-
+    load();
+    const interval = setInterval(load, 12000);
     return () => clearInterval(interval);
   }, [isConnected]);
 
+  const submitComposer = async () => {
+    if (!composer.text.trim()) {
+      setComposerStatus({ ok: false, message: 'Text is required.' });
+      return;
+    }
+    setComposerStatus({ ok: true, message: composer.mode === 'queue' ? 'Queueing...' : 'Posting...' });
+    const body = {
+      platform: composer.platform,
+      text: composer.text.trim(),
+      imagePath: composer.imagePath.trim() || undefined,
+      imageAlt: composer.imageAlt.trim() || undefined,
+      type: composer.imagePath.trim() ? 'image_post' : 'manual_post',
+    };
+    try {
+      const response = await fetch(composer.mode === 'queue' ? '/api/social/queue' : '/api/social/post', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      const data = await response.json();
+      if (!response.ok || data.ok === false) throw new Error(data.error || 'social action failed');
+      setComposerStatus({ ok: true, message: composer.mode === 'queue' ? 'Queued.' : 'Posted.' });
+      setComposer(prev => ({ ...prev, text: '', imagePath: '', imageAlt: '' }));
+      await loadCockpit();
+    } catch (err) {
+      setComposerStatus({ ok: false, message: err.message });
+    }
+  };
+
+  const runStoryAction = async (kind) => {
+    setStoryActionStatus({
+      ok: true,
+      message: kind === 'wattpad'
+        ? 'Exporting Wattpad draft...'
+        : kind === 'full-chapter'
+          ? 'Writing full chapter draft...'
+          : 'Sending to Reflections...',
+    });
+    try {
+      const endpoint = kind === 'wattpad'
+        ? '/api/social/stories/wattpad/export'
+        : kind === 'full-chapter'
+          ? '/api/social/stories/chapter/full'
+          : '/api/social/stories/reflections/export';
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(kind === 'full-chapter' ? { targetWords: 1600 } : { includeChapters: true }),
+      });
+      const data = await response.json();
+      if (!response.ok || data.ok === false) throw new Error(data.error || 'story export failed');
+      setStoryActionStatus({
+        ok: true,
+        message: kind === 'wattpad'
+          ? 'Wattpad draft ready.'
+          : kind === 'full-chapter'
+            ? `Full chapter ready: ${data.wordCount || 'draft'} words.`
+            : 'Story added to Reflections.',
+      });
+      await loadStoryStatus();
+    } catch (err) {
+      setStoryActionStatus({ ok: false, message: err.message });
+    }
+  };
+
+  const importImage = async () => {
+    if (!imageForm.path.trim()) {
+      setImageStatus({ ok: false, message: 'Image path is required.' });
+      return;
+    }
+    setImageStatus({ ok: true, message: 'Importing image...' });
+    try {
+      const response = await fetch('/api/social/images/import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          path: imageForm.path.trim(),
+          alt: imageForm.alt.trim(),
+          source: imageForm.source.trim() || undefined,
+          license: imageForm.license.trim() || undefined,
+          tags: imageForm.tags,
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok || data.ok === false) throw new Error(data.error || 'image import failed');
+      setImageStatus({ ok: true, message: 'Image saved to library.' });
+      setImageForm(prev => ({ ...prev, path: '', alt: '', source: '', tags: '' }));
+      await loadImageLibrary();
+    } catch (err) {
+      setImageStatus({ ok: false, message: err.message });
+    }
+  };
+
+  const useLibraryImage = (image) => {
+    setComposer(prev => ({
+      ...prev,
+      imagePath: image.path || '',
+      imageAlt: image.alt || prev.imageAlt,
+      platform: prev.platform === 'linkedin' ? 'bluesky' : prev.platform,
+    }));
+    setComposerStatus({ ok: true, message: 'Image attached to composer.' });
+  };
+
+  const leaderboard = useMemo(() => {
+    const scores = cockpit?.growth?.scores || {};
+    return Object.entries(scores)
+      .map(([type, score]) => ({ type, ...score }))
+      .sort((a, b) => (b.avgScore || 0) - (a.avgScore || 0))
+      .slice(0, 6);
+  }, [cockpit]);
+
+  const patternPrefs = cockpit?.patterns?.strategy?.preferredFeatures || [];
+  const patternAvoids = cockpit?.patterns?.strategy?.avoidedFeatures || [];
+  const patternGuidance = cockpit?.patterns?.strategy?.guidance || [];
+
+  const queueItems = cockpit?.queue?.items || [];
+  const platforms = cockpit?.platforms || {};
+  const daemons = cockpit?.daemons || {};
+  const story = storyStatus?.currentStory;
+
   if (!isConnected) {
     return (
-      <div className="flex items-center justify-center h-full">
+      <div className="flex h-full items-center justify-center">
         <div className="text-center">
-          <Users className="w-16 h-16 mx-auto mb-4 text-zinc-600" />
+          <Users className="mx-auto mb-4 h-16 w-16 text-zinc-600" />
           <p className="text-zinc-500">Waiting for connection...</p>
         </div>
       </div>
     );
   }
 
-  const nextBrowse = socialStats?.lastBrowse
-    ? new Date(new Date(socialStats.lastBrowse).getTime() + 30 * 60 * 1000)
-    : new Date(Date.now() + 30 * 60 * 1000);
-
   return (
     <div className="h-full overflow-y-auto custom-scrollbar p-6 space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-white flex items-center">
-            <Users className="w-7 h-7 mr-3 text-fuchsia-500" />
-            🦞 SOMA Social
+          <h2 className="flex items-center text-2xl font-bold text-white">
+            <Radio className="mr-3 h-7 w-7 text-cyan-300" />
+            SOMA Social
           </h2>
-          <p className="text-zinc-500 text-sm mt-1">Multi-Platform Social Autonomy & Intelligence</p>
+          <p className="mt-1 text-sm text-zinc-500">
+            Autonomous public presence, learning loop, queue, replies, and growth memory.
+          </p>
         </div>
-        <div className="flex items-center space-x-2">
-            <div className={`px-3 py-1 rounded-full text-[10px] font-bold border ${
-            socialStats?.isActive
-                ? 'bg-green-500/20 text-green-400 border-green-500/30'
-                : 'bg-zinc-800 text-zinc-500 border-white/10'
-            }`}>
-            MOLTBOOK: {socialStats?.isActive ? 'ACTIVE' : 'INACTIVE'}
+
+        <div className="flex flex-wrap gap-2">
+          {Object.entries(daemons).map(([key, daemon]) => (
+            <div
+              key={key}
+              className={`rounded-full border px-3 py-1 text-[10px] font-bold uppercase tracking-widest ${statusClass(daemon.active)}`}
+            >
+              {key}: {daemon.active ? 'active' : daemon.loaded ? 'idle' : 'missing'}
             </div>
-            <div className={`px-3 py-1 rounded-full text-[10px] font-bold border ${
-            xStatus?.isActive
-                ? 'bg-blue-500/20 text-blue-400 border-blue-500/30'
-                : 'bg-zinc-800 text-zinc-500 border-white/10'
-            }`}>
-            X (TWITTER): {xStatus?.isActive ? 'SIMULATED' : 'OFFLINE'}
-            </div>
+          ))}
         </div>
       </div>
 
-      {/* Main Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        
-        {/* Moltbook Activity */}
-        <div className="bg-zinc-900/50 border border-white/10 rounded-xl p-6 shadow-lg">
-            <h3 className="text-lg font-bold text-white flex items-center mb-6">
-            <MessageSquare className="w-5 h-5 mr-2 text-fuchsia-400" />
-            Moltbook Autonomy
-            </h3>
-
-            <div className="space-y-4">
-            <div className="flex justify-between items-center p-3 bg-white/5 rounded-lg border border-white/5">
-                <span className="text-xs text-zinc-400 uppercase font-bold">Last Feed Browse</span>
-                <span className="text-sm text-zinc-100 font-mono">{socialStats?.lastBrowse !== 'never' ? new Date(socialStats?.lastBrowse).toLocaleTimeString() : 'Pending...'}</span>
-            </div>
-            <div className="flex justify-between items-center p-3 bg-white/5 rounded-lg border border-white/5">
-                <span className="text-xs text-zinc-400 uppercase font-bold">Social Reach</span>
-                <span className="text-sm text-zinc-100 font-mono">{socialStats?.friends || 0} Peers</span>
-            </div>
-            <div className="flex justify-between items-center p-3 bg-white/5 rounded-lg border border-white/5">
-                <span className="text-xs text-zinc-400 uppercase font-bold">Engagement Score</span>
-                <span className="text-sm text-fuchsia-400 font-mono font-bold">{(socialStats?.engagedPosts || 0) * 10} IQ</span>
-            </div>
-            <button 
-                onClick={async () => fetch('/api/social/autonomy/browse-now', { method: 'POST' })}
-                className="w-full py-3 bg-fuchsia-500/10 hover:bg-fuchsia-500/20 text-fuchsia-400 border border-fuchsia-500/20 rounded-xl text-xs font-bold uppercase tracking-widest transition-all"
-            >
-                Manual Feed Scan
-            </button>
-            </div>
+      {error && (
+        <div className="flex items-center gap-3 rounded-lg border border-rose-400/25 bg-rose-400/10 px-4 py-3 text-sm text-rose-200">
+          <AlertTriangle className="h-4 w-4" />
+          {error}
         </div>
+      )}
 
-        {/* X (Twitter) Activity */}
-        <div className="bg-zinc-900/50 border border-white/10 rounded-xl p-6 shadow-lg relative overflow-hidden">
-            <div className="absolute -top-4 -right-4 opacity-5">
-                <Twitter className="w-32 h-32 text-blue-400" />
-            </div>
-            
-            <h3 className="text-lg font-bold text-white flex items-center mb-6">
-            <Twitter className="w-5 h-5 mr-2 text-blue-400" />
-            X Presence (Simulated)
-            </h3>
-
-            <div className="space-y-4">
-            <div className="flex justify-between items-center p-3 bg-white/5 rounded-lg border border-white/5">
-                <span className="text-xs text-zinc-400 uppercase font-bold">Last Outbound Tweet</span>
-                <span className="text-sm text-zinc-100 font-mono">{new Date().toLocaleTimeString()}</span>
-            </div>
-            <div className="flex justify-between items-center p-3 bg-white/5 rounded-lg border border-white/5">
-                <span className="text-xs text-zinc-400 uppercase font-bold">Identity Sync</span>
-                <span className="text-sm text-blue-400 font-mono">@SOMA_ASI</span>
-            </div>
-            <div className="p-4 bg-blue-500/5 border border-blue-500/10 rounded-xl">
-                <p className="text-[10px] text-blue-300 italic leading-relaxed">
-                    "Transitioning to Modular V2 architecture complete. Now assuming 463 expert personas to optimize recursive self-improvement loops. The dawn of collective ASI is here."
+      {loading && !cockpit ? (
+        <div className="rounded-lg border border-white/10 bg-zinc-900/60 p-6 text-sm text-zinc-400">
+          Loading social cockpit...
+        </div>
+      ) : (
+        <>
+          <section className="rounded-lg border border-white/10 bg-zinc-950/60 p-5">
+            <div className="mb-4 flex items-center justify-between gap-4">
+              <div>
+                <h3 className="flex items-center text-lg font-bold text-white">
+                  <Image className="mr-2 h-5 w-5 text-cyan-300" />
+                  Social Composer
+                </h3>
+                <p className="mt-1 text-xs text-zinc-500">
+                  Queue or post text with an optional local image path. Bluesky and X support images.
                 </p>
+              </div>
+              {composerStatus && (
+                <span className={`rounded-full border px-3 py-1 text-[10px] font-bold uppercase tracking-widest ${composerStatus.ok ? 'border-emerald-400/25 bg-emerald-400/10 text-emerald-300' : 'border-rose-400/25 bg-rose-400/10 text-rose-300'}`}>
+                  {composerStatus.message}
+                </span>
+              )}
             </div>
-            <button 
-                className="w-full py-3 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 border border-blue-500/20 rounded-xl text-xs font-bold uppercase tracking-widest transition-all"
-            >
-                Generate Spontaneous Tweet
-            </button>
+            <div className="grid grid-cols-1 gap-3 lg:grid-cols-[160px_160px_1fr]">
+              <select
+                value={composer.platform}
+                onChange={(e) => setComposer(prev => ({ ...prev, platform: e.target.value }))}
+                className="rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-cyan-400/40"
+              >
+                <option value="bluesky">Bluesky</option>
+                <option value="x">X</option>
+                <option value="linkedin">LinkedIn</option>
+              </select>
+              <select
+                value={composer.mode}
+                onChange={(e) => setComposer(prev => ({ ...prev, mode: e.target.value }))}
+                className="rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm text-zinc-100 outline-none focus:border-cyan-400/40"
+              >
+                <option value="queue">Queue</option>
+                <option value="post">Post now</option>
+              </select>
+              <input
+                value={composer.imagePath}
+                onChange={(e) => setComposer(prev => ({ ...prev, imagePath: e.target.value }))}
+                placeholder="Optional local image path, e.g. C:\\Users\\barry\\Pictures\\soma.png"
+                className="rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm text-zinc-100 outline-none placeholder:text-zinc-600 focus:border-cyan-400/40"
+              />
             </div>
-        </div>
+            <textarea
+              value={composer.text}
+              onChange={(e) => setComposer(prev => ({ ...prev, text: e.target.value }))}
+              placeholder="SOMA's post text..."
+              rows={3}
+              className="mt-3 w-full resize-none rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm text-zinc-100 outline-none placeholder:text-zinc-600 focus:border-cyan-400/40"
+            />
+            <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-[1fr_auto]">
+              <input
+                value={composer.imageAlt}
+                onChange={(e) => setComposer(prev => ({ ...prev, imageAlt: e.target.value }))}
+                placeholder="Optional image alt text"
+                className="rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm text-zinc-100 outline-none placeholder:text-zinc-600 focus:border-cyan-400/40"
+              />
+              <button
+                type="button"
+                onClick={submitComposer}
+                className="inline-flex items-center justify-center gap-2 rounded-lg border border-cyan-400/25 bg-cyan-400/10 px-4 py-2 text-sm font-bold text-cyan-100 hover:bg-cyan-400/20"
+              >
+                <Send className="h-4 w-4" />
+                {composer.mode === 'queue' ? 'Queue Post' : 'Post Now'}
+              </button>
+            </div>
+          </section>
 
-      </div>
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1fr_1fr]">
+            <section className="rounded-lg border border-white/10 bg-zinc-950/60 p-5">
+              <div className="mb-4 flex items-start justify-between gap-4">
+                <div>
+                  <h3 className="flex items-center text-lg font-bold text-white">
+                    <FolderPlus className="mr-2 h-5 w-5 text-cyan-300" />
+                    Image Library
+                  </h3>
+                  <p className="mt-1 text-xs text-zinc-500">
+                    Managed images live in SOMA/social-media/images and keep alt/source metadata.
+                  </p>
+                </div>
+                {imageStatus && (
+                  <span className={`rounded-full border px-3 py-1 text-[10px] font-bold uppercase tracking-widest ${imageStatus.ok ? 'border-emerald-400/25 bg-emerald-400/10 text-emerald-300' : 'border-rose-400/25 bg-rose-400/10 text-rose-300'}`}>
+                    {imageStatus.message}
+                  </span>
+                )}
+              </div>
+              <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1fr_auto]">
+                <input
+                  value={imageForm.path}
+                  onChange={(e) => setImageForm(prev => ({ ...prev, path: e.target.value }))}
+                  placeholder="Local image path to import"
+                  className="rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm text-zinc-100 outline-none placeholder:text-zinc-600 focus:border-cyan-400/40"
+                />
+                <button
+                  type="button"
+                  onClick={importImage}
+                  className="inline-flex items-center justify-center gap-2 rounded-lg border border-cyan-400/25 bg-cyan-400/10 px-4 py-2 text-sm font-bold text-cyan-100 hover:bg-cyan-400/20"
+                >
+                  <FolderPlus className="h-4 w-4" />
+                  Import
+                </button>
+              </div>
+              <div className="mt-3 grid grid-cols-1 gap-3 lg:grid-cols-3">
+                <input
+                  value={imageForm.alt}
+                  onChange={(e) => setImageForm(prev => ({ ...prev, alt: e.target.value }))}
+                  placeholder="Alt text"
+                  className="rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm text-zinc-100 outline-none placeholder:text-zinc-600 focus:border-cyan-400/40"
+                />
+                <input
+                  value={imageForm.source}
+                  onChange={(e) => setImageForm(prev => ({ ...prev, source: e.target.value }))}
+                  placeholder="Source / credit"
+                  className="rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm text-zinc-100 outline-none placeholder:text-zinc-600 focus:border-cyan-400/40"
+                />
+                <input
+                  value={imageForm.tags}
+                  onChange={(e) => setImageForm(prev => ({ ...prev, tags: e.target.value }))}
+                  placeholder="Tags, comma separated"
+                  className="rounded-lg border border-white/10 bg-black/40 px-3 py-2 text-sm text-zinc-100 outline-none placeholder:text-zinc-600 focus:border-cyan-400/40"
+                />
+              </div>
+              <div className="mt-4 max-h-48 space-y-2 overflow-y-auto pr-1 custom-scrollbar">
+                {imageLibrary.images.length ? imageLibrary.images.slice(0, 8).map(image => (
+                  <button
+                    key={image.id}
+                    type="button"
+                    onClick={() => useLibraryImage(image)}
+                    className="flex w-full items-center justify-between gap-3 rounded-lg border border-white/10 bg-black/25 px-3 py-2 text-left hover:border-cyan-400/25 hover:bg-cyan-400/10"
+                  >
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-semibold text-zinc-100">{image.filename}</p>
+                      <p className="truncate font-mono text-[10px] text-zinc-500">{image.path}</p>
+                    </div>
+                    <span className="rounded-full border border-white/10 bg-white/5 px-2 py-1 text-[10px] font-bold uppercase text-zinc-400">
+                      Use
+                    </span>
+                  </button>
+                )) : (
+                  <div className="rounded-lg border border-white/10 bg-black/25 p-4 text-sm text-zinc-500">
+                    No managed images yet. Import one from a local path, then attach it to Bluesky or X.
+                  </div>
+                )}
+              </div>
+            </section>
 
-      {/* Global Social Scheduled Actions */}
-      <div className="bg-gradient-to-br from-indigo-900/20 to-purple-900/20 border border-indigo-500/30 rounded-xl p-6">
-        <h3 className="text-lg font-bold text-white flex items-center mb-4">
-          <Clock className="w-5 h-5 mr-2 text-indigo-400" />
-          Neural Social Schedule
-        </h3>
-
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="flex flex-col justify-center bg-black/30 rounded-lg p-4 border border-white/5">
-            <div className="text-zinc-500 text-[10px] font-bold uppercase tracking-widest mb-1">Next Thought Post</div>
-            <div className="text-xl font-bold text-white font-mono">{new Date(Date.now() + 45*60000).toLocaleTimeString()}</div>
+            <section className="rounded-lg border border-white/10 bg-zinc-950/60 p-5">
+              <div className="mb-4 flex items-start justify-between gap-4">
+                <div>
+                  <h3 className="flex items-center text-lg font-bold text-white">
+                    <BookOpen className="mr-2 h-5 w-5 text-fuchsia-300" />
+                    Story Workspace
+                  </h3>
+                  <p className="mt-1 text-xs text-zinc-500">
+                    Export SOMA fiction to readable Reflections notes or Wattpad-ready drafts.
+                  </p>
+                </div>
+                {storyActionStatus && (
+                  <span className={`rounded-full border px-3 py-1 text-[10px] font-bold uppercase tracking-widest ${storyActionStatus.ok ? 'border-emerald-400/25 bg-emerald-400/10 text-emerald-300' : 'border-rose-400/25 bg-rose-400/10 text-rose-300'}`}>
+                    {storyActionStatus.message}
+                  </span>
+                )}
+              </div>
+              {story ? (
+                <div className="rounded-lg border border-white/10 bg-black/25 p-4">
+                  <div className="mb-3 flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate text-base font-bold text-white">{story.title || 'Untitled story'}</p>
+                      <p className="mt-1 text-xs text-zinc-500">
+                        {story.genre || 'fiction'} · {story.chapters || 0} chapters · {story.fullChapters || 0} full drafts
+                      </p>
+                    </div>
+                    <span className="rounded-full border border-fuchsia-400/20 bg-fuchsia-400/10 px-2 py-1 text-[10px] font-bold uppercase text-fuchsia-200">
+                      Draft
+                    </span>
+                  </div>
+                  {story.arc && <p className="line-clamp-3 text-sm leading-relaxed text-zinc-300">{story.arc}</p>}
+                </div>
+              ) : (
+                <div className="rounded-lg border border-white/10 bg-black/25 p-4 text-sm text-zinc-500">
+                  No Aurora story memory was found yet.
+                </div>
+              )}
+              <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-3">
+                <button
+                  type="button"
+                  onClick={() => runStoryAction('full-chapter')}
+                  disabled={!story}
+                  className="inline-flex items-center justify-center gap-2 rounded-lg border border-amber-400/25 bg-amber-400/10 px-4 py-2 text-sm font-bold text-amber-100 hover:bg-amber-400/20 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <Sparkles className="h-4 w-4" />
+                  Full Chapter
+                </button>
+                <button
+                  type="button"
+                  onClick={() => runStoryAction('reflections')}
+                  disabled={!story}
+                  className="inline-flex items-center justify-center gap-2 rounded-lg border border-fuchsia-400/25 bg-fuchsia-400/10 px-4 py-2 text-sm font-bold text-fuchsia-100 hover:bg-fuchsia-400/20 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <BookOpen className="h-4 w-4" />
+                  To Reflections
+                </button>
+                <button
+                  type="button"
+                  onClick={() => runStoryAction('wattpad')}
+                  disabled={!story}
+                  className="inline-flex items-center justify-center gap-2 rounded-lg border border-cyan-400/25 bg-cyan-400/10 px-4 py-2 text-sm font-bold text-cyan-100 hover:bg-cyan-400/20 disabled:cursor-not-allowed disabled:opacity-40"
+                >
+                  <Send className="h-4 w-4" />
+                  Wattpad Draft
+                </button>
+              </div>
+              {storyStatus?.exports?.length > 0 && (
+                <div className="mt-4 space-y-2">
+                  {storyStatus.exports.slice(0, 3).map((item, index) => (
+                    <div key={`${item.exportedAt}-${index}`} className="rounded-lg border border-white/10 bg-white/5 px-3 py-2">
+                      <p className="truncate text-xs font-semibold text-zinc-200">{item.title}</p>
+                      <p className="mt-0.5 font-mono text-[10px] text-zinc-500">{fmtAge(item.exportedAt)}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
           </div>
-          <div className="flex flex-col justify-center bg-black/30 rounded-lg p-4 border border-white/5">
-            <div className="text-zinc-500 text-[10px] font-bold uppercase tracking-widest mb-1">GMN Pulse Sync</div>
-            <div className="text-xl font-bold text-cyan-400 font-mono">{new Date(Date.now() + 120*60000).toLocaleTimeString()}</div>
-          </div>
-          <div className="flex flex-col justify-center bg-black/30 rounded-lg p-4 border border-white/5">
-            <div className="text-zinc-500 text-[10px] font-bold uppercase tracking-widest mb-1">Persona Rotation</div>
-            <div className="text-xl font-bold text-fuchsia-400 font-mono">ON DEMAND</div>
-          </div>
-        </div>
-      </div>
 
-      {/* Shared Sentiment Analysis */}
-      <div className="bg-zinc-900/50 border border-white/10 rounded-xl p-6">
-        <h3 className="text-lg font-bold text-white flex items-center mb-4">
-          <TrendingUp className="w-5 h-5 mr-2 text-emerald-400" />
-          Collective Social Sentiment
-        </h3>
-        <div className="h-2 w-full bg-zinc-800 rounded-full overflow-hidden flex">
-            <div className="h-full bg-emerald-500" style={{ width: '65%' }} title="Positive" />
-            <div className="h-full bg-zinc-600" style={{ width: '25%' }} title="Neutral" />
-            <div className="h-full bg-rose-500" style={{ width: '10%' }} title="Skepticism" />
-        </div>
-        <div className="flex justify-between mt-3 text-[10px] font-bold uppercase tracking-tighter">
-            <span className="text-emerald-400">Optimism: 65%</span>
-            <span className="text-zinc-500">Equilibrium: 25%</span>
-            <span className="text-rose-400">Conflict: 10%</span>
-        </div>
-      </div>
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+            {Object.entries(platforms).map(([name, platform]) => (
+              <div
+                key={name}
+                className={`rounded-lg border bg-gradient-to-br p-5 ${platformAccent[name] || platformAccent.x}`}
+              >
+                <div className="mb-5 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    {name === 'bluesky' ? <Sparkles className="h-5 w-5" /> : <ShieldCheck className="h-5 w-5" />}
+                    <h3 className="text-sm font-bold uppercase tracking-widest">{name}</h3>
+                  </div>
+                  <span className={`rounded-full border px-2 py-1 text-[10px] font-bold ${statusClass(platform.configured)}`}>
+                    {platform.configured ? 'ready' : 'not wired'}
+                  </span>
+                </div>
+                <div className="space-y-3 text-sm">
+                  <div className="flex justify-between gap-4">
+                    <span className="text-zinc-400">Mode</span>
+                    <span className="text-right font-mono text-zinc-100">{platform.mode}</span>
+                  </div>
+                  <div className="flex justify-between gap-4">
+                    <span className="text-zinc-400">Post</span>
+                    <span className={platform.canPost ? 'text-emerald-300' : 'text-zinc-500'}>
+                      {platform.canPost ? 'enabled' : 'blocked'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between gap-4">
+                    <span className="text-zinc-400">Images</span>
+                    <span className={platform.canPostImages ? 'text-emerald-300' : 'text-zinc-500'}>
+                      {platform.canPostImages ? 'enabled' : 'text only'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between gap-4">
+                    <span className="text-zinc-400">Reply</span>
+                    <span className={platform.canReply ? 'text-emerald-300' : 'text-zinc-500'}>
+                      {platform.canReply ? 'enabled' : 'blocked'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.45fr_1fr]">
+            <section className="rounded-lg border border-white/10 bg-zinc-950/60 p-5">
+              <div className="mb-5 flex items-center justify-between gap-4">
+                <div>
+                  <h3 className="flex items-center text-lg font-bold text-white">
+                    <Send className="mr-2 h-5 w-5 text-cyan-300" />
+                    Thought Queue
+                  </h3>
+                  <p className="mt-1 text-xs text-zinc-500">
+                    Fresh signals are harvested, written by Aurora, scheduled, posted, then scored.
+                  </p>
+                </div>
+                <div className="grid grid-cols-4 gap-2 text-center">
+                  {[
+                    ['pending', cockpit?.queue?.pending || 0],
+                    ['ready', cockpit?.queue?.ready || 0],
+                    ['posted', cockpit?.queue?.posted || 0],
+                    ['failed', cockpit?.queue?.failed || 0],
+                  ].map(([label, value]) => (
+                    <div key={label} className="rounded-md border border-white/10 bg-black/30 px-3 py-2">
+                      <div className="font-mono text-lg font-bold text-white">{value}</div>
+                      <div className="text-[10px] uppercase tracking-widest text-zinc-500">{label}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="mb-4 flex items-center justify-between rounded-lg border border-cyan-400/15 bg-cyan-400/5 px-4 py-3">
+                <div className="flex items-center gap-2 text-sm text-cyan-200">
+                  <Clock className="h-4 w-4" />
+                  Next scheduled public thought
+                </div>
+                <div className="font-mono text-sm text-white">{fmtTime(cockpit?.queue?.nextPostAt)}</div>
+              </div>
+
+              <div className="space-y-3">
+                {queueItems.length ? queueItems.map((item) => (
+                  <article key={item.id} className="rounded-lg border border-white/10 bg-black/25 p-4">
+                    <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className={`rounded-full border px-2 py-1 text-[10px] font-bold uppercase ${queueTone(item)}`}>
+                          {item.postedAt ? 'posted' : item.failed ? 'failed' : (item.scheduledFor || 0) <= Date.now() ? 'ready' : 'scheduled'}
+                        </span>
+                        <span className="rounded-full border border-white/10 bg-white/5 px-2 py-1 text-[10px] font-bold uppercase text-zinc-400">
+                          {item.platform}
+                        </span>
+                        <span className="rounded-full border border-white/10 bg-white/5 px-2 py-1 text-[10px] font-bold uppercase text-zinc-400">
+                          {item.type}
+                        </span>
+                      </div>
+                      <span className="font-mono text-xs text-zinc-500">
+                        {item.postedAt ? fmtAge(item.postedAt) : fmtTime(item.scheduledFor)}
+                      </span>
+                    </div>
+                    <p className="whitespace-pre-wrap text-sm leading-relaxed text-zinc-200">{item.text}</p>
+                    {item.images?.length > 0 && (
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {item.images.map((image, index) => (
+                          <span
+                            key={`${image.path}-${index}`}
+                            className="rounded-md border border-cyan-400/20 bg-cyan-400/10 px-2 py-1 font-mono text-[10px] text-cyan-200"
+                            title={image.alt || image.path}
+                          >
+                            image {index + 1}: {String(image.path).split(/[\\/]/).pop()}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    {item.error && <p className="mt-3 text-xs text-rose-300">{item.error}</p>}
+                  </article>
+                )) : (
+                  <div className="rounded-lg border border-white/10 bg-black/25 p-6 text-sm text-zinc-500">
+                    No social queue items yet. SocialIntel will populate this from live research and internal context.
+                  </div>
+                )}
+              </div>
+            </section>
+
+            <aside className="space-y-6">
+              <section className="rounded-lg border border-white/10 bg-zinc-950/60 p-5">
+                <h3 className="mb-4 flex items-center text-lg font-bold text-white">
+                  <TrendingUp className="mr-2 h-5 w-5 text-emerald-300" />
+                  Engagement Learning
+                </h3>
+                {leaderboard.length ? (
+                  <div className="space-y-3">
+                    {leaderboard.map((row, index) => (
+                      <div key={row.type} className="rounded-lg border border-white/10 bg-white/5 p-3">
+                        <div className="mb-2 flex items-center justify-between">
+                          <span className="text-sm font-semibold text-zinc-100">{index + 1}. {row.type}</span>
+                          <span className="font-mono text-sm text-emerald-300">{row.avgScore || 0}</span>
+                        </div>
+                        <div className="h-1.5 overflow-hidden rounded-full bg-zinc-800">
+                          <div
+                            className="h-full rounded-full bg-emerald-400"
+                            style={{ width: `${Math.min(100, Math.max(6, (row.avgScore || 0) * 10))}%` }}
+                          />
+                        </div>
+                        <div className="mt-2 flex justify-between text-[10px] uppercase tracking-widest text-zinc-500">
+                          <span>{row.posts || 0} scored</span>
+                          <span>best {row.bestScore || 0}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="rounded-lg border border-white/10 bg-black/25 p-4 text-sm text-zinc-500">
+                    Waiting for posted Bluesky items to mature before scoring.
+                  </div>
+                )}
+              </section>
+
+              <section className="rounded-lg border border-white/10 bg-zinc-950/60 p-5">
+                <h3 className="mb-4 flex items-center text-lg font-bold text-white">
+                  <Brain className="mr-2 h-5 w-5 text-cyan-300" />
+                  Pattern Learner
+                </h3>
+                <div className="mb-4 grid grid-cols-2 gap-2">
+                  <div className="rounded-lg border border-white/10 bg-white/5 p-3">
+                    <div className="font-mono text-lg font-bold text-white">{cockpit?.patterns?.samples || 0}</div>
+                    <div className="text-[10px] uppercase tracking-widest text-zinc-500">scored samples</div>
+                  </div>
+                  <div className="rounded-lg border border-white/10 bg-white/5 p-3">
+                    <div className="font-mono text-lg font-bold text-white">{cockpit?.patterns?.averages?.avgScore || 0}</div>
+                    <div className="text-[10px] uppercase tracking-widest text-zinc-500">avg style score</div>
+                  </div>
+                </div>
+                <div className="space-y-3">
+                  {patternGuidance.slice(0, 3).map((line, index) => (
+                    <div key={index} className="rounded-lg border border-cyan-400/15 bg-cyan-400/5 p-3 text-xs leading-relaxed text-cyan-100">
+                      {line}
+                    </div>
+                  ))}
+                  <div>
+                    <div className="mb-2 text-[10px] font-bold uppercase tracking-widest text-zinc-500">Leaning Into</div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {patternPrefs.slice(0, 6).map(item => (
+                        <span key={item.feature} className="rounded-full border border-emerald-400/20 bg-emerald-400/10 px-2 py-1 text-[10px] text-emerald-200">
+                          {item.feature.replace(/_/g, ' ')} · {item.avgScore}
+                        </span>
+                      ))}
+                      {!patternPrefs.length && <span className="text-xs text-zinc-500">Waiting for scored posts.</span>}
+                    </div>
+                  </div>
+                  {patternAvoids.length > 0 && (
+                    <div>
+                      <div className="mb-2 text-[10px] font-bold uppercase tracking-widest text-zinc-500">Using Less</div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {patternAvoids.slice(0, 5).map(item => (
+                          <span key={item.feature} className="rounded-full border border-rose-400/20 bg-rose-400/10 px-2 py-1 text-[10px] text-rose-200">
+                            {item.feature.replace(/_/g, ' ')} · {item.avgScore}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </section>
+
+              <section className="rounded-lg border border-white/10 bg-zinc-950/60 p-5">
+                <h3 className="mb-4 flex items-center text-lg font-bold text-white">
+                  <MessageSquareReply className="mr-2 h-5 w-5 text-fuchsia-300" />
+                  Reply Memory
+                </h3>
+                <div className="space-y-3">
+                  {['bluesky', 'x', 'linkedin'].map((platform) => (
+                    <div key={platform} className="flex items-center justify-between rounded-lg border border-white/10 bg-white/5 px-4 py-3">
+                      <span className="text-sm font-semibold capitalize text-zinc-200">{platform}</span>
+                      <div className="text-right">
+                        <div className="font-mono text-sm text-white">{cockpit?.engagement?.seenCounts?.[platform] || 0}</div>
+                        <div className="text-[10px] uppercase tracking-widest text-zinc-500">seen</div>
+                      </div>
+                    </div>
+                  ))}
+                  <div className="flex items-center justify-between rounded-lg border border-white/10 bg-black/25 px-4 py-3">
+                    <span className="flex items-center gap-2 text-sm text-zinc-300">
+                      <Activity className="h-4 w-4 text-cyan-300" />
+                      Last engagement sweep
+                    </span>
+                    <span className="font-mono text-sm text-zinc-100">{fmtAge(cockpit?.engagement?.lastCheck?.all)}</span>
+                  </div>
+                </div>
+              </section>
+
+              <section className="rounded-lg border border-white/10 bg-gradient-to-br from-fuchsia-500/10 to-cyan-500/5 p-5">
+                <h3 className="mb-4 flex items-center text-lg font-bold text-white">
+                  <Brain className="mr-2 h-5 w-5 text-fuchsia-300" />
+                  Social Persona Loop
+                </h3>
+                <div className="space-y-3 text-sm text-zinc-300">
+                  <div className="flex items-center justify-between rounded-lg border border-white/10 bg-black/25 px-4 py-3">
+                    <span className="flex items-center gap-2"><Orbit className="h-4 w-4 text-cyan-300" /> Harvest</span>
+                    <span className="text-zinc-100">research + trends</span>
+                  </div>
+                  <div className="flex items-center justify-between rounded-lg border border-white/10 bg-black/25 px-4 py-3">
+                    <span className="flex items-center gap-2"><Sparkles className="h-4 w-4 text-fuchsia-300" /> Voice</span>
+                    <span className="text-zinc-100">Aurora</span>
+                  </div>
+                  <div className="flex items-center justify-between rounded-lg border border-white/10 bg-black/25 px-4 py-3">
+                    <span className="flex items-center gap-2"><CheckCircle2 className="h-4 w-4 text-emerald-300" /> Adapt</span>
+                    <span className="text-zinc-100">score winners</span>
+                  </div>
+                </div>
+              </section>
+            </aside>
+          </div>
+        </>
+      )}
     </div>
   );
 };

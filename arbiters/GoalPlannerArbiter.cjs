@@ -9,6 +9,8 @@ const messageBroker = require('../core/MessageBroker.cjs');
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
+const { buildQualityReport, verifyGoal } = require('../core/GoalQualityGate.cjs');
+const { ownerName } = require('../core/SomaOwner.cjs');
 
 // NEMESIS Phase 2.2: Reality checks for autonomous goal generation
 let PrometheusNemesis = null;
@@ -89,6 +91,9 @@ class GoalPlannerArbiter extends BaseArbiter {
     }) : null;
     this.nemesisStats = { checked: 0, rejected: 0, warned: 0, passed: 0 };
 
+    // Brain reference — wired by SomaBootstrapV2 after QuadBrain is ready
+    this.brain = null;
+
     this.logger.info(`[${this.name}] 🎯 GoalPlannerArbiter initializing...`);
     this.logger.info(`[${this.name}] Max active goals: ${this.maxActiveGoals}`);
     this.logger.info(`[${this.name}] Planning interval: ${this.planningIntervalHours}h`);
@@ -105,6 +110,9 @@ class GoalPlannerArbiter extends BaseArbiter {
     // Load persisted goals before anything else
     await this._loadFromDisk();
 
+    // Import bullet points from PRIORITIES.md as goals (once per install, deduped)
+    await this._importPrioritiesAsGoals();
+
     this.registerWithBroker();
     this._subscribeBrokerMessages();
 
@@ -118,6 +126,104 @@ class GoalPlannerArbiter extends BaseArbiter {
     }, 5 * 60 * 1000);
 
     this.logger.info(`[${this.name}] ✅ Goal planning system active (${this.activeGoals.size} goals restored)`);
+  }
+
+  // Fix 4: parse PRIORITIES.md and create goals for each bullet, deduped by title
+  async _importPrioritiesAsGoals() {
+    const prioritiesPath = path.join(process.cwd(), 'SOMA', 'PRIORITIES.md');
+    if (!fs.existsSync(prioritiesPath)) return;
+
+    let content;
+    try { content = fs.readFileSync(prioritiesPath, 'utf8'); } catch { return; }
+
+    const bullets = content.split('\n')
+      .filter(l => /^\s*[-*]\s+\S/.test(l))
+      .map(l => l.replace(/^\s*[-*]\s+/, '').replace(/\*\*/g, '').trim())
+      .filter(l => l.length > 5 && l.length < 200);
+
+    const existingTitles = new Set(
+      Array.from(this.goals.values()).map(g => g.title.toLowerCase().trim())
+    );
+
+    let imported = 0;
+    for (const bullet of bullets) {
+      if (existingTitles.has(bullet.toLowerCase().trim())) continue;
+      try {
+        await this.createGoal({
+          title: bullet,
+          description: `Priority from ${ownerName()}`,
+          category: 'user_priority',
+          priority: 72,
+          source: 'priorities_md',
+          requestedBy: ownerName()
+        }, ownerName());
+        existingTitles.add(bullet.toLowerCase().trim());
+        imported++;
+      } catch { /* skip malformed bullets */ }
+    }
+
+    if (imported > 0) {
+      this.logger.info(`[${this.name}] 📋 Imported ${imported} goals from PRIORITIES.md`);
+    }
+  }
+
+  /** Called from SomaBootstrapV2 after QuadBrain is ready */
+  setBrain(brain) {
+    this.brain = brain;
+    this.logger.info(`[${this.name}] 🧠 Brain wired — goal decomposition enabled`);
+  }
+
+  /** Returns true when a goal is complex enough to warrant decomposition */
+  _isComplexGoal(goal) {
+    if (!this.brain) return false;
+    if (goal.metadata?.decomposed) return false;       // already decomposed
+    if (goal.tasks?.length > 0) return false;          // already has sub-tasks
+    if (goal.metadata?.parentGoalId) return false;     // is itself a sub-goal
+
+    // Vague action words with no specific target suggest multi-step work
+    const vaguePattern = /\b(improve|optimize|enhance|research|investigate|explore|refactor|analyse|analyze|study|review|assess|plan|redesign|consolidate|migrate|overhaul)\b/i;
+    if (!vaguePattern.test(goal.title)) return false;
+
+    // Only decompose if no concrete file/component target is named
+    const hasTarget = /\b(arbiter|daemon|file|module|component|route|api|db|table|endpoint)\b/i.test(goal.title + ' ' + goal.description);
+    return !hasTarget;
+  }
+
+  /**
+   * Uses LOGOS brain to break a vague goal into 2-4 concrete ordered sub-goals.
+   * Returns the array of sub-goal objects, or [] on failure.
+   */
+  async _decomposeGoal(goal) {
+    const prompt = `You are SOMA's goal decomposer. Break this vague engineering goal into 2-4 concrete, ordered sub-goals.
+
+Goal: "${goal.title}"
+Description: "${(goal.description || '').substring(0, 300)}"
+
+Rules:
+- Each sub-goal must be actionable and specific (name the file or component)
+- Order them so later sub-goals depend on earlier ones
+- Keep each title under 12 words
+- Output JSON only — no markdown, no explanation:
+
+[
+  { "title": "...", "description": "...", "order": 1 },
+  { "title": "...", "description": "...", "order": 2 }
+]`;
+
+    try {
+      const res = await Promise.race([
+        this.brain.reason(prompt, { quickResponse: true, preferredBrain: 'LOGOS' }),
+        new Promise(resolve => setTimeout(() => resolve(null), 10_000))
+      ]);
+      if (!res?.text) return [];
+      const match = res.text.match(/\[[\s\S]*?\]/);
+      if (!match) return [];
+      const parsed = JSON.parse(match[0]);
+      if (!Array.isArray(parsed) || parsed.length < 2) return [];
+      return parsed.filter(s => s.title && s.title.length > 3);
+    } catch {
+      return [];
+    }
   }
 
   registerWithBroker() {
@@ -255,6 +361,17 @@ class GoalPlannerArbiter extends BaseArbiter {
         throw new Error('Goal must have title and category');
       }
 
+      const existingGoals = Array.from(this.goals.values());
+      const quality = buildQualityReport(goalData, existingGoals);
+      const requireQuality = goalData.requireQuality !== false && source !== 'legacy';
+      if (requireQuality && !quality.approved) {
+        return {
+          success: false,
+          error: 'Goal failed quality gate',
+          quality
+        };
+      }
+
       // Deduplication — reject if a similar active goal already exists (all non-user sources)
       if (source !== 'user') {
         const duplicate = this._findSimilarActiveGoal(goalData.category, goalData.title, goalData);
@@ -314,6 +431,10 @@ class GoalPlannerArbiter extends BaseArbiter {
           source: source === 'user' ? 'user_requested' : 'autonomous',
           confidence: goalData.confidence || 1.0,
           rationale: goalData.rationale || '',
+          quality,
+          successCriteria: goalData.successCriteria || goalData.metadata?.successCriteria || quality.successCriteria || [],
+          verification: goalData.verification || goalData.metadata?.verification || quality.verification || null,
+          evidence: goalData.evidence || goalData.metadata?.evidence || null,
           ...goalData.metadata
         }
       };
@@ -434,7 +555,8 @@ class GoalPlannerArbiter extends BaseArbiter {
     
     // Check if goal is complete
     if (goal.metrics.progress >= 100) {
-      await this.completeGoal(goalId, { progress: 100, ...metadata });
+      const completion = await this.completeGoal(goalId, { progress: 100, ...metadata });
+      if (!completion.success) return completion;
     }
     
     this._dirty = true;
@@ -449,10 +571,24 @@ class GoalPlannerArbiter extends BaseArbiter {
     if (!goal) {
       return { success: false, error: 'Goal not found' };
     }
+
+    const verification = verifyGoal(goal, result, { repoRoot: process.cwd() });
+    goal.metadata = goal.metadata || {};
+    goal.metadata.lastVerification = verification;
+    if (!verification.passed && !result.force) {
+      goal.status = 'verification_failed';
+      goal.metrics.progress = Math.min(goal.metrics.progress || 0, 95);
+      this.activeGoals.add(goalId);
+      this._dirty = true;
+      this._saveToDisk();
+      this.logger.warn(`[${this.name}] Completion blocked by verification: ${goal.title}`);
+      return { success: false, error: 'Goal verification failed', goal, verification };
+    }
     
     goal.status = 'completed';
     goal.completedAt = Date.now();
     goal.metrics.progress = 100;
+    goal.metadata.completionResult = result;
     
     // Move to completed archive
     this.activeGoals.delete(goalId);
@@ -1435,12 +1571,15 @@ class GoalPlannerArbiter extends BaseArbiter {
 
   startPlanningLoop() {
     const intervalMs = this.planningIntervalHours * 60 * 60 * 1000;
-    
+
+    // Run once immediately so plan.md is written right after boot
+    setTimeout(() => this.runPlanningCycle().catch(() => {}), 5_000);
+
     this.planningInterval = setInterval(async () => {
       await this.runPlanningCycle();
     }, intervalMs);
-    
-    this.logger.info(`[${this.name}] Planning loop started (every ${this.planningIntervalHours}h)`);
+
+    this.logger.info(`[${this.name}] Planning loop started (every ${this.planningIntervalHours}h, first run in 5s)`);
   }
 
   _readPlanMd() {
@@ -1474,16 +1613,62 @@ class GoalPlannerArbiter extends BaseArbiter {
       // Calculate statistics
       this.updateStatistics();
 
+      // Decay priority on goals that have made no progress for >1 week
+      this._decayStaleGoalPriorities();
+
       // Dispatch the highest-priority pending goal
       await this._dispatchHighestPriorityGoal();
 
       this.logger.info(`[${this.name}] Planning cycle complete`);
       this.logger.info(`[${this.name}]    Active: ${this.activeGoals.size}, Completed: ${this.completedGoals.length}, Failed: ${this.failedGoals.length}`);
 
+      // Always write plan.md at end of every cycle — independent of _dirty flag
+      this._writePlanMd();
+
       return { success: true };
     } catch (err) {
       this.logger.error(`[${this.name}] Planning cycle error: ${err.message}`);
       return { success: false, error: err.message };
+    }
+  }
+
+  // Reduce priority on goals with no progress for >1 week — 5 pts/week, floor 10
+  _decayStaleGoalPriorities() {
+    const ONE_WEEK = 7 * 24 * 60 * 60 * 1000;
+    const DECAY_PER_WEEK = 5;
+    const MIN_PRIORITY   = 10;
+    const REVIEW_THRESHOLD = 20; // flag for attention when priority drops this low
+    const now = Date.now();
+    let decayed = 0;
+
+    for (const [, goal] of this.goals) {
+      if (goal.status !== 'active' && goal.status !== 'pending') continue;
+      if ((goal.metrics?.progress ?? 0) > 0) continue; // progress resets the clock
+
+      const lastTouch = goal.metadata?.lastProgressAt || goal.startedAt || goal.createdAt || now;
+      const weeksStale = (now - lastTouch) / ONE_WEEK;
+      if (weeksStale < 1) continue;
+
+      const decayAmount = Math.floor(DECAY_PER_WEEK * weeksStale);
+      const newPriority = Math.max(MIN_PRIORITY, goal.priority - decayAmount);
+      if (newPriority >= goal.priority) continue;
+
+      goal.priority = newPriority;
+      goal.metadata = goal.metadata || {};
+      goal.metadata.decayedAt = now;
+      goal.metadata.weeksStale = Math.round(weeksStale * 10) / 10;
+
+      if (newPriority <= REVIEW_THRESHOLD && !goal.metadata.flaggedForReview) {
+        goal.metadata.flaggedForReview = true;
+        this.logger.warn(`[${this.name}] ⚠️ Goal flagged for review (priority ${newPriority}, ${Math.round(weeksStale)}w stale): "${goal.title}"`);
+      }
+
+      this._dirty = true;
+      decayed++;
+    }
+
+    if (decayed > 0) {
+      this.logger.info(`[${this.name}] ⏬ Priority decayed on ${decayed} stale goal(s)`);
     }
   }
 
@@ -1498,46 +1683,59 @@ class GoalPlannerArbiter extends BaseArbiter {
 
     if (pending.length === 0) return;
 
-    const top = pending[0];
+    let top = pending[0];
     this.logger.info(`[${this.name}] 🚀 Dispatching highest-priority goal: "${top.title}" (priority ${top.priority})`);
+
+    // Fix 5: Decompose complex/vague goals into concrete ordered sub-goals before Heartbeat executes
+    if (this._isComplexGoal(top)) {
+      this.logger.info(`[${this.name}] 🔬 Goal appears vague — attempting decomposition: "${top.title}"`);
+      const subGoals = await this._decomposeGoal(top);
+      if (subGoals.length >= 2) {
+        // Defer the parent — sub-goals become the unit of execution
+        top.status = 'deferred';
+        top.metadata = top.metadata || {};
+        top.metadata.decomposed = true;
+        top.metadata.decomposedAt = Date.now();
+        this._dirty = true;
+        this.logger.info(`[${this.name}] 📐 Decomposed into ${subGoals.length} sub-goals`);
+
+        for (let i = 0; i < subGoals.length; i++) {
+          const s = subGoals[i];
+          const subPriority = Math.max(10, top.priority - (i * 3)); // earlier steps get higher priority
+          await this.createGoal({
+            title: s.title,
+            description: s.description || '',
+            category: top.category,
+            priority: subPriority,
+            source: 'decomposed',
+            requireQuality: false,
+            metadata: {
+              parentGoalId: top.id,
+              parentTitle: top.title,
+              decompositionOrder: s.order || (i + 1)
+            }
+          }, 'autonomous');
+        }
+        // Re-select the top pending goal after adding sub-goals
+        const newPending = Array.from(this.activeGoals)
+          .map(id => this.goals.get(id))
+          .filter(g => g && (g.status === 'pending' || g.status === 'proposed'))
+          .sort((a, b) => b.priority - a.priority);
+        if (newPending.length === 0) return;
+        top = newPending[0];
+        this.logger.info(`[${this.name}] 🔄 Now dispatching first sub-goal: "${top.title}"`);
+      }
+      // If decomposition failed or returned <2 items, fall through to dispatch the original
+    }
 
     // Mark as active so it doesn't get dispatched again next cycle
     top.status = 'active';
     top.startedAt = top.startedAt || Date.now();
     this._dirty = true;
 
-    // Resolve live targets — check broker for each assignee, fall back to EngineeringSwarmArbiter
-    const candidates = top.assignedTo?.length > 0 ? top.assignedTo : ['EngineeringSwarmArbiter'];
-    const liveTargets = candidates.filter(t => {
-      try {
-        const r = messageBroker.findArbiter?.(t, { suggest: false });
-        return r?.found === true;
-      } catch { return false; }
-    });
-    const targets = liveTargets.length > 0 ? liveTargets : ['EngineeringSwarmArbiter'];
-
-    if (liveTargets.length < candidates.length) {
-      const dead = candidates.filter(t => !liveTargets.includes(t));
-      this.logger.warn(`[${this.name}] Dead assignee(s) for "${top.title}": [${dead.join(', ')}] → routing to ${targets.join(', ')}`);
-    }
-
-    for (const target of targets) {
-      messageBroker.sendMessage({
-        from: this.name,
-        to:   target,
-        type: 'goal_assigned',
-        payload: {
-          goalId:      top.id,
-          goal: {
-            title:       top.title,
-            description: top.description,
-            category:    top.category,
-            priority:    top.priority,
-            metrics:     top.metrics
-          }
-        }
-      }).catch(() => {});
-    }
+    // Goal is now 'active' — AutonomousHeartbeat is the sole executor (polls activeGoals every 2 min).
+    // We do NOT send goal_assigned here to avoid racing with the Heartbeat's SomaAgenticExecutor path.
+    this.logger.info(`[${this.name}] 🟢 Goal ready for Heartbeat execution: "${top.title}"`);
 
     // Broadcast so DriveArbiter and other listeners know work started
     messageBroker.sendMessage({
@@ -1718,11 +1916,15 @@ class GoalPlannerArbiter extends BaseArbiter {
       const fmtGoal = (g, checked = false) => {
         const box = checked ? '[x]' : '[ ]';
         const pct = g.metrics?.progress != null ? ` — ${g.metrics.progress.toFixed(0)}%` : '';
+        const quality = g.metadata?.quality?.score != null ? ` · Q${g.metadata.quality.score}` : '';
+        const verify = g.metadata?.lastVerification
+          ? ` · verify ${g.metadata.lastVerification.passed ? 'pass' : 'fail'} ${g.metadata.lastVerification.score}%`
+          : '';
         const desc = g.description ? `\n  > ${g.description.substring(0, 120)}` : '';
-        return `- ${box} **${g.title}** *(priority: ${g.priority})${pct}*${desc}`;
+        return `- ${box} **${g.title}** *(priority: ${g.priority}${quality}${verify})${pct}*${desc}`;
       };
 
-      // Prepend Barry's priority notes if PRIORITIES.md exists
+      // Prepend the owner's priority notes if PRIORITIES.md exists
       const prioritiesPath = path.join(process.cwd(), 'SOMA', 'PRIORITIES.md');
       let prioritiesBlock = '';
       try {
@@ -1741,6 +1943,10 @@ class GoalPlannerArbiter extends BaseArbiter {
       }
       if (pending.length) {
         md += `## 🕐 Queued\n${pending.map(g => fmtGoal(g)).join('\n')}\n\n`;
+      }
+      const verificationFailed = allGoals.filter(g => g.status === 'verification_failed').sort((a, b) => b.priority - a.priority);
+      if (verificationFailed.length) {
+        md += `## 🧪 Verification Failed\n${verificationFailed.map(g => fmtGoal(g)).join('\n')}\n\n`;
       }
       if (completed.length) {
         md += `## ✅ Completed\n${completed.map(g => fmtGoal(g, true)).join('\n')}\n\n`;

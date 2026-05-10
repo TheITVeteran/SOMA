@@ -1,8 +1,8 @@
 /**
  * CodeSandboxView.jsx — Code Sandbox full-screen simulation
  *
- * Watch SOMA's engineering swarm decide what to fix, debate the approach,
- * and write the patch in real time.
+ * Watch SOMA's engineering swarm decide what to test, debate the approach,
+ * and verify candidate patches before they are promoted.
  *
  * Three panels:
  *   INTENT  — what she's chosen to work on and why
@@ -10,7 +10,7 @@
  *   EXEC    — the diff forming, then verification output
  *
  * Real swarm data injected from /api/soma/swarm/status when available.
- * Synthetic loop runs always so there's always something to watch.
+ * Seeded lab candidates keep the learning window active when no live goal is queued.
  */
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
@@ -189,6 +189,16 @@ const AGENTS = {
   AURORA:     { color: '#c084fc', label: 'AURORA',     role: 'Coherence & Identity' },
 };
 
+function asDisplayText(value) {
+  if (value == null) return '';
+  if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') return String(value);
+  if (typeof value.text === 'string') return value.text;
+  if (typeof value.response === 'string') return value.response;
+  if (typeof value.message === 'string') return value.message;
+  if (typeof value.output === 'string') return value.output;
+  try { return JSON.stringify(value); } catch { return String(value); }
+}
+
 // ── Debate generator ───────────────────────────────────────────────────────
 
 function generateDebate(candidate) {
@@ -242,7 +252,7 @@ function buildCollabMessages(candidate, proceed) {
 
   if (mode === 'max') return [
     { from: 'SOMA', to: 'MAX', text: `REQUEST_ENGINEERING — complexity:high — file:${file} — area:${area} — requesting swarm assist. Attaching full intent block.` },
-    { from: 'MAX', to: 'SOMA', text: `ACCEPTED. Deploying 3-agent sub-swarm. Analysing ${file} blast radius now.` },
+    { from: 'MAX', to: 'SOMA', text: `ACCEPTED. Spawning 3-agent lab swarm. Analysing ${file} blast radius now.` },
     { from: 'MAX', to: 'SOMA', text: `Sub-swarm analysis complete. Staged migration path confirmed safe. Drafting dual-path patch.` },
     { from: 'MAX', to: 'SOMA', text: `PATCH_READY — 2 files changed, 41 insertions, 18 deletions. Branch: feat/broker-index-routing. Awaiting SOMA merge approval.` },
     { from: 'SOMA', to: 'MAX', text: `Approved. Merging. Thank you.` },
@@ -293,8 +303,54 @@ function CollabMessage({ msg }) {
         <div className={`text-[9px] font-bold uppercase tracking-wider mb-0.5 ${isSoma ? color : 'text-zinc-500'}`}>
           {msg.from} → {msg.to}
         </div>
-        <div className="text-zinc-300 leading-relaxed">{msg.text}</div>
+        <div className="text-zinc-300 leading-relaxed">{asDisplayText(msg.text)}</div>
       </div>
+    </div>
+  );
+}
+
+function CodebaseSignal({ overview }) {
+  const modules = overview?.modules || [];
+  const functions = overview?.functions || [];
+  const topModules = modules
+    .filter(m => m.stats?.files > 0)
+    .sort((a, b) => (b.stats.files || 0) - (a.stats.files || 0))
+    .slice(0, 6);
+  const symbolSets = functions.filter(f => f.symbols?.length).slice(0, 4);
+
+  return (
+    <div className="border-b border-white/5 bg-black/20 px-3 py-2 shrink-0">
+      <div className="flex items-center gap-2 mb-2">
+        <Code2 className="w-3.5 h-3.5 text-emerald-400" />
+        <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">Codebase Signal</span>
+        <span className="ml-auto text-[9px] text-zinc-700 font-mono">
+          {overview?.totals?.files || 0} source files · {overview?.experiments?.promotable || 0} promotable experiments
+        </span>
+      </div>
+      <div className="grid grid-cols-6 gap-1.5 mb-2">
+        {topModules.map(mod => (
+          <div key={mod.key} className="rounded border border-white/8 bg-zinc-900/60 px-2 py-1 min-w-0">
+            <div className="text-[8px] text-zinc-600 uppercase tracking-wider truncate">{mod.label}</div>
+            <div className="text-[12px] font-mono text-zinc-300">{mod.stats.files}</div>
+          </div>
+        ))}
+      </div>
+      {symbolSets.length > 0 && (
+        <div className="grid grid-cols-2 gap-1.5">
+          {symbolSets.map(file => (
+            <div key={file.file} className="rounded border border-white/8 bg-zinc-900/40 px-2 py-1.5 min-w-0">
+              <div className="font-mono text-[9px] text-zinc-500 truncate mb-1">{file.file.split('/').slice(-2).join('/')}</div>
+              <div className="flex flex-wrap gap-1">
+                {file.symbols.slice(0, 5).map(sym => (
+                  <span key={sym} className="text-[8px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/15 font-mono">
+                    {sym}()
+                  </span>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -325,6 +381,7 @@ export default function CodeSandboxView() {
   const [shownCollab,    setShownCollab]    = useState([]);
   const [cycles,         setCycles]         = useState(0);
   const [realSwarm,      setRealSwarm]      = useState(null);
+  const [codebaseOverview, setCodebaseOverview] = useState(null);
   // validation results keyed by file — { score, tier, promoted, syntaxPassed, nemesisVerdict, message }
   const [validations,    setValidations]    = useState({});
   const phaseRef         = useRef(phase);
@@ -360,6 +417,18 @@ export default function CodeSandboxView() {
     const t1 = setInterval(pollStatus, 15000);
     const t2 = setInterval(pollCandidates, 30000);
     return () => { clearInterval(t1); clearInterval(t2); };
+  }, []);
+
+  useEffect(() => {
+    const pollOverview = async () => {
+      try {
+        const r = await fetch('/api/soma/swarm/codebase-overview');
+        if (r.ok) setCodebaseOverview(await r.json());
+      } catch {}
+    };
+    pollOverview();
+    const t = setInterval(pollOverview, 45000);
+    return () => clearInterval(t);
   }, []);
 
   // ── Autonomous simulation loop ─────────────────────────────────────────
@@ -482,7 +551,9 @@ export default function CodeSandboxView() {
           debateResult = generateDebate(candidate);
         }
 
-        const { messages, confidence, proceed, finalVerdict } = debateResult;
+        const { confidence, proceed } = debateResult;
+        const messages = (debateResult.messages || []).map(msg => ({ ...msg, text: asDisplayText(msg.text) }));
+        const finalVerdict = asDisplayText(debateResult.finalVerdict);
         // Cached results drip faster — she's recalling, not thinking from scratch
         const msgDelay = debateResult.cached ? 350 : PHASE_MS.debating;
         for (const msg of messages) {
@@ -542,7 +613,7 @@ export default function CodeSandboxView() {
           '> running import check...',
           '> OK',
           `✓ ${candidate.file} passes verification`,
-          `✓ Patch applied — ${candidate.before.length} lines changed → ${candidate.after.length} lines`,
+          `✓ Candidate patch verified — ${candidate.before.length} lines changed → ${candidate.after.length} lines`,
         ];
         for (const line of verifyLines) {
           if (!go()) break;
@@ -586,17 +657,21 @@ export default function CodeSandboxView() {
     return () => { cancelledRef.current = true; };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── View state: watch | deploy | rd ───────────────────────────────────
-  const [activeView,     setActiveView]     = useState('watch'); // 'watch' | 'deploy' | 'rd'
-  const deployView = activeView === 'deploy';
+  // ── View state: watch | promote | rd | experiments ────────────────────
+  const [activeView,     setActiveView]     = useState('watch'); // 'watch' | 'promote' | 'rd' | 'experiments'
 
   // ── R&D Discovery state ───────────────────────────────────────────────
   const [rdTopic,        setRdTopic]        = useState('agents');
   const [rdTopics,       setRdTopics]       = useState([]);
   const [rdCandidates,   setRdCandidates]   = useState([]);
   const [rdLoading,      setRdLoading]      = useState(false);
+  const [rdError,        setRdError]        = useState(null);
   const [rdExpanded,     setRdExpanded]     = useState(null);
   const [rdProposed,     setRdProposed]     = useState({}); // id → true
+  const [codeExperiments, setCodeExperiments] = useState({ experiments: [], summary: {} });
+  const [expandedCodeExperiment, setExpandedCodeExperiment] = useState(null);
+  const [runningCodeExperiment, setRunningCodeExperiment] = useState({});
+  const [runningPatchProposal, setRunningPatchProposal] = useState({});
 
   useEffect(() => {
     fetch('/api/soma/swarm/rd-topics').then(r => r.ok && r.json()).then(d => d && setRdTopics(d.topics || [])).catch(() => {});
@@ -604,6 +679,7 @@ export default function CodeSandboxView() {
 
   const rdDiscover = useCallback(async (topic, force = false) => {
     setRdLoading(true);
+    setRdError(null);
     setRdCandidates([]);
     try {
       const r = await fetch('/api/soma/swarm/rd-discover', {
@@ -611,11 +687,18 @@ export default function CodeSandboxView() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ topic, forceRefresh: force }),
       });
-      if (r.ok) {
-        const d = await r.json();
-        setRdCandidates(d.candidates || []);
+      const d = await r.json();
+      if (!r.ok || !d.success) {
+        setRdError(d.error || d.message || 'R&D discovery failed');
+        return;
       }
-    } catch {}
+      setRdCandidates(d.candidates || []);
+      if (!d.candidates?.length) {
+        setRdError(`No repositories found for ${topic}. Try another topic or refresh.`);
+      }
+    } catch (err) {
+      setRdError(err.message || 'R&D discovery failed');
+    }
     finally { setRdLoading(false); }
   }, []);
 
@@ -624,9 +707,64 @@ export default function CodeSandboxView() {
     if (activeView === 'rd' && rdCandidates.length === 0 && !rdLoading) rdDiscover(rdTopic);
   }, [activeView]); // eslint-disable-line
 
-  // ── Deploy panel state ────────────────────────────────────────────────
-  const [deployStatus,   setDeployStatus]   = useState({}); // file → { status, agent, msg }
-  const [expandedDeploy, setExpandedDeploy] = useState(null);
+  const refreshCodeExperiments = useCallback(async () => {
+    try {
+      const r = await fetch('/api/soma/swarm/code-experiments?limit=40');
+      if (r.ok) setCodeExperiments(await r.json());
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    refreshCodeExperiments();
+    const t = setInterval(refreshCodeExperiments, 15000);
+    return () => clearInterval(t);
+  }, [refreshCodeExperiments]);
+
+  const runCodeExperiment = useCallback(async (id) => {
+    setRunningCodeExperiment(prev => ({ ...prev, [id]: true }));
+    try {
+      const r = await fetch(`/api/soma/swarm/code-experiments/${encodeURIComponent(id)}/run`, { method: 'POST' });
+      if (r.ok) {
+        const d = await r.json();
+        setCodeExperiments(prev => ({
+          ...prev,
+          experiments: prev.experiments.map(item => item.id === id ? d.experiment : item),
+          summary: d.summary || prev.summary,
+        }));
+      }
+    } catch {}
+    finally {
+      setRunningCodeExperiment(prev => ({ ...prev, [id]: false }));
+      refreshCodeExperiments();
+    }
+  }, [refreshCodeExperiments]);
+
+  const proposeSomaPatch = useCallback(async (id) => {
+    setRunningPatchProposal(prev => ({ ...prev, [id]: true }));
+    try {
+      const r = await fetch(`/api/soma/swarm/code-experiments/${encodeURIComponent(id)}/propose-patch`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ iterations: 10000, queue: true }),
+      });
+      if (r.ok) {
+        const d = await r.json();
+        setCodeExperiments(prev => ({
+          ...prev,
+          experiments: prev.experiments.map(item => item.id === id ? d.experiment : item),
+          summary: d.summary || prev.summary,
+        }));
+      }
+    } catch {}
+    finally {
+      setRunningPatchProposal(prev => ({ ...prev, [id]: false }));
+      refreshCodeExperiments();
+    }
+  }, [refreshCodeExperiments]);
+
+  // ── Promotion lab state ───────────────────────────────────────────────
+  const [promoteStatus,   setPromoteStatus]   = useState({}); // file → { status, agent, msg }
+  const [expandedPromote, setExpandedPromote] = useState(null);
   const [outcomes,       setOutcomes]       = useState({ outcomes: [], optimHistory: [], totalRuns: 0, successRate: null });
 
   // Poll learning outcomes feed
@@ -642,8 +780,8 @@ export default function CodeSandboxView() {
     return () => clearInterval(t);
   }, []);
 
-  // All deployable candidates — real queue items first (SOMA's own goals), CANDIDATES as fallback
-  const deployList = useMemo(() => {
+  // All promotion candidates — real queue items first (SOMA's own goals), seeded candidates as lab backlog
+  const promoteList = useMemo(() => {
     const realItems = (realCandidates?.queue || [])
       .filter(c => c.file)
       .map(c => {
@@ -657,11 +795,32 @@ export default function CodeSandboxView() {
     return [...realItems, ...synthFill];
   }, [realCandidates]);
 
-  const doDeploy = useCallback(async (candidate) => {
+  const doPromote = useCallback(async (candidate) => {
     const f = candidate.file;
-    setDeployStatus(prev => ({ ...prev, [f]: { status: 'deploying', agent: { solo:'SOMA', steve:'Steve', max:'MAX' }[candidate.mode] || 'SOMA' } }));
+    const agent = { solo:'SOMA', steve:'Steve', max:'MAX' }[candidate.mode] || 'SOMA';
+    setPromoteStatus(prev => ({ ...prev, [f]: { status: 'preflight', agent, msg: 'Running syntax and production build checks...' } }));
     try {
-      const r = await fetch('/api/soma/swarm/deploy', {
+      const pr = await fetch('/api/soma/swarm/preflight', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ file: f, includeBuild: true }),
+      });
+      const preflight = await pr.json();
+      if (!pr.ok || !preflight.success) {
+        setPromoteStatus(prev => ({
+          ...prev,
+          [f]: {
+            status: 'blocked',
+            agent,
+            msg: preflight.error || preflight.message || 'Preflight failed. Promotion blocked before code changes.',
+            preflight,
+          },
+        }));
+        return;
+      }
+
+      setPromoteStatus(prev => ({ ...prev, [f]: { status: 'promoting', agent, msg: 'Preflight passed. Running engineering lab swarm...' } }));
+      const r = await fetch('/api/soma/swarm/promote', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -671,19 +830,27 @@ export default function CodeSandboxView() {
           mode:       candidate.mode,
           confidence: { low: 0.88, medium: 0.73, high: 0.61 }[candidate.complexity] || 0.75,
           intent:     candidate.intent,
+          requirePreflight: true,
         }),
       });
       const d = await r.json();
-      // Refresh outcomes after deploy so the learning feed updates
+      // Refresh outcomes after promotion so the learning feed updates
       fetch('/api/soma/swarm/outcomes?limit=12').then(r => r.ok && r.json()).then(d => d && setOutcomes(d)).catch(() => {});
-      setDeployStatus(prev => ({
+      setPromoteStatus(prev => ({
         ...prev,
         [f]: d.success
-          ? { status: 'applied', agent: d.agent, msg: d.message }
-          : { status: 'error',   agent: d.agent, msg: d.error || d.message || 'Unknown error' },
+          ? { status: 'promoted', agent: d.agent, msg: d.message, preflight: d.preflight, postflight: d.postflight }
+          : {
+              status: d.blocked ? 'blocked' : 'error',
+              agent: d.agent,
+              msg: d.error || d.message || 'Unknown error',
+              preflight: d.preflight,
+              postflight: d.postflight,
+              rollbackCheck: d.rollbackCheck,
+            },
       }));
     } catch (err) {
-      setDeployStatus(prev => ({ ...prev, [f]: { status: 'error', msg: err.message } }));
+      setPromoteStatus(prev => ({ ...prev, [f]: { status: 'error', msg: err.message } }));
     }
   }, []);
 
@@ -708,20 +875,22 @@ export default function CodeSandboxView() {
   return (
     <div className="flex flex-col flex-1 overflow-hidden min-h-0">
 
-    {/* ── WATCH / DEPLOY / R&D toggle bar ── */}
+    {/* ── WATCH / PROMOTE / R&D / EXPERIMENTS toggle bar ── */}
     <div className="flex items-center gap-1 px-3 py-2 border-b border-white/5 shrink-0 bg-black/20">
       {[
-        ['watch',  'WATCH',  null],
-        ['deploy', 'DEPLOY', deployList.length],
-        ['rd',     'R&D',    null],
+        ['watch',   'WATCH',   null],
+        ['promote', 'PROMOTE', promoteList.length],
+        ['rd',      'R&D',     null],
+        ['experiments', 'EXPERIMENTS', codeExperiments.summary?.total || null],
       ].map(([id, label, badge]) => (
         <button
           key={id}
           onClick={() => setActiveView(id)}
           className={`px-3 py-1 rounded text-[10px] font-bold uppercase tracking-wider transition-all ${
             activeView === id
-              ? id === 'deploy' ? 'bg-fuchsia-500/20 text-fuchsia-300 border border-fuchsia-500/30'
+              ? id === 'promote' ? 'bg-fuchsia-500/20 text-fuchsia-300 border border-fuchsia-500/30'
               : id === 'rd'     ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
+              : id === 'experiments' ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
               :                   'bg-white/10 text-zinc-200'
               : 'text-zinc-600 hover:text-zinc-400'
           }`}
@@ -740,33 +909,39 @@ export default function CodeSandboxView() {
             {Object.values(validations).filter(v => v.promoted).length} promoted
           </span>
         )}
-        {activeView === 'deploy'
-          ? `${Object.values(deployStatus).filter(s => s.status === 'applied').length} applied this session`
+        {activeView === 'promote'
+          ? `${Object.values(promoteStatus).filter(s => s.status === 'promoted').length} promoted this session`
           : activeView === 'rd'
           ? rdCandidates.length > 0 ? `${rdCandidates.length} candidates` : 'github scanner'
+          : activeView === 'experiments'
+          ? `${codeExperiments.summary?.promotable || 0} promotable · ${codeExperiments.summary?.rejected || 0} rejected`
           : currentWork?.source === 'real' ? '⬤ real data' : '◯ synthetic'}
       </div>
     </div>
 
-    {/* ── DEPLOY PANEL ── */}
-    {activeView === 'deploy' && (
+    {activeView === 'watch' && <CodebaseSignal overview={codebaseOverview} />}
+
+    {/* ── PROMOTION LAB PANEL ── */}
+    {activeView === 'promote' && (
       <div className="flex-1 overflow-y-auto custom-scrollbar p-3 space-y-2 min-h-0">
-        {deployList.map((c) => {
-          const ds        = deployStatus[c.file];
-          const isExp     = expandedDeploy === c.file;
+        {promoteList.map((c) => {
+          const ds        = promoteStatus[c.file];
+          const isExp     = expandedPromote === c.file;
           const mc        = modeColors[c.mode] || 'zinc';
           const ModeIcon  = modeIcons[c.mode]  || Bot;
           const conf      = { low: 0.88, medium: 0.73, high: 0.61 }[c.complexity] || 0.75;
           const agentName = { solo: 'SOMA', steve: 'STEVE', max: 'MAX' }[c.mode] || 'SOMA';
-          const isDeploying = ds?.status === 'deploying';
-          const isApplied   = ds?.status === 'applied';
+          const isPromoting = ds?.status === 'promoting';
+          const isPreflight  = ds?.status === 'preflight';
+          const isBlocked    = ds?.status === 'blocked';
+          const isPromoted   = ds?.status === 'promoted';
           const isError     = ds?.status === 'error';
           const vld         = validations[c.file]; // validation result for this file
           const hasOutcome  = outcomes.optimHistory?.some(o => o.file === c.file) || outcomes.outcomes?.some(o => o.file === c.file);
 
           return (
             <div key={c.file} className={`rounded-xl border overflow-hidden transition-all ${
-              isApplied ? 'border-emerald-500/30 bg-emerald-500/5'
+              isPromoted ? 'border-emerald-500/30 bg-emerald-500/5'
               : isError ? 'border-rose-500/30 bg-rose-500/5'
               : c.source === 'real' ? `border-blue-500/20 bg-zinc-900/60 hover:bg-zinc-900/80`
               : `border-${mc}-500/20 bg-zinc-900/60 hover:bg-zinc-900/80`
@@ -774,7 +949,7 @@ export default function CodeSandboxView() {
               {/* Row */}
               <div
                 className="flex items-center gap-2 px-3 py-2.5 cursor-pointer transition-all"
-                onClick={() => setExpandedDeploy(isExp ? null : c.file)}
+                onClick={() => setExpandedPromote(isExp ? null : c.file)}
               >
                 <ModeIcon className={`w-3 h-3 text-${c.source === 'real' ? 'blue' : mc}-400 shrink-0`} />
                 <div className="flex flex-col min-w-0 flex-1">
@@ -799,8 +974,9 @@ export default function CodeSandboxView() {
                   <span className={`text-[9px] px-1.5 py-0.5 rounded font-bold uppercase bg-${mc}-500/10 text-${mc}-400`}>
                     {c.complexity}
                   </span>
-                  {hasOutcome && !isApplied && !vld && <span className="text-[8px] text-zinc-700">learned</span>}
-                  {isApplied && <span className="text-[9px] text-emerald-400 font-bold">✓ APPLIED</span>}
+                  {hasOutcome && !isPromoted && !vld && <span className="text-[8px] text-zinc-700">learned</span>}
+                  {isPromoted && <span className="text-[9px] text-emerald-400 font-bold">✓ PROMOTED</span>}
+                  {isBlocked && <span className="text-[9px] text-amber-400 font-bold">BLOCKED</span>}
                   {isError   && <span className="text-[9px] text-rose-400 font-bold">✗ FAILED</span>}
                   <ChevronRight className={`w-3.5 h-3.5 text-zinc-700 transition-transform duration-200 ${isExp ? 'rotate-90' : ''}`} />
                 </div>
@@ -827,7 +1003,7 @@ export default function CodeSandboxView() {
                   )}
                   {!c.before?.length && !c.after?.length && (
                     <div className="text-[10px] text-zinc-600 italic px-2">
-                      The swarm generates the real diff at deploy time from the live file. Switch to WATCH to see her process it first.
+                      The lab generates the real patch candidate from the live file during promotion. Switch to WATCH to see her reason through it first.
                     </div>
                   )}
 
@@ -855,37 +1031,46 @@ export default function CodeSandboxView() {
                   )}
 
                   {/* Error message */}
-                  {isError && (
-                    <div className="px-2 py-1.5 rounded bg-rose-500/10 border border-rose-500/20 text-[10px] text-rose-400">
-                      <span className="font-bold block mb-0.5">Swarm failed — recorded as training signal</span>
+                  {(isError || isBlocked) && (
+                    <div className={`px-2 py-1.5 rounded border text-[10px] ${isBlocked ? 'bg-amber-500/10 border-amber-500/20 text-amber-300' : 'bg-rose-500/10 border-rose-500/20 text-rose-400'}`}>
+                      <span className="font-bold block mb-0.5">
+                        {isBlocked ? 'Promotion blocked — live code was not changed' : 'Swarm failed — recorded as training signal'}
+                      </span>
                       {ds.msg}
+                      {ds.postflight && (
+                        <div className="mt-2 rounded bg-black/25 p-2 text-[9px] text-zinc-400">
+                          Postflight checks failed. Original file restore: {ds.rollbackCheck?.ok ? 'passed' : 'check logs'}.
+                        </div>
+                      )}
                     </div>
                   )}
 
-                  {/* Applied outcome */}
-                  {isApplied && (
+                  {/* Promoted outcome */}
+                  {isPromoted && (
                     <div className="px-2 py-1.5 rounded bg-emerald-500/10 border border-emerald-500/20 text-[10px] text-emerald-400">
-                      <span className="font-bold block mb-0.5">Applied by {ds.agent} — outcome written to memory</span>
+                      <span className="font-bold block mb-0.5">Promoted by {ds.agent} — outcome written to memory</span>
                       {ds.msg}
                     </div>
                   )}
 
-                  {/* Deploy button */}
-                  {!isApplied && (
+                  {/* Promotion button */}
+                  {!isPromoted && (
                     <button
-                      onClick={() => doDeploy(c)}
-                      disabled={isDeploying}
+                      onClick={() => doPromote(c)}
+                      disabled={isPromoting || isPreflight}
                       className={`w-full py-2.5 rounded-lg text-[11px] font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-2 ${
                         c.mode === 'max'   ? 'bg-orange-500/20 hover:bg-orange-500/30 text-orange-300 border border-orange-500/30' :
                         c.mode === 'steve' ? 'bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 border border-cyan-500/30' :
                                              'bg-fuchsia-500/20 hover:bg-fuchsia-500/30 text-fuchsia-300 border border-fuchsia-500/30'
-                      } ${isDeploying ? 'opacity-50 cursor-not-allowed' : ''}`}
+                      } ${isPromoting || isPreflight ? 'opacity-50 cursor-not-allowed' : ''}`}
                     >
-                      {isDeploying
-                        ? <><RefreshCw className="w-3.5 h-3.5 animate-spin" /> Running swarm...</>
-                        : isError
+                      {isPreflight
+                        ? <><RefreshCw className="w-3.5 h-3.5 animate-spin" /> Running preflight...</>
+                        : isPromoting
+                          ? <><RefreshCw className="w-3.5 h-3.5 animate-spin" /> Running lab swarm...</>
+                          : isError || isBlocked
                           ? <><RefreshCw className="w-3.5 h-3.5" /> Retry → {agentName}</>
-                          : <><Zap className="w-3.5 h-3.5" /> Run swarm → {agentName}</>
+                          : <><Zap className="w-3.5 h-3.5" /> Test, then promote → {agentName}</>
                       }
                     </button>
                   )}
@@ -933,6 +1118,177 @@ export default function CodeSandboxView() {
       </div>
     )}
 
+    {/* ── CODE R&D EXPERIMENTS PANEL ── */}
+    {activeView === 'experiments' && (
+      <div className="flex-1 overflow-y-auto custom-scrollbar p-3 space-y-2 min-h-0">
+        {codeExperiments.experiments?.length > 0 && (
+          <div className="grid grid-cols-4 gap-2 mb-3">
+            {['discovered', 'queued', 'promotable', 'patch_ready'].map(status => (
+              <div key={status} className="rounded-lg border border-white/8 bg-zinc-900/60 px-3 py-2">
+                <div className="text-[9px] text-zinc-600 uppercase tracking-wider">{status}</div>
+                <div className="text-lg font-mono text-zinc-300">{codeExperiments.summary?.byStatus?.[status] || 0}</div>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {(codeExperiments.experiments || []).map(exp => {
+          const isExp = expandedCodeExperiment === exp.id;
+          const running = runningCodeExperiment[exp.id] || exp.status === 'sandboxing';
+          const statusClass =
+            exp.status === 'promotable' ? 'border-emerald-500/30 bg-emerald-500/5 text-emerald-400' :
+            exp.status === 'rejected'   ? 'border-rose-500/30 bg-rose-500/5 text-rose-400' :
+            exp.status === 'sandboxing' ? 'border-amber-500/30 bg-amber-500/5 text-amber-400' :
+            exp.status === 'queued'     ? 'border-blue-500/30 bg-blue-500/5 text-blue-400' :
+                                          'border-white/8 bg-zinc-900/60 text-zinc-500';
+          const criteria = exp.promotionCriteria || {};
+          const riskCount = exp.sandbox?.riskFindings?.length || 0;
+          const syntaxChecks = exp.sandbox?.syntaxChecks || [];
+          const proposing = runningPatchProposal[exp.id];
+          const simulation = exp.somaPatchSimulation;
+          const proposal = exp.somaPatchProposal;
+
+          return (
+            <div key={exp.id} className={`rounded-xl border overflow-hidden transition-all ${statusClass}`}>
+              <div
+                className="flex items-center gap-2 px-3 py-2.5 cursor-pointer"
+                onClick={() => setExpandedCodeExperiment(isExp ? null : exp.id)}
+              >
+                <FlaskConical className="w-3.5 h-3.5 shrink-0" />
+                <div className="flex flex-col min-w-0 flex-1">
+                  <span className="font-mono text-[11px] text-zinc-200 truncate">{exp.repo}</span>
+                  <span className="text-[9px] text-zinc-600 truncate">{exp.lesson || exp.candidate?.description || 'awaiting sandbox decision'}</span>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  {exp.candidate?.logos?.score != null && (
+                    <span className="text-[9px] font-mono font-bold text-zinc-400">{(exp.candidate.logos.score * 100).toFixed(0)}%</span>
+                  )}
+                  <span className="text-[9px] px-1.5 py-0.5 rounded font-bold uppercase bg-black/20">{exp.status}</span>
+                  <ChevronRight className={`w-3.5 h-3.5 text-zinc-700 transition-transform duration-200 ${isExp ? 'rotate-90' : ''}`} />
+                </div>
+              </div>
+
+              {isExp && (
+                <div className="border-t border-white/5 px-3 py-3 space-y-3">
+                  <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+                    {[
+                      ['syntax', criteria.syntaxPass],
+                      ['build', criteria.buildPass],
+                      ['risk', criteria.riskPass],
+                      ['score', criteria.lobeScorePass],
+                      ['rollback', criteria.rollbackSnapshot],
+                    ].map(([label, ok]) => (
+                      <div key={label} className={`rounded border px-2 py-1.5 text-[9px] uppercase tracking-wider ${
+                        ok === true ? 'border-emerald-500/20 bg-emerald-500/8 text-emerald-400' :
+                        ok === false ? 'border-rose-500/20 bg-rose-500/8 text-rose-400' :
+                        'border-white/8 bg-black/20 text-zinc-600'
+                      }`}>
+                        <span className="font-bold">{label}</span>
+                        <span className="ml-1">{ok === true ? 'pass' : ok === false ? 'fail' : 'pending'}</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  {exp.inspection?.summary && (
+                    <div className="rounded-lg bg-black/20 border border-white/8 p-2 text-[10px] text-zinc-500 space-y-1">
+                      <div className="text-[9px] text-zinc-600 uppercase tracking-wider font-bold">Repo Inspection</div>
+                      <div className="flex flex-wrap gap-2">
+                        <span>README {exp.inspection.summary.hasReadme ? 'yes' : 'no'}</span>
+                        <span>package {exp.inspection.summary.hasPackageJson ? 'yes' : 'no'}</span>
+                        <span>python {exp.inspection.summary.hasPythonManifest ? 'yes' : 'no'}</span>
+                        <span>source samples {exp.inspection.summary.sourceFiles || 0}</span>
+                      </div>
+                      {exp.inspection.readmePreview && <div className="text-zinc-600 line-clamp-2">{asDisplayText(exp.inspection.readmePreview)}</div>}
+                    </div>
+                  )}
+
+                  {exp.sandbox && (
+                    <div className="rounded-lg bg-black/20 border border-white/8 p-2 text-[10px] text-zinc-500 space-y-2">
+                      <div className="flex items-center gap-3 text-[9px] uppercase tracking-wider">
+                        <span className="font-bold text-zinc-400">Sandbox Results</span>
+                        <span>{exp.sandbox.fileCount || 0} files</span>
+                        <span>{syntaxChecks.filter(c => c.ok).length}/{syntaxChecks.length} syntax</span>
+                        <span>{riskCount} risk flags</span>
+                      </div>
+                      {riskCount > 0 && (
+                        <div className="space-y-1">
+                          {exp.sandbox.riskFindings.slice(0, 5).map((risk, i) => (
+                            <div key={i} className="font-mono text-[9px] text-amber-400 truncate">
+                              {risk.severity}: {risk.label} · {risk.file || 'package.json'}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {proposal && (
+                    <div className="rounded-lg bg-fuchsia-500/8 border border-fuchsia-500/20 p-2 text-[10px] text-fuchsia-200 space-y-1.5">
+                      <div className="text-[9px] text-fuchsia-300 uppercase tracking-wider font-bold">SOMA Patch Proposal</div>
+                      <div className="font-mono text-[10px] text-zinc-300">{proposal.file}</div>
+                      <div className="text-zinc-500">{asDisplayText(proposal.intent)}</div>
+                      {simulation && (
+                        <div className="flex flex-wrap gap-2 text-[9px] text-zinc-500 pt-1 border-t border-white/8">
+                          <span>{simulation.iterations?.toLocaleString()} simulations</span>
+                          <span>{((simulation.passRate || 0) * 100).toFixed(1)}% pass</span>
+                          <span>{simulation.approved ? 'approved' : 'held'}</span>
+                          <span>{exp.queuedForEngineering ? 'queued for swarm' : 'not queued'}</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  <div className="flex items-center gap-2">
+                    {exp.url && (
+                      <a
+                        href={exp.url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="flex items-center gap-1.5 text-[10px] text-blue-400/60 hover:text-blue-400 transition-colors"
+                        onClick={e => e.stopPropagation()}
+                      >
+                        <ExternalLink className="w-3 h-3" /> repository
+                      </a>
+                    )}
+                    {['discovered', 'queued', 'rejected'].includes(exp.status) && (
+                      <button
+                        onClick={() => runCodeExperiment(exp.id)}
+                        disabled={running}
+                        className="ml-auto px-3 py-2 rounded-lg text-[10px] font-bold uppercase tracking-wider bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                      >
+                        {running
+                          ? <><RefreshCw className="w-3 h-3 animate-spin" /> Sandboxing...</>
+                          : <><Shield className="w-3 h-3" /> Run Sandbox</>}
+                      </button>
+                    )}
+                    {['promotable', 'patch_ready'].includes(exp.status) && (
+                      <button
+                        onClick={() => proposeSomaPatch(exp.id)}
+                        disabled={proposing}
+                        className="ml-auto px-3 py-2 rounded-lg text-[10px] font-bold uppercase tracking-wider bg-fuchsia-500/20 hover:bg-fuchsia-500/30 text-fuchsia-300 border border-fuchsia-500/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                      >
+                        {proposing
+                          ? <><RefreshCw className="w-3 h-3 animate-spin" /> Simulating...</>
+                          : <><Zap className="w-3 h-3" /> Propose SOMA Patch</>}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+
+        {(!codeExperiments.experiments || codeExperiments.experiments.length === 0) && (
+          <div className="flex flex-col items-center justify-center py-12 gap-3 text-zinc-700">
+            <FlaskConical className="w-8 h-8 opacity-20" />
+            <div className="text-[11px]">No code experiments yet</div>
+            <div className="text-[9px] text-zinc-800">Use R&D discovery to queue real GitHub patterns into the sandbox ledger</div>
+          </div>
+        )}
+      </div>
+    )}
+
     {/* ── R&D DISCOVERY PANEL ── */}
     {activeView === 'rd' && (
       <div className="flex-1 overflow-y-auto custom-scrollbar p-3 space-y-3 min-h-0">
@@ -973,6 +1329,13 @@ export default function CodeSandboxView() {
             <FlaskConical className="w-8 h-8 opacity-20 animate-pulse" />
             <div className="text-[11px]">Scanning GitHub for <span className="text-blue-500">{rdTopic}</span> innovations...</div>
             <div className="text-[9px] text-zinc-800">LOGOS · PROMETHEUS · THALAMUS evaluating</div>
+          </div>
+        )}
+
+        {rdError && !rdLoading && (
+          <div className="rounded-lg border border-amber-500/20 bg-amber-500/10 px-3 py-2 text-[10px] text-amber-300">
+            <span className="font-bold uppercase tracking-wider block mb-0.5">R&D scanner status</span>
+            {rdError}
           </div>
         )}
 
@@ -1030,7 +1393,7 @@ export default function CodeSandboxView() {
                       <div className="text-[9px] font-bold text-blue-400 uppercase tracking-wider flex items-center gap-1.5">
                         <Brain className="w-2.5 h-2.5" /> LOGOS — Technical
                       </div>
-                      <div className="text-[10px] text-zinc-400 leading-relaxed pl-2.5 border-l border-blue-500/20">{c.logos.analysis}</div>
+                      <div className="text-[10px] text-zinc-400 leading-relaxed pl-2.5 border-l border-blue-500/20">{asDisplayText(c.logos.analysis)}</div>
                     </div>
                   )}
 
@@ -1040,7 +1403,7 @@ export default function CodeSandboxView() {
                       <div className="text-[9px] font-bold text-emerald-400 uppercase tracking-wider flex items-center gap-1.5">
                         <Zap className="w-2.5 h-2.5" /> PROMETHEUS — Impact
                       </div>
-                      <div className="text-[10px] text-zinc-400 leading-relaxed pl-2.5 border-l border-emerald-500/20">{c.prometheus.impact}</div>
+                      <div className="text-[10px] text-zinc-400 leading-relaxed pl-2.5 border-l border-emerald-500/20">{asDisplayText(c.prometheus.impact)}</div>
                     </div>
                   )}
 
@@ -1050,7 +1413,7 @@ export default function CodeSandboxView() {
                       <div className={`text-[9px] font-bold text-${riskClr}-400 uppercase tracking-wider flex items-center gap-1.5`}>
                         <Shield className="w-2.5 h-2.5" /> THALAMUS — Risk
                       </div>
-                      <div className="text-[10px] text-zinc-400 leading-relaxed pl-2.5 border-l border-amber-500/20">{c.thalamus.assessment}</div>
+                      <div className="text-[10px] text-zinc-400 leading-relaxed pl-2.5 border-l border-amber-500/20">{asDisplayText(c.thalamus.assessment)}</div>
                     </div>
                   )}
 
@@ -1082,13 +1445,14 @@ export default function CodeSandboxView() {
 
                   {/* Propose button */}
                   <button
-                    onClick={() => {
+                    onClick={async () => {
                       setRdProposed(prev => ({ ...prev, [i]: true }));
-                      fetch('/api/soma/swarm/rd-propose', {
+                      await fetch('/api/soma/swarm/rd-propose', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ candidate: c, topic: rdTopic }),
                       }).catch(() => {});
+                      refreshCodeExperiments();
                     }}
                     disabled={isProp}
                     className={`w-full py-2.5 rounded-lg text-[11px] font-bold uppercase tracking-wider transition-all flex items-center justify-center gap-2 ${
@@ -1098,8 +1462,8 @@ export default function CodeSandboxView() {
                     }`}
                   >
                     {isProp
-                      ? <><CheckCircle className="w-3.5 h-3.5" /> Proposed to Swarm</>
-                      : <><ArrowRight className="w-3.5 h-3.5" /> Propose to Engineering Swarm</>}
+                      ? <><CheckCircle className="w-3.5 h-3.5" /> Queued as Lab Experiment</>
+                      : <><ArrowRight className="w-3.5 h-3.5" /> Queue Lab Experiment</>}
                   </button>
                 </div>
               )}
@@ -1108,11 +1472,11 @@ export default function CodeSandboxView() {
         })}
 
         {/* Empty state */}
-        {!rdLoading && rdCandidates.length === 0 && (
+        {!rdLoading && rdCandidates.length === 0 && !rdError && (
           <div className="flex flex-col items-center justify-center py-12 gap-3 text-zinc-700">
             <FlaskConical className="w-8 h-8 opacity-20" />
             <div className="text-[11px]">Select a topic and hit Discover</div>
-            <div className="text-[9px] text-zinc-800">SOMA scans GitHub · LOGOS evaluates technical merit · PROMETHEUS scores SOMA impact</div>
+            <div className="text-[9px] text-zinc-800">SOMA scans GitHub · lobes score patterns · safe ideas become lab experiments</div>
           </div>
         )}
       </div>
@@ -1248,7 +1612,7 @@ export default function CodeSandboxView() {
                     <span className="text-[9px] text-zinc-700">{agent.role}</span>
                     {msg.live && <span className="text-[8px] text-zinc-700 ml-auto">live</span>}
                   </div>
-                  <div className="text-[10px] text-zinc-400 leading-snug pl-2 border-l border-white/10">{msg.text}</div>
+                  <div className="text-[10px] text-zinc-400 leading-snug pl-2 border-l border-white/10">{asDisplayText(msg.text)}</div>
                 </div>
               );
             })
@@ -1276,7 +1640,7 @@ export default function CodeSandboxView() {
               </div>
               {decision.finalVerdict && (
                 <div className="text-[9px] pt-1 border-t border-white/10 opacity-80 italic">
-                  DeepSeek: {decision.finalVerdict}
+                  DeepSeek: {asDisplayText(decision.finalVerdict)}
                 </div>
               )}
             </div>
@@ -1324,7 +1688,7 @@ export default function CodeSandboxView() {
           )}
           {phase === 'complete' && (
             <span className="ml-auto flex items-center gap-1 text-[9px] text-emerald-400">
-              <CheckCircle className="w-3 h-3" />applied
+              <CheckCircle className="w-3 h-3" />promoted
             </span>
           )}
         </div>

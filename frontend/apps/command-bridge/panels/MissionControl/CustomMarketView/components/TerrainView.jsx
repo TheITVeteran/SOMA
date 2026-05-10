@@ -1,12 +1,18 @@
 import React, { useEffect, useRef, useState } from 'react';
 import * as d3 from 'd3';
 
-const TerrainView = ({ data, width, height, predictions }) => {
+const TerrainView = ({ data, width, height, predictions, range }) => {
     const svgRef = useRef(null);
 
     // View State
     const [visibleCount, setVisibleCount] = useState(100);
     const [threshold, setThreshold] = useState(null);
+
+    useEffect(() => {
+        if (!range?.limit || !data?.length) return;
+        setVisibleCount(Math.min(range.limit, data.length));
+        setThreshold(null);
+    }, [range?.id, range?.limit, data?.length]);
 
     // Zoom Handler (Scroll Wheel)
     const handleWheel = (e) => {
@@ -231,22 +237,29 @@ const TerrainView = ({ data, width, height, predictions }) => {
             .attr("fill", "#020617")
             .attr("opacity", 0.5);
 
-        // Generate buckets matching the price scale
+        // Generate a volume-at-price rail from the active real bars.
         const bucketCount = 40;
         const bucketHeight = chartHeight / bucketCount;
-        // Map buckets to current Y view
-        const liquidityBuckets = Array.from({ length: bucketCount }, (_, i) => {
+        const rawBuckets = Array.from({ length: bucketCount }, (_, i) => {
             const yPos = i * bucketHeight;
-            const price = y.invert(yPos + bucketHeight / 2);
-            // Simulated volume profile with a "bell curve" around current price + noise
-            const dist = Math.abs(price - visibleData[visibleData.length - 1].close);
-            const baseVol = Math.exp(-dist * 0.05) * 1000;
             return {
                 y: yPos,
-                width: Math.min(domWidth, (baseVol + Math.random() * 500) / 1500 * domWidth),
-                color: price > visibleData[visibleData.length - 1].close ? "#ff00ff" : "#00ffff"
+                volume: 0,
+                price: y.invert(yPos + bucketHeight / 2)
             };
         });
+        visibleData.forEach(bar => {
+            const typicalPrice = ((bar.high ?? bar.close) + (bar.low ?? bar.close) + bar.close) / 3;
+            const bucketIndex = Math.max(0, Math.min(bucketCount - 1, Math.floor(y(typicalPrice) / bucketHeight)));
+            rawBuckets[bucketIndex].volume += Number(bar.volume || 0);
+        });
+        const maxBucketVolume = d3.max(rawBuckets, d => d.volume) || 1;
+        const latestClose = visibleData[visibleData.length - 1].close;
+        const liquidityBuckets = rawBuckets.map(bucket => ({
+            ...bucket,
+            width: Math.max(2, (bucket.volume / maxBucketVolume) * domWidth),
+            color: bucket.price > latestClose ? "#ff00ff" : "#00ffff"
+        }));
 
         domG.selectAll(".liq-bar")
             .data(liquidityBuckets)
@@ -314,7 +327,7 @@ const TerrainView = ({ data, width, height, predictions }) => {
         <div className="w-full h-full relative select-none" onWheel={handleWheel}>
             <svg ref={svgRef} width={width} height={height} className="overflow-visible block" />
             <div className="absolute top-4 right-4 text-[10px] text-slate-500 font-mono tracking-widest pointer-events-none bg-black/50 px-2 py-1 rounded backdrop-blur-sm border border-slate-900">
-                SCALE: {visibleCount < 100 ? 'MICRO' : visibleCount < 500 ? 'MESO' : 'MACRO'} ({visibleCount})
+                    SCALE: {range?.label?.toUpperCase() || (visibleCount < 100 ? 'MICRO' : visibleCount < 500 ? 'MESO' : 'MACRO')} ({visibleCount})
             </div>
             <div className="absolute bottom-4 left-4 flex flex-col gap-1 pointer-events-none">
                 <div className="text-[10px] text-slate-600 font-mono tracking-widest opacity-70">

@@ -13,6 +13,7 @@ import os
 import time
 import base64
 import re
+from pathlib import Path
 from playwright.async_api import async_playwright, TimeoutError as PlaywrightTimeout
 try:
     from playwright_stealth import stealth_async
@@ -356,6 +357,20 @@ class SomaBrowserEngine:
         text = p.get("text", "").strip()
         if not text:
             return {"success": False, "error": "text required"}
+        images = p.get("images") or []
+        if p.get("image_path"):
+            images.append({"path": p.get("image_path"), "alt": p.get("image_alt", "")})
+        normalized_images = []
+        for image in images[:4]:
+            image_path = image if isinstance(image, str) else image.get("path")
+            if not image_path:
+                continue
+            full_path = Path(image_path)
+            if not full_path.is_absolute():
+                full_path = Path.cwd() / full_path
+            if not full_path.exists():
+                return {"success": False, "error": f"Image not found: {image_path}"}
+            normalized_images.append(str(full_path))
 
         username = os.environ.get("X_USERNAME", "").strip()
         password = os.environ.get("X_PASSWORD", "").strip()
@@ -474,6 +489,14 @@ class SomaBrowserEngine:
             await asyncio.sleep(0.04 + (time.time() % 0.06))
 
         await self._human_delay(800)
+
+        if normalized_images:
+            file_input = self.page.locator('input[data-testid="fileInput"], input[type="file"]').first
+            try:
+                await file_input.set_input_files(normalized_images)
+                await self._human_delay(2500)
+            except Exception as e:
+                return {"success": False, "error": f"Could not attach image(s) to X post: {e}"}
 
         # Submit — force=True bypasses any overlay div intercepting pointer events
         submit_btn = self.page.locator('button[data-testid="tweetButtonInline"], button[data-testid="tweetButton"]')

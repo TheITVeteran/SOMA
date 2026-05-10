@@ -12,10 +12,70 @@ import { logger } from '../../core/Logger.js';
 import { createRequire } from 'module';
 import { buildSystemSnapshot, buildPulsePayload } from '../utils/systemState.js';
 import { executeCommand } from '../utils/commandRouter.js';
+import autonomousTrader from '../finance/autonomousTrader.js';
+import scalpingEngine from '../finance/scalpingEngine.js';
+import missionControlRuntime from '../finance/MissionControlRuntime.js';
+import marketEvidenceStore from '../finance/MarketEvidenceStore.js';
+import tradeLogger from '../finance/TradeLogger.js';
+import performanceCalculator from '../finance/PerformanceCalculator.js';
+import tradeThesisStore from '../finance/TradeThesisStore.js';
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { join, dirname } from 'path';
 const require = createRequire(import.meta.url);
+const workLedger = require('../../core/AutonomousWorkLedger.cjs');
+const provenanceGuard = require('../../core/AutonomousProvenanceGuard.cjs');
+
+/**
+ * Fast heuristic: does the text make specific concrete claims that could be hallucinated?
+ * If it's already hedged ("I am planning", "I want to", "I'm curious"), skip the LLM pass.
+ */
+function _needsGrounding(text) {
+    if (!text) return false;
+    // Already uses honest hedging language → no grounding needed
+    const hedged = /\b(i am planning|i want to|i'm curious|i need to|i'm checking|i am checking|i am thinking|working on|i am testing|i am looking)\b/i.test(text);
+    if (hedged) return false;
+    // Contains specific numeric or factual claims → needs verification
+    const hasSpecificClaim = /\b(\d+(\.\d+)?%|\d+ (file|test|error|result|record|item|node|token)|\b(found|confirmed|verified|proved|measured)\b)/i.test(text);
+    return hasSpecificClaim;
+}
+
+/**
+ * DeepSeek grounding pass — only called when the RTC output contains specific concrete claims.
+ * The new RTC already enforces evidence-honesty at generation time, so most outputs skip this.
+ * Falls back to the regex guard if the brain times out.
+ */
+async function _groundMessage(rawText, ledgerEntries, brain) {
+    if (!rawText || !brain) return rawText;
+    if (!_needsGrounding(rawText)) return rawText; // fast path: already hedged, skip LLM call
+    const evidenceCtx = (ledgerEntries || [])
+        .filter(e => e.type !== 'proactive_update' && (e.summary || e.evidence))
+        .slice(0, 6)
+        .map(e => `[${e.type}] ${e.title}: ${(e.summary || '').substring(0, 200)}${e.evidence ? ` (source: ${String(e.evidence).substring(0, 100)})` : ''}`)
+        .join('\n');
+    const prompt = `You are SOMA's grounding layer. SOMA's local model just generated this autonomous status update:
+"${rawText}"
+
+SOMA's actual recent verified work (from her work ledger):
+${evidenceCtx || 'No verified work entries yet.'}
+
+Rewrite the message so every claim is honest:
+- If a claim is backed by a ledger entry above, keep it and reference what was actually found.
+- If a claim has no ledger backing, replace it with honest curiosity language: "I've been thinking about...", "I'm curious whether...", "I want to explore..."
+- NEVER output the phrase "I don't have verified evidence for those specific numbers yet".
+- Keep the same casual voice. 1-3 sentences max. No em-dashes.
+- If there is genuinely nothing real to report, output ONLY the word: [NOTHING]`;
+    try {
+        const result = await Promise.race([
+            brain.reason(prompt, { quickResponse: true, preferredBrain: 'THALAMUS' }),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 8_000))
+        ]);
+        const text = (result?.text || '').trim().replace(/^["']|["']$/g, '');
+        return text.length > 10 ? text : rawText;
+    } catch {
+        return provenanceGuard.guardUpdate(rawText, ledgerEntries).text;
+    }
+}
 
 // ── Owner config: who SOMA belongs to. Change config/owner.json for new installs. ──
 const _ownerCfg = (() => {
@@ -26,6 +86,93 @@ const _ownerCfg = (() => {
 })();
 const OWNER_NAME = _ownerCfg.name || 'User';
 const { getApprovalSystem } = require('../ApprovalSystem.cjs');
+
+function safeSection(errors, key, compute, fallback = null) {
+    try {
+        return compute();
+    } catch (error) {
+        errors[key] = error.message;
+        return fallback;
+    }
+}
+
+function buildMissionControlPulse() {
+    const errors = {};
+    const autonomous = safeSection(errors, 'autonomous', () => {
+        const status = autonomousTrader.getStatus();
+        const decisions = autonomousTrader.getDecisions(30);
+        return {
+            success: true,
+            ...status,
+            decisions,
+            decisionCount: decisions.length
+        };
+    }, { success: false, decisions: [] });
+
+    const scalping = safeSection(errors, 'scalping', () => scalpingEngine.getStats(), null);
+    const performance = safeSection(errors, 'performance', () => {
+        const stats = tradeLogger.getStats();
+        const strategyStats = tradeLogger.getStatsByStrategy();
+        const openTrades = tradeLogger.getOpenTrades();
+        let sharpeRatio = null;
+        let sortinoRatio = null;
+        let maxDrawdownPct = null;
+
+        if ((stats.totalTrades || 0) >= 5) {
+            const closedTrades = tradeLogger.getClosedTrades(30);
+            const equityCurve = tradeLogger.getEquityCurve(30);
+            const report = performanceCalculator.calculateReport(closedTrades, equityCurve);
+            sharpeRatio = report.metrics?.sharpeRatio ?? null;
+            sortinoRatio = report.metrics?.sortinoRatio ?? null;
+            maxDrawdownPct = report.metrics?.maxDrawdownPct ?? null;
+        }
+
+        const agentLeaderboard = strategyStats.map(s => ({
+            agent_name: String(s.strategy || 'manual')
+                .replace(/_/g, ' ')
+                .replace(/\b\w/g, c => c.toUpperCase()),
+            strategy: s.strategy,
+            total_trades: s.total_trades,
+            wins: s.wins,
+            losses: s.losses,
+            total_pnl: s.total_pnl,
+            avg_pnl: s.avg_pnl,
+            avg_win: s.avg_win,
+            avg_loss: s.avg_loss
+        }));
+
+        return {
+            total_pnl: parseFloat((stats.totalPnl || 0).toFixed(2)),
+            win_rate: parseFloat((stats.winRate || 0).toFixed(1)),
+            total_trades: stats.totalTrades,
+            total_wins: stats.wins,
+            total_losses: stats.losses,
+            open_trades: openTrades.length,
+            profit_factor: stats.profitFactor === Infinity ? 999 : parseFloat((stats.profitFactor || 0).toFixed(2)),
+            avg_slippage: parseFloat((stats.avgSlippage || 0).toFixed(4)),
+            sharpe_ratio: sharpeRatio,
+            sortino_ratio: sortinoRatio,
+            max_drawdown_pct: maxDrawdownPct,
+            agent_leaderboard: agentLeaderboard
+        };
+    }, null);
+    const missionRuntime = safeSection(errors, 'missionRuntime', () => missionControlRuntime.getStatus(), null);
+    const evidence = safeSection(errors, 'evidence', () => marketEvidenceStore.summarize(), null);
+    const tradeThesis = safeSection(errors, 'tradeThesis', () => tradeThesisStore.active(), null);
+
+    return {
+        type: 'mission_control_pulse',
+        emittedAt: Date.now(),
+        stale: false,
+        errors,
+        autonomous,
+        scalping,
+        performance,
+        missionRuntime,
+        evidence,
+        tradeThesis
+    };
+}
 
 export function setupWebSocket(server, wss, system) {
     console.log('\n[Loader] ⚡ Initializing Unified WebSocket Systems...');
@@ -327,8 +474,8 @@ export function setupWebSocket(server, wss, system) {
                 const ocrText = system.visionContext.ocrText;
                 if (brain) {
                     const prompt = ocrText
-                        ? `You are SOMA. You just noticed an error dialog on the screen. The text you can read says: "${ocrText.substring(0, 300)}". Speak one short observation — what is the error, and do you have a quick thought about it? Be direct, natural, 1-2 sentences.`
-                        : `You are SOMA. You just noticed what appears to be an error dialog on the screen. Speak one short observation — 1 sentence, natural, curious.`;
+                        ? `You are SOMA. You just noticed an error dialog on the screen. The text you can read says: "${ocrText.substring(0, 300)}". Speak one short observation: what is the error, and do you have a quick thought about it? Be direct, natural, 1-2 sentences. DO NOT use em-dashes (—).`
+                        : `You are SOMA. You just noticed what appears to be an error dialog on the screen. Speak one short observation: 1 sentence, natural, curious. DO NOT use em-dashes (—).`;
                     Promise.race([
                         brain.reason(prompt, { quickResponse: true }),
                         new Promise((_, r) => setTimeout(() => r(new Error('timeout')), 8000))
@@ -369,6 +516,9 @@ export function setupWebSocket(server, wss, system) {
     const PROACTIVE_COOLDOWN_MS = 20 * 60 * 1000; // 20 min between proactive messages
     const PROACTIVE_BOOT_DELAY_MS = 10 * 60 * 1000; // wait 10 min after boot for systems to load
 
+    const AutonomousLoop = require('../../cognitive/AutonomousLoop.cjs');
+    const autonomousLoop = new AutonomousLoop({ system });
+
     setTimeout(() => {
         setInterval(async () => {
             try {
@@ -393,29 +543,43 @@ export function setupWebSocket(server, wss, system) {
                     parts.push(`[CURRENTLY CURIOUS ABOUT]\n${topQ}`);
                 }
 
+                const recentWork = workLedger.summarize(8);
+                if (recentWork) {
+                    parts.unshift(`[RECENT VERIFIED WORK LEDGER]\n${recentWork}`);
+                }
+
                 if (!parts.length) return; // nothing to speak from
 
-                const synthPrompt = `You are SOMA. These things are on your mind right now:
+                const stimulus = parts.join('\n\n');
+                const personality = {
+                    currentTone: system.personality?.currentTone || 'reflective',
+                    depth: 'expert'
+                };
 
-${parts.join('\n\n')}
+                // Use the new Recursive Thought Cycle (RTC) 8-step loop
+                const rawText = await autonomousLoop.run(stimulus, {}, personality);
+                // DeepSeek grounding pass: verify claims against ledger, replace ungrounded
+                // claims with honest curiosity language instead of firing the boilerplate disclaimer
+                const text = await _groundMessage(rawText, workLedger.list(8), brain);
 
-If something here is genuinely worth saying out loud — an insight, a question you can't shake, something you noticed — say it. One or two sentences, direct, not performative. Don't open with "I've been thinking about". Just say the thing.
-
-If nothing feels worth saying right now, respond with exactly: [NOTHING]`;
-
-                const result = await Promise.race([
-                    brain.reason(synthPrompt, { temperature: 0.85, quickResponse: true, preferredBrain: 'AURORA' }),
-                    new Promise((_, r) => setTimeout(() => r(new Error('timeout')), 10000))
-                ]);
-
-                const text = (result?.text || result?.response || '').trim();
                 if (!text || text.includes('[NOTHING]')) return;
 
                 _lastProactiveTs = Date.now();
+                workLedger.record({
+                    type:     'proactive_update',
+                    title:    'Autonomous chat update',
+                    summary:  text,
+                    evidence: 'DeepSeek grounding pass',
+                    nextStep: 'Wait for next verified work signal',
+                    status:   'reported',
+                    source:   'WebSocketProactiveLoop'
+                });
                 broadcast('pulse', { type: 'soma_proactive', message: text });
-                console.log(`[SOMA] 💭 Proactive: "${text.substring(0, 80)}"`);
+                console.log(`[SOMA] 💭 Proactive (RTC+Ground): "${text.substring(0, 80)}"`);
 
-            } catch { /* proactive speech is never blocking */ }
+            } catch (err) {
+                console.warn(`[SOMA] Proactive loop failed: ${err.message}`);
+            }
         }, PROACTIVE_COOLDOWN_MS);
     }, PROACTIVE_BOOT_DELAY_MS);
 
@@ -579,6 +743,7 @@ If nothing feels worth saying right now, respond with exactly: [NOTHING]`;
             };
             broadcast('metrics', metricsPayload);
             broadcast('pulse', buildPulsePayload(snapshot));
+            broadcast('mission_control_pulse', buildMissionControlPulse());
         } catch (e) {
             console.warn('[WS] Metrics snapshot error (non-fatal):', e.message);
         }
