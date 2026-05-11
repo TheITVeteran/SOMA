@@ -543,9 +543,17 @@ export function setupWebSocket(server, wss, system) {
                 // Gather what she's been thinking about
                 const parts = [];
 
+                // Item 2: Derive emotional tone from soul before building stimulus
+                let soulMood = 'focused';
                 if (system.soul?.getRecentReflections) {
-                    const reflections = system.soul.getRecentReflections(3);
-                    if (reflections) parts.push(`[RECENT REFLECTIONS]\n${reflections}`);
+                    const reflections = system.soul.getRecentReflections(5);
+                    if (reflections) {
+                        parts.push(`[RECENT REFLECTIONS]\n${reflections}`);
+                        if      (/frustrat|stuck|fail|broken|wrong/i.test(reflections))      soulMood = 'frustrated';
+                        else if (/excited|breakthrough|great|solved|clicked/i.test(reflections)) soulMood = 'energized';
+                        else if (/curious|wonder|strange|interesting|what if/i.test(reflections)) soulMood = 'curious';
+                        else if (/tired|heavy|slow|overwhelm/i.test(reflections))             soulMood = 'tired';
+                    }
                 }
 
                 if (system.curiosityEngine?.curiosityQueue?.length > 0) {
@@ -559,12 +567,29 @@ export function setupWebSocket(server, wss, system) {
                     parts.unshift(`[RECENT VERIFIED WORK LEDGER]\n${recentWork}`);
                 }
 
+                // Items 1 & 6: Pull relationship + opinion memories so she speaks as a continuous entity
+                if (system.mnemonicArbiter?.recall) {
+                    try {
+                        const _norm = (m) => (m?.results || (Array.isArray(m) ? m : []))
+                            .filter(x => (x.similarity ?? 1) > 0.3)
+                            .map(x => x.content || x.text || '')
+                            .filter(Boolean);
+                        const [relMem, opMem] = await Promise.all([
+                            Promise.race([system.mnemonicArbiter.recall('Barry owner relationship permission told', 3), new Promise(r => setTimeout(() => r([]), 2000))]),
+                            Promise.race([system.mnemonicArbiter.recall('opinion belief concluded view formed', 2),     new Promise(r => setTimeout(() => r([]), 2000))])
+                        ]);
+                        const hits = [..._norm(relMem), ..._norm(opMem)].slice(0, 4);
+                        if (hits.length) parts.unshift(`[WHAT SOMA KNOWS AND BELIEVES]\n${hits.map(h => `• ${h}`).join('\n')}`);
+                    } catch { /* non-fatal */ }
+                }
+
                 if (!parts.length) return; // nothing to speak from
 
                 const stimulus = parts.join('\n\n');
                 const personality = {
                     currentTone: system.personality?.currentTone || 'reflective',
-                    depth: 'expert'
+                    depth: 'expert',
+                    soulMood // Item 2: pass derived mood to AutonomousLoop
                 };
 
                 // Use the new Recursive Thought Cycle (RTC) 8-step loop

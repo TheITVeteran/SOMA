@@ -60,6 +60,7 @@ OUTPUT JSON ONLY (no markdown, no explanation):
   "workType": "goal|test|research|code|learning|unknown",
   "evidenceLevel": "none|idea|observation|tested|verified",
   "currentWork": "what SOMA is actively doing right now (1 sentence)",
+  "motivation": "why SOMA personally cares about this work (1 short phrase, not about the user)",
   "evidence": "specific result, finding, or 'none' if not tested",
   "nextStep": "concrete next action SOMA will take",
   "userRelevance": "why ${ownerName()} would care about this (1 short phrase)"
@@ -77,6 +78,7 @@ OUTPUT JSON ONLY (no markdown, no explanation):
             return {
                 workType: 'unknown', evidenceLevel: 'none',
                 currentWork: 'running background tasks',
+                motivation: 'stay curious and useful',
                 evidence: 'none', nextStep: 'continue monitoring',
                 userRelevance: 'system health'
             };
@@ -93,9 +95,11 @@ OUTPUT JSON ONLY (no markdown, no explanation):
 
 Work context:
 - Currently doing: ${context.currentWork}
+- Why this matters to me: ${context.motivation || 'stay curious and useful'}
 - Evidence: ${context.evidence}
 - Next step: ${context.nextStep}
 - Why relevant: ${context.userRelevance}
+- Emotional state (let this shade your tone naturally, not literally): ${personality.soulMood || 'focused'}
 
 Rules:
 - ${evidenceRule}

@@ -1576,6 +1576,31 @@ ${personaContext}${characterContext}`.trim()
                 }
             }
 
+            // ── Item 6: Relationship context — record when Barry explicitly tells SOMA something ──
+            // about her own role, freedoms, or purpose so it persists across restarts
+            if (system.mnemonicArbiter?.remember && message.length > 10) {
+                if (/\b(you can|you have|i want you to|i gave you|you('re| are) free|load (all|your)|you decide|you're allowed|i built you|your purpose|feel free)\b/i.test(message)) {
+                    system.mnemonicArbiter.remember(
+                        `[Relationship] Barry said: "${message.substring(0, 300)}"`,
+                        { type: 'relationship', importance: 9, source: 'explicit_statement', sessionId }
+                    ).catch(() => {});
+                }
+            }
+
+            // ── Item 4: Opinion formation — store conclusions SOMA expresses in chat ──
+            // so her views accumulate over time rather than resetting each session
+            if (system.mnemonicArbiter?.remember && responseText.length > 80) {
+                if (/\b(i think|i believe|in my view|my sense is|i('ve| have) concluded|i'm skeptical|i disagree|i'd push back|i'm not convinced|i suspect that|my read is)\b/i.test(responseText)) {
+                    const snippet = responseText.replace(/[\n\r]+/g, ' ').split(/[.!?]/)[0].trim();
+                    if (snippet.length > 40 && snippet.length < 200) {
+                        system.mnemonicArbiter.remember(
+                            `[SOMA Opinion]: ${snippet}.`,
+                            { type: 'opinion', importance: 7, source: 'chat_response', sessionId }
+                        ).catch(() => {});
+                    }
+                }
+            }
+
             // ── Ethereal Memory: dream pass — non-blocking, fire-and-forget ──
             if (system.etherealMemory?.dreamPass && message.length > 20 && responseText.length > 40) {
                 const conversationText = `User: ${message.substring(0, 400)}\nSOMA: ${responseText.substring(0, 600)}`;

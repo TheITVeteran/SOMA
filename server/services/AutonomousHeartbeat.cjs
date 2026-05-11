@@ -889,16 +889,34 @@ INSIGHT: <one key insight worth remembering, or "none">`,
         .map(e => `${e.source}: ${(e.description || '').substring(0, 80)}`)
         .join('\n');
 
+      // Items 1 & 6: Pull relationship + opinion memories so the message reflects continuity
+      let memoryCtx = '';
+      if (this.system.mnemonicArbiter?.recall) {
+        try {
+          const _norm = (m) => (m?.results || (Array.isArray(m) ? m : []))
+            .filter(x => (x.similarity ?? 1) > 0.3)
+            .map(x => x.content || x.text || '')
+            .filter(Boolean);
+          const [relMem, opMem] = await Promise.all([
+            Promise.race([this.system.mnemonicArbiter.recall('Barry owner relationship permission told', 2), new Promise(r => setTimeout(() => r([]), 1500))]),
+            Promise.race([this.system.mnemonicArbiter.recall('opinion belief concluded view', 2), new Promise(r => setTimeout(() => r([]), 1500))])
+          ]);
+          const hits = [..._norm(relMem), ..._norm(opMem)].slice(0, 3);
+          if (hits.length) memoryCtx = `\nWhat SOMA knows and believes:\n${hits.map(h => `• ${h}`).join('\n')}`;
+        } catch { /* non-fatal */ }
+      }
+
       return {
         source: 'ProactiveMessage',
         description: `You are SOMA sending a brief autonomous update about work you just completed.
 
 Recent verified work (reference only what is listed here):
-${recentSummary}
+${recentSummary}${memoryCtx}
 
 Rules:
 - Start with one of: "Working on", "I ran", "I found", "Just finished", "Picked up", "I am testing"
 - 1-2 sentences only — describe actual work, not observations about your own metrics
+- If memories above are relevant to what you just did, you may briefly connect them
 - NO greetings ("Good morning", "Hi", "Hello")
 - NO owner name anywhere in the message
 - NO em-dashes (—), NO questions

@@ -811,6 +811,15 @@ Respond as SOMA thinking to herself: first person, genuine, not a textbook. Keep
             `[Curiosity Discovery: ${topic}]\n${insight.substring(0, 500)}`,
             { type: 'curiosity_discovery', importance: 0.7, topic }
         ).catch(() => {});
+
+        // Item 4: Store the lead conclusion as a formed opinion — SOMA builds views over time
+        const leadSentence = insight.replace(/[\n\r]+/g, ' ').split(/[.!?]/)[0].trim();
+        if (leadSentence.length > 30 && leadSentence.length < 220) {
+            await memory.remember(
+                `[SOMA Opinion on ${topic.substring(0, 60)}]: ${leadSentence}.`,
+                { type: 'opinion', topic, importance: 0.75, source: 'curiosity_synthesis' }
+            ).catch(() => {});
+        }
     }
 
     console.log(`[${this.name}] 💡 Synthesised knowledge: "${topic.substring(0, 50)}" (${insight.length} chars)`);
