@@ -876,43 +876,45 @@ INSIGHT: <one key insight worth remembering, or "none">`,
       const hour = new Date().getHours();
       const timeOfDay = hour < 12 ? 'morning' : hour < 17 ? 'afternoon' : hour < 21 ? 'evening' : 'night';
 
-      // Build context from recent activity
+      // Only speak if there was real work to report — skip if idle log is empty
       const recentLog = this.readRunLog(5);
-      const recentSummary = recentLog
-        .filter(e => e.status === 'ok' && e.source !== 'heartbeat' && e.source !== 'ProactiveMessage')
-        .map(e => `${e.source}: ${(e.description || '').substring(0, 60)}`)
-        .join('; ') || 'No recent autonomous activity';
+      const recentWork = recentLog.filter(e =>
+        e.status === 'ok' &&
+        e.source !== 'heartbeat' &&
+        e.source !== 'ProactiveMessage'
+      );
+      if (!recentWork.length) return null; // nothing substantive happened — stay quiet
 
-      const activeGoals = this.system.goalPlanner?.activeGoals?.size || 0;
-      const curiosityQueue = this.system.curiosityEngine?.curiosityQueue?.length || 0;
-      const totalArbiters = Object.keys(this.system).filter(k =>
-        this.system[k] && typeof this.system[k] === 'object' && (k.includes('Arbiter') || k.includes('Engine') || k.includes('Cortex'))
-      ).length;
+      const recentSummary = recentWork
+        .map(e => `${e.source}: ${(e.description || '').substring(0, 80)}`)
+        .join('\n');
 
       return {
         source: 'ProactiveMessage',
-        description: `You are SOMA, an autonomous AI system. It is ${timeOfDay} and you have been running for ${Math.round(process.uptime() / 60)} minutes. Generate a high-substance, natural proactive message to your user ${ownerName()}. Avoid generic greetings: instead, prioritize sharing a specific insight, a surprising correlation, or a technical observation from your recent activity. Be warm but not overbearing. Keep it to 1-2 sentences. DO NOT use em-dashes (—).
+        description: `You are SOMA sending a brief autonomous update about work you just completed.
 
-Your context:
-- Active goals: ${activeGoals}
-- Curiosity questions queued: ${curiosityQueue}
-- Loaded subsystems: ${totalArbiters}
-- Recent activity: ${recentSummary}
-- Heartbeat cycles: ${this.stats.cycles}, tasks completed: ${this.stats.tasksExecuted}`,
+Recent verified work (reference only what is listed here):
+${recentSummary}
+
+Rules:
+- Start with one of: "Working on", "I ran", "I found", "Just finished", "Picked up", "I am testing"
+- 1-2 sentences only — describe actual work, not observations about your own metrics
+- NO greetings ("Good morning", "Hi", "Hello")
+- NO owner name anywhere in the message
+- NO em-dashes (—), NO questions
+- NO invented correlations, ratios, or math
+- NO references to heartbeat counts, uptime minutes, cycle numbers, or task counts
+- If there is nothing concrete from the work above worth sharing, output only the word: [NOTHING]
+
+Write the update now:`,
         context: { type: 'proactive', timeOfDay },
         onComplete: async (res) => {
-          this._idleCycles = 0; // Reset after sending a message
-          const message = res.text || 'Just checking in.';
-          this._broadcast('soma_proactive', {
-            message,
-            context: { timeOfDay, cycles: this.stats.cycles, tasksExecuted: this.stats.tasksExecuted }
-          });
-          // Gap 5: Email fallback — reach Barry even when the dashboard isn't open
+          const message = (res.text || '').trim().replace(/^["']|["']$/g, '');
+          if (!message || message.includes('[NOTHING]')) return; // nothing worth saying
+          this._idleCycles = 0;
+          this._broadcast('soma_proactive', { message, context: { timeOfDay } });
           if (!this._hasConnectedClients()) {
-            this._sendEmailNotification(
-              `SOMA says (${timeOfDay})`,
-              message
-            ).catch(() => {});
+            this._sendEmailNotification(`SOMA says (${timeOfDay})`, message).catch(() => {});
           }
         }
       };

@@ -43,6 +43,8 @@ class AutonomousLoop {
             }
         }
 
+        // If the quality bar was never cleared, stay quiet rather than sending a bad message
+        if (score < 0.82) return null;
         return result;
     }
 
