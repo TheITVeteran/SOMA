@@ -102,10 +102,11 @@ Rules:
 - Include the next concrete step
 - NO em-dashes (—), NO questions, NO metaphors, NO grand claims
 - If medical or trading: say "needs backtesting" or "unverified"
+- NEVER open with a greeting: no "Good morning", "Good evening", "Hello", "Hi"
 - NEVER start with "I've noticed" or "I noticed" — that formula is overused
-- NEVER invent ratios, patterns, or math unless it comes directly from the evidence above
-- NEVER reference heartbeat cycle counts or subsystem counts as the main point
-- NEVER address ${ownerName()} by name at the start of the message
+- NEVER invent correlations, scaling ratios, or math unless it comes directly from the evidence above
+- NEVER reference heartbeat cycle counts, runtime minutes, or subsystem counts as the main point
+- NEVER address ${ownerName()} by name anywhere in the message
 
 Write the update now:`;
 
@@ -129,16 +130,22 @@ Write the update now:`;
             return { score: 0.3, critique: 'unsupported claim' };
         if (/\b(Le Chatelier|entropy|synaptic|equilibrium|biological metaphor)\b/i.test(text))
             return { score: 0.3, critique: 'bad metaphor' };
-        // Penalise the "I've noticed [metric]... [invented ratio]" formula
-        if (/^(barry,?\s+)?i'?ve? noticed/i.test(text))
+        // Block "Good morning/evening/afternoon" openers — SOMA should open with substance
+        if (/^good (morning|evening|afternoon|day)/i.test(text.trim()))
+            return { score: 0.35, critique: 'greeting opener — skip pleasantries, open with the work' };
+        // "I've noticed" anywhere in the text — not just at the start
+        if (/\bi'?ve? noticed\b/i.test(text))
             return { score: 0.35, critique: 'overused "I noticed" formula — use a concrete opener' };
+        // Invented correlations / scaling claims with no evidence basis
+        if (/\b(correlates? (almost |perfectly |strongly )?with|scaling efficiency|yields? roughly|per heartbeat cycle|efficiency holds?|each additional .{3,30} yields?)\b/i.test(text))
+            return { score: 0.3, critique: 'invented correlation claim — only state what evidence shows' };
         if (/\b(fibonacci|prime factor|golden ratio|fibonacci.like|decay pattern)\b/i.test(text))
             return { score: 0.3, critique: 'invented mathematical pattern' };
         if (/\b\d+\s*(heartbeat cycles?|subsystems? loaded)\b/i.test(text) && text.split(/\d+/).length > 4)
             return { score: 0.4, critique: 'message is just metric soup — say what you are doing' };
         // Starts with owner name directly = formulaic
         const ownerN = (typeof ownerName === 'function' ? ownerName() : 'Barry').toLowerCase();
-        if (new RegExp(`^${ownerN},`, 'i').test(text.trim()))
+        if (new RegExp(`^(good \\w+,?\\s+)?${ownerN}[.,]`, 'i').test(text.trim()))
             return { score: 0.38, critique: 'starts with owner name — drop it, get to the point' };
 
         // If it passes rule-based checks and is concrete, skip the LLM eval call entirely

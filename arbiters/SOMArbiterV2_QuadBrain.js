@@ -353,7 +353,10 @@ INTEGRATED RESPONSE:`;
     if (canUseDeepSeek) {
         if (isUserChat || isCodingTask || isPublicFacing) {
             try {
-                const result = await this._callDeepSeek(prompt, temperature, maxTokens, systemPrompt, context.tools, history);
+                // Regular chat: cap at 20s so local fallback gets a real shot within the 50s wall.
+                // Deep thinking requests use the full 45s (they have a 110s wall).
+                const dsTimeout = context.deepThinking ? 45000 : 20000;
+                const result = await this._callDeepSeek(prompt, temperature, maxTokens, systemPrompt, context.tools, history, dsTimeout);
                 this._recordProviderResult('deepseek', true);
                 const cleanText = (result.text || '').replace(/—/g, ': ');
                 return { ...result, text: cleanText, brain: 'DEEPSEEK' };
@@ -466,7 +469,7 @@ INTEGRATED RESPONSE:`;
     return { type: 'object', properties, ...(required.length ? { required } : {}) };
   }
 
-  async _callDeepSeek(prompt, temperature, maxTokens, systemPrompt, tools = null, history = []) {
+  async _callDeepSeek(prompt, temperature, maxTokens, systemPrompt, tools = null, history = [], timeoutMs = 45000) {
     const messages = [];
     if (systemPrompt) messages.push({ role: 'system', content: systemPrompt });
     if (history?.length) history.forEach(h => messages.push({ role: h.role, content: h.content }));
@@ -496,7 +499,7 @@ INTEGRATED RESPONSE:`;
                 'Authorization': `Bearer ${this.deepseekApiKey}`
             },
             body: JSON.stringify(body),
-            signal: AbortSignal.timeout(45000) // 45s hard cap — prevents indefinite hangs
+            signal: AbortSignal.timeout(timeoutMs) // hard cap — prevents indefinite hangs
         });
 
         if (!response.ok) {
