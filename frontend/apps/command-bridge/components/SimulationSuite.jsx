@@ -468,7 +468,7 @@ function MedicalLabView() {
               <Activity className="w-4 h-4 text-emerald-400" />
               <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest">Medical Simulation Architecture</span>
             </div>
-            <div className="p-4">
+            <div className="p-4 flex-1 overflow-y-auto">
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-3">
                    <div className="rounded-lg border border-white/10 bg-black/30 p-3">

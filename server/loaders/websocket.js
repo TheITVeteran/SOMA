@@ -519,6 +519,17 @@ export function setupWebSocket(server, wss, system) {
     const AutonomousLoop = require('../../cognitive/AutonomousLoop.cjs');
     const autonomousLoop = new AutonomousLoop({ system });
 
+    // Rolling window of recent proactive message fingerprints — prevents near-duplicate sends
+    const _recentProactiveFingerprints = [];
+    function _isRepeat(text) {
+        // Extract the first 6 words as a fingerprint
+        const fp = (text || '').toLowerCase().replace(/[^a-z0-9 ]/g, '').split(/\s+/).slice(0, 6).join(' ');
+        if (_recentProactiveFingerprints.includes(fp)) return true;
+        _recentProactiveFingerprints.push(fp);
+        if (_recentProactiveFingerprints.length > 5) _recentProactiveFingerprints.shift();
+        return false;
+    }
+
     setTimeout(() => {
         setInterval(async () => {
             try {
@@ -562,7 +573,7 @@ export function setupWebSocket(server, wss, system) {
                 // claims with honest curiosity language instead of firing the boilerplate disclaimer
                 const text = await _groundMessage(rawText, workLedger.list(8), brain);
 
-                if (!text || text.includes('[NOTHING]')) return;
+                if (!text || text.includes('[NOTHING]') || _isRepeat(text)) return;
 
                 _lastProactiveTs = Date.now();
                 workLedger.record({
