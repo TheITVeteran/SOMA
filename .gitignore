@@ -169,6 +169,12 @@ SOMA/kuze_memory.json
 SOMA/training-history.json
 SOMA/user-profiles/
 
+# ── Auth Sessions (contain JWTs — NEVER commit) ───────────────────────────────
+SOMA/.bluesky-session.json
+SOMA/.linkedin-session.json
+SOMA/.x-session.json
+server/.soma/
+
 # ── Oversized Files (exceeds GitHub 100MB limit) ──────────────────────────────
 soul_fragments.json
 graphify-out/
