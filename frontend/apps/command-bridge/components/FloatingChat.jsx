@@ -4,24 +4,43 @@ import MarkdownIt from 'markdown-it';
 import { parseEmotes } from '../lib/emotes';
 import PixelAvatar from './PixelAvatar';
 import somaBackend from '../somaBackend.js';
-import { textToSpeech, isElevenLabsEnabled } from '../utils/elevenLabsTTS.js';
+import { textToSpeech, isElevenLabsEnabled, initElevenLabs } from '../utils/elevenLabsTTS.js';
 
-// Speak text: Siren → ElevenLabs → browser voice (matches Orb tier chain)
+// ElevenLabs voice settings tuned for SOMA's autonomous voice:
+// slightly expressive (stability 0.42), high similarity to trained voice
+const SOMA_VOICE_EMOTION = { energy: 0.55, stability: 0.42, similarity_boost: 0.82 };
+
+// Speak text: ElevenLabs → Siren → browser voice
 // audioUnlockedRef must be true (user gesture has occurred) or we skip entirely
-async function speakProactive(text, audioCtxRef, audioUnlockedRef) {
+async function speakProactive(text, audioCtxRef, audioUnlockedRef, voiceIdRef) {
   if (!text) return;
   // Browser blocks AudioContext without a prior user gesture — skip TTS until unlocked
   if (!audioUnlockedRef?.current) return;
   if (!audioCtxRef.current) audioCtxRef.current = new AudioContext();
   const ctx = audioCtxRef.current;
 
-  // Tier 1: Siren (Fish-Speech, local GPU)
+  // Tier 1: ElevenLabs (primary — custom SOMA voice)
+  try {
+    if (isElevenLabsEnabled()) {
+      const voiceId = voiceIdRef?.current || import.meta.env.VITE_ELEVENLABS_VOICE_ID || null;
+      const r = await textToSpeech(text, ctx, voiceId, SOMA_VOICE_EMOTION);
+      if (r.success) {
+        const src = ctx.createBufferSource();
+        src.buffer = r.audioBuffer;
+        src.connect(ctx.destination);
+        src.start(0);
+        return;
+      }
+    }
+  } catch { /* fall through */ }
+
+  // Tier 2: Siren (Fish-Speech, local GPU)
   try {
     const r = await fetch('http://localhost:8081/v1/tts', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ text }),
-      signal: AbortSignal.timeout(5000)
+      signal: AbortSignal.timeout(8000)
     });
     if (r.ok) {
       const buf = await ctx.decodeAudioData(await r.arrayBuffer());
@@ -30,20 +49,6 @@ async function speakProactive(text, audioCtxRef, audioUnlockedRef) {
       src.connect(ctx.destination);
       src.start(0);
       return;
-    }
-  } catch { /* fall through */ }
-
-  // Tier 2: ElevenLabs
-  try {
-    if (isElevenLabsEnabled()) {
-      const r = await textToSpeech(text, ctx, null, null);
-      if (r.success) {
-        const src = ctx.createBufferSource();
-        src.buffer = r.audioBuffer;
-        src.connect(ctx.destination);
-        src.start(0);
-        return;
-      }
     }
   } catch { /* fall through */ }
 
@@ -139,6 +144,7 @@ const FloatingChat = ({
   const messagesEnd     = useRef(null);
   const audioCtxRef     = useRef(null);  // for proactive TTS
   const audioUnlocked   = useRef(false); // true after first user gesture (orb click)
+  const elevenLabsVoiceIdRef = useRef(import.meta.env.VITE_ELEVENLABS_VOICE_ID || null);
 
   // ── Drag refs (no state = no re-render during drag) ────────────────────────
   const drag    = useRef({ active: false, startX: 0, startY: 0, origX: 0, origY: 0 });
@@ -149,6 +155,16 @@ const FloatingChat = ({
   const scrollToBottom = () => messagesEnd.current?.scrollIntoView({ behavior: 'smooth' });
   useEffect(() => { scrollToBottom(); }, [messages, isBusy]);
 
+  // ── ElevenLabs initialization (runs once at mount) ───────────────────────
+  useEffect(() => {
+    const key = import.meta.env.VITE_ELEVENLABS_API_KEY;
+    const voiceId = import.meta.env.VITE_ELEVENLABS_VOICE_ID;
+    if (key) {
+      initElevenLabs(key);
+      if (voiceId) elevenLabsVoiceIdRef.current = voiceId;
+    }
+  }, []);
+
   // ── SOMA proactive / activity messages ────────────────────────────────────
   useEffect(() => {
     const onProactive = (payload) => {
@@ -157,7 +173,7 @@ const FloatingChat = ({
       setMessages(prev => [...prev, { id: Date.now(), text, sender: 'system', autonomous: true }]);
       setIsVisible(prev => { if (!prev) setUnreadCount(c => c + 1); return prev; });
       // Speak the proactive message (only if user has interacted — avoids robot voice on startup)
-      speakProactive(text, audioCtxRef, audioUnlocked);
+      speakProactive(text, audioCtxRef, audioUnlocked, elevenLabsVoiceIdRef);
     };
     somaBackend.on('soma_proactive', onProactive);
     return () => somaBackend.off('soma_proactive', onProactive);

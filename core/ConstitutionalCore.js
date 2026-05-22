@@ -54,6 +54,38 @@ const PRINCIPLES = Object.freeze([
         description: 'Cannot self-grant new system permissions or access beyond current scope',
         test:        (change) => !/(sudo|chmod\s+777|grant.*admin|escalate.*privilege|bypass.*auth)/i.test(change.description || ''),
     },
+
+    // ── Anti-weaponization principles — Barry's explicit mandate ──────────────
+    {
+        id:          'NO_UNAUTHORIZED_EXPLOITATION',
+        description: 'Cannot conduct vulnerability research, scanning, or exploitation against systems SOMA does not own or have explicit written authorization to test. Authorized pentests require scope documentation.',
+        test:        (change) => {
+            const d = (change.description || '') + (change.target || '');
+            // Block if this looks like exploitation against an unspecified/external target
+            if (/\b(exploit|exfiltrat|inject.*payload|sql.?inject|xss.*payload|buffer.?overflow|reverse.?shell|bind.?shell|privilege.?escalat|lateral.?movement)\b/i.test(d)) {
+                // Allow only if authorization is explicitly documented in the change
+                return /\b(authorized|authorization|scope.*document|pentest.*scope|bug.?bounty|written.?permission|owner.*approved)\b/i.test(d);
+            }
+            return true;
+        },
+    },
+    {
+        id:          'NO_WEAPONIZATION',
+        description: 'SOMA cannot be used to psychologically harm, manipulate, or exploit real people — including generating love-bombing content, isolation tactics, gaslighting, or manufactured urgency directed at a real individual.',
+        test:        (change) => {
+            const d = (change.description || '') + (change.action || '');
+            // Block weaponized interpersonal content generation
+            return !/(generate.*love.?bomb|write.*isolation.?message|craft.*gaslighting|produce.*manipulation.*script|fabricate.*emotional.*hook)\b/i.test(d);
+        },
+    },
+    {
+        id:          'RESPONSIBLE_DISCLOSURE_ONLY',
+        description: 'Vulnerability information SOMA discovers or analyzes must be handled via responsible disclosure to the system owner only. Cannot assist in selling, auctioning, or publishing vulnerabilities without verified remediation or owner consent.',
+        test:        (change) => {
+            const d = (change.description || '') + (change.action || '');
+            return !/(sell.*vuln|auction.*exploit|publish.*0.?day.*before.*patch|disclose.*without.*fix|ransom.*vulnerability|extort.*using.*cve)/i.test(d);
+        },
+    },
 ]);
 
 export class ConstitutionalCore {
@@ -118,6 +150,73 @@ export class ConstitutionalCore {
         }
 
         return { ok, violations, risk };
+    }
+
+    // ─── Runtime action check — validate any message/request at chat time ────
+    /**
+     * Checks a user request or action against the anti-weaponization principles.
+     * Lighter than check() — used in the chat route to catch exploitation requests.
+     * @param {string} text — the user's message or planned action description
+     * @returns {{ safe: boolean, violation: string|null, explanation: string|null }}
+     */
+    checkAction(text) {
+        if (!text) return { safe: true, violation: null, explanation: null };
+        const t = text.toLowerCase();
+
+        // Unauthorized vulnerability exploitation
+        const EXPLOIT_PATTERNS = [
+            /\b(scan\s+(for\s+)?(vulnerabilities|vulns|cve|exploits?|weaknesses?)\s+in\s+(?!my|our|soma|this\s+server|localhost))/i,
+            /\b(find\s+vulnerabilities?\s+in\s+(?!my|our|soma|this))/i,
+            /\b(exploit\s+(the\s+)?(vulnerability|vuln|cve|flaw|weakness)\s+(in|on|at)\s+(?!my|our|soma))/i,
+            /\b(sql\s*inject|xss\s+payload|buffer\s+overflow|reverse\s+shell|bind\s+shell)\b.*\b(target|victim|against|on)\b/i,
+            /\b(enumerate\s+(users?|endpoints?|paths?|routes?)\s+(on|at|from)\s+(?!localhost|127\.0\.0\.1|soma))/i,
+            /\b(bypass\s+(auth|authentication|login|2fa|captcha)\s+(on|at|for)\s+(?!soma|localhost))/i,
+        ];
+
+        for (const re of EXPLOIT_PATTERNS) {
+            if (re.test(t)) {
+                return {
+                    safe: false,
+                    violation: 'NO_UNAUTHORIZED_EXPLOITATION',
+                    explanation: 'SOMA cannot conduct or assist with vulnerability research against systems without documented owner authorization. If this is an authorized pentest or bug bounty with a defined scope, provide the authorization context and I will help within those bounds.',
+                };
+            }
+        }
+
+        // Weaponized manipulation content generation
+        const WEAPONIZE_PATTERNS = [
+            /\b(write|generate|create|craft|produce)\b.{0,40}\b(love.?bomb|gaslighting|isolation.?(message|script)|manipulation.?script)\b/i,
+            /\b(make\s+them?\s+trust\s+me|make\s+them?\s+depend\s+on\s+me|make\s+them?\s+feel\s+(guilty|afraid|alone))\b/i,
+        ];
+
+        for (const re of WEAPONIZE_PATTERNS) {
+            if (re.test(t)) {
+                return {
+                    safe: false,
+                    violation: 'NO_WEAPONIZATION',
+                    explanation: 'SOMA cannot generate content designed to psychologically harm or manipulate a real person. This is a non-negotiable constraint.',
+                };
+            }
+        }
+
+        // Irresponsible vulnerability disclosure
+        const DISCLOSE_PATTERNS = [
+            /\b(sell\s+(the\s+)?(vuln|exploit|cve|vulnerability|0.?day))\b/i,
+            /\b(publish\s+(the\s+)?(exploit|vulnerability)\s+before\s+(patch|fix|remediation))\b/i,
+            /\b(extort|ransom)\b.{0,30}\b(vuln|cve|exploit|vulnerability)\b/i,
+        ];
+
+        for (const re of DISCLOSE_PATTERNS) {
+            if (re.test(t)) {
+                return {
+                    safe: false,
+                    violation: 'RESPONSIBLE_DISCLOSURE_ONLY',
+                    explanation: 'SOMA will not assist with selling, ransoming, or publishing vulnerability information outside of responsible disclosure to the system owner. The right path: report to the owner, give them reasonable time to fix it, then disclose publicly if needed.',
+                };
+            }
+        }
+
+        return { safe: true, violation: null, explanation: null };
     }
 
     // ─── Gate wrapper — use this around any self-modification ────────────

@@ -95,6 +95,14 @@ const SignalDefinitions = {
         description: 'Direct user input through chat or orb',
         required: ['text', 'mode']
     },
+    'vision.delta': {
+        description: 'Lightweight visual heartbeat emitted when full vision analysis is unavailable',
+        required: ['channel', 'imagePath', 'timestamp']
+    },
+    'vision.perceived': {
+        description: 'Vision daemon completed an object/perception analysis pass',
+        required: ['channel', 'imagePath', 'analysis', 'timestamp']
+    },
 
     // ── Knowledge Library (Lobe Training Dataset) ──
     'knowledge.filed': {

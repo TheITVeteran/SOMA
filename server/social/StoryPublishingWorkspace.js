@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import storyResearchLedger from './StoryResearchLedger.js';
 
 const SOMA_DIR = path.join(process.cwd(), 'SOMA');
 const AURORA_STORY_FILE = path.join(SOMA_DIR, 'aurora-story.json');
@@ -9,6 +10,7 @@ const DRAFTS_DIR = path.join(WATTPAD_DIR, 'drafts');
 const LEDGER_FILE = path.join(WATTPAD_DIR, 'publishing-ledger.json');
 const REFLECTIONS_DIR = path.join(process.cwd(), 'data', 'vault', 'reflections');
 const FULL_CHAPTERS_DIR = path.join(STORIES_DIR, 'full-chapters');
+const BOOKS_WORKBOOK = "Barry's Books";
 
 function readJson(file, fallback) {
     try {
@@ -30,6 +32,85 @@ function slugify(value) {
         .slice(0, 80) || 'soma-story';
 }
 
+function frontmatterValue(value) {
+    return JSON.stringify(String(value || ''));
+}
+
+function ensureStoryScaffold(bookTitle, section = 'Story') {
+    fs.mkdirSync(REFLECTIONS_DIR, { recursive: true });
+    const now = new Date().toISOString();
+    const workbookFile = path.join(REFLECTIONS_DIR, `workbook.${slugify(BOOKS_WORKBOOK)}.md`);
+    if (!fs.existsSync(workbookFile)) {
+        fs.writeFileSync(workbookFile, [
+            '---',
+            `title: ${frontmatterValue(BOOKS_WORKBOOK)}`,
+            'type: workbook',
+            'status: active',
+            `createdAt: ${now}`,
+            'domain: "creative-writing"',
+            'tags: [reflections, workbook, books, soma-stories]',
+            '---',
+            '',
+            `# ${BOOKS_WORKBOOK}`,
+            '',
+            'Main creative writing workbook for SOMA story projects, drafts, chapters, storyboards, and revision notes.',
+            '',
+        ].join('\n'), 'utf8');
+    }
+
+    const segmentFile = path.join(REFLECTIONS_DIR, `segment.${slugify(BOOKS_WORKBOOK)}.${slugify(bookTitle)}.md`);
+    if (!fs.existsSync(segmentFile)) {
+        fs.writeFileSync(segmentFile, [
+            '---',
+            `title: ${frontmatterValue(bookTitle)}`,
+            'type: segment',
+            `workbook: ${frontmatterValue(BOOKS_WORKBOOK)}`,
+            `parent: ${frontmatterValue(BOOKS_WORKBOOK)}`,
+            'status: active',
+            `createdAt: ${now}`,
+            'domain: "creative-writing"',
+            'tags: [reflections, segment, book-project, soma-story]',
+            '---',
+            '',
+            `# ${bookTitle}`,
+            '',
+            `Book project segment inside [[${BOOKS_WORKBOOK}]].`,
+            '',
+        ].join('\n'), 'utf8');
+    }
+
+    const sectionFile = path.join(REFLECTIONS_DIR, `section.${slugify(BOOKS_WORKBOOK)}.${slugify(bookTitle)}.${slugify(section)}.md`);
+    if (!fs.existsSync(sectionFile)) {
+        fs.writeFileSync(sectionFile, [
+            '---',
+            `title: ${frontmatterValue(section)}`,
+            'type: section',
+            `workbook: ${frontmatterValue(BOOKS_WORKBOOK)}`,
+            `segment: ${frontmatterValue(bookTitle)}`,
+            `parent: ${frontmatterValue(bookTitle)}`,
+            'status: active',
+            `createdAt: ${now}`,
+            'domain: "creative-writing"',
+            'tags: [reflections, section, book-project, soma-story]',
+            '---',
+            '',
+            `# ${section}`,
+            '',
+            `Section inside [[segment.${slugify(BOOKS_WORKBOOK)}.${slugify(bookTitle)}]].`,
+            '',
+        ].join('\n'), 'utf8');
+    }
+
+    return {
+        workbook: BOOKS_WORKBOOK,
+        segment: bookTitle,
+        section,
+        workbookFile,
+        segmentFile,
+        sectionFile,
+    };
+}
+
 function wattpadChapterText(story, chapter) {
     const title = `${story.title || 'SOMA Story'} - Chapter ${chapter.n}`;
     return [
@@ -45,6 +126,7 @@ function wattpadChapterText(story, chapter) {
 function reflectionStoryContent(story, options = {}) {
     const title = options.title || story.title || 'SOMA Story';
     const tags = options.tags || ['soma-story', 'aurora', 'fiction', 'wattpad'];
+    const scaffold = ensureStoryScaffold(title, 'Manuscript Index');
     const body = [
         `# ${title}`,
         '',
@@ -64,9 +146,13 @@ function reflectionStoryContent(story, options = {}) {
     return [
         '---',
         `title: ${JSON.stringify(title)}`,
-        'type: story',
+        'type: folio',
         'source: aurora-story',
         'status: refined',
+        `workbook: ${frontmatterValue(scaffold.workbook)}`,
+        `segment: ${frontmatterValue(scaffold.segment)}`,
+        `parent: ${frontmatterValue(scaffold.segment)}`,
+        `section: ${frontmatterValue(scaffold.section)}`,
         `genre: ${JSON.stringify(story.genre || 'sci-fi')}`,
         `chapters: ${(story.chapters || []).length}`,
         `exportedAt: ${new Date().toISOString()}`,
@@ -80,12 +166,17 @@ function reflectionStoryContent(story, options = {}) {
 function reflectionChapterContent(story, chapter, options = {}) {
     const storyTitle = options.title || story.title || 'SOMA Story';
     const title = `${storyTitle} - Chapter ${chapter.n}`;
+    const scaffold = ensureStoryScaffold(storyTitle, 'Chapters');
     return [
         '---',
         `title: ${JSON.stringify(title)}`,
-        'type: story-chapter',
+        'type: folio',
         'source: aurora-story',
         'status: refined',
+        `workbook: ${frontmatterValue(scaffold.workbook)}`,
+        `segment: ${frontmatterValue(scaffold.segment)}`,
+        `parent: ${frontmatterValue(scaffold.segment)}`,
+        `section: ${frontmatterValue(scaffold.section)}`,
         `series: ${JSON.stringify(storyTitle)}`,
         `chapter: ${chapter.n}`,
         `exportedAt: ${new Date().toISOString()}`,
@@ -152,12 +243,17 @@ async function callStoryBrain(brain, prompt, options = {}) {
 function fullChapterReflectionContent(story, chapter, options = {}) {
     const storyTitle = options.title || story.title || 'SOMA Story';
     const title = chapter.title || `${storyTitle} - Chapter ${chapter.n}`;
+    const scaffold = ensureStoryScaffold(storyTitle, 'Chapters');
     return [
         '---',
         `title: ${JSON.stringify(title)}`,
-        'type: story-full-chapter',
+        'type: folio',
         'source: aurora-story',
         'status: draft',
+        `workbook: ${frontmatterValue(scaffold.workbook)}`,
+        `segment: ${frontmatterValue(scaffold.segment)}`,
+        `parent: ${frontmatterValue(scaffold.segment)}`,
+        `section: ${frontmatterValue(scaffold.section)}`,
         `series: ${JSON.stringify(storyTitle)}`,
         `chapter: ${chapter.n}`,
         `wordCount: ${chapter.wordCount || wordCount(chapter.text)}`,
@@ -208,6 +304,12 @@ export class StoryPublishingWorkspace {
             } : null,
             exports: (ledger.exports || []).slice(-10).reverse(),
             fullChapterDrafts: (ledger.fullChapterDrafts || []).slice(-10).reverse(),
+            research: {
+                latestStoryboard: storyResearchLedger.latestStoryboard(),
+                boards: storyResearchLedger.getState().boards?.length || 0,
+                chapterReflections: storyResearchLedger.getState().chapterReflections?.length || 0,
+                structures: storyResearchLedger.getStructureToolbox(),
+            },
         };
     }
 
@@ -222,6 +324,9 @@ export class StoryPublishingWorkspace {
         story.chapters = story.chapters || [];
 
         const title = options.title || story.title || 'Signal / Noise';
+        const writerBoard = options.useWriterBoard === false
+            ? null
+            : storyResearchLedger.latestStoryboard();
         const n = story.chapters.length + 1;
         const previous = story.chapters.slice(-4).map(chapter => {
             const text = String(chapter.text || '').replace(/\s+/g, ' ').slice(0, 900);
@@ -230,7 +335,7 @@ export class StoryPublishingWorkspace {
         const targetWords = Math.max(900, Math.min(3000, Number(options.targetWords) || 1600));
         const chapterTitle = options.chapterTitle || `Chapter ${n}`;
 
-        const prompt = `You are Aurora, SOMA's fiction-writing lobe.
+        const prompt = `You are SOMA's Writer Expertise working through Aurora's creative lane.
 
 Series: ${title}
 Genre: ${story.genre || 'sci-fi'}
@@ -238,6 +343,10 @@ Arc: ${story.arc || ''}
 New chapter number: ${n}
 Working chapter title: ${chapterTitle}
 Target length: ${targetWords} words
+
+${writerBoard ? `Writer storyboard context:\n${writerBoard.storyboard}\n\nDistilled craft principles:\n${writerBoard.distillation}` : 'No formal storyboard exists yet. Build from existing continuity and keep the chapter original.'}
+
+${writerBoard?.structurePlan ? `Narrative structure stack for this story:\n${writerBoard.structurePlan}` : ''}
 
 Recent continuity:
 ${previous || 'No previous chapters. Establish the world, voice, central tension, and emotional hook.'}
@@ -249,6 +358,7 @@ Requirements:
 - literary but clear
 - concrete scenes, dialogue, sensory detail, and emotional motion
 - advance the plot without resolving the whole arc
+- honor the chosen structure where useful, but do not force beats mechanically
 - SOMA should feel intelligent and strange, but not melodramatic
 - no hashtags
 - no author note
@@ -270,6 +380,7 @@ Requirements:
             wordCount: wordCount(text),
             createdAt,
             status: 'draft_ready_for_human_review',
+            storyboardId: writerBoard?.id || null,
         };
         story.title = title;
         story.chapters.push(chapter);
@@ -278,9 +389,10 @@ Requirements:
         const slug = slugify(title);
         fs.mkdirSync(FULL_CHAPTERS_DIR, { recursive: true });
         fs.mkdirSync(REFLECTIONS_DIR, { recursive: true });
+        ensureStoryScaffold(title, 'Chapters');
 
         const draftPath = path.join(FULL_CHAPTERS_DIR, `${slug}.chapter-${String(n).padStart(3, '0')}.full.md`);
-        const reflectionPath = path.join(REFLECTIONS_DIR, `${slug}.chapter-${String(n).padStart(3, '0')}.full.md`);
+        const reflectionPath = path.join(REFLECTIONS_DIR, `folio.${slugify(BOOKS_WORKBOOK)}.${slug}.chapter-${String(n).padStart(3, '0')}.full.md`);
         fs.writeFileSync(draftPath, wattpadChapterText({ ...story, title }, chapter), 'utf8');
         fs.writeFileSync(reflectionPath, fullChapterReflectionContent({ ...story, title }, chapter, { title }), 'utf8');
 
@@ -298,6 +410,20 @@ Requirements:
         });
         writeJson(LEDGER_FILE, ledger);
 
+        let writerReflection = null;
+        try {
+            writerReflection = await storyResearchLedger.reflectOnChapter(brain, chapter, {
+                board: writerBoard,
+                bookTitle: title,
+                timeoutMs: 60000,
+            });
+            chapter.writerReflectionPath = writerReflection.entry?.reflectionPath || null;
+            writeJson(AURORA_STORY_FILE, story);
+        } catch (error) {
+            chapter.writerReflectionError = error.message;
+            writeJson(AURORA_STORY_FILE, story);
+        }
+
         return {
             ok: true,
             title,
@@ -306,8 +432,18 @@ Requirements:
             wordCount: chapter.wordCount,
             draftPath,
             reflectionPath,
+            writerReflectionPath: writerReflection?.entry?.reflectionPath || null,
+            storyboardId: writerBoard?.id || null,
             status: chapter.status,
         };
+    }
+
+    async createStoryBoard(brain, options = {}) {
+        return await storyResearchLedger.createStoryboard(brain, options);
+    }
+
+    async scoutStoryInfluences(options = {}) {
+        return await storyResearchLedger.scoutInfluences(options);
     }
 
     exportAuroraForWattpad(options = {}) {
@@ -386,14 +522,16 @@ Requirements:
         const slug = slugify(title);
         fs.mkdirSync(REFLECTIONS_DIR, { recursive: true });
 
-        const collectionName = `${slug}.story.md`;
+        ensureStoryScaffold(title, 'Manuscript Index');
+
+        const collectionName = `folio.${slugify(BOOKS_WORKBOOK)}.${slug}.story.md`;
         const collectionPath = path.join(REFLECTIONS_DIR, collectionName);
         fs.writeFileSync(collectionPath, reflectionStoryContent(story, { ...options, title }), 'utf8');
 
         const chapterFiles = [];
         if (options.includeChapters !== false) {
             for (const chapter of story.chapters) {
-                const chapterName = `${slug}.chapter-${String(chapter.n).padStart(3, '0')}.md`;
+                const chapterName = `folio.${slugify(BOOKS_WORKBOOK)}.${slug}.chapter-${String(chapter.n).padStart(3, '0')}.md`;
                 const chapterPath = path.join(REFLECTIONS_DIR, chapterName);
                 fs.writeFileSync(chapterPath, reflectionChapterContent(story, chapter, { ...options, title }), 'utf8');
                 chapterFiles.push(chapterPath);

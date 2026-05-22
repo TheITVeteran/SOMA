@@ -42,6 +42,83 @@ export default class CommunicationHub {
     this.dir = path.join(rootDir, 'data', 'communication-hub');
     this.file = path.join(this.dir, 'state.json');
     this.state = this.load();
+    // Enterprise notification channels — set via env vars
+    this._slackWebhook = process.env.SOMA_SLACK_WEBHOOK_URL || null;
+    this._teamsWebhook = process.env.SOMA_TEAMS_WEBHOOK_URL || null;
+    this._notifyEmail  = process.env.SOMA_NOTIFY_EMAIL      || null;
+  }
+
+  /**
+   * Send a Slack notification via incoming webhook.
+   * Requires SOMA_SLACK_WEBHOOK_URL env var.
+   * @param {string} text — main message text
+   * @param {object} opts — { emoji, title, fields: [{title, value}], urgent }
+   */
+  async notifySlack(text, { emoji = ':robot_face:', title = null, fields = [], urgent = false } = {}) {
+    if (!this._slackWebhook) return { sent: false, reason: 'SOMA_SLACK_WEBHOOK_URL not configured' };
+    try {
+      const blocks = [];
+      if (title) {
+        blocks.push({ type: 'header', text: { type: 'plain_text', text: `${emoji} ${title}`, emoji: true } });
+      }
+      blocks.push({ type: 'section', text: { type: 'mrkdwn', text: text.slice(0, 3000) } });
+      if (fields.length) {
+        blocks.push({
+          type: 'section',
+          fields: fields.slice(0, 10).map(f => ({ type: 'mrkdwn', text: `*${f.title}*\n${f.value}` }))
+        });
+      }
+      blocks.push({ type: 'context', elements: [{ type: 'mrkdwn', text: `SOMA · ${new Date().toLocaleString()}${urgent ? ' · *URGENT*' : ''}` }] });
+
+      const body = JSON.stringify({ blocks, text: text.slice(0, 300) });
+      const res = await fetch(this._slackWebhook, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body,
+        signal: AbortSignal.timeout(8000)
+      });
+      const ok = res.ok;
+      this.addTimeline({ type: 'outbox', title: 'Slack notification sent', detail: text.slice(0, 120), route: 'slack', agent: 'SOMA', priority: urgent ? 'important' : 'normal' });
+      this.save();
+      return { sent: ok, status: res.status };
+    } catch (e) {
+      return { sent: false, error: e.message };
+    }
+  }
+
+  /**
+   * Send a Microsoft Teams notification via incoming webhook.
+   * Requires SOMA_TEAMS_WEBHOOK_URL env var.
+   */
+  async notifyTeams(text, { title = 'SOMA Update', urgent = false } = {}) {
+    if (!this._teamsWebhook) return { sent: false, reason: 'SOMA_TEAMS_WEBHOOK_URL not configured' };
+    try {
+      const body = JSON.stringify({
+        '@type': 'MessageCard',
+        '@context': 'http://schema.org/extensions',
+        summary: title,
+        themeColor: urgent ? 'FF0000' : '0078D4',
+        title,
+        text: text.slice(0, 4000)
+      });
+      const res = await fetch(this._teamsWebhook, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body,
+        signal: AbortSignal.timeout(8000)
+      });
+      return { sent: res.ok, status: res.status };
+    } catch (e) {
+      return { sent: false, error: e.message };
+    }
+  }
+
+  /** Broadcast to all configured enterprise channels */
+  async notifyAll(text, opts = {}) {
+    const results = {};
+    if (this._slackWebhook)  results.slack  = await this.notifySlack(text, opts);
+    if (this._teamsWebhook)  results.teams  = await this.notifyTeams(text, opts);
+    return results;
   }
 
   load() {
@@ -75,7 +152,7 @@ export default class CommunicationHub {
   }
 
   classify(text = '', context = {}) {
-    const route = ROUTES.find(r => r.rx.test(text)) || { id: 'orb', agent: 'SOMA', label: 'SOMA Orb', risk: 'low' };
+    const route = ROUTES.find(r => r.rx.test(text)) || { id: 'orb', agent: 'SOMA', label: 'Presence', risk: 'low' };
     const needsApproval = RISK_WORDS.test(text) && route.risk !== 'low';
     const trust = this.trustFor({ text, route, context, needsApproval });
     return {

@@ -16,7 +16,9 @@ let mnemonicArbiterInstance = null;
 let microAgentManagerInstance = null;
 let knowledgeGraphInstance = null;
 let analystArbiterInstance = null;
-let localModelManagerInstance = null; // Self-training system
+let fragmentRegistryInstance = null; // New
+let localModelManagerInstance = null;
+ // Self-training system
 let trainingDataCollectorInstance = null; // Self-training data capture
 
 // Track the single instance of SomaBrain
@@ -85,6 +87,10 @@ class SomaBrain {
     setMicroAgentManager(instance) { microAgentManagerInstance = instance; }
     setKnowledgeGraph(instance) { knowledgeGraphInstance = instance; }
     setAnalystArbiter(instance) { analystArbiterInstance = instance; }
+    setFragmentRegistry(instance) { 
+        fragmentRegistryInstance = instance; 
+        if (this.conductor) this.conductor.setFragmentRegistry(instance);
+    }
     setThoughtNetwork(instance) {
         this.thoughtNetwork = instance;
         // Connect brain if already ready
@@ -155,6 +161,7 @@ class SomaBrain {
             // 3. Wire connections
             this.conductor.setTriBrain(this.tribrain);
             this.conductor.setReasoningChamber(this.chamber);
+            if (fragmentRegistryInstance) this.conductor.setFragmentRegistry(fragmentRegistryInstance);
 
             // 4. Initialize PersonalityEngine
             // Now, PersonalityEngine uses the injected EmotionalEngine directly (or safe fallback)

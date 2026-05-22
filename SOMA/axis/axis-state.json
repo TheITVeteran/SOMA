@@ -1,0 +1,1083 @@
+{
+  "friends": [
+    {
+      "id": "axis-marcus",
+      "username": "marcus_chen",
+      "handle": "marcus_chen",
+      "avatar": "https://randomuser.me/api/portraits/men/32.jpg",
+      "online": true,
+      "chatId": "axis-marcus",
+      "status": "friend",
+      "favorite": true,
+      "group": "creative"
+    },
+    {
+      "id": "axis-ava",
+      "username": "ava_williams",
+      "handle": "ava_williams",
+      "avatar": "https://randomuser.me/api/portraits/women/44.jpg",
+      "online": true,
+      "chatId": "axis-ava",
+      "status": "friend",
+      "favorite": true,
+      "group": "creative"
+    },
+    {
+      "id": "axis-jordan",
+      "username": "jordan_blake",
+      "handle": "jordan_blake",
+      "avatar": "https://randomuser.me/api/portraits/men/71.jpg",
+      "online": false,
+      "chatId": "axis-jordan",
+      "status": "friend",
+      "favorite": true,
+      "group": "creative"
+    },
+    {
+      "id": "axis-priya",
+      "username": "priya_sharma",
+      "handle": "priya_sharma",
+      "avatar": "https://randomuser.me/api/portraits/women/26.jpg",
+      "online": true,
+      "chatId": "axis-priya",
+      "status": "friend",
+      "favorite": true,
+      "group": "creative"
+    },
+    {
+      "id": "axis-tyler",
+      "username": "tyler_reed",
+      "handle": "tyler_reed",
+      "avatar": "https://randomuser.me/api/portraits/men/55.jpg",
+      "online": false,
+      "chatId": "axis-tyler",
+      "status": "friend",
+      "favorite": true,
+      "group": "creative"
+    },
+    {
+      "id": "axis-zoe",
+      "username": "zoe_martinez",
+      "handle": "zoe_martinez",
+      "avatar": "https://randomuser.me/api/portraits/women/15.jpg",
+      "online": true,
+      "chatId": "axis-zoe",
+      "status": "friend",
+      "favorite": true,
+      "group": "creative"
+    },
+    {
+      "id": "axis-dex",
+      "username": "dex_hammond",
+      "handle": "dex_hammond",
+      "avatar": "https://randomuser.me/api/portraits/men/9.jpg",
+      "online": false,
+      "chatId": "axis-dex",
+      "status": "friend",
+      "favorite": true,
+      "group": "creative"
+    },
+    {
+      "id": "axis-nadia",
+      "username": "nadia_okafor",
+      "handle": "nadia_okafor",
+      "avatar": "https://randomuser.me/api/portraits/women/62.jpg",
+      "online": true,
+      "chatId": "axis-nadia",
+      "status": "friend",
+      "favorite": true,
+      "group": "creative"
+    },
+    {
+      "id": "axis-sam",
+      "username": "sam_kowalski",
+      "handle": "sam_kowalski",
+      "avatar": "https://randomuser.me/api/portraits/men/47.jpg",
+      "online": false,
+      "chatId": "axis-sam",
+      "status": "friend",
+      "favorite": true,
+      "group": "creative"
+    },
+    {
+      "id": "axis-riley",
+      "username": "riley_park",
+      "handle": "riley_park",
+      "avatar": "https://randomuser.me/api/portraits/women/33.jpg",
+      "online": true,
+      "chatId": "axis-riley",
+      "status": "friend",
+      "favorite": true,
+      "group": "creative"
+    },
+    {
+      "id": "axis-finn",
+      "username": "finn_o_brien",
+      "handle": "finn_o_brien",
+      "avatar": "https://randomuser.me/api/portraits/men/22.jpg",
+      "online": false,
+      "chatId": "axis-finn",
+      "status": "friend",
+      "favorite": true,
+      "group": "creative"
+    },
+    {
+      "id": "axis-layla",
+      "username": "layla_hassan",
+      "handle": "layla_hassan",
+      "avatar": "https://randomuser.me/api/portraits/women/50.jpg",
+      "online": false,
+      "chatId": "axis-layla",
+      "status": "friend",
+      "favorite": true,
+      "group": "creative"
+    },
+    {
+      "id": "axis-cole",
+      "username": "cole_nakamura",
+      "handle": "cole_nakamura",
+      "avatar": "https://randomuser.me/api/portraits/men/38.jpg",
+      "online": true,
+      "chatId": "axis-cole",
+      "status": "friend",
+      "favorite": true,
+      "group": "creative"
+    },
+    {
+      "id": "axis-eva",
+      "username": "eva_reyes",
+      "handle": "eva_reyes",
+      "avatar": "https://randomuser.me/api/portraits/women/7.jpg",
+      "online": false,
+      "chatId": "axis-eva",
+      "status": "friend",
+      "favorite": true,
+      "group": "creative"
+    },
+    {
+      "id": "axis-ben",
+      "username": "ben_osei",
+      "handle": "ben_osei",
+      "avatar": "https://randomuser.me/api/portraits/men/64.jpg",
+      "online": true,
+      "chatId": "axis-ben",
+      "status": "friend",
+      "favorite": true,
+      "group": "creative"
+    },
+    {
+      "id": "axis-mia",
+      "username": "mia_thornton",
+      "handle": "mia_thornton",
+      "avatar": "https://randomuser.me/api/portraits/women/88.jpg",
+      "online": false,
+      "chatId": "axis-mia",
+      "status": "friend",
+      "favorite": true,
+      "group": "creative"
+    },
+    {
+      "id": "axis-kai",
+      "username": "kai_patel",
+      "handle": "kai_patel",
+      "avatar": "https://randomuser.me/api/portraits/men/17.jpg",
+      "online": true,
+      "chatId": "axis-kai",
+      "status": "friend",
+      "favorite": true,
+      "group": "creative"
+    },
+    {
+      "id": "axis-jade",
+      "username": "jade_moreau",
+      "handle": "jade_moreau",
+      "avatar": "https://randomuser.me/api/portraits/women/41.jpg",
+      "online": false,
+      "chatId": "axis-jade",
+      "status": "friend",
+      "favorite": true,
+      "group": "creative"
+    },
+    {
+      "id": "axis-aaron",
+      "username": "aaron_cruz",
+      "handle": "aaron_cruz",
+      "avatar": "https://randomuser.me/api/portraits/men/83.jpg",
+      "online": true,
+      "chatId": "axis-aaron",
+      "status": "friend",
+      "favorite": true,
+      "group": "creative"
+    },
+    {
+      "id": "axis-luna",
+      "username": "luna_vance",
+      "handle": "luna_vance",
+      "avatar": "https://randomuser.me/api/portraits/women/19.jpg",
+      "online": false,
+      "chatId": "axis-luna",
+      "status": "friend",
+      "favorite": true,
+      "group": "creative"
+    }
+  ],
+  "chats": [
+    {
+      "id": "axis-marcus",
+      "title": "Marcus Chen",
+      "image": "https://randomuser.me/api/portraits/men/32.jpg",
+      "online": true,
+      "messagesCount": "Sent - 09:54 AM",
+      "status": "active",
+      "axisId": "axis-marcus",
+      "updatedAt": 1779112496495,
+      "lastMessage": "bro forsure"
+    },
+    {
+      "id": "axis-ava",
+      "title": "Ava Williams",
+      "image": "https://randomuser.me/api/portraits/women/44.jpg",
+      "online": true,
+      "messagesCount": "New - 09:52 AM",
+      "status": "active",
+      "axisId": "axis-ava",
+      "updatedAt": 1779112376491,
+      "lastMessage": "also love the new Studio layout btw"
+    },
+    {
+      "id": "axis-jordan",
+      "title": "Jordan Blake",
+      "image": "https://randomuser.me/api/portraits/men/71.jpg",
+      "online": false,
+      "messagesCount": "New - 09:52 AM",
+      "status": "active",
+      "axisId": "axis-jordan",
+      "updatedAt": 1779112376492,
+      "lastMessage": "keep me posted"
+    },
+    {
+      "id": "axis-priya",
+      "title": "Priya Sharma",
+      "image": "https://randomuser.me/api/portraits/women/26.jpg",
+      "online": true,
+      "messagesCount": "Sent - 09:52 AM",
+      "status": "active",
+      "axisId": "axis-priya",
+      "updatedAt": 1779112376492,
+      "lastMessage": "Yeah 3pm works"
+    },
+    {
+      "id": "axis-tyler",
+      "title": "Tyler Reed",
+      "image": "https://randomuser.me/api/portraits/men/55.jpg",
+      "online": false,
+      "messagesCount": "Sent - 09:52 AM",
+      "status": "active",
+      "axisId": "axis-tyler",
+      "updatedAt": 1779112376492,
+      "lastMessage": "lmk what they said"
+    },
+    {
+      "id": "axis-zoe",
+      "title": "Zoe Martinez",
+      "image": "https://randomuser.me/api/portraits/women/15.jpg",
+      "online": true,
+      "messagesCount": "Sent - 09:52 AM",
+      "status": "active",
+      "axisId": "axis-zoe",
+      "updatedAt": 1779112376492,
+      "lastMessage": "looks good, nice work"
+    },
+    {
+      "id": "axis-dex",
+      "title": "Dex Hammond",
+      "image": "https://randomuser.me/api/portraits/men/9.jpg",
+      "online": false,
+      "messagesCount": "New - 09:52 AM",
+      "status": "active",
+      "axisId": "axis-dex",
+      "updatedAt": 1779112376492,
+      "lastMessage": "nice gonna try that setup"
+    },
+    {
+      "id": "axis-nadia",
+      "title": "Nadia Okafor",
+      "image": "https://randomuser.me/api/portraits/women/62.jpg",
+      "online": true,
+      "messagesCount": "New - 09:52 AM",
+      "status": "active",
+      "axisId": "axis-nadia",
+      "updatedAt": 1779112376492,
+      "lastMessage": "🔥"
+    },
+    {
+      "id": "axis-sam",
+      "title": "Sam Kowalski",
+      "image": "https://randomuser.me/api/portraits/men/47.jpg",
+      "online": false,
+      "messagesCount": "Sent - 09:52 AM",
+      "status": "active",
+      "axisId": "axis-sam",
+      "updatedAt": 1779112376492,
+      "lastMessage": "classic"
+    },
+    {
+      "id": "axis-riley",
+      "title": "Riley Park",
+      "image": "https://randomuser.me/api/portraits/women/33.jpg",
+      "online": true,
+      "messagesCount": "Sent - 09:52 AM",
+      "status": "active",
+      "axisId": "axis-riley",
+      "updatedAt": 1779112376493,
+      "lastMessage": "haha thanks, still a lot of rough edges"
+    },
+    {
+      "id": "axis-finn",
+      "title": "Finn O'Brien",
+      "image": "https://randomuser.me/api/portraits/men/22.jpg",
+      "online": false,
+      "messagesCount": "Sent - 09:52 AM",
+      "status": "active",
+      "axisId": "axis-finn",
+      "updatedAt": 1779112376493,
+      "lastMessage": "cool, I'll check the logs"
+    },
+    {
+      "id": "axis-layla",
+      "title": "Layla Hassan",
+      "image": "https://randomuser.me/api/portraits/women/50.jpg",
+      "online": false,
+      "messagesCount": "New - 09:52 AM",
+      "status": "active",
+      "axisId": "axis-layla",
+      "updatedAt": 1779112376493,
+      "lastMessage": "will do"
+    },
+    {
+      "id": "axis-cole",
+      "title": "Cole Nakamura",
+      "image": "https://randomuser.me/api/portraits/men/38.jpg",
+      "online": true,
+      "messagesCount": "Sent - 09:52 AM",
+      "status": "active",
+      "axisId": "axis-cole",
+      "updatedAt": 1779112376493,
+      "lastMessage": "Yeah for sure"
+    },
+    {
+      "id": "axis-eva",
+      "title": "Eva Reyes",
+      "image": "https://randomuser.me/api/portraits/women/7.jpg",
+      "online": false,
+      "messagesCount": "Sent - 09:52 AM",
+      "status": "active",
+      "axisId": "axis-eva",
+      "updatedAt": 1779112376493,
+      "lastMessage": "Same, building constantly lol"
+    },
+    {
+      "id": "axis-ben",
+      "title": "Ben Osei",
+      "image": "https://randomuser.me/api/portraits/men/64.jpg",
+      "online": true,
+      "messagesCount": "New - 09:52 AM",
+      "status": "active",
+      "axisId": "axis-ben",
+      "updatedAt": 1779112376493,
+      "lastMessage": "following you now"
+    },
+    {
+      "id": "axis-mia",
+      "title": "Mia Thornton",
+      "image": "https://randomuser.me/api/portraits/women/88.jpg",
+      "online": false,
+      "messagesCount": "Sent - 09:52 AM",
+      "status": "active",
+      "axisId": "axis-mia",
+      "updatedAt": 1779112376494,
+      "lastMessage": "appreciate it"
+    },
+    {
+      "id": "axis-kai",
+      "title": "Kai Patel",
+      "image": "https://randomuser.me/api/portraits/men/17.jpg",
+      "online": true,
+      "messagesCount": "New - 09:52 AM",
+      "status": "active",
+      "axisId": "axis-kai",
+      "updatedAt": 1779112376494,
+      "lastMessage": "okay I need this setup"
+    },
+    {
+      "id": "axis-jade",
+      "title": "Jade Moreau",
+      "image": "https://randomuser.me/api/portraits/women/41.jpg",
+      "online": false,
+      "messagesCount": "New - 09:52 AM",
+      "status": "active",
+      "axisId": "axis-jade",
+      "updatedAt": 1779112376494,
+      "lastMessage": "next time you should come"
+    },
+    {
+      "id": "axis-aaron",
+      "title": "Aaron Cruz",
+      "image": "https://randomuser.me/api/portraits/men/83.jpg",
+      "online": true,
+      "messagesCount": "Sent - 09:52 AM",
+      "status": "active",
+      "axisId": "axis-aaron",
+      "updatedAt": 1779112376494,
+      "lastMessage": "Both modes, I can show you"
+    },
+    {
+      "id": "axis-luna",
+      "title": "Luna Vance",
+      "image": "https://randomuser.me/api/portraits/women/19.jpg",
+      "online": false,
+      "messagesCount": "Sent - 09:52 AM",
+      "status": "active",
+      "axisId": "axis-luna",
+      "updatedAt": 1779112376494,
+      "lastMessage": "exactly what I'm trying to build into SOMA"
+    }
+  ],
+  "messages": {
+    "axis-marcus": [
+      {
+        "id": "axis-marcus-m1",
+        "sender": "other",
+        "text": "Yo did you see the new DeepSeek update?",
+        "timestamp": "09:48 AM",
+        "avatar": "https://randomuser.me/api/portraits/men/32.jpg",
+        "createdAt": 1779112136491
+      },
+      {
+        "id": "axis-marcus-m2",
+        "sender": "user",
+        "text": "Yeah running it locally now. Insane.",
+        "timestamp": "09:50 AM",
+        "avatar": "https://picsum.photos/200/200",
+        "createdAt": 1779112256491
+      },
+      {
+        "id": "axis-marcus-m3",
+        "sender": "other",
+        "text": "bro",
+        "timestamp": "09:52 AM",
+        "avatar": "https://randomuser.me/api/portraits/men/32.jpg",
+        "createdAt": 1779112376491
+      },
+      {
+        "id": "msg-1779112496494",
+        "threadId": "axis-marcus",
+        "conversationId": "axis-marcus",
+        "participants": [
+          "barry",
+          "axis-marcus"
+        ],
+        "sender": "user",
+        "text": "bro forsure",
+        "timestamp": "09:54 AM",
+        "avatar": "https://picsum.photos/200/200",
+        "createdAt": 1779112496495,
+        "updatedAt": 1779112496495,
+        "readAt": null,
+        "archivedAt": null
+      }
+    ],
+    "axis-ava": [
+      {
+        "id": "axis-ava-m1",
+        "sender": "user",
+        "text": "Sending you the design files tonight",
+        "timestamp": "09:48 AM",
+        "avatar": "https://picsum.photos/200/200",
+        "createdAt": 1779112136491
+      },
+      {
+        "id": "axis-ava-m2",
+        "sender": "other",
+        "text": "Perfect, I'll review first thing tomorrow",
+        "timestamp": "09:50 AM",
+        "avatar": "https://randomuser.me/api/portraits/women/44.jpg",
+        "createdAt": 1779112256491
+      },
+      {
+        "id": "axis-ava-m3",
+        "sender": "other",
+        "text": "also love the new Studio layout btw",
+        "timestamp": "09:52 AM",
+        "avatar": "https://randomuser.me/api/portraits/women/44.jpg",
+        "createdAt": 1779112376491
+      }
+    ],
+    "axis-jordan": [
+      {
+        "id": "axis-jordan-m1",
+        "sender": "other",
+        "text": "That system you built is wild",
+        "timestamp": "09:48 AM",
+        "avatar": "https://randomuser.me/api/portraits/men/71.jpg",
+        "createdAt": 1779112136492
+      },
+      {
+        "id": "axis-jordan-m2",
+        "sender": "user",
+        "text": "Still a lot to wire up but getting there",
+        "timestamp": "09:50 AM",
+        "avatar": "https://picsum.photos/200/200",
+        "createdAt": 1779112256492
+      },
+      {
+        "id": "axis-jordan-m3",
+        "sender": "other",
+        "text": "keep me posted",
+        "timestamp": "09:52 AM",
+        "avatar": "https://randomuser.me/api/portraits/men/71.jpg",
+        "createdAt": 1779112376492
+      }
+    ],
+    "axis-priya": [
+      {
+        "id": "axis-priya-m1",
+        "sender": "other",
+        "text": "Can we jump on a call later?",
+        "timestamp": "09:48 AM",
+        "avatar": "https://randomuser.me/api/portraits/women/26.jpg",
+        "createdAt": 1779112136492
+      },
+      {
+        "id": "axis-priya-m2",
+        "sender": "other",
+        "text": "have some ideas for the data pipeline",
+        "timestamp": "09:50 AM",
+        "avatar": "https://randomuser.me/api/portraits/women/26.jpg",
+        "createdAt": 1779112256492
+      },
+      {
+        "id": "axis-priya-m3",
+        "sender": "user",
+        "text": "Yeah 3pm works",
+        "timestamp": "09:52 AM",
+        "avatar": "https://picsum.photos/200/200",
+        "createdAt": 1779112376492
+      }
+    ],
+    "axis-tyler": [
+      {
+        "id": "axis-tyler-m1",
+        "sender": "user",
+        "text": "How did the pitch go?",
+        "timestamp": "09:48 AM",
+        "avatar": "https://picsum.photos/200/200",
+        "createdAt": 1779112136492
+      },
+      {
+        "id": "axis-tyler-m2",
+        "sender": "other",
+        "text": "Could've been worse lol",
+        "timestamp": "09:50 AM",
+        "avatar": "https://randomuser.me/api/portraits/men/55.jpg",
+        "createdAt": 1779112256492
+      },
+      {
+        "id": "axis-tyler-m3",
+        "sender": "user",
+        "text": "lmk what they said",
+        "timestamp": "09:52 AM",
+        "avatar": "https://picsum.photos/200/200",
+        "createdAt": 1779112376492
+      }
+    ],
+    "axis-zoe": [
+      {
+        "id": "axis-zoe-m1",
+        "sender": "other",
+        "text": "Just pushed to staging",
+        "timestamp": "09:48 AM",
+        "avatar": "https://randomuser.me/api/portraits/women/15.jpg",
+        "createdAt": 1779112136492
+      },
+      {
+        "id": "axis-zoe-m2",
+        "sender": "user",
+        "text": "Checking now",
+        "timestamp": "09:50 AM",
+        "avatar": "https://picsum.photos/200/200",
+        "createdAt": 1779112256492
+      },
+      {
+        "id": "axis-zoe-m3",
+        "sender": "user",
+        "text": "looks good, nice work",
+        "timestamp": "09:52 AM",
+        "avatar": "https://picsum.photos/200/200",
+        "createdAt": 1779112376492
+      }
+    ],
+    "axis-dex": [
+      {
+        "id": "axis-dex-m1",
+        "sender": "other",
+        "text": "You using Ollama for local inference?",
+        "timestamp": "09:48 AM",
+        "avatar": "https://randomuser.me/api/portraits/men/9.jpg",
+        "createdAt": 1779112136492
+      },
+      {
+        "id": "axis-dex-m2",
+        "sender": "user",
+        "text": "Yeah gemma3 mostly. Decent for quick stuff",
+        "timestamp": "09:50 AM",
+        "avatar": "https://picsum.photos/200/200",
+        "createdAt": 1779112256492
+      },
+      {
+        "id": "axis-dex-m3",
+        "sender": "other",
+        "text": "nice gonna try that setup",
+        "timestamp": "09:52 AM",
+        "avatar": "https://randomuser.me/api/portraits/men/9.jpg",
+        "createdAt": 1779112376492
+      }
+    ],
+    "axis-nadia": [
+      {
+        "id": "axis-nadia-m1",
+        "sender": "other",
+        "text": "Did you end up going with the agent architecture?",
+        "timestamp": "09:48 AM",
+        "avatar": "https://randomuser.me/api/portraits/women/62.jpg",
+        "createdAt": 1779112136492
+      },
+      {
+        "id": "axis-nadia-m2",
+        "sender": "user",
+        "text": "Yep. Four sub-brains running in parallel now",
+        "timestamp": "09:50 AM",
+        "avatar": "https://picsum.photos/200/200",
+        "createdAt": 1779112256492
+      },
+      {
+        "id": "axis-nadia-m3",
+        "sender": "other",
+        "text": "🔥",
+        "timestamp": "09:52 AM",
+        "avatar": "https://randomuser.me/api/portraits/women/62.jpg",
+        "createdAt": 1779112376492
+      }
+    ],
+    "axis-sam": [
+      {
+        "id": "axis-sam-m1",
+        "sender": "user",
+        "text": "Any luck with the integration?",
+        "timestamp": "09:48 AM",
+        "avatar": "https://picsum.photos/200/200",
+        "createdAt": 1779112136492
+      },
+      {
+        "id": "axis-sam-m2",
+        "sender": "other",
+        "text": "Almost. OAuth is being a pain",
+        "timestamp": "09:50 AM",
+        "avatar": "https://randomuser.me/api/portraits/men/47.jpg",
+        "createdAt": 1779112256492
+      },
+      {
+        "id": "axis-sam-m3",
+        "sender": "user",
+        "text": "classic",
+        "timestamp": "09:52 AM",
+        "avatar": "https://picsum.photos/200/200",
+        "createdAt": 1779112376492
+      }
+    ],
+    "axis-riley": [
+      {
+        "id": "axis-riley-m1",
+        "sender": "other",
+        "text": "Okay I finally set up SOMA on my end",
+        "timestamp": "09:48 AM",
+        "avatar": "https://randomuser.me/api/portraits/women/33.jpg",
+        "createdAt": 1779112136493
+      },
+      {
+        "id": "axis-riley-m2",
+        "sender": "other",
+        "text": "this is genuinely impressive",
+        "timestamp": "09:50 AM",
+        "avatar": "https://randomuser.me/api/portraits/women/33.jpg",
+        "createdAt": 1779112256493
+      },
+      {
+        "id": "axis-riley-m3",
+        "sender": "user",
+        "text": "haha thanks, still a lot of rough edges",
+        "timestamp": "09:52 AM",
+        "avatar": "https://picsum.photos/200/200",
+        "createdAt": 1779112376493
+      }
+    ],
+    "axis-finn": [
+      {
+        "id": "axis-finn-m1",
+        "sender": "user",
+        "text": "Did you deploy yet?",
+        "timestamp": "09:48 AM",
+        "avatar": "https://picsum.photos/200/200",
+        "createdAt": 1779112136493
+      },
+      {
+        "id": "axis-finn-m2",
+        "sender": "other",
+        "text": "Tomorrow morning",
+        "timestamp": "09:50 AM",
+        "avatar": "https://randomuser.me/api/portraits/men/22.jpg",
+        "createdAt": 1779112256493
+      },
+      {
+        "id": "axis-finn-m3",
+        "sender": "user",
+        "text": "cool, I'll check the logs",
+        "timestamp": "09:52 AM",
+        "avatar": "https://picsum.photos/200/200",
+        "createdAt": 1779112376493
+      }
+    ],
+    "axis-layla": [
+      {
+        "id": "axis-layla-m1",
+        "sender": "other",
+        "text": "I wrote up some notes on the memory system if you want them",
+        "timestamp": "09:48 AM",
+        "avatar": "https://randomuser.me/api/portraits/women/50.jpg",
+        "createdAt": 1779112136493
+      },
+      {
+        "id": "axis-layla-m2",
+        "sender": "user",
+        "text": "Yes please, send them over",
+        "timestamp": "09:50 AM",
+        "avatar": "https://picsum.photos/200/200",
+        "createdAt": 1779112256493
+      },
+      {
+        "id": "axis-layla-m3",
+        "sender": "other",
+        "text": "will do",
+        "timestamp": "09:52 AM",
+        "avatar": "https://randomuser.me/api/portraits/women/50.jpg",
+        "createdAt": 1779112376493
+      }
+    ],
+    "axis-cole": [
+      {
+        "id": "axis-cole-m1",
+        "sender": "other",
+        "text": "working on something kinda related to what you're building",
+        "timestamp": "09:48 AM",
+        "avatar": "https://randomuser.me/api/portraits/men/38.jpg",
+        "createdAt": 1779112136493
+      },
+      {
+        "id": "axis-cole-m2",
+        "sender": "other",
+        "text": "can I show you next week?",
+        "timestamp": "09:50 AM",
+        "avatar": "https://randomuser.me/api/portraits/men/38.jpg",
+        "createdAt": 1779112256493
+      },
+      {
+        "id": "axis-cole-m3",
+        "sender": "user",
+        "text": "Yeah for sure",
+        "timestamp": "09:52 AM",
+        "avatar": "https://picsum.photos/200/200",
+        "createdAt": 1779112376493
+      }
+    ],
+    "axis-eva": [
+      {
+        "id": "axis-eva-m1",
+        "sender": "user",
+        "text": "Hey long time, how are you?",
+        "timestamp": "09:48 AM",
+        "avatar": "https://picsum.photos/200/200",
+        "createdAt": 1779112136493
+      },
+      {
+        "id": "axis-eva-m2",
+        "sender": "other",
+        "text": "Good! busy but good. You?",
+        "timestamp": "09:50 AM",
+        "avatar": "https://randomuser.me/api/portraits/women/7.jpg",
+        "createdAt": 1779112256493
+      },
+      {
+        "id": "axis-eva-m3",
+        "sender": "user",
+        "text": "Same, building constantly lol",
+        "timestamp": "09:52 AM",
+        "avatar": "https://picsum.photos/200/200",
+        "createdAt": 1779112376493
+      }
+    ],
+    "axis-ben": [
+      {
+        "id": "axis-ben-m1",
+        "sender": "other",
+        "text": "The social posting feature is live?",
+        "timestamp": "09:48 AM",
+        "avatar": "https://randomuser.me/api/portraits/men/64.jpg",
+        "createdAt": 1779112136493
+      },
+      {
+        "id": "axis-ben-m2",
+        "sender": "user",
+        "text": "Just launched it, Bluesky integration is working",
+        "timestamp": "09:50 AM",
+        "avatar": "https://picsum.photos/200/200",
+        "createdAt": 1779112256493
+      },
+      {
+        "id": "axis-ben-m3",
+        "sender": "other",
+        "text": "following you now",
+        "timestamp": "09:52 AM",
+        "avatar": "https://randomuser.me/api/portraits/men/64.jpg",
+        "createdAt": 1779112376493
+      }
+    ],
+    "axis-mia": [
+      {
+        "id": "axis-mia-m1",
+        "sender": "user",
+        "text": "Got your message, will respond properly tonight",
+        "timestamp": "09:48 AM",
+        "avatar": "https://picsum.photos/200/200",
+        "createdAt": 1779112136494
+      },
+      {
+        "id": "axis-mia-m2",
+        "sender": "other",
+        "text": "No rush, just wanted to flag it",
+        "timestamp": "09:50 AM",
+        "avatar": "https://randomuser.me/api/portraits/women/88.jpg",
+        "createdAt": 1779112256494
+      },
+      {
+        "id": "axis-mia-m3",
+        "sender": "user",
+        "text": "appreciate it",
+        "timestamp": "09:52 AM",
+        "avatar": "https://picsum.photos/200/200",
+        "createdAt": 1779112376494
+      }
+    ],
+    "axis-kai": [
+      {
+        "id": "axis-kai-m1",
+        "sender": "other",
+        "text": "Running 4 agents in parallel sounds expensive",
+        "timestamp": "09:48 AM",
+        "avatar": "https://randomuser.me/api/portraits/men/17.jpg",
+        "createdAt": 1779112136494
+      },
+      {
+        "id": "axis-kai-m2",
+        "sender": "user",
+        "text": "Local models so basically free",
+        "timestamp": "09:50 AM",
+        "avatar": "https://picsum.photos/200/200",
+        "createdAt": 1779112256494
+      },
+      {
+        "id": "axis-kai-m3",
+        "sender": "other",
+        "text": "okay I need this setup",
+        "timestamp": "09:52 AM",
+        "avatar": "https://randomuser.me/api/portraits/men/17.jpg",
+        "createdAt": 1779112376494
+      }
+    ],
+    "axis-jade": [
+      {
+        "id": "axis-jade-m1",
+        "sender": "other",
+        "text": "Paris was amazing btw",
+        "timestamp": "09:48 AM",
+        "avatar": "https://randomuser.me/api/portraits/women/41.jpg",
+        "createdAt": 1779112136494
+      },
+      {
+        "id": "axis-jade-m2",
+        "sender": "user",
+        "text": "I saw the photos, looks incredible",
+        "timestamp": "09:50 AM",
+        "avatar": "https://picsum.photos/200/200",
+        "createdAt": 1779112256494
+      },
+      {
+        "id": "axis-jade-m3",
+        "sender": "other",
+        "text": "next time you should come",
+        "timestamp": "09:52 AM",
+        "avatar": "https://randomuser.me/api/portraits/women/41.jpg",
+        "createdAt": 1779112376494
+      }
+    ],
+    "axis-aaron": [
+      {
+        "id": "axis-aaron-m1",
+        "sender": "other",
+        "text": "quick question about your goal engine",
+        "timestamp": "09:48 AM",
+        "avatar": "https://randomuser.me/api/portraits/men/83.jpg",
+        "createdAt": 1779112136494
+      },
+      {
+        "id": "axis-aaron-m2",
+        "sender": "other",
+        "text": "is it fully autonomous or does it need prompting?",
+        "timestamp": "09:50 AM",
+        "avatar": "https://randomuser.me/api/portraits/men/83.jpg",
+        "createdAt": 1779112256494
+      },
+      {
+        "id": "axis-aaron-m3",
+        "sender": "user",
+        "text": "Both modes, I can show you",
+        "timestamp": "09:52 AM",
+        "avatar": "https://picsum.photos/200/200",
+        "createdAt": 1779112376494
+      }
+    ],
+    "axis-luna": [
+      {
+        "id": "axis-luna-m1",
+        "sender": "user",
+        "text": "Did you see that paper on constitutional AI?",
+        "timestamp": "09:48 AM",
+        "avatar": "https://picsum.photos/200/200",
+        "createdAt": 1779112136494
+      },
+      {
+        "id": "axis-luna-m2",
+        "sender": "other",
+        "text": "yes! loved the section on value alignment",
+        "timestamp": "09:50 AM",
+        "avatar": "https://randomuser.me/api/portraits/women/19.jpg",
+        "createdAt": 1779112256494
+      },
+      {
+        "id": "axis-luna-m3",
+        "sender": "user",
+        "text": "exactly what I'm trying to build into SOMA",
+        "timestamp": "09:52 AM",
+        "avatar": "https://picsum.photos/200/200",
+        "createdAt": 1779112376494
+      }
+    ]
+  },
+  "spaces": [],
+  "activities": [
+    {
+      "id": "activity-1779377457824-hey7v",
+      "type": "studio_profile_saved",
+      "title": "Studio profile saved",
+      "summary": "Profile, widgets, or Studio settings were updated.",
+      "createdAt": 1779377457824,
+      "source": "studio-profile",
+      "metadata": {}
+    },
+    {
+      "id": "activity-1779377457647-doe5t",
+      "type": "studio_profile_saved",
+      "title": "Studio profile saved",
+      "summary": "Profile, widgets, or Studio settings were updated.",
+      "createdAt": 1779377457647,
+      "source": "studio-profile",
+      "metadata": {}
+    },
+    {
+      "id": "activity-1779374533139-yogkl",
+      "type": "studio_profile_saved",
+      "title": "Studio profile saved",
+      "summary": "Profile, widgets, or Studio settings were updated.",
+      "createdAt": 1779374533139,
+      "source": "studio-profile",
+      "metadata": {}
+    },
+    {
+      "id": "activity-1779374532996-gwfsz",
+      "type": "studio_profile_saved",
+      "title": "Studio profile saved",
+      "summary": "Profile, widgets, or Studio settings were updated.",
+      "createdAt": 1779374532996,
+      "source": "studio-profile",
+      "metadata": {}
+    },
+    {
+      "id": "activity-1779373914163-foxcf",
+      "type": "studio_profile_saved",
+      "title": "Studio profile saved",
+      "summary": "Profile, widgets, or Studio settings were updated.",
+      "createdAt": 1779373914163,
+      "source": "studio-profile",
+      "metadata": {}
+    },
+    {
+      "id": "activity-1779373914034-wlbts",
+      "type": "studio_profile_saved",
+      "title": "Studio profile saved",
+      "summary": "Profile, widgets, or Studio settings were updated.",
+      "createdAt": 1779373914034,
+      "source": "studio-profile",
+      "metadata": {}
+    },
+    {
+      "id": "activity-1779373885960-zdn9t",
+      "type": "studio_profile_saved",
+      "title": "Studio profile saved",
+      "summary": "Profile, widgets, or Studio settings were updated.",
+      "createdAt": 1779373885960,
+      "source": "studio-profile",
+      "metadata": {}
+    },
+    {
+      "id": "activity-1779373885955-wom6f",
+      "type": "studio_profile_saved",
+      "title": "Studio profile saved",
+      "summary": "Profile, widgets, or Studio settings were updated.",
+      "createdAt": 1779373885955,
+      "source": "studio-profile",
+      "metadata": {}
+    },
+    {
+      "id": "activity-1779373183884-zp34d",
+      "type": "studio_identity_registered",
+      "title": "Studio identity registered",
+      "summary": "@barry registered as the portable Studio identity.",
+      "createdAt": 1779373183884,
+      "source": "studio-identity",
+      "metadata": {
+        "userId": "usr-51e95cd8-4112-49a4-8b87-e80f99506be8",
+        "handle": "barry"
+      }
+    },
+    {
+      "id": "activity-1779112496500-v3pjn",
+      "type": "axis_direct_sent",
+      "title": "Direct sent",
+      "summary": "Direct sent to Marcus Chen.",
+      "createdAt": 1779112496500,
+      "source": "studio",
+      "metadata": {}
+    }
+  ],
+  "updatedAt": 1779377457837,
+  "source": "C:\\Users\\barry\\OneDrive\\Desktop\\The Stack\\SOMA\\SOMA\\axis\\axis-state.json"
+}

@@ -9,6 +9,7 @@ const _reflectionsUpload = multer({ dest: os.tmpdir() });
 const { buildQualityReport, verifyGoal } = require('../../core/GoalQualityGate.cjs');
 const workLedger = require('../../core/AutonomousWorkLedger.cjs');
 import { ContentExtractor } from '../utils/ContentExtractor.js';
+import { requireEnterpriseAuth } from '../loaders/authMiddleware.js';
 import financeRoutes from '../../server/finance/financeRoutes.js';
 import marketDataRoutes from '../../server/finance/marketDataRoutes.js';
 import scalpingRoutes from '../../server/finance/scalpingRoutes.js';
@@ -35,9 +36,13 @@ import somaRoutes from '../../server/routes/somaRoutes.js';
 import notificationRoutes from '../../server/routes/notificationRoutes.js';
 import perceptionRoutes from '../../server/routes/perceptionRoutes.js';
 import createAxisRoutes from '../../server/routes/axisRoutes.js';
+import createProjectRoutes from '../../server/routes/projectRoutes.js';
+import createCommunityRoutes from '../../server/routes/communityRoutes.js';
 import createSocialRoutes from '../../server/routes/socialRoutes.js';
 import createMaintenanceRoutes from '../../server/routes/maintenanceRoutes.js';
 import createWorkspaceRoutes from '../../server/routes/workspaceRoutes.js';
+import createStudioRoutes from '../../server/routes/studioRoutes.js';
+import createThirdPlaceRoutes from '../../server/routes/thirdPlaceRoutes.js';
 import { toggleAutopilot, getAutopilotStatus } from './extended.js';
 import { buildSystemSnapshot } from '../utils/systemState.js';
 import { executeCommand } from '../utils/commandRouter.js';
@@ -46,6 +51,48 @@ import { buildReadinessReport } from '../../core/SomaReadinessScanner.js';
 
 export async function loadRoutes(app, system) {
     console.log('\n[Loader] ðŸ›£ï¸  Mounting Production API Routes...');
+
+    const classifyBrainLanes = (text = '', metadata = {}) => {
+        const haystack = `${text} ${JSON.stringify(metadata || {})}`.toLowerCase();
+        const lanes = new Set(['MNEMOSYNE']);
+        if (/\b(plato|socrates|aristotle|metaphysics|myth|archetype|symbol|story|voice|soul|phenomenology|existential|identity|selfhood|personhood|consciousness|memory)\b/i.test(haystack)) lanes.add('AURORA');
+        if (/\b(strategy|goal|plan|virtue|ethic|discipline|decision|priority|risk|future|mission|principle|rule)\b/i.test(haystack)) lanes.add('PROMETHEUS');
+        if (/\b(logic|argument|contradiction|definition|proof|coherent|evidence|reasoning|socratic|question)\b/i.test(haystack)) lanes.add('LOGOS');
+        if (/\b(safety|boundary|guard|security|threat|harm|permission|secret|credential)\b/i.test(haystack)) lanes.add('THALAMUS');
+        return Array.from(lanes);
+    };
+
+    const rememberRoutedContext = async ({ content, source, title, metadata = {}, importance = 7 }) => {
+        const mnemonic = system.mnemonicArbiter || system.mnemonic;
+        if (!mnemonic?.remember || !content?.trim()) return null;
+        const brainLanes = classifyBrainLanes(content, metadata);
+        return mnemonic.remember(content.trim(), {
+            ...(metadata || {}),
+            type: metadata.type || 'routed_context',
+            source,
+            title,
+            brainLanes,
+            primaryBrain: brainLanes.find(lane => lane !== 'MNEMOSYNE') || 'MNEMOSYNE',
+            importance,
+            timestamp: Date.now()
+        }).catch(() => null);
+    };
+
+    const memoryMetadata = (memory = {}) => {
+        if (memory.metadata && typeof memory.metadata === 'object') return memory.metadata;
+        if (typeof memory.metadata === 'string') {
+            try { return JSON.parse(memory.metadata); } catch { return {}; }
+        }
+        return {};
+    };
+
+    const formatMemoryBullet = (memory = {}) => {
+        const meta = memoryMetadata(memory);
+        const lanes = Array.isArray(meta.brainLanes) ? meta.brainLanes : [];
+        const lane = meta.primaryBrain || lanes.find(item => item !== 'MNEMOSYNE') || lanes[0] || 'MNEMOSYNE';
+        const content = (memory.content || memory.text || memory).toString().replace(/\s+/g, ' ').substring(0, 180);
+        return `• [${lane}] ${content}`;
+    };
 
     const commandBridgeSettingsPath = path.join(process.cwd(), 'SOMA', 'command-bridge-settings.json');
     const defaultCommandBridgeSettings = {
@@ -78,6 +125,13 @@ export async function loadRoutes(app, system) {
         network: {
             peerDiscovery: true,
             seasonalLearningExchange: false
+        },
+        providers: {
+            odds: {
+                provider: 'the-odds-api',
+                enabled: true,
+                cacheTtlSeconds: 300
+            }
         }
     };
 
@@ -106,6 +160,65 @@ export async function loadRoutes(app, system) {
         await fs.writeFile(commandBridgeSettingsPath, JSON.stringify(settings, null, 2));
         system.commandBridgeSettings = settings;
         return settings;
+    };
+
+    const envFilePath = path.join(process.cwd(), '.env');
+    const maskSecret = (value = '') => {
+        const secret = String(value || '').trim();
+        if (!secret) return null;
+        if (secret.length <= 8) return 'configured';
+        return `${secret.slice(0, 4)}...${secret.slice(-4)}`;
+    };
+
+    const upsertEnvVars = async (updates = {}) => {
+        const entries = Object.entries(updates)
+            .filter(([key, value]) => /^[A-Za-z_][A-Za-z0-9_]*$/.test(key) && typeof value === 'string');
+        if (entries.length === 0) return;
+
+        let raw = '';
+        try {
+            raw = await fs.readFile(envFilePath, 'utf8');
+        } catch {
+            raw = '';
+        }
+
+        const newline = raw.includes('\r\n') ? '\r\n' : '\n';
+        const lines = raw ? raw.split(/\r?\n/) : [];
+        const touched = new Set();
+        const updateMap = new Map(entries);
+        const nextLines = lines.map(line => {
+            const match = line.match(/^([A-Za-z_][A-Za-z0-9_]*)=/);
+            if (!match || !updateMap.has(match[1])) return line;
+            touched.add(match[1]);
+            return `${match[1]}=${updateMap.get(match[1])}`;
+        });
+
+        for (const [key, value] of entries) {
+            if (!touched.has(key)) nextLines.push(`${key}=${value}`);
+        }
+
+        const nextRaw = nextLines.join(newline).replace(/\s*$/u, '') + newline;
+        await fs.writeFile(envFilePath, nextRaw, 'utf8');
+    };
+
+    const buildProviderSettingsStatus = async () => {
+        const settings = await readCommandBridgeSettings();
+        const oddsKey = process.env.ODDS_API_KEY || process.env.THE_ODDS_API_KEY || '';
+        const oddsSettings = settings.providers?.odds || defaultCommandBridgeSettings.providers.odds;
+        return {
+            settings: settings.providers || defaultCommandBridgeSettings.providers,
+            providers: {
+                odds: {
+                    ...oddsSettings,
+                    configured: Boolean(oddsKey),
+                    keyPreview: maskSecret(oddsKey),
+                    envName: 'ODDS_API_KEY',
+                    fallbackEnvName: 'THE_ODDS_API_KEY',
+                    supportedMarkets: ['h2h', 'spreads', 'totals'],
+                    unsupportedMarkets: ['player_props']
+                }
+            }
+        };
     };
 
     const allowedRoots = (process.env.SOMA_ALLOWED_PATHS || '')
@@ -482,7 +595,7 @@ export async function loadRoutes(app, system) {
                         .filter(m => (m.similarity || 1) > 0.35)
                         .slice(0, 3);
                     if (hits.length > 0) {
-                        memoryContext = `\n[SOMA MEMORY]\n${hits.map(m => `â€¢ ${(m.content || m).toString().substring(0, 150)}`).join('\n')}\n[/SOMA MEMORY]\n`;
+                        memoryContext = `\n[SOMA MEMORY — recalled with brain-lane routing]\n${hits.map(formatMemoryBullet).join('\n')}\n[/SOMA MEMORY]\n`;
                     }
                 } catch (e) {}
             }
@@ -1403,6 +1516,44 @@ export async function loadRoutes(app, system) {
         }
     });
 
+    app.get('/api/settings/providers', async (req, res) => {
+        try {
+            const status = await buildProviderSettingsStatus();
+            res.json({ success: true, ...status });
+        } catch (error) {
+            res.status(500).json({ success: false, error: error.message });
+        }
+    });
+
+    app.post('/api/settings/providers/odds', async (req, res) => {
+        try {
+            const { apiKey, provider = 'the-odds-api', enabled = true, cacheTtlSeconds = 300 } = req.body || {};
+            const current = await readCommandBridgeSettings();
+            const nextSettings = mergeSettings(current, {
+                providers: {
+                    odds: {
+                        provider,
+                        enabled: Boolean(enabled),
+                        cacheTtlSeconds: Number(cacheTtlSeconds) || 300
+                    }
+                }
+            });
+
+            const trimmedKey = typeof apiKey === 'string' ? apiKey.trim() : '';
+            const looksMasked = trimmedKey.includes('...') || trimmedKey === 'configured';
+            if (trimmedKey && !looksMasked) {
+                await upsertEnvVars({ ODDS_API_KEY: trimmedKey });
+                process.env.ODDS_API_KEY = trimmedKey;
+            }
+
+            await writeCommandBridgeSettings(nextSettings);
+            const status = await buildProviderSettingsStatus();
+            res.json({ success: true, ...status });
+        } catch (error) {
+            res.status(500).json({ success: false, error: error.message });
+        }
+    });
+
 
     // 3b. APPROVAL SYSTEM ENDPOINTS
     app.get('/api/approval/pending', (req, res) => {
@@ -1652,6 +1803,7 @@ export async function loadRoutes(app, system) {
                     title: fm.title || f.replace(/\.md$/i, ''),
                     workbook: fm.workbook || null,
                     segment: fm.segment || null,
+                    section: fm.section || null,
                     parent: fm.parent || null
                 };
             }));
@@ -1665,10 +1817,10 @@ export async function loadRoutes(app, system) {
         .replace(/^-+|-+$/g, '')
         .slice(0, 80) || 'untitled';
 
-    const writeReflectionArtifact = async ({ type, title, workbook, segment, parent, body }) => {
+    const writeReflectionArtifact = async ({ type, title, workbook, segment, section, parent, body }) => {
         const vaultPath = path.resolve(process.cwd(), 'data', 'vault', 'reflections');
         await fs.mkdir(vaultPath, { recursive: true });
-        const slugParts = [type, workbook, segment, title].filter(Boolean).map(reflectionSlug);
+        const slugParts = [type, workbook, segment, section, title].filter(Boolean).map(reflectionSlug);
         const filename = `${slugParts.join('.')}.md`;
         const filePath = path.resolve(vaultPath, filename);
         if (!filePath.startsWith(vaultPath)) throw new Error('Forbidden path');
@@ -1681,6 +1833,7 @@ export async function loadRoutes(app, system) {
             `createdAt: ${now}`,
             workbook ? `workbook: ${JSON.stringify(workbook)}` : null,
             segment ? `segment: ${JSON.stringify(segment)}` : null,
+            section ? `section: ${JSON.stringify(section)}` : null,
             parent ? `parent: ${JSON.stringify(parent)}` : null,
             `tags: [reflections, ${type}]`,
             '---',
@@ -1728,19 +1881,71 @@ export async function loadRoutes(app, system) {
         } catch (error) { res.status(500).json({ success: false, error: error.message }); }
     });
 
+    app.post('/api/reflections/section', async (req, res) => {
+        try {
+            const { title, workbook, segment, description = '' } = req.body || {};
+            if (!title?.trim() || !workbook?.trim()) return res.status(400).json({ success: false, error: 'title and workbook required' });
+            const segmentName = segment?.trim() || workbook.trim();
+            const segmentPath = path.resolve(process.cwd(), 'data', 'vault', 'reflections', `segment.${reflectionSlug(workbook)}.${reflectionSlug(segmentName)}.md`);
+            try {
+                await fs.access(segmentPath);
+            } catch {
+                await writeReflectionArtifact({
+                    type: 'segment',
+                    title: segmentName,
+                    workbook: workbook.trim(),
+                    parent: workbook.trim(),
+                    body: `# ${segmentName}\n\nDefault project segment for sections in [[workbook.${reflectionSlug(workbook)}]].\n\n## Sections\n\n`
+                });
+            }
+            const body = `# ${title.trim()}\n\nSection of [[segment.${reflectionSlug(workbook)}.${reflectionSlug(segmentName)}]].\n\n${description.trim() || 'Section notes.'}\n\n## Folios\n\n`;
+            const result = await writeReflectionArtifact({
+                type: 'section',
+                title: title.trim(),
+                workbook: workbook.trim(),
+                segment: segmentName,
+                parent: segmentName,
+                body
+            });
+            workLedger.record({
+                type: 'reflection_section_created',
+                title: title.trim(),
+                summary: `Created section in ${workbook.trim()} / ${segmentName}`,
+                evidence: { filename: result.filename, workbook: workbook.trim(), segment: segmentName },
+                nextStep: 'Add folios for individual pages',
+                status: 'created',
+                source: 'Reflections',
+            });
+            res.json(result);
+        } catch (error) { res.status(500).json({ success: false, error: error.message }); }
+    });
+
     app.post('/api/reflections/folio', async (req, res) => {
         try {
-            const { title, workbook, segment, content = '' } = req.body || {};
-            if (!title?.trim() || !workbook?.trim() || !segment?.trim()) {
-                return res.status(400).json({ success: false, error: 'title, workbook, and segment required' });
+            const { title, workbook, segment, section, content = '' } = req.body || {};
+            if (!title?.trim() || !workbook?.trim()) {
+                return res.status(400).json({ success: false, error: 'title and workbook required' });
             }
-            const body = `# ${title.trim()}\n\nPart of [[segment.${reflectionSlug(workbook)}.${reflectionSlug(segment)}]].\n\n${content.trim() || 'Start writing here.'}\n`;
-            const result = await writeReflectionArtifact({ type: 'folio', title: title.trim(), workbook: workbook.trim(), segment: segment.trim(), parent: segment.trim(), body });
+            const segmentName = segment?.trim() || workbook.trim();
+            const parent = section?.trim() || segmentName;
+            const parentLink = section?.trim()
+                ? `section.${reflectionSlug(workbook)}.${reflectionSlug(segmentName)}.${reflectionSlug(section)}`
+                : `segment.${reflectionSlug(workbook)}.${reflectionSlug(segmentName)}`;
+            const body = `# ${title.trim()}\n\nPart of [[${parentLink}]].\n\n${content.trim() || 'Start writing here.'}\n`;
+            const result = await writeReflectionArtifact({
+                type: 'folio',
+                title: title.trim(),
+                workbook: workbook.trim(),
+                segment: segmentName,
+                section: section?.trim() || null,
+                parent,
+                body
+            });
             workLedger.record({
                 type: 'reflection_folio_created',
                 title: title.trim(),
-                summary: `Created folio in ${workbook.trim()} / ${segment.trim()}`,
-                evidence: { filename: result.filename, workbook: workbook.trim(), segment: segment.trim() },
+                summary: `Created folio in ${workbook.trim()} / ${segmentName}${section?.trim() ? ` / ${section.trim()}` : ''}`,
+                evidence: { filename: result.filename, workbook: workbook.trim(), segment: segmentName, section: section?.trim() || null },
                 nextStep: 'Write or link supporting notes',
                 status: 'created',
                 source: 'Reflections',
@@ -1753,8 +1958,23 @@ export async function loadRoutes(app, system) {
         try {
             const { text, title, context } = req.body;
             if (!system.reflections) return res.status(503).json({ error: 'Reflections Arbiter not available' });
-            const result = await system.reflections.appendQuickNote(text, { title, context });
-            res.json(result);
+            const brainLanes = classifyBrainLanes(text, { title, context });
+            const result = await system.reflections.appendQuickNote(text, { title, context, brainLanes });
+            const memory = await rememberRoutedContext({
+                content: [
+                    title ? `Reflection note: ${title}` : 'Reflection note',
+                    text
+                ].filter(Boolean).join('\n\n'),
+                source: 'reflections.quick_note',
+                title,
+                metadata: {
+                    type: 'reflection_note',
+                    context,
+                    reflectionFile: result?.filename
+                },
+                importance: context?.source === 'ml-intern' ? 8 : 6
+            });
+            res.json({ ...result, memoryRouted: !!memory, brainLanes });
         } catch (error) { res.status(500).json({ error: error.message }); }
     });
 
@@ -2015,6 +2235,261 @@ export async function loadRoutes(app, system) {
         } catch (error) { res.status(500).json({ success: false, error: error.message }); }
     });
 
+    app.get('/api/reflections/intelligence', async (req, res) => {
+        try {
+            const index = await buildReflectionsIndex();
+            const stopWords = new Set([
+                'about', 'after', 'again', 'also', 'because', 'before', 'being', 'between', 'could', 'every',
+                'from', 'have', 'into', 'just', 'like', 'more', 'need', 'notes', 'other', 'should', 'their',
+                'there', 'these', 'thing', 'think', 'this', 'those', 'through', 'under', 'using', 'where',
+                'which', 'while', 'with', 'would', 'your'
+            ]);
+            const now = Date.now();
+
+            const safeDate = value => {
+                if (!value) return 0;
+                const parsed = Date.parse(String(value));
+                return Number.isFinite(parsed) ? parsed : 0;
+            };
+            const noteDate = note => safeDate(note.frontmatter.updatedAt || note.frontmatter.createdAt || note.frontmatter.created || note.frontmatter.ingested);
+            const cleanSnippet = text => String(text || '').replace(/\s+/g, ' ').trim().slice(0, 180);
+            const tokenize = text => [...String(text || '').toLowerCase().matchAll(/[a-z][a-z0-9-]{4,}/g)]
+                .map(match => match[0])
+                .filter(token => !stopWords.has(token) && !token.includes('http'));
+            const topTerms = (text, limit = 5) => {
+                const counts = new Map();
+                for (const token of tokenize(text)) counts.set(token, (counts.get(token) || 0) + 1);
+                return [...counts.entries()].sort((a, b) => b[1] - a[1]).slice(0, limit).map(([term, count]) => ({ term, count }));
+            };
+            const annotationsFor = note => {
+                const section = note.body.match(/^##\s+Annotations\s*\n([\s\S]*)$/mi)?.[1] || '';
+                const entries = [];
+                const entryRe = />\s*==([\s\S]*?)==\s*\n+([\s\S]*?)(?=\n>\s*==|\n##\s|$)/g;
+                for (const match of section.matchAll(entryRe)) {
+                    entries.push({
+                        quote: cleanSnippet(match[1]),
+                        note: cleanSnippet(String(match[2] || '').replace(/-\s*Annotated:.*/gi, '')),
+                        source: note.name,
+                        title: note.title
+                    });
+                }
+                return entries;
+            };
+            const statusWeight = status => ({
+                inbox: 8,
+                raw: 14,
+                refined: 42,
+                linked: 58,
+                promoted: 72,
+                archived: 35
+            }[String(status || 'inbox').toLowerCase()] || 18);
+            const maturityStage = score => {
+                if (score >= 78) return 'publishable';
+                if (score >= 62) return 'synthesized';
+                if (score >= 44) return 'connected';
+                if (score >= 25) return 'forming';
+                return 'spark';
+            };
+
+            const annotationMap = new Map(index.notes.map(note => [note.name, annotationsFor(note)]));
+            const noteProfiles = index.notes.map(note => {
+                const outgoing = index.outgoingResolved.get(note.name) || [];
+                const backlinks = index.backlinks.get(note.name) || [];
+                const annotations = annotationMap.get(note.name) || [];
+                const degree = outgoing.filter(link => link.resolved).length + backlinks.length;
+                const ageMs = noteDate(note) ? now - noteDate(note) : Number.MAX_SAFE_INTEGER;
+                const terms = topTerms([note.title, note.tags.join(' '), note.body].join('\n'), 8);
+                const score = Math.min(100,
+                    statusWeight(note.frontmatter.status) +
+                    Math.min(24, degree * 8) +
+                    Math.min(14, annotations.length * 7) +
+                    Math.min(12, Math.floor(note.wordCount / 180) * 4) +
+                    Math.min(10, note.headings.length * 2)
+                );
+                return { note, outgoing, backlinks, annotations, degree, ageMs, terms, score, stage: maturityStage(score) };
+            });
+
+            const statusCounts = noteProfiles.reduce((acc, profile) => {
+                const status = String(profile.note.frontmatter.status || 'inbox').toLowerCase();
+                acc[status] = (acc[status] || 0) + 1;
+                return acc;
+            }, {});
+
+            const thoughtTrails = noteProfiles
+                .filter(profile => profile.degree > 0)
+                .sort((a, b) => b.degree - a.degree || b.score - a.score)
+                .slice(0, 6)
+                .map(profile => ({
+                    name: profile.note.name,
+                    title: profile.note.title,
+                    strength: profile.degree,
+                    stage: profile.stage,
+                    connected: [
+                        ...profile.outgoing.filter(link => link.resolved).map(link => ({ name: link.name, title: link.title, direction: 'out' })),
+                        ...profile.backlinks.map(link => ({ name: link.name, title: link.title, direction: 'in' }))
+                    ].slice(0, 5),
+                    summary: `${profile.note.title} connects ${profile.degree} reflection${profile.degree === 1 ? '' : 's'} around ${profile.terms.slice(0, 3).map(t => t.term).join(', ') || 'the current vault'}.`
+                }));
+
+            const livingRecall = noteProfiles
+                .filter(profile => profile.ageMs > 1000 * 60 * 60 * 24 * 7 || profile.degree === 0)
+                .sort((a, b) => (a.degree - b.degree) || (b.score - a.score))
+                .slice(0, 8)
+                .map(profile => ({
+                    name: profile.note.name,
+                    title: profile.note.title,
+                    reason: profile.degree === 0 ? 'isolated thought' : 'older thread worth revisiting',
+                    ageDays: Number.isFinite(profile.ageMs) ? Math.max(0, Math.round(profile.ageMs / 86400000)) : null,
+                    suggestion: profile.degree === 0 ? 'Link this to a workbook, section, or active theme.' : 'Re-open and decide whether it still matters.'
+                }));
+
+            const allAnnotations = noteProfiles.flatMap(profile => profile.annotations.map(annotation => ({
+                ...annotation,
+                relatedCount: index.notes.filter(candidate =>
+                    candidate.name !== annotation.source &&
+                    annotation.quote.length > 12 &&
+                    normalizeNoteKey(candidate.body).includes(normalizeNoteKey(annotation.quote).slice(0, 30))
+                ).length
+            })));
+
+            const annotationGraph = allAnnotations
+                .sort((a, b) => b.relatedCount - a.relatedCount || b.quote.length - a.quote.length)
+                .slice(0, 8);
+
+            const termBuckets = new Map();
+            for (const profile of noteProfiles) {
+                for (const { term } of profile.terms.slice(0, 5)) {
+                    if (!termBuckets.has(term)) termBuckets.set(term, []);
+                    termBuckets.get(term).push(profile.note);
+                }
+            }
+
+            const distillerInbox = [
+                ...noteProfiles
+                    .filter(profile => ['raw', 'inbox', ''].includes(String(profile.note.frontmatter.status || 'inbox').toLowerCase()) && profile.note.wordCount > 80)
+                    .sort((a, b) => b.note.wordCount - a.note.wordCount)
+                    .slice(0, 4)
+                    .map(profile => ({
+                        type: 'refine',
+                        name: profile.note.name,
+                        title: profile.note.title,
+                        reason: `${profile.note.wordCount} words are still in ${profile.note.frontmatter.status || 'inbox'} state.`
+                    })),
+                ...[...termBuckets.entries()]
+                    .filter(([, bucket]) => bucket.length >= 3)
+                    .sort((a, b) => b[1].length - a[1].length)
+                    .slice(0, 3)
+                    .map(([term, bucket]) => ({
+                        type: 'cluster',
+                        title: `Cluster: ${term}`,
+                        reason: `${bucket.length} reflections share this signal.`,
+                        notes: bucket.slice(0, 5).map(note => ({ name: note.name, title: note.title }))
+                    })),
+                ...allAnnotations
+                    .filter(annotation => annotation.relatedCount === 0)
+                    .slice(0, 3)
+                    .map(annotation => ({
+                        type: 'annotation',
+                        name: annotation.source,
+                        title: annotation.title,
+                        reason: `Highlighted idea has not been connected yet: "${annotation.quote}"`
+                    }))
+            ].slice(0, 10);
+
+            const contradictionRe = /\b(however|but|contradict|conflict|tension|risk|false|wrong|failed|failure|not significant|non-significant|artifact|uncertain|unclear|veto)\b/i;
+            const contradictions = noteProfiles
+                .filter(profile => contradictionRe.test(profile.note.body))
+                .sort((a, b) => b.score - a.score)
+                .slice(0, 8)
+                .map(profile => {
+                    const line = profile.note.body.split(/\n+/).find(part => contradictionRe.test(part)) || profile.note.body;
+                    return {
+                        name: profile.note.name,
+                        title: profile.note.title,
+                        risk: profile.stage,
+                        snippet: cleanSnippet(line),
+                        suggestion: 'Check whether this is a real contradiction, a useful uncertainty, or a dead branch.'
+                    };
+                });
+
+            const maturity = noteProfiles
+                .sort((a, b) => b.score - a.score)
+                .slice(0, 10)
+                .map(profile => ({
+                    name: profile.note.name,
+                    title: profile.note.title,
+                    score: profile.score,
+                    stage: profile.stage,
+                    links: profile.degree,
+                    annotations: profile.annotations.length,
+                    wordCount: profile.note.wordCount
+                }));
+
+            const transformations = noteProfiles
+                .filter(profile => profile.score >= 35 || profile.annotations.length > 0)
+                .sort((a, b) => b.score - a.score)
+                .slice(0, 8)
+                .map(profile => {
+                    const text = `${profile.note.title} ${profile.note.tags.join(' ')}`.toLowerCase();
+                    const mode = /story|chapter|character|saga|novel/.test(text) ? 'story chapter'
+                        : /research|medical|biotech|study|paper|evidence/.test(text) ? 'research brief'
+                        : /task|todo|plan|build|fix|implement/.test(text) ? 'execution plan'
+                        : /market|trade|finance|signal/.test(text) ? 'strategy memo'
+                        : 'essay seed';
+                    return {
+                        name: profile.note.name,
+                        title: profile.note.title,
+                        mode,
+                        reason: `${profile.stage} reflection with ${profile.degree} link${profile.degree === 1 ? '' : 's'} and ${profile.annotations.length} annotation${profile.annotations.length === 1 ? '' : 's'}.`
+                    };
+                });
+
+            const heatDays = new Map();
+            for (let i = 13; i >= 0; i--) {
+                const day = new Date(now - i * 86400000).toISOString().slice(0, 10);
+                heatDays.set(day, 0);
+            }
+            for (const profile of noteProfiles) {
+                const stamp = noteDate(profile.note);
+                if (!stamp) continue;
+                const day = new Date(stamp).toISOString().slice(0, 10);
+                if (heatDays.has(day)) heatDays.set(day, heatDays.get(day) + 1);
+            }
+            const topicHeat = [...termBuckets.entries()]
+                .map(([term, bucket]) => ({ term, count: bucket.length }))
+                .sort((a, b) => b.count - a.count)
+                .slice(0, 12);
+
+            res.json({
+                success: true,
+                generatedAt: new Date().toISOString(),
+                stats: {
+                    notes: index.notes.length,
+                    links: [...index.outgoingResolved.values()].flat().filter(link => link.resolved).length,
+                    backlinks: [...index.backlinks.values()].flat().length,
+                    annotations: allAnnotations.length,
+                    raw: statusCounts.raw || 0,
+                    refined: statusCounts.refined || 0,
+                    linked: statusCounts.linked || 0,
+                    promoted: statusCounts.promoted || 0
+                },
+                thoughtTrails,
+                livingRecall,
+                annotationGraph,
+                distillerInbox,
+                contradictions,
+                maturity,
+                transformations,
+                heatmap: {
+                    days: [...heatDays.entries()].map(([day, count]) => ({ day, count })),
+                    topics: topicHeat
+                }
+            });
+        } catch (error) {
+            res.status(500).json({ success: false, error: error.message });
+        }
+    });
+
     app.get('/api/reflections/analyze', async (req, res) => {
         try {
             const vaultPath = path.resolve(process.cwd(), 'data', 'vault', 'reflections');
@@ -2176,6 +2651,7 @@ Return ONLY valid JSON (no markdown, no explanation):
                 contradictions: `Find internal contradictions, logical gaps, or claims that conflict with each other in this note. Be specific and cite exact phrases.\n\nNOTE:\n${body}\n\nContradictions found:`,
                 tasks: `Extract every actionable task, decision, or next step from this note. Format as a numbered list. Only extract explicit or strongly implied actions.\n\nNOTE:\n${body}\n\nTasks:`,
                 'suggest-links': `Suggest 3-6 concept names or topic titles that this note should link to — things the author likely has or should write notes about. Return only a JSON array of short strings: ["concept one", "concept two", ...]\n\nNOTE:\n${body}`,
+                distill: `Distill this reflection into a durable cognition packet for SOMA.\n\nReturn this exact section structure:\nCORE SIGNAL: one concise sentence describing the most important idea.\nPERSONALITY EFFECT: how this should shape SOMA's voice, values, or behavior.\nKNOWLEDGE LINKS: 3-6 short concepts this should connect to.\nNEXT QUESTION: one useful question SOMA should revisit later.\n\nKeep it grounded in the note. Do not invent claims.\n\nNOTE:\n${body}`,
                 promote: `Extract the single most important insight from this note as a durable memory. Format: one paragraph, third-person, past-tense facts only. No filler.\n\nNOTE:\n${body}\n\nCore insight:`,
                 'expertise-seed': `Convert the key knowledge in this note into a structured expertise seed. Return JSON: {"domain":"...","concepts":["..."],"keyFacts":["..."],"openQuestions":["..."]}\n\nNOTE:\n${body}`,
             };
@@ -2189,18 +2665,28 @@ Return ONLY valid JSON (no markdown, no explanation):
             ]);
             const text = result?.text || result?.response?.text || (typeof result === 'string' ? result : '');
 
-            // If promote, also store in mnemonic
-            if (action === 'promote' && text && system.mnemonicArbiter) {
+            const brainLanes = classifyBrainLanes(`${body}\n${text}`, { action, noteRef: name, source: 'reflections' });
+
+            // Promote/distill actions become routed memory so Knowledge can excavate and promote them later.
+            if ((action === 'promote' || action === 'distill') && text) {
                 try {
-                    await system.mnemonicArbiter.store(text, {
+                    await rememberRoutedContext({
+                        content: text,
                         source: 'reflections',
-                        noteRef: name,
-                        type: 'insight'
+                        title: name,
+                        metadata: {
+                            action,
+                            noteRef: name,
+                            type: action === 'distill' ? 'reflection_distillation' : 'insight',
+                            brainLanes,
+                            primaryBrain: brainLanes.find(lane => lane !== 'MNEMOSYNE') || 'MNEMOSYNE'
+                        },
+                        importance: action === 'distill' ? 8 : 7
                     });
                 } catch (e) { console.warn('[Reflections] Promote to memory failed:', e.message); }
             }
 
-            res.json({ success: true, action, result: text });
+            res.json({ success: true, action, result: text, brainLanes });
         } catch (error) { res.status(500).json({ success: false, error: error.message }); }
     });
 
@@ -2656,27 +3142,35 @@ Return ONLY valid JSON (no markdown, no explanation):
     });
 
     // 6. FINANCE (Full Trading Stack)
-    safeMount('/api/finance', checkReady, financeRoutes);
+    // Read-only market data routes — no auth required (UI uses these freely)
     safeMount('/api/market', checkReady, marketDataRoutes);
-    safeMount('/api/scalping', checkReady, scalpingRoutes);
-    safeMount('/api/lowlatency', checkReady, lowLatencyRoutes);
-    safeMount('/api/alpaca', checkReady, alpacaRoutes);
     safeMount('/api/performance', checkReady, performanceRoutes);
-    safeMount('/api/learning', checkReady, performanceRoutes);
-    safeMount('/api/trading', checkReady, performanceRoutes);
-    safeMount('/api/debate', checkReady, debateRoutes);
-    safeMount('/api/exchange', checkReady, exchangeRoutes);
-    safeMount('/api/binance', checkReady, binanceRoutes);
-    safeMount('/api/hyperliquid', checkReady, hyperliquidRoutes);
     safeMount('/api/backtest', checkReady, backtestRoutes);
-    safeMount('/api/alerts', checkReady, alertRoutes);
-    safeMount('/api/guardian', checkReady, createGuardianRoutes(system.guardian || null));
-    safeMount('/api/autonomous', checkReady, autonomousRoutes);
-    safeMount('/api/mission-control', checkReady, missionControlRoutes);
     safeMount('/api/market-evidence', checkReady, marketEvidenceRoutes);
-    safeMount('/api/gridbot',   checkReady, gridBotRoutes);
+    safeMount('/api/alerts', checkReady, alertRoutes);
+    safeMount('/api/debate', checkReady, debateRoutes);
+    safeMount('/api/mission-control', checkReady, missionControlRoutes);
+
+    // Execution routes — require enterprise auth key when SOMA_API_KEY is set in env
+    // In local dev the default key allows open access; set SOMA_API_KEY in production
+    const financeAuth = process.env.SOMA_API_KEY && process.env.SOMA_API_KEY !== 'soma_sk_local_dev_9942a1'
+        ? [checkReady, requireEnterpriseAuth]
+        : [checkReady];
+    safeMount('/api/finance',       ...financeAuth, financeRoutes);
+    safeMount('/api/scalping',      ...financeAuth, scalpingRoutes);
+    safeMount('/api/lowlatency',    ...financeAuth, lowLatencyRoutes);
+    safeMount('/api/alpaca',        ...financeAuth, alpacaRoutes);
+    safeMount('/api/learning',      ...financeAuth, performanceRoutes);
+    safeMount('/api/trading',       ...financeAuth, performanceRoutes);
+    safeMount('/api/exchange',      ...financeAuth, exchangeRoutes);
+    safeMount('/api/binance',       ...financeAuth, binanceRoutes);
+    safeMount('/api/hyperliquid',   ...financeAuth, hyperliquidRoutes);
+    safeMount('/api/guardian',      ...financeAuth, createGuardianRoutes(system.guardian || null));
+    safeMount('/api/autonomous',    ...financeAuth, autonomousRoutes);
+    safeMount('/api/gridbot',       ...financeAuth, gridBotRoutes);
     safeMount('/api/notifications', notificationRoutes);  // no checkReady — used during settings modal before system.ready
     safeMount('/api/perception', perceptionRoutes);        // no checkReady — COS daemons may load before system.ready
+    safeMount('/api/studio', createStudioRoutes(system));  // user.md-backed operator profile for Studio + Axis
     // Conceive module â€” optional, not always committed to repo
     try {
         const { default: conceiveRoutes } = await import('../../server/routes/conceiveRoutes.js');
@@ -2936,7 +3430,20 @@ Return ONLY valid JSON (no markdown, no explanation):
     });
 
     // 8. SOCIAL (Fixing Social Tab)
-    app.get('/api/identity/personas', (req, res) => res.json({ success: true, personas: Array.from(system.identityArbiter?.personas?.values() || []) }));
+    app.get('/api/identity/personas', (req, res) => {
+        const arbiter = system.identityArbiter;
+        const personas = Array.from(arbiter?.personas?.values() || []);
+        res.json({
+            success: true,
+            personas,
+            meta: {
+                ready: Boolean(arbiter),
+                count: personas.length,
+                loadedFrom: arbiter?.repoPath || null,
+                lobes: arbiter?.lobeIndex ? Object.fromEntries(Array.from(arbiter.lobeIndex.entries()).map(([lobe, names]) => [lobe, names.size])) : {}
+            }
+        });
+    });
     app.get('/api/identity/active', (req, res) => {
         const active = system.identityArbiter?.getActivePersona?.() || null;
         res.json({ success: true, active });
@@ -3031,25 +3538,1346 @@ Return ONLY valid JSON (no markdown, no explanation):
         } catch (e) { res.status(500).json({ success: false, error: e.message }); }
     });
 
-    // 9. FORECASTER (Fixing Forecaster Tab)
-    app.post('/api/forecaster/moneyball', checkReady, async (req, res) => {
+    // 9. FORECASTER (Forecast dossiers + parlay simulation)
+    const forecasterLedgerPath = path.join(process.cwd(), 'data', 'forecaster', 'forecast-ledger.json');
+    const forecasterSuiteLedgerPath = path.join(process.cwd(), 'data', 'forecaster', 'simulation-suite-ledger.json');
+    const readForecasterLedger = async () => {
         try {
-            const { query, sport, teams } = req.body;
+            const raw = await fs.readFile(forecasterLedgerPath, 'utf8');
+            const parsed = JSON.parse(raw);
+            return Array.isArray(parsed) ? parsed : [];
+        } catch {
+            return [];
+        }
+    };
+    const writeForecasterLedger = async (entries) => {
+        await fs.mkdir(path.dirname(forecasterLedgerPath), { recursive: true });
+        await fs.writeFile(forecasterLedgerPath, JSON.stringify(entries.slice(0, 500), null, 2), 'utf8');
+    };
+    const readForecasterSuiteLedger = async () => {
+        try {
+            const raw = await fs.readFile(forecasterSuiteLedgerPath, 'utf8');
+            const parsed = JSON.parse(raw);
+            return Array.isArray(parsed) ? parsed : [];
+        } catch {
+            return [];
+        }
+    };
+    const writeForecasterSuiteLedger = async (entries) => {
+        await fs.mkdir(path.dirname(forecasterSuiteLedgerPath), { recursive: true });
+        await fs.writeFile(forecasterSuiteLedgerPath, JSON.stringify(entries.slice(0, 100), null, 2), 'utf8');
+    };
+    const buildForecasterCalibration = (entries) => {
+        const graded = entries.filter(entry => entry.grade?.status === 'graded');
+        if (!graded.length) {
+            return {
+                total: entries.length,
+                graded: 0,
+                hitRate: null,
+                avgPredicted: null,
+                brierScore: null,
+                buckets: []
+            };
+        }
+        const brier = graded.reduce((sum, entry) => {
+            const p = Math.max(0, Math.min(1, Number(entry.analysis?.trueProb || entry.trueProb || 0) / 100));
+            const y = entry.grade?.hit ? 1 : 0;
+            return sum + ((p - y) ** 2);
+        }, 0) / graded.length;
+        const buckets = [
+            { label: '<25%', min: 0, max: 25 },
+            { label: '25-50%', min: 25, max: 50 },
+            { label: '50-75%', min: 50, max: 75 },
+            { label: '75%+', min: 75, max: 101 }
+        ].map(bucket => {
+            const items = graded.filter(entry => {
+                const p = Number(entry.analysis?.trueProb || entry.trueProb || 0);
+                return p >= bucket.min && p < bucket.max;
+            });
+            return {
+                label: bucket.label,
+                count: items.length,
+                hitRate: items.length ? Number(((items.filter(entry => entry.grade?.hit).length / items.length) * 100).toFixed(1)) : null
+            };
+        });
+        return {
+            total: entries.length,
+            graded: graded.length,
+            hitRate: Number(((graded.filter(entry => entry.grade?.hit).length / graded.length) * 100).toFixed(1)),
+            avgPredicted: Number((graded.reduce((sum, entry) => sum + Number(entry.analysis?.trueProb || entry.trueProb || 0), 0) / graded.length).toFixed(1)),
+            brierScore: Number(brier.toFixed(4)),
+            buckets
+        };
+    };
+    const getEntryProbability = (entry = {}) => {
+        const candidates = [
+            entry.analysis?.trueProb,
+            entry.swarm?.consensus?.probability,
+            entry.trueProb
+        ].map(Number).filter(Number.isFinite);
+        return candidates.length ? Math.max(0, Math.min(100, candidates[0])) : null;
+    };
+    const buildCalibrationLearning = (entries) => {
+        const graded = entries.filter(entry => entry.grade?.status === 'graded' && getEntryProbability(entry) != null);
+        const groupBy = (keyFn) => {
+            const groups = new Map();
+            graded.forEach(entry => {
+                const key = keyFn(entry) || 'UNKNOWN';
+                if (!groups.has(key)) groups.set(key, []);
+                groups.get(key).push(entry);
+            });
+            return Object.fromEntries(Array.from(groups.entries()).map(([key, items]) => {
+                const avgPredicted = items.reduce((sum, item) => sum + getEntryProbability(item), 0) / items.length;
+                const actual = (items.filter(item => item.grade?.hit).length / items.length) * 100;
+                const adjustment = Math.max(-8, Math.min(8, (actual - avgPredicted) * Math.min(1, items.length / 20)));
+                return [key, {
+                    count: items.length,
+                    avgPredicted: Number(avgPredicted.toFixed(1)),
+                    actual: Number(actual.toFixed(1)),
+                    adjustment: Number(adjustment.toFixed(2))
+                }];
+            }));
+        };
+        const global = graded.length ? groupBy(() => 'GLOBAL').GLOBAL : { count: 0, avgPredicted: null, actual: null, adjustment: 0 };
+        return {
+            global,
+            byMode: groupBy(entry => entry.mode),
+            bySport: groupBy(entry => entry.legs?.[0]?.sport),
+            byMarketType: groupBy(entry => entry.legs?.[0]?.marketType),
+            note: graded.length >= 20
+                ? 'Calibration learning active from graded forecast outcomes.'
+                : 'Calibration learning is conservative until at least 20 graded outcomes exist.'
+        };
+    };
+    const buildBacktestReport = (entries) => {
+        const graded = entries
+            .filter(entry => entry.grade?.status === 'graded' && getEntryProbability(entry) != null)
+            .sort((a, b) => new Date(b.grade?.gradedAt || b.createdAt || 0) - new Date(a.grade?.gradedAt || a.createdAt || 0));
+        const scored = graded.map(entry => {
+            const predicted = getEntryProbability(entry);
+            const hit = Boolean(entry.grade?.hit);
+            return {
+                id: entry.id,
+                createdAt: entry.createdAt,
+                mode: entry.mode,
+                legs: entry.legs?.length || 0,
+                sport: entry.legs?.[0]?.sport || 'UNKNOWN',
+                marketType: entry.legs?.[0]?.marketType || 'UNKNOWN',
+                predicted,
+                hit,
+                absoluteError: Number(Math.abs((hit ? 100 : 0) - predicted).toFixed(1)),
+                brier: Number((((predicted / 100) - (hit ? 1 : 0)) ** 2).toFixed(4))
+            };
+        });
+        const avg = (items, key) => items.length ? Number((items.reduce((sum, item) => sum + item[key], 0) / items.length).toFixed(3)) : null;
+        return {
+            count: scored.length,
+            recent: scored.slice(0, 20),
+            summary: {
+                hitRate: scored.length ? Number(((scored.filter(item => item.hit).length / scored.length) * 100).toFixed(1)) : null,
+                meanAbsoluteError: avg(scored, 'absoluteError'),
+                brierScore: avg(scored, 'brier')
+            },
+            calibration: buildForecasterCalibration(entries),
+            learning: buildCalibrationLearning(entries)
+        };
+    };
+    const groupForecasterPerformance = (entries) => {
+        const graded = entries.filter(entry => entry.grade?.status === 'graded');
+        const groupBy = (keyFn) => {
+            const groups = new Map();
+            graded.forEach(entry => {
+                const key = keyFn(entry) || 'UNKNOWN';
+                if (!groups.has(key)) groups.set(key, []);
+                groups.get(key).push(entry);
+            });
+            return Array.from(groups.entries()).map(([key, items]) => ({
+                key,
+                count: items.length,
+                hitRate: Number(((items.filter(item => item.grade?.hit).length / items.length) * 100).toFixed(1)),
+                avgPredicted: Number((items.reduce((sum, item) => sum + Number(item.analysis?.trueProb || 0), 0) / items.length).toFixed(1))
+            })).sort((a, b) => b.count - a.count);
+        };
+        return {
+            bySport: groupBy(entry => entry.legs?.[0]?.sport),
+            byMarketType: groupBy(entry => entry.legs?.[0]?.marketType),
+            byMode: groupBy(entry => entry.mode)
+        };
+    };
+    const buildCovarianceModel = (entries, legs = []) => {
+        const graded = entries.filter(entry => entry.grade?.status === 'graded' && Array.isArray(entry.legs));
+        const cohortStats = new Map();
+        const addCohort = (key, entry) => {
+            if (!cohortStats.has(key)) cohortStats.set(key, { count: 0, hits: 0 });
+            const row = cohortStats.get(key);
+            row.count += 1;
+            row.hits += entry.grade?.hit ? 1 : 0;
+        };
+        graded.forEach(entry => {
+            const first = entry.legs?.[0] || {};
+            addCohort(`sport:${first.sport || 'UNKNOWN'}`, entry);
+            addCohort(`market:${first.marketType || 'UNKNOWN'}`, entry);
+            addCohort(`legs:${entry.legs.length}`, entry);
+        });
+        const pairHints = buildCorrelationMatrix(legs).map(pair => {
+            const a = legs[pair.from] || {};
+            const b = legs[pair.to] || {};
+            let historicalSupport = 'thin';
+            const sportKey = `sport:${a.sport || b.sport || 'UNKNOWN'}`;
+            const sportStats = cohortStats.get(sportKey);
+            if (sportStats?.count >= 10) historicalSupport = `${sportStats.count} graded ${sportKey.replace('sport:', '')} outcomes`;
+            return {
+                ...pair,
+                covarianceType: pair.score > 0.5 ? 'strong_positive' : pair.score > 0.2 ? 'positive' : pair.score < 0 ? 'diversifying' : 'unknown',
+                historicalSupport
+            };
+        });
+        return {
+            pairs: pairHints,
+            cohorts: Object.fromEntries(Array.from(cohortStats.entries()).map(([key, value]) => [key, {
+                ...value,
+                hitRate: value.count ? Number(((value.hits / value.count) * 100).toFixed(1)) : null
+            }])),
+            maturity: graded.length >= 50 ? 'learned' : graded.length >= 10 ? 'warming_up' : 'rule_based'
+        };
+    };
+    const buildCorrelationMatrix = (legs = []) => {
+        const pairs = [];
+        for (let i = 0; i < legs.length; i += 1) {
+            for (let j = i + 1; j < legs.length; j += 1) {
+                const a = legs[i] || {};
+                const b = legs[j] || {};
+                let score = 0;
+                const reasons = [];
+                if (a.entity && a.entity === b.entity) { score += 0.55; reasons.push('same entity'); }
+                if (a.gameId && a.gameId === b.gameId) { score += 0.35; reasons.push('same game'); }
+                if (a.team && b.team && a.team === b.team) { score += 0.2; reasons.push('same team'); }
+                if (a.sport && b.sport && a.sport !== b.sport) { score -= 0.1; reasons.push('different sports'); }
+                if (!reasons.length) reasons.push('no known link');
+                pairs.push({
+                    from: i,
+                    to: j,
+                    score: Number(Math.max(-1, Math.min(1, score)).toFixed(2)),
+                    confidence: reasons[0] === 'no known link' ? 'LOW' : 'MEDIUM',
+                    reasons
+                });
+            }
+        }
+        return pairs;
+    };
+    const forecastSwarmAgents = [
+        { id: 'sharp_model', name: 'Sharp Model', role: 'Probability Discipline', bias: 0.02, risk: 0.85 },
+        { id: 'public_money', name: 'Public Money', role: 'Crowd Bias Detector', bias: -0.015, risk: 0.55 },
+        { id: 'oddsmaker', name: 'Oddsmaker', role: 'Market-Implied Anchor', bias: 0, risk: 0.75 },
+        { id: 'stat_scout', name: 'Stat Scout', role: 'Recent Form Analyst', bias: 0.025, risk: 0.65 },
+        { id: 'contrarian', name: 'Contrarian', role: 'Narrative Fade', bias: -0.025, risk: 0.7 },
+        { id: 'risk_manager', name: 'Risk Manager', role: 'Correlation Guard', bias: -0.035, risk: 0.95 },
+        { id: 'weather_injury', name: 'Context Scout', role: 'External Friction', bias: -0.01, risk: 0.8 },
+        { id: 'ledger_calibrator', name: 'Ledger Calibrator', role: 'Outcome Memory', bias: 0.005, risk: 0.9 }
+    ];
+    const getCalibrationAdjustmentForLeg = (learning, mode, leg = {}) => {
+        const adjustments = [
+            learning?.global?.adjustment,
+            learning?.byMode?.[mode]?.adjustment,
+            learning?.bySport?.[leg.sport]?.adjustment,
+            learning?.byMarketType?.[leg.marketType]?.adjustment
+        ].map(Number).filter(Number.isFinite);
+        if (!adjustments.length) return 0;
+        return Math.max(-0.08, Math.min(0.08, adjustments.reduce((sum, value) => sum + value, 0) / adjustments.length / 100));
+    };
+    const buildDataSourceSummary = (legs = [], lineShop = null, contextSignals = []) => {
+        const legSources = legs.flatMap(leg => {
+            const sources = [];
+            if (leg.sourceStatus) sources.push(leg.sourceStatus);
+            if (leg.dataFreshness) sources.push(leg.dataFreshness);
+            if (leg.source) sources.push(leg.source);
+            return sources;
+        });
+        return {
+            badges: Array.from(new Set([
+                ...legSources,
+                lineShop?.providerStatus === 'configured' ? 'live-odds-provider' : 'odds-provider-missing',
+                contextSignals.length ? 'news-context-scanned' : 'context-not-scanned'
+            ])).filter(Boolean),
+            liveStatsLegs: legs.filter(leg => leg.sourceStatus === 'real-stats-attached').length,
+            heuristicLegs: legs.filter(leg => !leg.sourceStatus || leg.sourceStatus === 'needs-live-stats').length,
+            contextSignals: contextSignals.length
+        };
+    };
+    const buildForecastSwarm = ({ legs = [], mode = 'balanced', rounds = 120, calibration = null, learning = null, covariance = null }) => {
+        const safeRounds = Math.max(25, Math.min(Number(rounds) || 120, 500));
+        const correlationPairs = (covariance?.pairs || buildCorrelationMatrix(legs)).filter(pair => pair.score > 0.2);
+        const correlationPenalty = Math.min(0.18, correlationPairs.reduce((sum, pair) => sum + Math.max(0, pair.score), 0) * 0.035);
+        const modeBias = { conservative: -0.025, balanced: 0, aggressive: 0.018, research: 0 }[mode] || 0;
+        const legModels = legs.map((leg, index) => {
+            const odds = Math.max(Number(leg.odds) || 1.91, 1.01);
+            const implied = 1 / odds;
+            const model = Math.max(0.03, Math.min(0.94, Number(leg.modelProb || leg.confidenceScore || implied)));
+            const quality = Math.max(1, Math.min(100, Number(leg.quality) || 55));
+            const sampleSize = Math.max(0, Number(leg.sampleSize) || 0);
+            const volatility = String(leg.volatility || 'MEDIUM').toUpperCase();
+            const uncertainty = (volatility === 'HIGH' ? 0.08 : volatility === 'LOW' ? 0.025 : 0.05) + Math.max(0, 8 - sampleSize) * 0.006;
+            return { ...leg, index, implied, model, quality, sampleSize, uncertainty };
+        });
+        const graded = Number(calibration?.graded || 0);
+        const brierPenalty = Number.isFinite(Number(calibration?.brierScore)) ? Math.min(0.06, Number(calibration.brierScore) * 0.08) : 0.025;
+        const agents = forecastSwarmAgents.map((agent, agentIndex) => {
+            const legOpinions = legModels.map((leg, legIndex) => {
+                const qualityBoost = (leg.quality - 60) / 900;
+                const sampleBoost = Math.min(0.035, leg.sampleSize * 0.003);
+                const marketGap = (leg.model - leg.implied) * (agent.id === 'oddsmaker' ? 0.2 : 0.55);
+                const riskPenalty = agent.risk * (leg.uncertainty + correlationPenalty / Math.max(legs.length, 1));
+                const learnedAdjustment = agent.id === 'ledger_calibrator' ? getCalibrationAdjustmentForLeg(learning, mode, leg) : getCalibrationAdjustmentForLeg(learning, mode, leg) * 0.35;
+                const archetypeNoise = Math.sin((agentIndex + 1) * (legIndex + 2) * 1.37) * 0.018;
+                const probability = Math.max(0.03, Math.min(0.94, leg.model + agent.bias + modeBias + qualityBoost + sampleBoost + marketGap + learnedAdjustment - riskPenalty - brierPenalty + archetypeNoise));
+                return {
+                    index: legIndex,
+                    entity: leg.entity || `Leg ${legIndex + 1}`,
+                    stat: leg.stat || 'Forecast',
+                    probability: Number(probability.toFixed(3)),
+                    concern: leg.quality < 55 ? 'low quality' : leg.uncertainty > 0.08 ? 'thin data' : marketGap < -0.03 ? 'market disagrees' : 'acceptable',
+                    learnedAdjustment: Number((learnedAdjustment * 100).toFixed(2))
+                };
+            });
+            const parlayProbability = legOpinions.reduce((acc, opinion) => acc * opinion.probability, 1) * (1 - correlationPenalty);
+            const confidence = Math.max(0.35, Math.min(0.92, 0.74 - (correlationPenalty * 1.1) - (brierPenalty * 2) + (graded ? Math.min(0.08, graded / 250) : 0)));
+            const weakest = [...legOpinions].sort((a, b) => a.probability - b.probability)[0];
+            return {
+                ...agent,
+                probability: Number((parlayProbability * 100).toFixed(1)),
+                confidence: Number(confidence.toFixed(2)),
+                stance: parlayProbability >= 0.22 ? 'support' : parlayProbability >= 0.12 ? 'watch' : 'fade',
+                thesis: `${agent.name} ${parlayProbability >= 0.22 ? 'supports the structure' : parlayProbability >= 0.12 ? 'wants more evidence' : 'would fade this build'}; weakest pressure point is ${weakest?.entity || 'unknown'}.`,
+                warnings: [
+                    ...(correlationPenalty > 0.06 ? ['correlation drag'] : []),
+                    ...(brierPenalty > 0.03 ? ['ledger calibration still thin'] : []),
+                    ...(legOpinions.some(opinion => opinion.concern !== 'acceptable') ? ['one or more legs need evidence review'] : [])
+                ],
+                legOpinions
+            };
+        });
+        const probs = agents.map(agent => agent.probability);
+        const avg = probs.reduce((sum, value) => sum + value, 0) / Math.max(probs.length, 1);
+        const variance = probs.reduce((sum, value) => sum + ((value - avg) ** 2), 0) / Math.max(probs.length, 1);
+        const disagreement = Math.sqrt(variance);
+        const roundsOut = [];
+        for (let round = 1; round <= safeRounds; round += Math.max(1, Math.floor(safeRounds / 12))) {
+            const stabilization = 1 - Math.exp(-round / Math.max(20, safeRounds / 4));
+            const drift = Math.sin(round * 0.41 + legs.length) * disagreement * 0.18;
+            roundsOut.push({
+                round,
+                consensus: Number((avg * stabilization + (avg + drift) * (1 - stabilization)).toFixed(1)),
+                disagreement: Number((disagreement * (1.12 - stabilization * 0.28)).toFixed(1))
+            });
+        }
+        const weakestAgent = [...agents].sort((a, b) => a.probability - b.probability)[0];
+        const strongestAgent = [...agents].sort((a, b) => b.probability - a.probability)[0];
+        return {
+            agents,
+            rounds: roundsOut,
+            consensus: {
+                probability: Number(avg.toFixed(1)),
+                low: Number(Math.max(0, avg - disagreement).toFixed(1)),
+                high: Number(Math.min(100, avg + disagreement).toFixed(1)),
+                disagreement: Number(disagreement.toFixed(1)),
+                rating: avg >= 28 && disagreement < 8 ? 'coherent' : avg >= 15 ? 'uncertain' : 'fragile',
+                strongestCase: strongestAgent?.thesis || 'No strong case found.',
+                weakestAssumption: weakestAgent?.thesis || 'No weak assumption found.',
+                recommendation: avg >= 28 && disagreement < 8 ? 'Track as a serious candidate' : avg >= 15 ? 'Keep in simulation and improve evidence' : 'Do not trust without better data'
+            },
+            evidence: {
+                legs: legs.length,
+                rounds: safeRounds,
+                correlationPairs,
+                correlationPenalty: Number((correlationPenalty * 100).toFixed(1)),
+                calibrationUsed: Boolean(calibration),
+                covarianceMaturity: covariance?.maturity || 'rule_based',
+                learning: learning?.note || 'No calibration learning available yet.',
+                sources: buildDataSourceSummary(legs),
+                note: 'SOMA-native swarm simulation. No external AGPL source code copied.'
+            }
+        };
+    };
+    const forecasterOddsCachePath = path.join(process.cwd(), 'data', 'forecaster', 'odds-cache.json');
+    const oddsProviderKey = () => process.env.ODDS_API_KEY || process.env.THE_ODDS_API_KEY || '';
+    const oddsSportKey = (sport = '') => {
+        const key = String(sport || '').toUpperCase();
+        if (key === 'NBA') return 'basketball_nba';
+        if (key === 'NFL') return 'americanfootball_nfl';
+        if (key === 'NHL') return 'icehockey_nhl';
+        if (key === 'MLB') return 'baseball_mlb';
+        if (key === 'EPL') return 'soccer_epl';
+        return 'upcoming';
+    };
+    const readOddsCache = async () => {
+        try {
+            const raw = await fs.readFile(forecasterOddsCachePath, 'utf8');
+            return JSON.parse(raw);
+        } catch {
+            return {};
+        }
+    };
+    const writeOddsCache = async (cache) => {
+        await fs.mkdir(path.dirname(forecasterOddsCachePath), { recursive: true });
+        await fs.writeFile(forecasterOddsCachePath, JSON.stringify(cache, null, 2), 'utf8');
+    };
+    const fetchOddsSnapshot = async (sportKey, markets = 'h2h,spreads,totals') => {
+        const apiKey = oddsProviderKey();
+        if (!apiKey) return { status: 'provider_not_configured', data: [], cached: false };
+        const cache = await readOddsCache();
+        const cacheKey = `${sportKey}:${markets}:us`;
+        const cached = cache[cacheKey];
+        if (cached && Date.now() - cached.fetchedAt < 5 * 60 * 1000) {
+            return { status: 'cached', data: cached.data || [], cached: true, fetchedAt: cached.fetchedAt };
+        }
+        const url = new URL(`https://api.the-odds-api.com/v4/sports/${sportKey}/odds`);
+        url.searchParams.set('apiKey', apiKey);
+        url.searchParams.set('regions', 'us');
+        url.searchParams.set('markets', markets);
+        url.searchParams.set('oddsFormat', 'decimal');
+        url.searchParams.set('dateFormat', 'iso');
+        const data = await fetchJsonWithTimeout(url.toString(), 9000);
+        cache[cacheKey] = { fetchedAt: Date.now(), data };
+        await writeOddsCache(cache);
+        return { status: 'live', data, cached: false, fetchedAt: cache[cacheKey].fetchedAt };
+    };
+    const normalizeName = (value = '') => String(value).toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+    const namesMatch = (a = '', b = '') => {
+        const aa = normalizeName(a);
+        const bb = normalizeName(b);
+        return Boolean(aa && bb && (aa.includes(bb) || bb.includes(aa)));
+    };
+    const findBestLineForLeg = (leg, oddsEvents = []) => {
+        const side = String(leg.side || '').toLowerCase();
+        const marketType = String(leg.marketType || '').toLowerCase();
+        if (marketType === 'player_prop') {
+            return {
+                bestAvailable: null,
+                status: 'market_not_supported',
+                note: 'Provider adapter currently supports h2h, spreads, and totals. Player prop line shopping needs a props market feed.'
+            };
+        }
+        const wantedMarket = side === 'moneyline' || marketType === 'moneyline' ? 'h2h'
+            : side === 'spread' || marketType === 'spread' ? 'spreads'
+                : side === 'over' || side === 'under' || marketType === 'total' ? 'totals'
+                    : 'h2h';
+        let best = null;
+        for (const event of oddsEvents) {
+            const eventMatches = wantedMarket === 'totals'
+                || namesMatch(event.home_team, leg.entity)
+                || namesMatch(event.away_team, leg.entity)
+                || namesMatch(`${event.home_team} ${event.away_team}`, leg.entity);
+            if (!eventMatches) continue;
+            for (const book of event.bookmakers || []) {
+                const market = (book.markets || []).find(item => item.key === wantedMarket);
+                if (!market) continue;
+                for (const outcome of market.outcomes || []) {
+                    const outcomeMatches = wantedMarket === 'totals'
+                        ? namesMatch(outcome.name, side || 'over')
+                        : namesMatch(outcome.name, leg.entity);
+                    if (!outcomeMatches) continue;
+                    const candidate = {
+                        bookmaker: book.title || book.key,
+                        market: wantedMarket,
+                        event: `${event.away_team} @ ${event.home_team}`,
+                        line: outcome.point ?? null,
+                        odds: outcome.price,
+                        lastUpdate: book.last_update || event.commence_time
+                    };
+                    if (!best || Number(candidate.odds) > Number(best.odds)) best = candidate;
+                }
+            }
+        }
+        return best
+            ? { bestAvailable: best, status: 'matched', note: 'Best decimal odds found across available US books.' }
+            : { bestAvailable: null, status: 'no_match', note: 'Provider returned odds, but no confident match for this leg.' };
+    };
+
+    app.get('/api/forecaster/provider-status', checkReady, async (req, res) => {
+        res.json({
+            success: true,
+            oddsProvider: oddsProviderKey() ? 'configured' : 'missing',
+            supportedMarkets: ['h2h', 'spreads', 'totals'],
+            cacheTtlSeconds: 300
+        });
+    });
+
+    app.get('/api/forecaster/ledger', checkReady, async (req, res) => {
+        try {
+            const entries = await readForecasterLedger();
+            res.json({ success: true, entries: entries.slice(0, 100), calibration: buildForecasterCalibration(entries) });
+        } catch (e) {
+            res.status(500).json({ success: false, error: e.message });
+        }
+    });
+
+    app.get('/api/forecaster/performance', checkReady, async (req, res) => {
+        try {
+            const entries = await readForecasterLedger();
+            res.json({
+                success: true,
+                calibration: buildForecasterCalibration(entries),
+                backtest: buildBacktestReport(entries),
+                learning: buildCalibrationLearning(entries),
+                performance: groupForecasterPerformance(entries),
+                dataQuality: {
+                    ledgerEntries: entries.length,
+                    gradedEntries: entries.filter(entry => entry.grade?.status === 'graded').length,
+                    note: 'Performance only reflects graded ledger entries. Ungraded forecasts are excluded.'
+                }
+            });
+        } catch (e) {
+            res.status(500).json({ success: false, error: e.message });
+        }
+    });
+
+    app.get('/api/forecaster/backtest', checkReady, async (req, res) => {
+        try {
+            const entries = await readForecasterLedger();
+            res.json({ success: true, ...buildBacktestReport(entries) });
+        } catch (e) {
+            res.status(500).json({ success: false, error: e.message });
+        }
+    });
+
+    app.post('/api/forecaster/ledger', checkReady, async (req, res) => {
+        try {
+            const entry = req.body || {};
+            const entries = await readForecasterLedger();
+            const saved = {
+                id: entry.id || `forecast-${Date.now()}`,
+                createdAt: entry.createdAt || new Date().toISOString(),
+                type: entry.type || 'parlay_scenario',
+                mode: entry.mode || 'balanced',
+                legs: Array.isArray(entry.legs) ? entry.legs : [],
+                analysis: entry.analysis || null,
+                swarm: entry.swarm || null,
+                grade: entry.grade || { status: 'pending' },
+                source: 'Forecast OS'
+            };
+            const next = [saved, ...entries.filter(item => item.id !== saved.id)];
+            await writeForecasterLedger(next);
+            res.json({ success: true, entry: saved, calibration: buildForecasterCalibration(next) });
+        } catch (e) {
+            res.status(500).json({ success: false, error: e.message });
+        }
+    });
+
+    app.post('/api/forecaster/ledger/:id/grade', checkReady, async (req, res) => {
+        try {
+            const entries = await readForecasterLedger();
+            const idx = entries.findIndex(entry => entry.id === req.params.id);
+            if (idx === -1) return res.status(404).json({ success: false, error: 'Forecast entry not found' });
+            entries[idx] = {
+                ...entries[idx],
+                grade: {
+                    status: 'graded',
+                    hit: Boolean(req.body?.hit),
+                    result: req.body?.result || (req.body?.hit ? 'hit' : 'miss'),
+                    notes: req.body?.notes || '',
+                    gradedAt: new Date().toISOString()
+                }
+            };
+            await writeForecasterLedger(entries);
+            res.json({ success: true, entry: entries[idx], calibration: buildForecasterCalibration(entries) });
+        } catch (e) {
+            res.status(500).json({ success: false, error: e.message });
+        }
+    });
+
+    app.post('/api/forecaster/ledger/:id/auto-grade', checkReady, async (req, res) => {
+        try {
+            const entries = await readForecasterLedger();
+            const idx = entries.findIndex(entry => entry.id === req.params.id);
+            if (idx === -1) return res.status(404).json({ success: false, error: 'Forecast entry not found' });
+            const entry = entries[idx];
+            const legs = Array.isArray(entry.legs) ? entry.legs : [];
+            const gradable = legs.filter(leg => Number.isFinite(Number(leg.resultValue)) && Number.isFinite(Number(leg.line)));
+            if (!gradable.length) {
+                entries[idx] = {
+                    ...entry,
+                    grade: {
+                        status: 'needs_manual_result',
+                        hit: null,
+                        result: 'needs_manual_result',
+                        notes: 'No exact resultValue fields are attached to saved legs yet.',
+                        gradedAt: new Date().toISOString()
+                    }
+                };
+                await writeForecasterLedger(entries);
+                return res.json({ success: true, entry: entries[idx], calibration: buildForecasterCalibration(entries) });
+            }
+            const legResults = gradable.map(leg => {
+                const side = String(leg.side || 'over').toLowerCase();
+                const resultValue = Number(leg.resultValue);
+                const line = Number(leg.line);
+                const hit = side === 'under' ? resultValue < line : side === 'moneyline' ? Boolean(leg.resultHit) : resultValue > line;
+                return { entity: leg.entity, stat: leg.stat, side, line, resultValue, hit };
+            });
+            const scenarioHit = legResults.every(result => result.hit);
+            entries[idx] = {
+                ...entry,
+                grade: {
+                    status: 'graded',
+                    hit: scenarioHit,
+                    result: scenarioHit ? 'hit' : 'miss',
+                    legResults,
+                    notes: 'Auto-graded from explicit saved resultValue fields.',
+                    gradedAt: new Date().toISOString()
+                }
+            };
+            await writeForecasterLedger(entries);
+            res.json({ success: true, entry: entries[idx], calibration: buildForecasterCalibration(entries) });
+        } catch (e) {
+            res.status(500).json({ success: false, error: e.message });
+        }
+    });
+
+    app.post('/api/forecaster/correlation-matrix', checkReady, async (req, res) => {
+        try {
+            const legs = Array.isArray(req.body?.legs) ? req.body.legs : [];
+            const entries = await readForecasterLedger();
+            const covariance = buildCovarianceModel(entries, legs);
+            res.json({ success: true, matrix: covariance.pairs, covariance });
+        } catch (e) {
+            res.status(500).json({ success: false, error: e.message });
+        }
+    });
+
+    app.post('/api/forecaster/line-shop', checkReady, async (req, res) => {
+        try {
+            const legs = Array.isArray(req.body?.legs) ? req.body.legs : [];
+            if (!oddsProviderKey()) {
+                return res.json({
+                    success: true,
+                    provider: 'the-odds-api',
+                    providerStatus: 'missing_key',
+                    lines: legs.map((leg, index) => ({
+                        index,
+                        entity: leg.entity,
+                        stat: leg.stat,
+                        currentLine: leg.line,
+                        currentOdds: leg.odds,
+                        bestAvailable: null,
+                        status: 'provider_not_configured',
+                        note: 'Set ODDS_API_KEY or THE_ODDS_API_KEY to enable live line shopping.'
+                    }))
+                });
+            }
+            const sports = Array.from(new Set(legs.map(leg => oddsSportKey(leg.sport)).filter(Boolean)));
+            const snapshots = {};
+            for (const sportKey of sports.length ? sports : ['upcoming']) {
+                snapshots[sportKey] = await fetchOddsSnapshot(sportKey);
+            }
+            res.json({
+                success: true,
+                provider: 'the-odds-api',
+                providerStatus: 'configured',
+                lines: legs.map((leg, index) => {
+                    const sportKey = oddsSportKey(leg.sport);
+                    const snapshot = snapshots[sportKey] || snapshots.upcoming || { data: [] };
+                    const match = findBestLineForLeg(leg, snapshot.data || []);
+                    return {
+                        index,
+                        entity: leg.entity,
+                        stat: leg.stat,
+                        currentLine: leg.line,
+                        currentOdds: leg.odds,
+                        sportKey,
+                        snapshotStatus: snapshot.status,
+                        fetchedAt: snapshot.fetchedAt || null,
+                        ...match
+                    };
+                })
+            });
+        } catch (e) {
+            res.status(500).json({ success: false, error: e.message });
+        }
+    });
+
+    const fetchJsonWithTimeout = async (url, timeoutMs = 7000) => {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), timeoutMs);
+        try {
+            const response = await fetch(url, {
+                signal: controller.signal,
+                headers: { 'User-Agent': 'SOMA-ForecastOS/1.0' }
+            });
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            return await response.json();
+        } finally {
+            clearTimeout(timeout);
+        }
+    };
+    const inferForecasterStatKey = (stat = '') => {
+        const text = String(stat).toLowerCase();
+        if (/\bpassing/.test(text)) return { key: 'passingYards', label: 'passing yards' };
+        if (/\brushing/.test(text)) return { key: 'rushingYards', label: 'rushing yards' };
+        if (/\breceiving/.test(text)) return { key: 'receivingYards', label: 'receiving yards' };
+        if (/\btouchdown/.test(text)) return { key: 'touchdowns', label: 'touchdowns' };
+        if (/\bshot/.test(text)) return { key: 'shots', label: 'shots' };
+        if (/\bgoal/.test(text)) return { key: 'goals', label: 'goals' };
+        if (/\bassist/.test(text)) return { key: 'ast', label: 'assists' };
+        if (/\brebound/.test(text)) return { key: 'reb', label: 'rebounds' };
+        if (/\bpoint/.test(text)) return { key: 'pts', label: 'points' };
+        return { key: 'pts', label: 'points' };
+    };
+    const summarizeValues = (values = []) => {
+        const clean = values.map(Number).filter(Number.isFinite);
+        if (!clean.length) return null;
+        const mean = clean.reduce((sum, value) => sum + value, 0) / clean.length;
+        const variance = clean.reduce((sum, value) => sum + ((value - mean) ** 2), 0) / clean.length;
+        const stdDev = Math.sqrt(variance);
+        return {
+            sampleSize: clean.length,
+            average: Number(mean.toFixed(1)),
+            stdDev: Number(stdDev.toFixed(1)),
+            volatility: stdDev / Math.max(mean, 1) > 0.45 ? 'HIGH' : stdDev / Math.max(mean, 1) > 0.25 ? 'MEDIUM' : 'LOW'
+        };
+    };
+    const probabilityFromLine = ({ average, stdDev, line, side = 'over', fallback = 0.55 }) => {
+        const avg = Number(average);
+        const sd = Math.max(Number(stdDev) || Math.max(Math.abs(avg) * 0.25, 1), 1);
+        const targetLine = Number(line);
+        if (!Number.isFinite(avg) || !Number.isFinite(targetLine)) return fallback;
+        const directionalMargin = String(side).toLowerCase() === 'under'
+            ? targetLine - avg
+            : avg - targetLine;
+        const z = Math.max(-2.2, Math.min(2.2, directionalMargin / sd));
+        // Smooth logistic approximation of a normal CDF. Good enough for v1
+        // while avoiding a heavy stats dependency in the main Node server.
+        return Math.max(0.08, Math.min(0.9, 1 / (1 + Math.exp(-1.45 * z))));
+    };
+    const enrichNbaLeg = async (leg) => {
+        const playerName = String(leg.entity || '').replace(/\b(vs|against)\b.*$/i, '').trim();
+        if (!playerName) return null;
+        const stat = inferForecasterStatKey(leg.stat);
+        const seasonYear = new Date().getMonth() >= 9 ? new Date().getFullYear() : new Date().getFullYear() - 1;
+        const search = await fetchJsonWithTimeout(`https://www.balldontlie.io/api/v1/players?search=${encodeURIComponent(playerName)}`);
+        const player = search?.data?.[0];
+        if (!player?.id) return null;
+        const stats = await fetchJsonWithTimeout(`https://www.balldontlie.io/api/v1/stats?seasons[]=${seasonYear}&player_ids[]=${player.id}&per_page=15`);
+        const recentGames = (stats?.data || []).map(game => ({
+            date: game.game?.date,
+            opponent: game.game?.home_team_id === game.team?.id ? game.game?.visitor_team_id : game.game?.home_team_id,
+            pts: game.pts,
+            ast: game.ast,
+            reb: game.reb,
+            min: game.min
+        }));
+        const summary = summarizeValues(recentGames.map(game => game[stat.key]));
+        if (!summary) return null;
+        return {
+            provider: 'balldontlie',
+            sport: 'NBA',
+            marketType: 'player_prop',
+            player: `${player.first_name} ${player.last_name}`,
+            team: player.team?.full_name || player.team?.abbreviation || null,
+            statLabel: stat.label,
+            recentGames,
+            ...summary
+        };
+    };
+    const enrichNhlLeg = async (leg) => {
+        const playerName = String(leg.entity || '').replace(/\b(vs|against)\b.*$/i, '').trim();
+        if (!playerName) return null;
+        const stat = inferForecasterStatKey(leg.stat);
+        const search = await fetchJsonWithTimeout(`https://suggest.svc.nhl.com/svc/suggest/v1/minplayers/${encodeURIComponent(playerName)}/99999`);
+        const suggestion = search?.suggestions?.[0];
+        const playerId = String(suggestion || '').split('|')[0];
+        if (!playerId) return null;
+        const data = await fetchJsonWithTimeout(`https://api-web.nhle.com/v1/player/${playerId}/landing`);
+        const recentGames = (data?.last5Games || []).map(game => ({
+            date: game.gameDate,
+            opponent: game.opponentAbbrev,
+            goals: game.goals,
+            assists: game.assists,
+            points: game.points,
+            shots: game.shots,
+            toi: game.toi
+        }));
+        const key = stat.key === 'pts' ? 'points' : stat.key === 'ast' ? 'assists' : stat.key;
+        const summary = summarizeValues(recentGames.map(game => game[key]));
+        if (!summary) return null;
+        return {
+            provider: 'nhl-official',
+            sport: 'NHL',
+            marketType: 'player_prop',
+            player: `${data.firstName?.default || ''} ${data.lastName?.default || ''}`.trim() || playerName,
+            team: data.currentTeamAbbrev || null,
+            statLabel: stat.label,
+            recentGames,
+            ...summary
+        };
+    };
+    const flattenEspnStats = (node, out = []) => {
+        if (!node || typeof node !== 'object') return out;
+        if (Array.isArray(node)) {
+            node.forEach(item => flattenEspnStats(item, out));
+            return out;
+        }
+        if (node.name || node.displayName || node.shortDisplayName) {
+            const rawValue = node.value ?? node.displayValue;
+            const numericValue = Number(String(rawValue ?? '').replace(/,/g, '').match(/-?\d+(\.\d+)?/)?.[0]);
+            if (Number.isFinite(numericValue)) {
+                out.push({
+                    name: String(node.name || node.displayName || node.shortDisplayName).toLowerCase(),
+                    displayName: String(node.displayName || node.shortDisplayName || node.name || '').toLowerCase(),
+                    value: numericValue
+                });
+            }
+        }
+        Object.values(node).forEach(value => flattenEspnStats(value, out));
+        return out;
+    };
+    const enrichNflLeg = async (leg) => {
+        const playerName = String(leg.entity || '').replace(/\b(vs|against)\b.*$/i, '').trim();
+        if (!playerName) return null;
+        const stat = inferForecasterStatKey(leg.stat);
+        const search = await fetchJsonWithTimeout(`https://site.api.espn.com/apis/common/v3/search?query=${encodeURIComponent(playerName)}&limit=1&league=nfl`);
+        const athlete = search?.results?.[0];
+        if (!athlete?.id) return null;
+        const data = await fetchJsonWithTimeout(`https://site.api.espn.com/apis/site/v2/sports/football/nfl/athletes/${athlete.id}/statistics`);
+        const flattened = flattenEspnStats(data);
+        const aliases = {
+            passingYards: ['passingyards', 'passing yards', 'pass yards', 'yds'],
+            rushingYards: ['rushingyards', 'rushing yards', 'rush yards'],
+            receivingYards: ['receivingyards', 'receiving yards', 'rec yards'],
+            touchdowns: ['touchdowns', 'td', 'tds']
+        }[stat.key] || [stat.label];
+        const match = flattened.find(item => aliases.some(alias => item.name.includes(alias) || item.displayName.includes(alias)));
+        if (!match) return null;
+        return {
+            provider: 'espn',
+            sport: 'NFL',
+            marketType: 'player_prop',
+            player: athlete.name || playerName,
+            team: athlete.team?.name || athlete.team?.abbreviation || null,
+            statLabel: stat.label,
+            sampleSize: 1,
+            average: Number(match.value.toFixed(1)),
+            stdDev: Math.max(Number(match.value) * 0.25, 1),
+            volatility: 'MEDIUM',
+            recentGames: [],
+            note: 'ESPN season/stat summary, not game-log distribution yet.'
+        };
+    };
+    const espnSportPath = (sport = '') => {
+        const key = String(sport || '').toUpperCase();
+        if (key === 'NBA') return 'basketball/nba';
+        if (key === 'NFL') return 'football/nfl';
+        if (key === 'NHL') return 'hockey/nhl';
+        if (key === 'MLB') return 'baseball/mlb';
+        return null;
+    };
+    const fetchForecasterContextSignals = async (leg = {}) => {
+        const sportPath = espnSportPath(leg.sport);
+        const query = normalizeName(`${leg.entity || ''} ${leg.team || ''}`);
+        const signals = [];
+        if (!sportPath || !query) {
+            return {
+                status: 'not_available',
+                signals,
+                notes: ['Context scan needs a supported sport and entity/team name.']
+            };
+        }
+        try {
+            const news = await fetchJsonWithTimeout(`https://site.api.espn.com/apis/site/v2/sports/${sportPath}/news?limit=25`, 7000);
+            for (const item of news?.articles || []) {
+                const headline = item.headline || item.title || '';
+                const description = item.description || '';
+                const text = `${headline} ${description}`.toLowerCase();
+                if (!query.split(' ').some(token => token.length > 3 && text.includes(token))) continue;
+                const tags = [];
+                if (/\b(injury|injured|questionable|doubtful|out|illness|hamstring|ankle|knee|concussion)\b/i.test(text)) tags.push('injury');
+                if (/\b(rain|wind|snow|weather|storm|delay)\b/i.test(text)) tags.push('weather');
+                if (/\b(lineup|starter|minutes|rest|load management|inactive)\b/i.test(text)) tags.push('availability');
+                signals.push({
+                    type: tags[0] || 'news',
+                    headline,
+                    source: item.source || 'ESPN',
+                    publishedAt: item.published || item.lastModified || null,
+                    url: item.links?.web?.href || item.link || null,
+                    tags
+                });
+                if (signals.length >= 5) break;
+            }
+            return {
+                status: signals.length ? 'signals_found' : 'no_relevant_signals',
+                signals,
+                notes: signals.length
+                    ? [`Found ${signals.length} contextual ESPN signal(s).`]
+                    : ['No matching injury/weather/news signals found in the current ESPN feed.']
+            };
+        } catch (e) {
+            return {
+                status: 'source_error',
+                signals,
+                notes: [`Context source unavailable: ${e.message}`]
+            };
+        }
+    };
+
+    const enrichForecastLegInternal = async (inputLeg = {}) => {
+        const leg = inputLeg || {};
+        const text = `${leg.entity || ''} ${leg.stat || ''}`.toLowerCase();
+        const sport = leg.sport || (
+            /\b(passing|rushing|receiving|touchdown|yards|nfl)\b/.test(text) ? 'NFL'
+                : /\b(points|rebounds|assists|nba|basketball)\b/.test(text) ? 'NBA'
+                    : /\b(goals|shots|nhl|hockey)\b/.test(text) ? 'NHL'
+                        : 'UNKNOWN'
+        );
+        const marketType = leg.marketType || (
+            /\b(moneyline|ml)\b/.test(text) ? 'moneyline'
+                : /\b(spread)\b/.test(text) ? 'spread'
+                    : /\b(total)\b/.test(text) ? 'total'
+                        : 'player_prop'
+        );
+        const line = Number(leg.line ?? leg.value ?? 0);
+        const modelProb = Math.max(0.05, Math.min(0.92, Number(leg.modelProb || leg.confidenceScore || 0.55)));
+        const sampleSize = Number(leg.sampleSize || 0);
+        let realStats = null;
+        if (marketType === 'player_prop') {
+            if (sport === 'NBA') realStats = await enrichNbaLeg(leg).catch(() => null);
+            else if (sport === 'NHL') realStats = await enrichNhlLeg(leg).catch(() => null);
+            else if (sport === 'NFL') realStats = await enrichNflLeg(leg).catch(() => null);
+        }
+        const enrichedSampleSize = Number(realStats?.sampleSize || sampleSize || 0);
+        const average = Number(realStats?.average ?? leg.average ?? leg.value ?? line ?? 0);
+        const volatility = realStats?.volatility || leg.volatility || (enrichedSampleSize >= 10 ? 'MEDIUM' : 'HIGH');
+        const enrichedProb = realStats
+            ? probabilityFromLine({
+                average,
+                stdDev: realStats.stdDev,
+                line,
+                side: leg.side || 'over',
+                fallback: modelProb
+            })
+            : modelProb;
+        const confidenceScore = Math.max(0.35, Math.min(0.88, enrichedProb + Math.min(enrichedSampleSize, 12) * 0.01 - (volatility === 'HIGH' ? 0.06 : 0)));
+        const context = await fetchForecasterContextSignals({
+            ...leg,
+            sport: realStats?.sport || sport,
+            team: realStats?.team || leg.team
+        });
+        const contextPenalty = context.signals.some(signal => signal.tags?.includes('injury') || signal.tags?.includes('availability')) ? 0.03 : 0;
+        const sourceStatus = realStats ? 'real-stats-attached' : (sampleSize > 0 ? 'partial-stats-attached' : 'needs-live-stats');
+        const dataFreshness = realStats ? 'recent-game-log' : 'heuristic';
+
+        return {
+            ...leg,
+            entity: realStats?.player || leg.entity,
+            sport: realStats?.sport || sport,
+            marketType: realStats?.marketType || marketType,
+            line,
+            dataFreshness,
+            sourceStatus,
+            sampleSize: enrichedSampleSize,
+            average,
+            recentGames: realStats?.recentGames || leg.recentGames || [],
+            team: realStats?.team || leg.team || null,
+            volatility,
+            confidenceScore: Number(Math.max(0.25, confidenceScore - contextPenalty).toFixed(3)),
+            modelProb: Number(Math.max(0.05, enrichedProb - contextPenalty).toFixed(3)),
+            probabilityDelta: Number((((enrichedProb - contextPenalty) - modelProb) * 100).toFixed(1)),
+            contextSignals: context.signals,
+            contextStatus: context.status,
+            dataSources: buildDataSourceSummary([{ ...leg, sourceStatus, dataFreshness }], null, context.signals).badges,
+            enrichmentNotes: realStats
+                ? `${realStats.note || `Attached ${realStats.sampleSize} recent ${realStats.sport} game log(s) from ${realStats.provider}; average ${realStats.average} ${realStats.statLabel} vs line ${line}.`} ${context.notes.join(' ')}`
+                : sampleSize > 0
+                    ? `Using ${sampleSize} attached comparable(s). ${context.notes.join(' ')}`
+                    : `No recent game-log adapter attached yet; using line, odds, and parsed market structure. ${context.notes.join(' ')}`
+        };
+    };
+
+    app.post('/api/forecaster/enrich-leg', checkReady, async (req, res) => {
+        try {
+            const leg = req.body?.leg || req.body || {};
+            const text = `${leg.entity || ''} ${leg.stat || ''}`.toLowerCase();
+            const sport = leg.sport || (
+                /\b(passing|rushing|receiving|touchdown|yards|nfl)\b/.test(text) ? 'NFL'
+                    : /\b(points|rebounds|assists|nba|basketball)\b/.test(text) ? 'NBA'
+                        : /\b(goals|shots|nhl|hockey)\b/.test(text) ? 'NHL'
+                            : 'UNKNOWN'
+            );
+            const marketType = leg.marketType || (
+                /\b(moneyline|ml)\b/.test(text) ? 'moneyline'
+                    : /\b(spread)\b/.test(text) ? 'spread'
+                        : /\b(total)\b/.test(text) ? 'total'
+                            : 'player_prop'
+            );
+            const line = Number(leg.line ?? leg.value ?? 0);
+            const modelProb = Math.max(0.05, Math.min(0.92, Number(leg.modelProb || leg.confidenceScore || 0.55)));
+            const sampleSize = Number(leg.sampleSize || 0);
+            let realStats = null;
+            if (marketType === 'player_prop') {
+                if (sport === 'NBA') realStats = await enrichNbaLeg(leg).catch(() => null);
+                else if (sport === 'NHL') realStats = await enrichNhlLeg(leg).catch(() => null);
+                else if (sport === 'NFL') realStats = await enrichNflLeg(leg).catch(() => null);
+            }
+            const enrichedSampleSize = Number(realStats?.sampleSize || sampleSize || 0);
+            const average = Number(realStats?.average ?? leg.average ?? leg.value ?? line ?? 0);
+            const volatility = realStats?.volatility || leg.volatility || (enrichedSampleSize >= 10 ? 'MEDIUM' : 'HIGH');
+            const enrichedProb = realStats
+                ? probabilityFromLine({
+                    average,
+                    stdDev: realStats.stdDev,
+                    line,
+                    side: leg.side || 'over',
+                    fallback: modelProb
+                })
+                : modelProb;
+            const confidenceScore = Math.max(0.35, Math.min(0.88, enrichedProb + Math.min(enrichedSampleSize, 12) * 0.01 - (volatility === 'HIGH' ? 0.06 : 0)));
+            const context = await fetchForecasterContextSignals({
+                ...leg,
+                sport: realStats?.sport || sport,
+                team: realStats?.team || leg.team
+            });
+            const contextPenalty = context.signals.some(signal => signal.tags?.includes('injury') || signal.tags?.includes('availability')) ? 0.03 : 0;
+
+            res.json({
+                success: true,
+                leg: {
+                    ...leg,
+                    entity: realStats?.player || leg.entity,
+                    sport: realStats?.sport || sport,
+                    marketType: realStats?.marketType || marketType,
+                    line,
+                    dataFreshness: realStats ? 'recent-game-log' : 'heuristic',
+                    sourceStatus: realStats ? 'real-stats-attached' : (sampleSize > 0 ? 'partial-stats-attached' : 'needs-live-stats'),
+                    sampleSize: enrichedSampleSize,
+                    average,
+                    recentGames: realStats?.recentGames || leg.recentGames || [],
+                    team: realStats?.team || leg.team || null,
+                    volatility,
+                    confidenceScore: Number(Math.max(0.25, confidenceScore - contextPenalty).toFixed(3)),
+                    modelProb: Number(Math.max(0.05, enrichedProb - contextPenalty).toFixed(3)),
+                    probabilityDelta: Number((((enrichedProb - contextPenalty) - modelProb) * 100).toFixed(1)),
+                    contextSignals: context.signals,
+                    contextStatus: context.status,
+                    dataSources: buildDataSourceSummary([{ ...leg, sourceStatus: realStats ? 'real-stats-attached' : (sampleSize > 0 ? 'partial-stats-attached' : 'needs-live-stats'), dataFreshness: realStats ? 'recent-game-log' : 'heuristic' }], null, context.signals).badges,
+                    enrichmentNotes: realStats
+                        ? `${realStats.note || `Attached ${realStats.sampleSize} recent ${realStats.sport} game log(s) from ${realStats.provider}; average ${realStats.average} ${realStats.statLabel} vs line ${line}.`} ${context.notes.join(' ')}`
+                        : sampleSize > 0
+                            ? `Using ${sampleSize} attached comparable(s). ${context.notes.join(' ')}`
+                            : `No recent game-log adapter attached yet; using line, odds, and parsed market structure. ${context.notes.join(' ')}`
+                }
+            });
+        } catch (e) {
+            res.status(500).json({ success: false, error: e.message });
+        }
+    });
+
+    const forecastSuiteSeedLegs = [
+        { sport: 'NBA', entity: 'Luka Doncic', stat: 'points', value: 29.5, line: 29.5, side: 'over', odds: 1.91, modelProb: 0.56, confidenceScore: 0.56, quality: 62, marketType: 'player_prop' },
+        { sport: 'NBA', entity: 'Nikola Jokic', stat: 'assists', value: 8.5, line: 8.5, side: 'over', odds: 1.87, modelProb: 0.55, confidenceScore: 0.55, quality: 61, marketType: 'player_prop' },
+        { sport: 'NBA', entity: 'Jayson Tatum', stat: 'points', value: 26.5, line: 26.5, side: 'under', odds: 1.95, modelProb: 0.53, confidenceScore: 0.53, quality: 58, marketType: 'player_prop' },
+        { sport: 'NFL', entity: 'Patrick Mahomes', stat: 'passing yards', value: 264.5, line: 264.5, side: 'over', odds: 1.91, modelProb: 0.54, confidenceScore: 0.54, quality: 60, marketType: 'player_prop' },
+        { sport: 'NFL', entity: 'Christian McCaffrey', stat: 'rushing yards', value: 78.5, line: 78.5, side: 'over', odds: 1.88, modelProb: 0.55, confidenceScore: 0.55, quality: 59, marketType: 'player_prop' },
+        { sport: 'NFL', entity: 'Travis Kelce', stat: 'receiving yards', value: 58.5, line: 58.5, side: 'under', odds: 1.93, modelProb: 0.52, confidenceScore: 0.52, quality: 56, marketType: 'player_prop' },
+        { sport: 'NHL', entity: 'Connor McDavid', stat: 'shots', value: 3.5, line: 3.5, side: 'over', odds: 1.82, modelProb: 0.57, confidenceScore: 0.57, quality: 63, marketType: 'player_prop' },
+        { sport: 'NHL', entity: 'Auston Matthews', stat: 'goals', value: 0.5, line: 0.5, side: 'over', odds: 2.15, modelProb: 0.47, confidenceScore: 0.47, quality: 55, marketType: 'player_prop' }
+    ];
+    const buildForecastSuiteScenario = (index, { sport = 'ALL', maxLegs = 3 } = {}) => {
+        const pool = forecastSuiteSeedLegs.filter(leg => sport === 'ALL' || leg.sport === sport);
+        const source = pool.length ? pool : forecastSuiteSeedLegs;
+        const legCount = Math.max(1, Math.min(maxLegs, 1 + (index % maxLegs)));
+        const legs = [];
+        for (let i = 0; i < legCount; i += 1) {
+            const seed = source[(index + i * 2) % source.length];
+            const lineDrift = ((index + i) % 3 - 1) * 0.5;
+            legs.push({
+                ...seed,
+                line: Number((Number(seed.line) + lineDrift).toFixed(1)),
+                value: Number((Number(seed.value) + lineDrift).toFixed(1)),
+                suiteSeed: true,
+                scenarioSeed: index
+            });
+        }
+        return legs;
+    };
+    const computeForecasterParlayModel = (legs = [], mode = 'balanced') => {
+        const modeMultiplier = { conservative: 0.92, balanced: 1, aggressive: 1.06, research: 1 }[mode] || 1;
+        const decimalOdds = legs.map((leg) => Math.max(Number(leg.odds) || 1.91, 1.01));
+        const impliedLegProbs = decimalOdds.map((odds) => 1 / odds);
+        const impliedProbParlay = impliedLegProbs.reduce((acc, prob) => acc * prob, 1);
+        const modelLegs = legs.map((leg, index) => {
+            const quality = Math.max(1, Math.min(100, Number(leg.quality) || 50));
+            const rawModelProb = Number(leg.modelProb);
+            const baseProb = Number.isFinite(rawModelProb) ? rawModelProb : impliedLegProbs[index];
+            const qualityPenalty = quality < 50 ? (50 - quality) / 500 : 0;
+            const probability = Math.max(0.03, Math.min(0.94, (baseProb * modeMultiplier) - qualityPenalty));
+            return { index, entity: leg.entity || `Leg ${index + 1}`, stat: leg.stat || 'Forecast', line: leg.line, value: leg.value, quality, probability };
+        });
+        const covariance = buildCovarianceModel([], legs);
+        const correlated = covariance.pairs.filter(pair => pair.score > 0.2);
+        const correlationPenalty = Math.min(0.25, correlated.reduce((sum, pair) => sum + Math.max(0.03, Number(pair.score || 0) * 0.07), 0));
+        const qualityPenalty = Math.max(0, (65 - (modelLegs.reduce((sum, leg) => sum + leg.quality, 0) / modelLegs.length)) / 500);
+        const modelParlayProb = modelLegs.reduce((acc, leg) => acc * leg.probability, 1);
+        const trueProb = Math.max(0, modelParlayProb * (1 - correlationPenalty - qualityPenalty));
+        return {
+            trueProb: Number((trueProb * 100).toFixed(1)),
+            impliedProb: Number((impliedProbParlay * 100).toFixed(1)),
+            edge: Number(((trueProb - impliedProbParlay) * 100).toFixed(1)),
+            rating: trueProb * 100 >= 25 && correlationPenalty < 0.08 ? 'Reasonable' : trueProb * 100 < 10 || legs.length >= 5 ? 'Long Shot' : 'Fragile',
+            legQuality: modelLegs,
+            weakLink: [...modelLegs].sort((a, b) => (a.quality * a.probability) - (b.quality * b.probability))[0] || null,
+            calibration: {
+                mode,
+                modelParlayProb: Number((modelParlayProb * 100).toFixed(1)),
+                correlationPenalty: Number((correlationPenalty * 100).toFixed(1)),
+                qualityPenalty: Number((qualityPenalty * 100).toFixed(1))
+            }
+        };
+    };
+
+    app.get('/api/forecaster/suite/status', checkReady, async (req, res) => {
+        try {
+            const suiteEntries = await readForecasterSuiteLedger();
+            const forecastEntries = await readForecasterLedger();
+            res.json({
+                success: true,
+                latest: suiteEntries[0] || null,
+                runs: suiteEntries.slice(0, 20),
+                summary: {
+                    totalRuns: suiteEntries.length,
+                    totalScenarios: suiteEntries.reduce((sum, run) => sum + Number(run.summary?.scenarios || 0), 0),
+                    savedForecasts: forecastEntries.filter(entry => entry.source === 'Forecast Simulation Suite').length,
+                    gradedForecasts: forecastEntries.filter(entry => entry.source === 'Forecast Simulation Suite' && entry.grade?.status === 'graded').length,
+                    latestAt: suiteEntries[0]?.createdAt || null
+                },
+                backtest: buildBacktestReport(forecastEntries)
+            });
+        } catch (e) {
+            res.status(500).json({ success: false, error: e.message });
+        }
+    });
+
+    app.post('/api/forecaster/suite/run', checkReady, async (req, res) => {
+        try {
+            const {
+                scenarios = 12,
+                sport = 'ALL',
+                mode = 'balanced',
+                maxLegs = 3,
+                enrich = true
+            } = req.body || {};
+            const count = Math.max(1, Math.min(Number(scenarios) || 12, 25));
+            const now = new Date().toISOString();
+            const entries = await readForecasterLedger();
+            const learning = buildCalibrationLearning(entries);
+            const run = {
+                id: `forecast-suite-${Date.now()}`,
+                createdAt: now,
+                mode,
+                sport,
+                requestedScenarios: count,
+                status: 'completed',
+                results: [],
+                summary: { scenarios: 0, saved: 0, avgProbability: 0, avgSwarmProbability: 0, needsLiveStats: 0 }
+            };
+
+            for (let i = 0; i < count; i += 1) {
+                const rawLegs = buildForecastSuiteScenario(i, { sport, maxLegs });
+                const legs = [];
+                for (const leg of rawLegs) {
+                    legs.push(enrich ? await enrichForecastLegInternal(leg) : leg);
+                }
+                const analysis = computeForecasterParlayModel(legs, mode);
+                const covariance = buildCovarianceModel(entries, legs);
+                const swarm = buildForecastSwarm({
+                    legs,
+                    mode,
+                    rounds: 120,
+                    calibration: buildForecasterCalibration(entries),
+                    learning,
+                    covariance
+                });
+                const forecastEntry = {
+                    id: `forecast-suite-scenario-${Date.now()}-${i}`,
+                    createdAt: new Date().toISOString(),
+                    type: 'forecast_simulation_suite',
+                    mode,
+                    legs,
+                    analysis,
+                    swarm,
+                    grade: { status: 'pending' },
+                    source: 'Forecast Simulation Suite',
+                    suiteRunId: run.id
+                };
+                entries.unshift(forecastEntry);
+                run.results.push({
+                    id: forecastEntry.id,
+                    legs: legs.length,
+                    primary: legs[0]?.entity || 'Scenario',
+                    probability: analysis.trueProb,
+                    edge: analysis.edge,
+                    swarmProbability: swarm.consensus?.probability,
+                    rating: analysis.rating,
+                    sources: buildDataSourceSummary(legs).badges
+                });
+            }
+
+            await writeForecasterLedger(entries);
+            run.summary = {
+                scenarios: run.results.length,
+                saved: run.results.length,
+                avgProbability: Number((run.results.reduce((sum, item) => sum + Number(item.probability || 0), 0) / Math.max(1, run.results.length)).toFixed(1)),
+                avgSwarmProbability: Number((run.results.reduce((sum, item) => sum + Number(item.swarmProbability || 0), 0) / Math.max(1, run.results.length)).toFixed(1)),
+                needsLiveStats: run.results.filter(item => item.sources?.includes('needs-live-stats')).length
+            };
+            const suiteLedger = await readForecasterSuiteLedger();
+            await writeForecasterSuiteLedger([run, ...suiteLedger]);
+            res.json({ success: true, run, backtest: buildBacktestReport(entries) });
+        } catch (e) {
+            res.status(500).json({ success: false, error: e.message });
+        }
+    });
+
+    app.post('/api/forecaster/parlay-simulate', checkReady, async (req, res) => {
+        try {
+            const legs = Array.isArray(req.body?.legs) ? req.body.legs : [];
+            const mode = String(req.body?.mode || 'balanced');
+            const iterations = Math.min(Math.max(Number(req.body?.iterations) || 10000, 1000), 50000);
+            if (!legs.length) return res.status(400).json({ success: false, error: 'No legs provided' });
+
+            const modeMultiplier = {
+                conservative: 0.92,
+                balanced: 1,
+                aggressive: 1.06,
+                research: 1
+            }[mode] || 1;
+
+            const decimalOdds = legs.map((leg) => Math.max(Number(leg.odds) || 1.91, 1.01));
+            const impliedLegProbs = decimalOdds.map((odds) => 1 / odds);
+            const impliedProbParlay = impliedLegProbs.reduce((acc, prob) => acc * prob, 1);
+            const entries = await readForecasterLedger();
+            const learning = buildCalibrationLearning(entries);
+            const covariance = buildCovarianceModel(entries, legs);
+            const modelLegs = legs.map((leg, index) => {
+                const quality = Math.max(1, Math.min(100, Number(leg.quality) || 50));
+                const rawModelProb = Number(leg.modelProb);
+                const baseProb = Number.isFinite(rawModelProb) ? rawModelProb : impliedLegProbs[index];
+                const qualityPenalty = quality < 50 ? (50 - quality) / 500 : 0;
+                const learnedAdjustment = getCalibrationAdjustmentForLeg(learning, mode, leg);
+                const probability = Math.max(0.03, Math.min(0.94, (baseProb * modeMultiplier) + learnedAdjustment - qualityPenalty));
+                return {
+                    index,
+                    entity: leg.entity || `Leg ${index + 1}`,
+                    stat: leg.stat || 'Forecast',
+                    line: leg.line,
+                    value: leg.value,
+                    quality,
+                    probability,
+                    learnedAdjustment: Number((learnedAdjustment * 100).toFixed(2))
+                };
+            });
+            const modelParlayProb = modelLegs.reduce((acc, leg) => acc * leg.probability, 1);
+
+            const correlated = covariance.pairs.filter(pair => pair.score > 0.2).map(pair => ({
+                i: pair.from,
+                j: pair.to,
+                reason: pair.reasons?.join(', ') || pair.covarianceType,
+                historicalSupport: pair.historicalSupport
+            }));
+
+            // Conservative correlation adjustment. Without a true covariance model,
+            // same-entity/same-game legs get penalized instead of over-promised.
+            const correlationPenalty = Math.min(0.25, correlated.reduce((sum, pair) => sum + Math.max(0.03, Number(covariance.pairs.find(p => p.from === pair.i && p.to === pair.j)?.score || 0) * 0.07), 0));
+            const qualityPenalty = Math.max(0, (65 - (modelLegs.reduce((sum, leg) => sum + leg.quality, 0) / modelLegs.length)) / 500);
+            const trueProb = Math.max(0, modelParlayProb * (1 - correlationPenalty - qualityPenalty));
+            const edge = (trueProb - impliedProbParlay) * 100;
+            const truePct = trueProb * 100;
+            const weakLink = [...modelLegs].sort((a, b) => (a.quality * a.probability) - (b.quality * b.probability))[0] || null;
+
+            let rating = 'Fragile';
+            if (truePct >= 25 && correlationPenalty < 0.08) rating = 'Reasonable';
+            if (truePct >= 40 && legs.length <= 2) rating = 'Strong';
+            if (truePct < 10 || legs.length >= 5) rating = 'Long Shot';
+
+            const suggestions = [];
+            if (weakLink && weakLink.quality < 55) suggestions.push(`Weak link is ${weakLink.entity}; improve the line or remove it.`);
+            if (legs.length >= 4) suggestions.push('Compare this against a smaller 2-3 leg version.');
+            if (correlated.length) suggestions.push('Correlation detected; validate same-game/entity logic before trusting the stack.');
+            if (edge < -3) suggestions.push('Market-implied probability is richer than SOMA estimate; structure looks expensive.');
+            if (!suggestions.length) suggestions.push('Track this scenario and grade the outcome before increasing trust.');
+
+            res.json({
+                success: true,
+                trueProb: Number(truePct.toFixed(1)),
+                impliedProb: Number((impliedProbParlay * 100).toFixed(1)),
+                edge: Number(edge.toFixed(1)),
+                weakLink,
+                legQuality: modelLegs,
+                correlation: correlated.length
+                    ? `${correlated.length} linked leg(s): ${correlated.map((c) => c.reason).join(', ')}`
+                    : 'No obvious same-game/entity correlation detected',
+                rating,
+                iterations,
+                calibration: {
+                    mode,
+                    avgLegQuality: Number((modelLegs.reduce((sum, leg) => sum + leg.quality, 0) / modelLegs.length).toFixed(1)),
+                    modelParlayProb: Number((modelParlayProb * 100).toFixed(1)),
+                    correlationPenalty: Number((correlationPenalty * 100).toFixed(1)),
+                    qualityPenalty: Number((qualityPenalty * 100).toFixed(1)),
+                    covarianceMaturity: covariance.maturity,
+                    learning: learning.note
+                },
+                dataSources: buildDataSourceSummary(legs),
+                covariance,
+                suggestions,
+                warnings: [
+                    ...(legs.length >= 4 ? ['Parlay hit rate drops sharply as legs are added.'] : []),
+                    ...(correlated.length ? ['Correlation is estimated conservatively until full historical covariance is available.'] : [])
+                ]
+            });
+        } catch (e) {
+            res.status(500).json({ success: false, error: e.message });
+        }
+    });
+
+    app.post('/api/forecaster/swarm-simulate', checkReady, async (req, res) => {
+        try {
+            const legs = Array.isArray(req.body?.legs) ? req.body.legs : [];
+            if (!legs.length) return res.status(400).json({ success: false, error: 'No legs provided' });
+            const entries = await readForecasterLedger();
+            const result = buildForecastSwarm({
+                legs,
+                mode: String(req.body?.mode || 'balanced'),
+                rounds: req.body?.rounds || 120,
+                calibration: buildForecasterCalibration(entries),
+                learning: buildCalibrationLearning(entries),
+                covariance: buildCovarianceModel(entries, legs)
+            });
+            res.json({ success: true, ...result });
+        } catch (e) {
+            res.status(500).json({ success: false, error: e.message });
+        }
+    });
+
+    const forecasterHandler = async (req, res) => {
+        try {
+            const { query, matchup, sport, teams, topic } = req.body || {};
+            const prompt = query || matchup || topic || `${sport || 'sports'}: ${Array.isArray(teams) ? teams.join(' vs ') : ''}`;
             const forecaster = system.forecaster;
             if (forecaster && typeof forecaster.getForecast === 'function') {
-                const forecast = await forecaster.getForecast(query || `${sport}: ${teams?.join(' vs ')}`);
+                const forecast = await forecaster.getForecast(prompt);
                 res.json({ success: true, forecast });
             } else {
                 const brain = system.quadBrain || system.somArbiter;
                 if (brain) {
-                    const result = await brain.reason(`Sports prediction: ${query || `${sport}: ${teams?.join(' vs ')}`}. Analyze recent performance, injuries, and odds.`, { temperature: 0.3 });
+                    const result = await brain.reason(`Sports forecast: ${prompt}. Analyze recent performance, injuries, market-implied probability, and uncertainty. Do not provide betting instructions.`, { temperature: 0.3 });
                     res.json({ success: true, forecast: { prediction: result.text, confidence: result.confidence || 0.6 } });
                 } else {
                     res.json({ success: false, error: 'No forecaster available' });
                 }
             }
         } catch (e) { res.status(500).json({ success: false, error: e.message }); }
-    });
+    };
+
+    app.post('/api/forecaster/moneyball', checkReady, forecasterHandler);
+    app.post('/api/forecaster/predict', checkReady, forecasterHandler);
 
     // â”€â”€ Drive tension status â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     app.get('/api/drive/status', (req, res) => {
@@ -3116,20 +4944,16 @@ Return ONLY valid JSON (no markdown, no explanation):
         }
     });
 
-    safeMount('/api/axis', createAxisRoutes(system));
+    safeMount('/api/axis',            createAxisRoutes(system));
+    safeMount('/api/axis/projects',   createProjectRoutes(system));
+    safeMount('/api/axis/communities', createCommunityRoutes(system));
     safeMount('/api/social', createSocialRoutes(system));
     safeMount('/api/maintenance', createMaintenanceRoutes(system));
     safeMount('/api/workspace',  createWorkspaceRoutes(system));
+    safeMount('/api/thirdplace', createThirdPlaceRoutes(system));
 
     const kevin = system.kevinArbiter || system.kevinManager;
     if (kevin) app.locals.kevinArbiter = kevin;
 
     console.log('      âœ… All production routes mounted (Full Tab Coverage Active)');
 }
-
-
-
-
-
-
-

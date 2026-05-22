@@ -1,0 +1,38 @@
+{
+  "images": [
+    {
+      "id": "f3630d772e38ef",
+      "path": "C:\\Users\\barry\\OneDrive\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\1778971448648-3a1e3cae-453f-4c62-9eeb-fc777ae4681b.jpg",
+      "filename": "1778971448648-3a1e3cae-453f-4c62-9eeb-fc777ae4681b.jpg",
+      "ext": ".jpg",
+      "size": 3748881,
+      "alt": "Featured work imported through Studio for SOMA social posting: 3A1E3CAE-453F-4C62-9EEB-FC777AE4681B.jpg",
+      "source": "studio-featured-work",
+      "license": "user-provided",
+      "tags": [
+        "studio",
+        "featured-work",
+        "social-image"
+      ],
+      "createdAt": 1778971448718,
+      "updatedAt": 1778971448718
+    },
+    {
+      "id": "f36066df76c50e",
+      "path": "C:\\Users\\barry\\OneDrive\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\1778971481295-95f28021-fe14-48ee-b1d7-0dfc0d59448c.jpg",
+      "filename": "1778971481295-95f28021-fe14-48ee-b1d7-0dfc0d59448c.jpg",
+      "ext": ".jpg",
+      "size": 342946,
+      "alt": "Featured work imported through Studio for SOMA social posting: 95F28021-FE14-48EE-B1D7-0DFC0D59448C.jpg",
+      "source": "studio-featured-work",
+      "license": "user-provided",
+      "tags": [
+        "studio",
+        "featured-work",
+        "social-image"
+      ],
+      "createdAt": 1778971481299,
+      "updatedAt": 1778971481299
+    }
+  ]
+}

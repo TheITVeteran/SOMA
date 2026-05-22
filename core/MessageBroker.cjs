@@ -672,22 +672,58 @@ class MessageBroker extends EventEmitter {
 
   /**
    * Internal method to deliver signals to subscribers.
+   * Attention Engine v2: uses evaluateSignal() for soft scoring.
+   * Score bands: ≥0.7 immediate, 0.3–0.69 normal, <0.3 deferred 200 ms batch.
    */
   async _deliverSignal(signal) {
-    // CNS: Attention & Focus Gate (The Amygdala)
-    if (this.attentionEngine && typeof this.attentionEngine.shouldNotice === 'function') {
-      if (!this.attentionEngine.shouldNotice(signal)) {
-        console.log(`[MessageBroker] 🙈 Attention Gate suppressed signal: ${signal.type}`);
+    if (this.attentionEngine) {
+      let pass = true;
+      let score = 1.0;
+
+      if (typeof this.attentionEngine.evaluateSignal === 'function') {
+        ({ pass, score } = this.attentionEngine.evaluateSignal(signal));
+      } else if (typeof this.attentionEngine.shouldNotice === 'function') {
+        pass = this.attentionEngine.shouldNotice(signal);
+      }
+
+      if (!pass) {
+        console.log(`[MessageBroker] 🙈 Suppressed: ${signal.type} (score: ${score.toFixed(2)})`);
         return 0;
       }
+
+      // Soft bandwidth: low-relevance signals deferred to 200 ms batch
+      if (score < 0.3) {
+        this._queueLowPrioritySignal(signal, score);
+        return 0;
+      }
+
+      signal._attentionScore = score;
     }
 
     this.metrics.messagesSent++;
     this._addToHistory(signal);
-
-    // Signals are published to topics matching their type
-    // e.g. signal 'repo.file.changed' -> topic 'repo.file.changed'
     return await this.publish(signal.type, signal);
+  }
+
+  _queueLowPrioritySignal(signal, score) {
+    if (!this._lpQueue) this._lpQueue = [];
+    this._lpQueue.push({ signal, score });
+    if (!this._lpTimer) {
+      this._lpTimer = setTimeout(() => this._flushLowPriorityQueue(), 200);
+    }
+  }
+
+  async _flushLowPriorityQueue() {
+    this._lpTimer = null;
+    if (!this._lpQueue?.length) return;
+    const batch = this._lpQueue.sort((a, b) => b.score - a.score);
+    this._lpQueue = [];
+    for (const { signal, score } of batch) {
+      signal._attentionScore = score;
+      this.metrics.messagesSent++;
+      this._addToHistory(signal);
+      await this.publish(signal.type, signal);
+    }
   }
 
   // ===========================

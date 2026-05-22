@@ -5,13 +5,13 @@ import {
 } from 'lucide-react';
 
 /**
- * THE GOAL - Ultimate Sports Betting Intelligence Hub
+ * THE GOAL - Sports Forecast Intelligence Hub
  * 
  * Aggregates:
  * - ML Predictions (SportsBetting models)
  * - Live Odds (multiple bookmakers)
  * - Player Props predictions
- * - Edge calculations
+ * - Market-implied probability gaps
  * - Historical context
  * - Web consensus
  */
@@ -118,7 +118,7 @@ const TheGoalView = ({ games }) => {
                     }
                 ],
                 edge_analysis: {
-                    best_bet: {
+                    strongest_signal: {
                         type: 'spread',
                         selection: `${game.homeTeam.shortName} -4.5`,
                         odds: -110,
@@ -376,8 +376,21 @@ const MLPredictionPanel = ({ game, predictions }) => {
 
 // Edge Detector Component
 const EdgeDetector = ({ game, analysis }) => {
-    const { best_bet } = analysis;
-    const isPositiveEdge = best_bet.edge > 0;
+    const signal = analysis?.strongest_signal || analysis?.best_bet;
+    if (!signal) {
+        return (
+            <div className="glass-panel p-6 rounded-xl h-full">
+                <div className="flex items-center gap-2 mb-4">
+                    <Calculator size={16} className="text-slate-500" />
+                    <h3 className="text-sm font-bold text-white uppercase tracking-widest">
+                        Forecast Gap
+                    </h3>
+                </div>
+                <p className="text-xs text-slate-500">No signal available for this game yet.</p>
+            </div>
+        );
+    }
+    const isPositiveEdge = signal.edge > 0;
 
     return (
         <div className={`glass-panel p-6 rounded-xl h-full border-t-2 ${
@@ -386,7 +399,7 @@ const EdgeDetector = ({ game, analysis }) => {
             <div className="flex items-center gap-2 mb-4">
                 <Calculator size={16} className={isPositiveEdge ? 'text-emerald-400' : 'text-rose-400'} />
                 <h3 className="text-sm font-bold text-white uppercase tracking-widest">
-                    Edge Analysis
+                    Forecast Gap
                 </h3>
             </div>
 
@@ -396,15 +409,15 @@ const EdgeDetector = ({ game, analysis }) => {
                     : 'bg-rose-500/10 border border-rose-500/20'
             }`}>
                 <div className="text-[10px] text-slate-500 uppercase font-bold mb-2">
-                    Best Bet Detected
+                    Strongest Signal Detected
                 </div>
                 <div className={`text-2xl font-black ${
                     isPositiveEdge ? 'text-emerald-400' : 'text-rose-400'
                 } mb-1`}>
-                    {best_bet.selection}
+                    {signal.selection}
                 </div>
                 <div className="text-xs text-slate-400">
-                    {best_bet.type.toUpperCase()} @ {best_bet.odds}
+                    {signal.type.toUpperCase()} @ {signal.odds}
                 </div>
             </div>
 
@@ -412,14 +425,14 @@ const EdgeDetector = ({ game, analysis }) => {
                 <div className="flex justify-between items-center p-3 rounded-lg bg-slate-900/50">
                     <span className="text-xs text-slate-500">Model Probability</span>
                     <span className="text-sm font-mono font-bold text-white">
-                        {(best_bet.model_prob * 100).toFixed(1)}%
+                        {(signal.model_prob * 100).toFixed(1)}%
                     </span>
                 </div>
 
                 <div className="flex justify-between items-center p-3 rounded-lg bg-slate-900/50">
                     <span className="text-xs text-slate-500">Implied Probability</span>
                     <span className="text-sm font-mono font-bold text-white">
-                        {(best_bet.implied_prob * 100).toFixed(1)}%
+                        {(signal.implied_prob * 100).toFixed(1)}%
                     </span>
                 </div>
 
@@ -434,21 +447,21 @@ const EdgeDetector = ({ game, analysis }) => {
                     <span className={`text-lg font-mono font-black ${
                         isPositiveEdge ? 'text-emerald-400' : 'text-rose-400'
                     }`}>
-                        {isPositiveEdge ? '+' : ''}{best_bet.edge.toFixed(1)}%
+                        {isPositiveEdge ? '+' : ''}{signal.edge.toFixed(1)}%
                     </span>
                 </div>
 
                 <div className="flex justify-between items-center p-3 rounded-lg bg-indigo-500/10">
-                    <span className="text-xs text-indigo-400">Expected Value</span>
+                    <span className="text-xs text-indigo-400">Expected Gap</span>
                     <span className="text-sm font-mono font-bold text-white">
-                        ${best_bet.ev_per_10.toFixed(2)} per $10
+                        {signal.ev_per_10.toFixed(2)} signal points
                     </span>
                 </div>
 
                 <div className="flex justify-between items-center p-3 rounded-lg bg-purple-500/10">
-                    <span className="text-xs text-purple-400">Kelly Criterion</span>
+                    <span className="text-xs text-purple-400">Suggested Exposure</span>
                     <span className="text-sm font-mono font-bold text-white">
-                        {best_bet.kelly.toFixed(1)}% of bankroll
+                        {signal.kelly.toFixed(1)}% max-risk equivalent
                     </span>
                 </div>
             </div>

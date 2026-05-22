@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { queryForecaster, queryForecasterWithConsensus } from './services/forecasterService.js';
 import { getCachedConsensus } from './services/consensusAggregator.js';
 import {
@@ -21,39 +21,351 @@ import TheGoalView from './views/TheGoalView.jsx';
 // Since this is a partial replace, I'll be careful. 
 // Wait, I need to inject the new components BEFORE 'ForecasterApp'.
 
-// --- NEW COMPONENT: ForecastResultView ---
+const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
+const decimalToAmerican = (decimalOdds = 1.91) => {
+    const odds = Math.max(Number(decimalOdds) || 1.91, 1.01);
+    if (odds >= 2) return `+${Math.round((odds - 1) * 100)}`;
+    return `${Math.round(-100 / (odds - 1))}`;
+};
+const americanToDecimal = (americanOdds = -110) => {
+    const odds = Number(americanOdds);
+    if (!Number.isFinite(odds) || odds === 0) return 1.91;
+    return odds > 0 ? 1 + (odds / 100) : 1 + (100 / Math.abs(odds));
+};
+const probToAmerican = (prob = 0.5) => {
+    const p = clamp(Number(prob) || 0.5, 0.01, 0.99);
+    if (p >= 0.5) return Math.round(-(p / (1 - p)) * 100);
+    return Math.round(((1 - p) / p) * 100);
+};
+const parseSlipText = (text = '') => {
+    const lines = text.split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+    const legs = [];
+    const unparsed = [];
 
-// --- NEW COMPONENT: ParlaySidebar ---
-const ParlaySidebar = ({ legs, onRemove, onClear }) => {
+    lines.forEach((line) => {
+        const cleaned = line.replace(/\s+/g, ' ');
+        const oddsMatch = cleaned.match(/([+-]\d{3,4})\b/);
+        const ouMatch = cleaned.match(/\b(over|under|o|u)\s*([0-9]+(?:\.[0-9]+)?)/i);
+        const spreadMatch = !ouMatch && cleaned.match(/\b([+-][0-9]+(?:\.[0-9]+)?)\b/);
+        const moneyline = /\b(ml|moneyline)\b/i.test(cleaned);
+
+        if (!ouMatch && !spreadMatch && !moneyline) {
+            unparsed.push(line);
+            return;
+        }
+
+        const statMatch = cleaned.match(/\b(passing yards|rushing yards|receiving yards|points|rebounds|assists|goals|shots|strikeouts|total|spread|moneyline)\b/i);
+        const side = ouMatch ? (/^(u|under)$/i.test(ouMatch[1]) ? 'under' : 'over') : (spreadMatch ? 'spread' : 'moneyline');
+        const lineValue = ouMatch ? Number(ouMatch[2]) : (spreadMatch ? Math.abs(Number(spreadMatch[1])) : 0);
+        const entity = cleaned
+            .replace(/\b(over|under|o|u)\s*[0-9]+(?:\.[0-9]+)?/ig, '')
+            .replace(/[+-]\d{3,4}\b/g, '')
+            .replace(/\b(ml|moneyline)\b/ig, '')
+            .replace(/\b(passing yards|rushing yards|receiving yards|points|rebounds|assists|goals|shots|strikeouts|total|spread)\b/ig, '')
+            .replace(/\s+/g, ' ')
+            .trim() || 'Parsed leg';
+
+        legs.push({
+            entity,
+            stat: statMatch?.[1] || (moneyline ? 'Moneyline' : 'Parsed Market'),
+            value: lineValue,
+            line: lineValue,
+            side,
+            odds: americanToDecimal(oddsMatch ? oddsMatch[1] : -110),
+            modelProb: 0.55,
+            confidenceScore: 0.55,
+            volatility: 'MEDIUM',
+            sampleSize: 0,
+            source: 'paste-slip'
+        });
+    });
+
+    return { legs, unparsed };
+};
+const qualityColor = (score) => score >= 78 ? 'text-emerald-400' : score >= 58 ? 'text-amber-400' : 'text-rose-400';
+const dataBadgeClass = (badge = '') => {
+    if (/real|live|recent|found|connected/.test(badge)) return 'border-emerald-500/20 bg-emerald-500/10 text-emerald-300';
+    if (/missing|needs|heuristic|not_|pending|thin|partial/.test(badge)) return 'border-amber-500/20 bg-amber-500/10 text-amber-300';
+    if (/error|unavailable/.test(badge)) return 'border-rose-500/20 bg-rose-500/10 text-rose-300';
+    return 'border-white/10 bg-white/5 text-slate-400';
+};
+const modeAdjustments = {
+    conservative: { label: 'Conservative', multiplier: 0.92, maxLegs: 3 },
+    balanced: { label: 'Balanced', multiplier: 1, maxLegs: 4 },
+    aggressive: { label: 'Aggressive', multiplier: 1.06, maxLegs: 6 },
+    research: { label: 'Research Only', multiplier: 1, maxLegs: 99 }
+};
+
+const getLegQuality = (leg) => {
+    const confidence = Number(leg.confidenceScore || 0.55);
+    const volatilityPenalty = String(leg.volatility || '').toUpperCase() === 'HIGH' ? 20 : String(leg.volatility || '').toUpperCase() === 'LOW' ? 0 : 8;
+    const margin = Math.abs(Number(leg.value || 0) - Number(leg.line || leg.value || 0));
+    const marginBoost = clamp(margin * 2, 0, 14);
+    const sampleBoost = clamp((Number(leg.sampleSize || 0) / 10) * 10, 0, 10);
+    return clamp(Math.round((confidence * 78) + marginBoost + sampleBoost - volatilityPenalty), 5, 99);
+};
+
+const getLegProbability = (leg, mode = 'balanced') => {
+    const base = Number(leg.modelProb || leg.confidenceScore || 0.55);
+    const line = Number(leg.line || leg.value || 0);
+    const projection = Number(leg.value || line);
+    const direction = leg.side === 'under' ? -1 : 1;
+    const margin = (projection - line) * direction;
+    const marginBoost = clamp(margin / Math.max(8, Math.abs(projection || 1) * 0.18), -0.14, 0.14);
+    const volatilityPenalty = String(leg.volatility || '').toUpperCase() === 'HIGH' ? 0.08 : String(leg.volatility || '').toUpperCase() === 'LOW' ? 0.01 : 0.04;
+    const modeBoost = modeAdjustments[mode]?.multiplier || 1;
+    return clamp((base + marginBoost - volatilityPenalty) * modeBoost, 0.05, 0.92);
+};
+
+const buildParlayDiagnostics = (legs, mode) => {
+    const enriched = legs.map((leg, index) => {
+        const quality = getLegQuality(leg);
+        const modelProb = getLegProbability(leg, mode);
+        return { ...leg, index, quality, modelProb };
+    });
+    const weakLink = [...enriched].sort((a, b) => (a.quality * a.modelProb) - (b.quality * b.modelProb))[0] || null;
+    const correlationPairs = [];
+    for (let i = 0; i < enriched.length; i += 1) {
+        for (let j = i + 1; j < enriched.length; j += 1) {
+            const sameEntity = enriched[i].entity && enriched[i].entity === enriched[j].entity;
+            const sameGame = enriched[i].gameId && enriched[i].gameId === enriched[j].gameId;
+            if (sameEntity || sameGame) correlationPairs.push({ from: i + 1, to: j + 1, reason: sameEntity ? 'same entity' : 'same game' });
+        }
+    }
+    const suggestions = [];
+    if (weakLink && weakLink.quality < 55) suggestions.push(`Remove or rework ${weakLink.entity}: low leg quality.`);
+    if (correlationPairs.length) suggestions.push('Review same-game/entity links before trusting the combined probability.');
+    if (enriched.length > (modeAdjustments[mode]?.maxLegs || 4)) suggestions.push(`${modeAdjustments[mode]?.label || 'This'} mode prefers fewer legs.`);
+    if (enriched.length >= 4) suggestions.push('Try a smaller 2-3 leg version and compare hit chance.');
+    if (!suggestions.length) suggestions.push('Structure is clean enough to track, but still needs outcome grading.');
+    return { enriched, weakLink, correlationPairs, suggestions };
+};
+
+const ParlaySidebar = ({ legs, onRemove, onClear, onUpdateLeg }) => {
     const [isSimulating, setIsSimulating] = useState(false);
     const [analysis, setAnalysis] = useState(null);
+    const [mode, setMode] = useState('balanced');
+    const [ledger, setLedger] = useState(() => {
+        try { return JSON.parse(localStorage.getItem('soma.forecaster.parlayLedger') || '[]').slice(0, 6); }
+        catch { return []; }
+    });
+    const [calibration, setCalibration] = useState(null);
+    const [lineOverrides, setLineOverrides] = useState({});
+    const [enrichingIndex, setEnrichingIndex] = useState(null);
+    const [matrix, setMatrix] = useState([]);
+    const [covariance, setCovariance] = useState(null);
+    const [lineShopStatus, setLineShopStatus] = useState(null);
+    const [lineShopLines, setLineShopLines] = useState([]);
+    const [isSwarming, setIsSwarming] = useState(false);
+    const [swarmResult, setSwarmResult] = useState(null);
 
     // Reset analysis when legs change
     useEffect(() => {
         setAnalysis(null);
+        setSwarmResult(null);
+    }, [legs, mode, lineOverrides]);
+
+    useEffect(() => {
+        let cancelled = false;
+        fetch('/api/forecaster/ledger')
+            .then(res => res.ok ? res.json() : null)
+            .then(data => {
+                if (cancelled || !data?.success) return;
+                setLedger((data.entries || []).slice(0, 8));
+                setCalibration(data.calibration || null);
+            })
+            .catch(() => {});
+        return () => { cancelled = true; };
+    }, []);
+
+    useEffect(() => {
+        if (!legs.length) return;
+        let cancelled = false;
+        fetch('/api/forecaster/correlation-matrix', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ legs })
+        })
+            .then(res => res.ok ? res.json() : null)
+            .then(data => {
+                if (!cancelled && data?.success) {
+                    setMatrix(data.matrix || []);
+                    setCovariance(data.covariance || null);
+                }
+            })
+            .catch(() => {});
+        return () => { cancelled = true; };
     }, [legs]);
 
+    const adjustedLegs = legs.map((leg, index) => ({
+        ...leg,
+        line: lineOverrides[index] ?? leg.line ?? leg.value
+    }));
+    const diagnostics = useMemo(() => buildParlayDiagnostics(adjustedLegs, mode), [adjustedLegs, mode]);
     if (legs.length === 0) return null;
-
-    const totalOdds = legs.reduce((acc, leg) => acc * (leg.odds || 1.91), 1);
+    const totalOdds = adjustedLegs.reduce((acc, leg) => acc * (leg.odds || 1.91), 1);
     const impliedProb = (1 / totalOdds) * 100;
-    const potentialPayout = (100 * totalOdds).toFixed(2);
+    const modelParlayProb = diagnostics.enriched.reduce((acc, leg) => acc * (leg.modelProb || 0.5), 1);
+    const fairAmerican = probToAmerican(modelParlayProb);
+    const marketEdge = (modelParlayProb * 100) - impliedProb;
+
+    const saveScenario = async () => {
+        const scenario = {
+            id: `forecast-${Date.now()}`,
+            createdAt: new Date().toISOString(),
+            type: 'parlay_scenario',
+            mode,
+            legs: diagnostics.enriched.map(leg => ({
+                entity: leg.entity,
+                stat: leg.stat,
+                value: leg.value,
+                line: leg.line,
+                side: leg.side,
+                odds: leg.odds,
+                quality: leg.quality,
+                modelProb: leg.modelProb,
+                confidenceScore: leg.confidenceScore,
+                sport: leg.sport,
+                marketType: leg.marketType,
+                team: leg.team,
+                sampleSize: leg.sampleSize,
+                volatility: leg.volatility,
+                sourceStatus: leg.sourceStatus,
+                dataFreshness: leg.dataFreshness,
+                dataSources: leg.dataSources,
+                contextStatus: leg.contextStatus,
+                contextSignals: leg.contextSignals
+            })),
+            analysis,
+            swarm: swarmResult
+        };
+        const next = [scenario, ...ledger].slice(0, 8);
+        setLedger(next);
+        localStorage.setItem('soma.forecaster.parlayLedger', JSON.stringify(next));
+        try {
+            const res = await fetch('/api/forecaster/ledger', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(scenario)
+            });
+            if (res.ok) {
+                const data = await res.json();
+                if (data.success) {
+                    setLedger(prev => [data.entry, ...prev.filter(item => item.id !== data.entry.id)].slice(0, 8));
+                    setCalibration(data.calibration || null);
+                }
+            }
+        } catch (e) {
+            console.warn('[Forecaster] Backend ledger save failed; kept local scenario.', e.message);
+        }
+    };
+
+    const gradeScenario = async (id, hit) => {
+        const next = ledger.map(item => item.id === id ? { ...item, grade: { status: 'graded', hit } } : item);
+        setLedger(next);
+        localStorage.setItem('soma.forecaster.parlayLedger', JSON.stringify(next));
+        try {
+            const res = await fetch(`/api/forecaster/ledger/${encodeURIComponent(id)}/grade`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ hit })
+            });
+            if (res.ok) {
+                const data = await res.json();
+                if (data.success) {
+                    setLedger(prev => prev.map(item => item.id === id ? data.entry : item));
+                    setCalibration(data.calibration || null);
+                }
+            }
+        } catch (e) {
+            console.warn('[Forecaster] Backend grading failed; kept local grade.', e.message);
+        }
+    };
+
+    const updateLeg = (index, patch) => {
+        onUpdateLeg?.(index, patch);
+    };
+
+    const enrichLeg = async (index, leg) => {
+        setEnrichingIndex(index);
+        try {
+            const res = await fetch('/api/forecaster/enrich-leg', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ leg })
+            });
+            if (res.ok) {
+                const data = await res.json();
+                if (data.success && data.leg) updateLeg(index, data.leg);
+            }
+        } catch (e) {
+            console.warn('[Forecaster] Leg enrichment failed:', e.message);
+        } finally {
+            setEnrichingIndex(null);
+        }
+    };
+
+    const enrichAllLegs = async () => {
+        for (const [index, leg] of diagnostics.enriched.entries()) {
+            await enrichLeg(index, leg);
+        }
+    };
+
+    const runLineShop = async () => {
+        setLineShopStatus('checking');
+        setLineShopLines([]);
+        try {
+            const res = await fetch('/api/forecaster/line-shop', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ legs: diagnostics.enriched })
+            });
+            const data = res.ok ? await res.json() : null;
+            if (data?.success) {
+                setLineShopLines(data.lines || []);
+                if (data.providerStatus === 'missing_key') {
+                    setLineShopStatus(`${data.lines?.length || 0} checked; add ODDS_API_KEY`);
+                } else {
+                    const matched = (data.lines || []).filter(line => line.status === 'matched').length;
+                    setLineShopStatus(`${matched}/${data.lines?.length || 0} matched`);
+                }
+            } else {
+                setLineShopStatus('unavailable');
+            }
+        } catch {
+            setLineShopStatus('unavailable');
+        }
+    };
 
     const runSimulation = async () => {
         setIsSimulating(true);
         
         try {
-            // Hit the Python Prophet Engine
-            // Note: In dev this hits localhost:5000 via proxy or direct
-            // Assuming Vite proxy is set or we use direct URL for now if proxy missing
-            const res = await fetch('http://127.0.0.1:5000/api/simulate/parlay', {
+            // Use the SOMA backend route so the simulator still works when the
+            // standalone Prophet Flask service is not running.
+            const res = await fetch('/api/forecaster/parlay-simulate', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    legs: legs.map(l => ({
+                    mode,
+                    legs: diagnostics.enriched.map(l => ({
                         entity: l.entity,
                         stat: l.stat,
-                        odds: l.odds || 1.91
+                        value: l.value,
+                        line: l.line,
+                        side: l.side || 'over',
+                        odds: l.odds || 1.91,
+                        modelProb: l.modelProb,
+                        quality: l.quality,
+                        gameId: l.gameId,
+                        sport: l.sport,
+                        marketType: l.marketType,
+                        sampleSize: l.sampleSize,
+                        volatility: l.volatility,
+                        sourceStatus: l.sourceStatus,
+                        dataFreshness: l.dataFreshness,
+                        dataSources: l.dataSources,
+                        contextSignals: l.contextSignals
                     })),
                     iterations: 10000
                 })
@@ -64,10 +376,14 @@ const ParlaySidebar = ({ legs, onRemove, onClear }) => {
                 setAnalysis({
                     trueProb: data.trueProb,
                     edge: data.edge,
-                    ev: 'N/A', // EV depends on stake, simplified here
                     correlation: data.correlation,
-                    rating: data.rating
+                    rating: data.rating,
+                    warnings: data.warnings || [],
+                    weakLink: data.weakLink || diagnostics.weakLink,
+                    suggestions: data.suggestions || diagnostics.suggestions,
+                    calibration: data.calibration || null
                 });
+                if (data.covariance) setCovariance(data.covariance);
             } else {
                 console.error("Simulation failed");
             }
@@ -78,18 +394,96 @@ const ParlaySidebar = ({ legs, onRemove, onClear }) => {
         }
     };
 
+    const runSwarmSimulation = async () => {
+        setIsSwarming(true);
+        setSwarmResult(null);
+        try {
+            const res = await fetch('/api/forecaster/swarm-simulate', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    mode,
+                    rounds: 120,
+                    legs: diagnostics.enriched.map(l => ({
+                        entity: l.entity,
+                        stat: l.stat,
+                        value: l.value,
+                        line: l.line,
+                        side: l.side || 'over',
+                        odds: l.odds || 1.91,
+                        modelProb: l.modelProb,
+                        confidenceScore: l.confidenceScore,
+                        quality: l.quality,
+                        sampleSize: l.sampleSize,
+                        volatility: l.volatility,
+                        gameId: l.gameId,
+                        team: l.team,
+                        sport: l.sport,
+                        marketType: l.marketType,
+                        sourceStatus: l.sourceStatus,
+                        dataFreshness: l.dataFreshness,
+                        dataSources: l.dataSources,
+                        contextSignals: l.contextSignals
+                    }))
+                })
+            });
+            const data = res.ok ? await res.json() : null;
+            if (data?.success) setSwarmResult(data);
+        } catch (e) {
+            console.warn('[Forecaster] Swarm simulation failed:', e.message);
+        } finally {
+            setIsSwarming(false);
+        }
+    };
+
     return (
-        <div className="fixed right-6 bottom-6 w-80 bg-[#0E0E11] border border-white/10 rounded-2xl shadow-2xl overflow-hidden z-50 animate-in slide-in-from-right duration-300 flex flex-col max-h-[80vh]">
+        <div className="fixed right-6 bottom-6 w-[360px] bg-[#0E0E11] border border-white/10 rounded-2xl shadow-2xl overflow-hidden z-50 animate-in slide-in-from-right duration-300 flex flex-col max-h-[84vh]">
             <div className="p-4 border-b border-white/5 bg-indigo-600/10 flex justify-between items-center shrink-0">
                 <div className="flex items-center gap-2">
                     <Layers size={16} className="text-indigo-400" />
-                    <span className="text-xs font-bold uppercase tracking-widest text-white">Active Parlay</span>
+                    <span className="text-xs font-bold uppercase tracking-widest text-white">Parlay Simulator</span>
                 </div>
-                <span className="text-[10px] font-mono text-indigo-300">{legs.length} LEGS</span>
+                <div className="flex items-center gap-2">
+                    <button
+                        onClick={enrichAllLegs}
+                        disabled={enrichingIndex !== null}
+                        className="px-2 py-1 rounded bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 text-[9px] uppercase font-bold"
+                    >
+                        Enrich All
+                    </button>
+                    <button
+                        onClick={runLineShop}
+                        className="px-2 py-1 rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 text-[9px] uppercase font-bold"
+                    >
+                        Lines
+                    </button>
+                    <button
+                        onClick={runSwarmSimulation}
+                        disabled={isSwarming}
+                        className="px-2 py-1 rounded bg-fuchsia-500/10 text-fuchsia-300 border border-fuchsia-500/20 text-[9px] uppercase font-bold disabled:opacity-50"
+                    >
+                        {isSwarming ? 'Swarm...' : 'Swarm'}
+                    </button>
+                    <span className="text-[10px] font-mono text-indigo-300">{legs.length} LEGS</span>
+                </div>
+            </div>
+            
+            <div className="p-3 border-b border-white/5 bg-slate-950/60">
+                <div className="grid grid-cols-4 gap-1">
+                    {Object.entries(modeAdjustments).map(([id, cfg]) => (
+                        <button
+                            key={id}
+                            onClick={() => setMode(id)}
+                            className={`py-2 rounded-md text-[8px] font-bold uppercase tracking-wider ${mode === id ? 'bg-indigo-600 text-white' : 'bg-white/5 text-slate-500 hover:text-slate-200'}`}
+                        >
+                            {cfg.label}
+                        </button>
+                    ))}
+                </div>
             </div>
             
             <div className="overflow-y-auto p-2 space-y-2 flex-1 custom-scrollbar">
-                {legs.map((leg, idx) => (
+                {diagnostics.enriched.map((leg, idx) => (
                     <div key={idx} className="p-3 bg-white/5 rounded-lg border border-white/5 relative group">
                         <button 
                             onClick={() => onRemove(idx)}
@@ -97,21 +491,234 @@ const ParlaySidebar = ({ legs, onRemove, onClear }) => {
                         >
                             <TrendingDown size={12} />
                         </button>
-                        <div className="text-xs font-bold text-white mb-1">{leg.entity}</div>
+                        <div className="text-xs font-bold text-white mb-1 pr-5">{leg.entity}</div>
+                        <div className="grid grid-cols-2 gap-2 mb-2">
+                            <input
+                                value={leg.entity || ''}
+                                onChange={(e) => updateLeg(idx, { entity: e.target.value })}
+                                className="bg-slate-950/70 border border-white/5 rounded px-2 py-1 text-[10px] text-white focus:outline-none focus:border-indigo-500/50"
+                            />
+                            <input
+                                value={leg.stat || ''}
+                                onChange={(e) => updateLeg(idx, { stat: e.target.value })}
+                                className="bg-slate-950/70 border border-white/5 rounded px-2 py-1 text-[10px] text-white focus:outline-none focus:border-indigo-500/50"
+                            />
+                        </div>
                         <div className="flex justify-between items-center">
                             <span className="text-[10px] text-slate-400 uppercase">{leg.stat}</span>
                             <span className="text-sm font-mono font-bold text-emerald-400">{leg.value}</span>
                         </div>
+                        <div className="grid grid-cols-3 gap-2 mt-3 text-[9px] font-mono">
+                            <div>
+                                <div className="text-slate-600 uppercase">Quality</div>
+                                <div className={qualityColor(leg.quality)}>{leg.quality}/100</div>
+                            </div>
+                            <div>
+                                <div className="text-slate-600 uppercase">Hit Est.</div>
+                                <div className="text-white">
+                                    {(leg.modelProb * 100).toFixed(1)}%
+                                    {Number.isFinite(Number(leg.probabilityDelta)) && Number(leg.probabilityDelta) !== 0 && (
+                                        <span className={Number(leg.probabilityDelta) > 0 ? 'text-emerald-400 ml-1' : 'text-rose-400 ml-1'}>
+                                            {Number(leg.probabilityDelta) > 0 ? '+' : ''}{Number(leg.probabilityDelta).toFixed(1)}
+                                        </span>
+                                    )}
+                                </div>
+                            </div>
+                            <div>
+                                <div className="text-slate-600 uppercase">Odds</div>
+                                <div className="text-slate-300">{decimalToAmerican(leg.odds)}</div>
+                            </div>
+                        </div>
+                        {(leg.sampleSize || leg.average) && (
+                            <div className="grid grid-cols-3 gap-2 mt-2 text-[9px] font-mono">
+                                <div>
+                                    <div className="text-slate-600 uppercase">Sample</div>
+                                    <div className="text-slate-300">{leg.sampleSize || 0}</div>
+                                </div>
+                                <div>
+                                    <div className="text-slate-600 uppercase">Avg</div>
+                                    <div className="text-slate-300">{Number(leg.average || 0).toFixed(1)}</div>
+                                </div>
+                                <div>
+                                    <div className="text-slate-600 uppercase">Vol</div>
+                                    <div className={leg.volatility === 'HIGH' ? 'text-rose-400' : leg.volatility === 'LOW' ? 'text-emerald-400' : 'text-amber-400'}>{leg.volatility || 'UNK'}</div>
+                                </div>
+                            </div>
+                        )}
+                        <div className="mt-3">
+                            <div className="grid grid-cols-3 gap-2 mb-2">
+                                <label className="text-[8px] text-slate-600 uppercase">
+                                    Line
+                                    <input
+                                        type="number"
+                                        value={Number(leg.line || 0)}
+                                        onChange={(e) => {
+                                            const value = Number(e.target.value);
+                                            setLineOverrides(prev => ({ ...prev, [idx]: value }));
+                                            updateLeg(idx, { line: value, value });
+                                        }}
+                                        className="mt-1 w-full bg-slate-950/70 border border-white/5 rounded px-1 py-1 text-[10px] text-white"
+                                    />
+                                </label>
+                                <label className="text-[8px] text-slate-600 uppercase">
+                                    Side
+                                    <select
+                                        value={leg.side || 'over'}
+                                        onChange={(e) => updateLeg(idx, { side: e.target.value })}
+                                        className="mt-1 w-full bg-slate-950/70 border border-white/5 rounded px-1 py-1 text-[10px] text-white"
+                                    >
+                                        <option value="over">over</option>
+                                        <option value="under">under</option>
+                                        <option value="spread">spread</option>
+                                        <option value="moneyline">ml</option>
+                                    </select>
+                                </label>
+                                <label className="text-[8px] text-slate-600 uppercase">
+                                    Odds
+                                    <input
+                                        type="number"
+                                        value={Number(String(decimalToAmerican(leg.odds)).replace('+', ''))}
+                                        onChange={(e) => updateLeg(idx, { odds: americanToDecimal(Number(e.target.value)) })}
+                                        className="mt-1 w-full bg-slate-950/70 border border-white/5 rounded px-1 py-1 text-[10px] text-white"
+                                    />
+                                </label>
+                            </div>
+                            <div className="flex justify-between text-[9px] text-slate-500 uppercase">
+                                <span>What-if line</span>
+                                <span className="text-slate-300">{Number(leg.line || 0).toFixed(1)}</span>
+                            </div>
+                            <input
+                                type="range"
+                                min={Math.max(0, Number(leg.value || 0) - 25)}
+                                max={Number(leg.value || 0) + 25}
+                                step="0.5"
+                                value={Number(leg.line || leg.value || 0)}
+                                onChange={(e) => setLineOverrides(prev => ({ ...prev, [idx]: Number(e.target.value) }))}
+                                className="w-full accent-indigo-500"
+                            />
+                        </div>
+                        <div className="mt-3 flex items-center justify-between gap-2">
+                            <div className="text-[9px] text-slate-500">
+                                <span className="uppercase text-slate-600">Data</span> {leg.sourceStatus || 'not enriched'}
+                            </div>
+                            <button
+                                onClick={() => enrichLeg(idx, leg)}
+                                disabled={enrichingIndex === idx}
+                                className="px-2 py-1 rounded bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 text-[9px] uppercase font-bold"
+                            >
+                                {enrichingIndex === idx ? 'Enriching' : 'Enrich'}
+                            </button>
+                        </div>
+                        <div className="mt-2 flex flex-wrap gap-1">
+                            {([...(leg.dataSources || []), leg.contextStatus].filter(Boolean).slice(0, 4)).map(source => (
+                                <span key={source} className={`px-1.5 py-0.5 rounded border text-[8px] uppercase tracking-wider ${dataBadgeClass(source)}`}>
+                                    {String(source).replace(/_/g, '-')}
+                                </span>
+                            ))}
+                            {!leg.dataSources?.length && !leg.contextStatus && (
+                                <span className={`px-1.5 py-0.5 rounded border text-[8px] uppercase tracking-wider ${dataBadgeClass('heuristic')}`}>
+                                    heuristic
+                                </span>
+                            )}
+                        </div>
+                        {leg.contextSignals?.length > 0 && (
+                            <div className="mt-2 space-y-1">
+                                {leg.contextSignals.slice(0, 2).map((signal, signalIdx) => (
+                                    <div key={`${signal.headline}-${signalIdx}`} className="text-[9px] text-slate-400 truncate">
+                                        <span className="text-amber-300 uppercase">{signal.type}</span> {signal.headline}
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                        {leg.enrichmentNotes && (
+                            <div className="mt-2 text-[9px] text-slate-500 italic">{leg.enrichmentNotes}</div>
+                        )}
                     </div>
                 ))}
+
+                <div className="p-3 rounded-lg bg-slate-950/70 border border-white/5">
+                    <div className="flex items-center justify-between mb-2">
+                        <div className="text-[10px] text-slate-500 uppercase font-bold">Correlation Map</div>
+                        <span className={`px-1.5 py-0.5 rounded border text-[8px] uppercase ${dataBadgeClass(covariance?.maturity || 'rule_based')}`}>
+                            {covariance?.maturity || 'rule based'}
+                        </span>
+                    </div>
+                    {matrix.length ? matrix.map((pair, idx) => (
+                        <div key={idx} className="text-[10px] text-amber-300 flex justify-between border-b border-white/5 py-1 last:border-0">
+                            <span>Leg {pair.from + 1} to Leg {pair.to + 1}</span>
+                            <span>{pair.score} | {pair.covarianceType || pair.confidence}</span>
+                        </div>
+                    )) : <div className="text-[10px] text-slate-600">No obvious same-game/entity links.</div>}
+                    {lineShopStatus && (
+                        <div className="mt-2 text-[9px] text-emerald-300 border-t border-white/5 pt-2">Line shop: {lineShopStatus}</div>
+                    )}
+                    {lineShopLines.slice(0, 3).map((line) => (
+                        <div key={line.index} className="mt-1 text-[9px] text-slate-400 flex justify-between gap-2">
+                            <span className="truncate">{line.entity}</span>
+                            <span className={line.status === 'matched' ? 'text-emerald-300' : 'text-slate-600'}>
+                                {line.bestAvailable ? `${line.bestAvailable.bookmaker} ${decimalToAmerican(line.bestAvailable.odds)}` : line.status}
+                            </span>
+                        </div>
+                    ))}
+                </div>
+
+                {swarmResult && (
+                    <div className="p-3 rounded-lg bg-fuchsia-950/20 border border-fuchsia-500/20">
+                        <div className="flex items-center justify-between mb-3">
+                            <div className="flex items-center gap-2">
+                                <Users size={13} className="text-fuchsia-300" />
+                                <span className="text-[10px] text-fuchsia-300 uppercase font-bold tracking-widest">Forecast Swarm</span>
+                            </div>
+                            <span className="text-[10px] font-mono text-white">{swarmResult.consensus?.probability}%</span>
+                        </div>
+                        <div className="grid grid-cols-3 gap-2 mb-3">
+                            <div className="rounded bg-black/30 border border-white/5 p-2">
+                                <div className="text-[8px] text-slate-600 uppercase font-bold">Band</div>
+                                <div className="text-[10px] text-slate-200 font-mono">{swarmResult.consensus?.low}-{swarmResult.consensus?.high}%</div>
+                            </div>
+                            <div className="rounded bg-black/30 border border-white/5 p-2">
+                                <div className="text-[8px] text-slate-600 uppercase font-bold">Disagree</div>
+                                <div className="text-[10px] text-amber-300 font-mono">{swarmResult.consensus?.disagreement}%</div>
+                            </div>
+                            <div className="rounded bg-black/30 border border-white/5 p-2">
+                                <div className="text-[8px] text-slate-600 uppercase font-bold">Rating</div>
+                                <div className="text-[10px] text-fuchsia-200 font-mono">{swarmResult.consensus?.rating}</div>
+                            </div>
+                        </div>
+                        <div className="text-[10px] text-slate-300 leading-snug mb-3">
+                            {swarmResult.consensus?.recommendation}
+                        </div>
+                        <div className="space-y-1 max-h-32 overflow-y-auto custom-scrollbar">
+                            {(swarmResult.agents || []).map(agent => (
+                                <div key={agent.id} className="grid grid-cols-[1fr_auto] gap-2 text-[9px] border-t border-white/5 pt-1">
+                                    <div>
+                                        <span className="text-slate-200 font-bold">{agent.name}</span>
+                                        <span className="text-slate-600"> / {agent.stance}</span>
+                                    </div>
+                                    <span className="font-mono text-fuchsia-200">{agent.probability}%</span>
+                                </div>
+                            ))}
+                        </div>
+                        <div className="mt-3 text-[9px] text-slate-500 italic">
+                            {swarmResult.evidence?.note}
+                        </div>
+                        <div className="mt-2 flex flex-wrap gap-1">
+                            {(swarmResult.evidence?.sources?.badges || []).slice(0, 5).map(source => (
+                                <span key={source} className={`px-1.5 py-0.5 rounded border text-[8px] uppercase tracking-wider ${dataBadgeClass(source)}`}>
+                                    {String(source).replace(/_/g, '-')}
+                                </span>
+                            ))}
+                        </div>
+                    </div>
+                )}
             </div>
 
             {/* Analysis Section */}
             {analysis && (
                 <div className="p-4 bg-emerald-900/10 border-y border-emerald-500/20 animate-in fade-in shrink-0">
                     <div className="flex justify-between items-center mb-2">
-                        <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest">SOMA Simulation</span>
-                        <span className="text-xs font-black text-white px-2 py-0.5 bg-emerald-500 rounded text-black">{analysis.rating} RATING</span>
+                        <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest">SOMA Hit-Rate Model</span>
+                        <span className="text-xs font-black text-white px-2 py-0.5 bg-emerald-500 rounded text-black">{analysis.rating}</span>
                     </div>
                     <div className="grid grid-cols-2 gap-2 text-center mb-2">
                         <div className="bg-slate-900/50 rounded p-1">
@@ -119,20 +726,64 @@ const ParlaySidebar = ({ legs, onRemove, onClear }) => {
                             <div className="font-mono text-slate-300 text-xs">{impliedProb.toFixed(1)}%</div>
                         </div>
                         <div className="bg-emerald-900/30 rounded p-1 border border-emerald-500/30">
-                            <div className="text-[9px] text-emerald-400 uppercase">True Prob</div>
+                            <div className="text-[9px] text-emerald-400 uppercase">Hit Chance</div>
                             <div className="font-mono text-white text-xs font-bold">{analysis.trueProb}%</div>
                         </div>
                     </div>
                     <div className="text-[9px] text-center text-emerald-300/80 italic">
                         {analysis.correlation}
                     </div>
+                    {analysis.weakLink && (
+                        <div className="mt-3 p-2 rounded bg-rose-500/10 border border-rose-500/20">
+                            <div className="text-[9px] text-rose-300 uppercase font-bold">Weak Link</div>
+                            <div className="text-xs text-white">{analysis.weakLink.entity}</div>
+                            <div className="text-[10px] text-slate-400">{analysis.weakLink.stat} | quality {analysis.weakLink.quality}/100</div>
+                        </div>
+                    )}
+                    <div className="mt-3 space-y-1">
+                        {(analysis.suggestions || diagnostics.suggestions).slice(0, 3).map((item, idx) => (
+                            <div key={idx} className="text-[10px] text-slate-300 flex gap-2">
+                                <span className="text-indigo-400">•</span>{item}
+                            </div>
+                        ))}
+                    </div>
+                    {analysis.calibration && (
+                        <div className="mt-3 grid grid-cols-3 gap-2 text-[9px] font-mono">
+                            <div className="rounded bg-black/20 border border-white/5 p-1">
+                                <div className="text-slate-600 uppercase">Covar</div>
+                                <div className="text-slate-300">{analysis.calibration.covarianceMaturity || covariance?.maturity || 'rule'}</div>
+                            </div>
+                            <div className="rounded bg-black/20 border border-white/5 p-1">
+                                <div className="text-slate-600 uppercase">Corr Drag</div>
+                                <div className="text-amber-300">{analysis.calibration.correlationPenalty ?? 0}%</div>
+                            </div>
+                            <div className="rounded bg-black/20 border border-white/5 p-1">
+                                <div className="text-slate-600 uppercase">Quality Drag</div>
+                                <div className="text-amber-300">{analysis.calibration.qualityPenalty ?? 0}%</div>
+                            </div>
+                        </div>
+                    )}
                 </div>
             )}
 
             <div className="p-4 border-t border-white/10 bg-slate-900/50 shrink-0">
                 <div className="flex justify-between items-end mb-4">
-                    <span className="text-[10px] text-slate-500 font-bold uppercase">Combined Odds</span>
+                    <span className="text-[10px] text-slate-500 font-bold uppercase">Combined Market Odds</span>
                     <span className="text-xl font-mono font-bold text-white">+{((totalOdds - 1) * 100).toFixed(0)}</span>
+                </div>
+                <div className="grid grid-cols-3 gap-2 mb-4">
+                    <div className="rounded bg-slate-950/70 border border-white/5 p-2">
+                        <div className="text-[8px] text-slate-600 uppercase font-bold">SOMA Prob</div>
+                        <div className="text-xs text-white font-mono">{(modelParlayProb * 100).toFixed(1)}%</div>
+                    </div>
+                    <div className="rounded bg-slate-950/70 border border-white/5 p-2">
+                        <div className="text-[8px] text-slate-600 uppercase font-bold">Fair Odds</div>
+                        <div className="text-xs text-indigo-300 font-mono">{fairAmerican > 0 ? `+${fairAmerican}` : fairAmerican}</div>
+                    </div>
+                    <div className="rounded bg-slate-950/70 border border-white/5 p-2">
+                        <div className="text-[8px] text-slate-600 uppercase font-bold">Gap</div>
+                        <div className={`text-xs font-mono ${marketEdge >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>{marketEdge >= 0 ? '+' : ''}{marketEdge.toFixed(1)}%</div>
+                    </div>
                 </div>
                 
                 {!analysis ? (
@@ -142,16 +793,56 @@ const ParlaySidebar = ({ legs, onRemove, onClear }) => {
                         className="w-full mb-3 py-3 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-[10px] font-bold text-white uppercase tracking-widest transition-all flex items-center justify-center gap-2 shadow-[0_0_15px_rgba(79,70,229,0.3)]"
                     >
                         {isSimulating ? <RefreshCw size={14} className="animate-spin" /> : <BrainCircuit size={14} />}
-                        {isSimulating ? 'Running Monte Carlo...' : 'Analyze Correlation'}
+                        {isSimulating ? 'Running Hit-Rate Model...' : 'Analyze Correlation'}
                     </button>
                 ) : (
                     <div className="grid grid-cols-2 gap-3">
                         <button onClick={onClear} className="px-3 py-3 rounded-lg bg-slate-800 text-[10px] font-bold text-slate-400 hover:text-white uppercase tracking-wider transition-colors">
                             Clear
                         </button>
-                        <button className="px-3 py-3 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-[10px] font-bold text-black uppercase tracking-wider transition-colors shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-2">
-                            Place Bet <Target size={12} />
+                        <button onClick={saveScenario} className="px-3 py-3 rounded-lg bg-emerald-500 hover:bg-emerald-400 text-[10px] font-bold text-black uppercase tracking-wider transition-colors shadow-lg shadow-emerald-500/20 flex items-center justify-center gap-2">
+                            Save Scenario <Target size={12} />
                         </button>
+                    </div>
+                )}
+                {ledger.length > 0 && (
+                    <div className="mt-4 pt-3 border-t border-white/5">
+                        <div className="flex justify-between items-center mb-2">
+                            <div className="text-[9px] text-slate-500 uppercase font-bold">Outcome Ledger</div>
+                            {calibration?.graded > 0 && (
+                                <div className="text-[9px] text-emerald-400 font-mono">
+                                    {calibration.hitRate}% hit | Brier {calibration.brierScore}
+                                </div>
+                            )}
+                        </div>
+                        <div className="space-y-1 max-h-20 overflow-y-auto custom-scrollbar">
+                            {ledger.slice(0, 3).map(item => (
+                                <div key={item.id} className="grid grid-cols-[1fr_auto] gap-2 text-[10px] text-slate-500 items-center">
+                                    <span>{item.legs.length} legs | {modeAdjustments[item.mode]?.label} | {item.analysis?.trueProb ?? '?'}%</span>
+                                    {item.grade?.status === 'graded' ? (
+                                        <span className={item.grade.hit ? 'text-emerald-400' : 'text-rose-400'}>{item.grade.hit ? 'hit' : 'miss'}</span>
+                                    ) : (
+                                        <span className="flex gap-1">
+                                            <button onClick={() => gradeScenario(item.id, true)} className="px-1 rounded bg-emerald-500/10 text-emerald-300">H</button>
+                                            <button onClick={() => gradeScenario(item.id, false)} className="px-1 rounded bg-rose-500/10 text-rose-300">M</button>
+                                            <button
+                                                onClick={async () => {
+                                                    const res = await fetch(`/api/forecaster/ledger/${encodeURIComponent(item.id)}/auto-grade`, { method: 'POST' });
+                                                    const data = res.ok ? await res.json() : null;
+                                                    if (data?.success) {
+                                                        setLedger(prev => prev.map(row => row.id === item.id ? data.entry : row));
+                                                        setCalibration(data.calibration || null);
+                                                    }
+                                                }}
+                                                className="px-1 rounded bg-indigo-500/10 text-indigo-300"
+                                            >
+                                                A
+                                            </button>
+                                        </span>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
                     </div>
                 )}
             </div>
@@ -189,11 +880,28 @@ const ForecastResultView = ({ result, onBack, onAddToParlay }) => {
                             entity: interpretation.entity,
                             stat: interpretation.stat,
                             value: prediction.expectedValue,
-                            odds: 1.91 // Default/Mock odds
+                            line: prediction.expectedValue,
+                            side: 'over',
+                            odds: 1.91, // Default market reference until real line data is attached.
+                            modelProb: prediction.confidenceScore || 0.55,
+                            confidenceScore: prediction.confidenceScore || 0.55,
+                            volatility: prediction.volatility || 'MEDIUM',
+                            sampleSize: comparables.length,
+                            sourceStatus: comparables.length ? 'partial-stats-attached' : 'needs-live-stats',
+                            dataFreshness: result.isBase === false ? 'web-consensus' : 'base-model',
+                            dataSources: [
+                                result.isBase === false ? 'web-consensus' : 'base-model',
+                                comparables.length ? 'comparables' : 'needs-live-stats'
+                            ],
+                            sourceProof: {
+                                context: interpretation.context,
+                                drivers: reasoning.keyDrivers || [],
+                                comparables
+                            }
                         })}
                         className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] font-bold uppercase tracking-widest rounded-lg flex items-center gap-2 shadow-lg shadow-indigo-500/20 transition-all hover:scale-105"
                     >
-                        <Layers size={14} /> Add to Parlay
+                        <Layers size={14} /> Add to Simulator
                     </button>
                     
                     {/* Enhancement Status */}
@@ -400,6 +1108,37 @@ const ForecastResultView = ({ result, onBack, onAddToParlay }) => {
                                     </div>
                                 </div>
                             ))}
+                        </div>
+                    </div>
+
+                    {/* Source / Proof Panel */}
+                    <div className="glass-panel p-6 rounded-xl">
+                        <h3 className="text-sm font-bold text-white uppercase tracking-widest mb-4 flex items-center gap-2">
+                            <Database size={16} className="text-emerald-500" /> Source Proof
+                        </h3>
+                        <div className="grid grid-cols-2 gap-3 mb-4">
+                            <div className="p-3 rounded-lg bg-slate-900/50 border border-slate-800">
+                                <div className="text-[9px] text-slate-500 uppercase font-bold">Sample</div>
+                                <div className="text-lg font-mono font-bold text-white">{comparables.length || 0}</div>
+                            </div>
+                            <div className="p-3 rounded-lg bg-slate-900/50 border border-slate-800">
+                                <div className="text-[9px] text-slate-500 uppercase font-bold">Freshness</div>
+                                <div className="text-lg font-mono font-bold text-emerald-400">{result.timestamp ? 'Live' : 'Unknown'}</div>
+                            </div>
+                        </div>
+                        <div className="space-y-2 text-[10px] text-slate-400">
+                            <div className="flex justify-between gap-3">
+                                <span className="text-slate-600 uppercase">Context</span>
+                                <span className="text-right">{interpretation.context || 'Unavailable'}</span>
+                            </div>
+                            <div className="flex justify-between gap-3">
+                                <span className="text-slate-600 uppercase">Model</span>
+                                <span className="text-right">{result.modelId || 'FORECASTER'}</span>
+                            </div>
+                            <div className="flex justify-between gap-3">
+                                <span className="text-slate-600 uppercase">Range</span>
+                                <span className="text-right">{prediction.range?.low ?? '?'} - {prediction.range?.high ?? '?'}</span>
+                            </div>
                         </div>
                     </div>
 
@@ -931,12 +1670,15 @@ export default function ForecasterApp() {
     const useConsensus = true; // Always use web consensus
     const [isEnhancing, setIsEnhancing] = useState(false); // Background consensus enhancement
     const [scrapingStatus, setScrapingStatus] = useState(''); // Track scraping progress
+    const [slipText, setSlipText] = useState('');
+    const [slipParseResult, setSlipParseResult] = useState(null);
+    const [performance, setPerformance] = useState(null);
     
     // Oracle State
     const [oracleDossier, setOracleDossier] = useState(null);
     const [isOracleLoading, setIsOracleLoading] = useState(false);
 
-    // Parlay Builder State
+    // Parlay Simulator State
     const [parlayLegs, setParlayLegs] = useState([]);
 
     const addToParlay = (leg) => {
@@ -947,7 +1689,19 @@ export default function ForecasterApp() {
         setParlayLegs(prev => prev.filter((_, i) => i !== index));
     };
 
+    const updateParlayLeg = (index, patch) => {
+        setParlayLegs(prev => prev.map((leg, i) => i === index ? { ...leg, ...patch } : leg));
+    };
+
     const clearParlay = () => setParlayLegs([]);
+
+    const handleSlipAnalyze = () => {
+        const parsed = parseSlipText(slipText);
+        setSlipParseResult(parsed);
+        if (parsed.legs.length) {
+            setParlayLegs(prev => [...prev, ...parsed.legs]);
+        }
+    };
 
     // Real-time data ingestion
     useEffect(() => {
@@ -968,6 +1722,15 @@ export default function ForecasterApp() {
         return () => {
             clearInterval(pollInterval);
         };
+    }, []);
+
+    useEffect(() => {
+        fetch('/api/forecaster/performance')
+            .then(res => res.ok ? res.json() : null)
+            .then(data => {
+                if (data?.success) setPerformance(data);
+            })
+            .catch(() => {});
     }, []);
 
     const handleGameSelect = (game) => {
@@ -1149,7 +1912,7 @@ export default function ForecasterApp() {
             
             if (res.ok) {
                 const data = await res.json();
-                setOracleDossier(data.dossier); // { matchup, prediction, confidence, details }
+                setOracleDossier(data.forecast || data.dossier); // { matchup, prediction, confidence, details }
             }
         } catch (e) {
             console.error("Oracle scan failed", e);
@@ -1412,7 +2175,10 @@ export default function ForecasterApp() {
                             <BrainCircuit size={24} className="animate-pulse" />
                             <span className="text-xs font-bold uppercase tracking-[0.2em]">Forecaster Intelligence Layer</span>
                         </div>
-                        <h1 className="text-4xl font-black text-white tracking-tight">Ask the Projection Engine</h1>
+                        <h1 className="text-4xl font-black text-white tracking-tight">Forecast OS</h1>
+                        <p className="text-sm text-slate-500 max-w-xl mx-auto">
+                            Ask for a projection, paste a slip, simulate the structure, then save it for grading.
+                        </p>
 
                         <form onSubmit={handleQuerySubmit} className="relative w-full max-w-xl mx-auto">
                             <div className="relative group">
@@ -1435,13 +2201,12 @@ export default function ForecasterApp() {
                             </div>
                         </form>
 
-                        {/* Web Consensus Status */}
-                        <div className="flex items-center justify-center gap-3">
-                            <div className="flex items-center gap-2 px-4 py-2 rounded-lg bg-emerald-500/20 border border-emerald-500/30">
-                                <Globe size={14} className="text-emerald-400" />
-                                <span className="text-xs font-bold text-emerald-400 uppercase tracking-wider">Web Consensus Always Active</span>
-                            </div>
-                            <span className="text-[9px] text-slate-600 italic">Aggregating 5+ sources automatically</span>
+                        <div className="grid grid-cols-5 gap-2 text-[9px] text-slate-500 font-bold uppercase tracking-wider">
+                            {['Ask', 'Analyze', 'Simulate', 'Optimize', 'Grade'].map((step, idx) => (
+                                <div key={step} className="py-2 rounded-lg bg-white/5 border border-white/5">
+                                    {idx + 1}. {step}
+                                </div>
+                            ))}
                         </div>
                         
                         {/* Scraping Status */}
@@ -1458,6 +2223,89 @@ export default function ForecasterApp() {
                             <span>"Luka points vs Boston"</span>
                             <span>•</span>
                             <span>"Chiefs win probability"</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="glass-panel rounded-2xl border-white/5 p-5">
+                    <div className="flex items-center justify-between gap-4 mb-4">
+                        <div>
+                            <div className="flex items-center gap-2 text-indigo-400">
+                                <FileText size={16} />
+                                <span className="text-xs font-bold uppercase tracking-[0.2em]">Paste Slip Analyzer</span>
+                            </div>
+                            <p className="text-xs text-slate-500 mt-1">Paste lines from a slip and SOMA converts them into simulator legs.</p>
+                        </div>
+                        <button
+                            onClick={handleSlipAnalyze}
+                            disabled={!slipText.trim()}
+                            className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 text-white text-[10px] font-bold uppercase tracking-widest"
+                        >
+                            Add to Simulator
+                        </button>
+                    </div>
+                    <textarea
+                        value={slipText}
+                        onChange={(e) => setSlipText(e.target.value)}
+                        placeholder={`Example:\nPatrick Mahomes over 264.5 passing yards -110\nTravis Kelce over 58.5 receiving yards +105\nChiefs moneyline -135`}
+                        className="w-full min-h-24 resize-y rounded-xl bg-[#0E0E11] border border-white/10 p-4 text-xs text-slate-200 placeholder:text-slate-700 focus:outline-none focus:border-indigo-500/50"
+                    />
+                    {slipParseResult && (
+                        <div className="mt-3 flex flex-wrap gap-2 text-[10px]">
+                            <span className="px-2 py-1 rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/20">
+                                Parsed {slipParseResult.legs.length} leg(s)
+                            </span>
+                            {slipParseResult.unparsed.length > 0 && (
+                                <span className="px-2 py-1 rounded bg-amber-500/10 text-amber-300 border border-amber-500/20">
+                                    {slipParseResult.unparsed.length} line(s) need review
+                                </span>
+                            )}
+                        </div>
+                    )}
+                </div>
+
+                <div className="glass-panel rounded-2xl border-white/5 p-5">
+                    <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center gap-2 text-emerald-400">
+                            <BarChart3 size={16} />
+                            <span className="text-xs font-bold uppercase tracking-[0.2em]">Forecast Performance</span>
+                        </div>
+                        <span className="text-[10px] text-slate-600 uppercase">
+                            {performance?.dataQuality?.gradedEntries || 0} graded / {performance?.dataQuality?.ledgerEntries || 0} saved
+                        </span>
+                    </div>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                        <div className="p-3 rounded-lg bg-slate-950/70 border border-white/5">
+                            <div className="text-[9px] text-slate-600 uppercase font-bold">Hit Rate</div>
+                            <div className="text-lg font-mono text-white">{performance?.calibration?.hitRate ?? 'N/A'}{performance?.calibration?.hitRate != null ? '%' : ''}</div>
+                        </div>
+                        <div className="p-3 rounded-lg bg-slate-950/70 border border-white/5">
+                            <div className="text-[9px] text-slate-600 uppercase font-bold">Avg Pred</div>
+                            <div className="text-lg font-mono text-indigo-300">{performance?.calibration?.avgPredicted ?? 'N/A'}{performance?.calibration?.avgPredicted != null ? '%' : ''}</div>
+                        </div>
+                        <div className="p-3 rounded-lg bg-slate-950/70 border border-white/5">
+                            <div className="text-[9px] text-slate-600 uppercase font-bold">Brier</div>
+                            <div className="text-lg font-mono text-emerald-300">{performance?.calibration?.brierScore ?? 'N/A'}</div>
+                        </div>
+                        <div className="p-3 rounded-lg bg-slate-950/70 border border-white/5">
+                            <div className="text-[9px] text-slate-600 uppercase font-bold">Status</div>
+                            <div className="text-xs text-slate-400 mt-1">{performance?.dataQuality?.note || 'No graded data yet.'}</div>
+                        </div>
+                    </div>
+                    <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-3">
+                        <div className="p-3 rounded-lg bg-slate-950/70 border border-white/5">
+                            <div className="text-[9px] text-slate-600 uppercase font-bold">Backtest MAE</div>
+                            <div className="text-lg font-mono text-amber-300">{performance?.backtest?.summary?.meanAbsoluteError ?? 'N/A'}</div>
+                        </div>
+                        <div className="p-3 rounded-lg bg-slate-950/70 border border-white/5">
+                            <div className="text-[9px] text-slate-600 uppercase font-bold">Learning Adj</div>
+                            <div className="text-lg font-mono text-fuchsia-300">
+                                {Number.isFinite(Number(performance?.learning?.global?.adjustment)) ? `${performance.learning.global.adjustment > 0 ? '+' : ''}${performance.learning.global.adjustment}%` : 'N/A'}
+                            </div>
+                        </div>
+                        <div className="p-3 rounded-lg bg-slate-950/70 border border-white/5">
+                            <div className="text-[9px] text-slate-600 uppercase font-bold">Learning Mode</div>
+                            <div className="text-xs text-slate-400 mt-1">{performance?.learning?.note || 'Waiting on graded outcomes.'}</div>
                         </div>
                     </div>
                 </div>
@@ -1507,7 +2355,7 @@ export default function ForecasterApp() {
                 {renderContent()}
             </div>
 
-            <ParlaySidebar legs={parlayLegs} onRemove={removeLeg} onClear={clearParlay} />
+            <ParlaySidebar legs={parlayLegs} onRemove={removeLeg} onClear={clearParlay} onUpdateLeg={updateParlayLeg} />
         </div>
     );
 }

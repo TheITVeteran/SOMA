@@ -26,6 +26,10 @@ import { NodeVM } from 'vm2';
 const TMP_DIR = path.join(process.cwd(), '.soma', 'immune_system_tmp');
 if (!existsSync(TMP_DIR)) mkdirSync(TMP_DIR, { recursive: true });
 
+import * as acorn from 'acorn';
+import { generate } from 'astring';
+import { walk } from 'estree-walker';
+
 // --------------------- Guardian (Superman) ---------------------
 class Guardian {
   constructor(logger) {
@@ -49,54 +53,92 @@ class Guardian {
     return {
       issueType: 'runtime-error',
       message: errorMessage,
-      strategy: 'wrap-exports-try-catch'
+      strategy: 'ast-instrumentation'
     };
   }
 
   generatePatch(originalCode, analysis) {
-    const header = `/* 🛡️ Patch by Guardian [${new Date().toISOString()}] - Strategy: ${analysis.strategy} */\n`;
+    const header = `/* 🛡️ Patch by Guardian [${new Date().toISOString()}] - Strategy: AST-Instrumentation */\n`;
     
     try {
-        let patched = originalCode;
+        // Parse the code into an AST
+        const ast = acorn.parse(originalCode, {
+            ecmaVersion: 'latest',
+            sourceType: 'module'
+        });
 
-        // Strategy 1: Defensive Checks (for "undefined" errors)
-        if (analysis.strategy === 'defensive-checks') {
-            // Very basic heuristic: Wrap top-level function bodies in try/catch
-            // In a real production system, we'd use AST parsing (babel/acorn) here.
-            // For now, we use the "Wrap Exports" fallback which is robust for runtime stability.
-        }
+        // Traverse and instrument
+        walk(ast, {
+            enter(node, parent) {
+                // Wrap function bodies in try/catch
+                if (
+                    node.type === 'FunctionDeclaration' || 
+                    node.type === 'FunctionExpression' || 
+                    node.type === 'ArrowFunctionExpression' ||
+                    node.type === 'MethodDefinition'
+                ) {
+                    const bodyNode = node.type === 'MethodDefinition' ? node.value.body : node.body;
+                    
+                    // If it's already a block statement and not already patched
+                    if (bodyNode && bodyNode.type === 'BlockStatement' && !bodyNode._isPatched) {
+                        const originalStatements = [...bodyNode.body];
+                        
+                        // Create the catch clause
+                        const catchClause = {
+                            type: 'CatchClause',
+                            param: { type: 'Identifier', name: 'e' },
+                            body: {
+                                type: 'BlockStatement',
+                                body: [
+                                    {
+                                        type: 'ExpressionStatement',
+                                        expression: {
+                                            type: 'CallExpression',
+                                            callee: {
+                                                type: 'MemberExpression',
+                                                object: { type: 'Identifier', name: 'console' },
+                                                property: { type: 'Identifier', name: 'error' },
+                                                computed: false
+                                            },
+                                            arguments: [
+                                                { type: 'Literal', value: `[Guardian] 🛡️ Exception in ${node.id?.name || 'anonymous function'}:` },
+                                                { type: 'MemberExpression', object: { type: 'Identifier', name: 'e' }, property: { type: 'Identifier', name: 'message' }, computed: false }
+                                            ]
+                                        }
+                                    },
+                                    {
+                                        type: 'ReturnStatement',
+                                        argument: { type: 'Literal', value: null }
+                                    }
+                                ]
+                            }
+                        };
 
-        // Strategy 2: Wrap Exports (The "Safety Net")
-        // Wraps module.exports in a defensive layer
-        const moduleExportsMatch = patched.match(/module\.exports\s*=\s*{([^}]+)}/s);
-        if (moduleExportsMatch) {
-            const keysRaw = moduleExportsMatch[1];
-            const keys = keysRaw.split(',').map(s => s.trim().split(':')[0].trim()).filter(Boolean);
-            
-            const wrappers = keys.map(k => {
-            return `${k}: (function(){ try { if (typeof ${k} === 'function') return function(){ try { return ${k}.apply(this, arguments); } catch(e){ console.error('[Guardian] 🛡️ Caught error in ${k}:', e.message); return null; } }; return ${k}; } catch(e){ return function(){ return null; }; } })()`;
-            }).join(',\n  ');
-            
-            patched = patched.replace(moduleExportsMatch[0], `module.exports = {\n  ${wrappers}\n};`);
-            return header + patched;
-        }
+                        // Wrap in TryStatement
+                        const tryStatement = {
+                            type: 'TryStatement',
+                            block: {
+                                type: 'BlockStatement',
+                                body: originalStatements
+                            },
+                            handler: catchClause,
+                            finalizer: null
+                        };
 
-        // Fallback: Global Try/Catch wrapper
-        // This ensures the module at least LOADS without crashing the main process
-        const wrappedAll = `${header}
-let __guardian_export = {};
-try {
-${patched.replace(/module\.exports\s*=/g, '__guardian_export =')}
-} catch(__err) {
-    console.error('[Guardian] 🛑 Module crashed during load:', __err.message);
-    __guardian_export = { status: 'crashed', error: __err.message };
-}
-module.exports = __guardian_export;
-`;
-        return wrappedAll;
+                        // Update function body
+                        bodyNode.body = [tryStatement];
+                        bodyNode._isPatched = true;
+                    }
+                }
+            }
+        });
+
+        // Generate patched code from AST
+        const patchedCode = generate(ast);
+        return header + patchedCode;
 
     } catch (e) {
-      console.error(`[Guardian] Patch generation failed: ${e.message}`);
+      console.error(`[Guardian] AST Patch generation failed: ${e.message}. Falling back to original code.`);
       return originalCode; // Fail safe
     }
   }
@@ -359,6 +401,31 @@ export class ImmuneSystemArbiter extends BaseArbiterV4 {
   }
 
   // ... (keeping other methods, updating logger calls to this.log)
+
+  /**
+   * Run sandbox tests for a given piece of code
+   * Used by SelfModificationArbiter to verify optimizations
+   */
+  async runSandboxTests(patchCode, originalPath = 'unknown_module.js') {
+    this.log('info', `[${this.name}] 🧪 Running sandbox verification for external request...`);
+
+    const antibodyId = `test_${crypto.randomUUID().slice(0, 8)}`;
+    const antibody = new AntibodyClone(antibodyId, originalPath, this.auditLogger);
+    this.activeAntibodies.set(antibodyId, antibody);
+
+    try {
+        await antibody.prepare();
+        await antibody.injectPatch(patchCode);
+        const verification = await antibody.verify();
+        
+        return verification;
+    } catch (err) {
+        return { success: false, error: err.message };
+    } finally {
+        await antibody.cleanup();
+        this.activeAntibodies.delete(antibodyId);
+    }
+  }
 
   async healModule(filePath, errorObj) {
     this.log('info', `[${this.name}] 🚑 Initiating healing protocol for: ${path.basename(filePath)}`);

@@ -102,36 +102,64 @@ export class AttentionArbiter extends BaseArbiterV4 {
     }
 
     /**
-     * The Amygdala Gate: Decide if a signal should be noticed by decision arbiters.
-     * Logic:
-     * 1. 'emergency' or 'high' priority always pass.
-     * 2. If load is > loadThreshold, drop 'low' priority unless they match focus.
-     * 3. Signals matching focus get a priority boost.
+     * Soft attention gate (v2): score signals 0–1 instead of binary pass/fail.
+     * Returns { pass: boolean, score: number } so MessageBroker can tier delivery.
+     *
+     * Score bands:
+     *   ≥ 0.70 — deliver immediately (high-relevance)
+     *   0.30–0.69 — deliver normally
+     *   0.10–0.29 — defer to 200 ms batch (low bandwidth)
+     *   < 0.10 (under load) — suppress
      */
-    shouldNotice(signal) {
-        const { type, priority, payload } = signal;
+    evaluateSignal(signal) {
+        const { type = '', priority, payload } = signal;
 
-        // 1. High-priority bypass
-        if (priority === 'high' || priority === 'emergency') return true;
+        // Emergency/high always score maximum — never batched
+        if (priority === 'emergency') return { pass: true, score: 1.0 };
+        if (priority === 'high')      return { pass: true, score: 0.85 };
 
-        // Check focus expiration
+        let score = 0.5;
+
+        // Priority nudge
+        if (priority === 'low') score -= 0.2;
+
+        // Focus expiration check
         if (this.focusExpiry && Date.now() > this.focusExpiry) {
             this.focusTopic = 'general';
             this.focusExpiry = null;
         }
 
-        // 2. Focus match
-        const matchesFocus = type.includes(this.focusTopic) || 
-                            (payload && JSON.stringify(payload).includes(this.focusTopic));
-
-        // 3. Load-based shedding
-        if (this.systemHealth.cpuUsage > this.loadThreshold) {
-            if (priority === 'low' && !matchesFocus) {
-                return false; // Shed low-priority non-focus signal
-            }
+        // Focus match boost (only meaningful when focus is specific)
+        if (this.focusTopic !== 'general') {
+            const matchesFocus = type.includes(this.focusTopic) ||
+                (payload && JSON.stringify(payload).includes(this.focusTopic));
+            if (matchesFocus) score += 0.25;
         }
 
-        return true;
+        // Signal type scoring
+        if (type.includes('heartbeat'))    score -= 0.3;  // background noise
+        if (type.includes('health.metrics')) score -= 0.1; // frequent polling
+        if (type.includes('error') || type.includes('warning')) score += 0.2;
+        if (type.includes('goal'))         score += 0.15;
+        if (type.includes('update'))       score += 0.1;
+
+        // CPU load pressure: suppress low-scoring signals harder under load
+        const underLoad = this.systemHealth.cpuUsage > this.loadThreshold;
+        if (underLoad && score < 0.5) score -= 0.15;
+
+        score = Math.max(0, Math.min(1, score));
+
+        // Under load: harder pass threshold; otherwise allow most through
+        const pass = underLoad ? score >= 0.35 : score > 0.10;
+        return { pass, score };
+    }
+
+    /**
+     * Backward-compat binary gate — delegates to evaluateSignal().
+     * MessageBroker v2 prefers evaluateSignal(); this stays for any legacy callers.
+     */
+    shouldNotice(signal) {
+        return this.evaluateSignal(signal).pass;
     }
 
     async handleMessage(message) {

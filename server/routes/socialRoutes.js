@@ -15,6 +15,7 @@ import socialQueue from '../social/SocialQueue.js';
 import { getSocialPatternState } from '../social/SocialPatternLearner.js';
 import storyWorkspace from '../social/StoryPublishingWorkspace.js';
 import socialImageLibrary from '../social/SocialImageLibrary.js';
+import socialMemory from '../social/SocialMemoryEngine.js';
 
 const SOMA_DIR = path.join(process.cwd(), 'SOMA');
 const GROWTH_FILE = path.join(SOMA_DIR, 'social-growth.json');
@@ -73,7 +74,7 @@ export default function createSocialRoutes(system) {
         for (const p of targets) {
             try {
                 if (p === 'bluesky') {
-                    if (!blueskeyClient.configured) throw new Error('BLUESKY_IDENTIFIER / BLUESKY_PASSWORD not set');
+                    if (!blueskeyClient.configured) throw new Error('BLUESKY_HANDLE / BLUESKY_APP_PASSWORD not set');
                     const r = await blueskeyClient.post(text);
                     results.bluesky = { ok: true, uri: r.uri };
 
@@ -115,6 +116,16 @@ export default function createSocialRoutes(system) {
                 result = await system.oculusBrowser?.postToLinkedIn(text.trim());
             } else {
                 return res.status(400).json({ ok: false, error: `Unknown platform: ${platform}` });
+            }
+            if (images.length) {
+                try {
+                    socialImageLibrary.recordUsage(images, {
+                        platform,
+                        text: text.trim(),
+                        status: 'posted',
+                        postUrl: result?.url || result?.uri || result?.link || null,
+                    });
+                } catch {}
             }
             res.json({ ok: true, result });
         } catch (e) {
@@ -170,6 +181,7 @@ export default function createSocialRoutes(system) {
 
         const growth = readJson(GROWTH_FILE, { pending: [], scores: {} });
         const engagement = readJson(ENGAGEMENT_FILE, { seenIds: {}, lastCheck: {} });
+        const socialMemoryState = socialMemory.getState();
         const browserReady = Boolean(system.oculusBrowser || system.somaBrowser || system.browser);
 
         res.json({
@@ -179,6 +191,7 @@ export default function createSocialRoutes(system) {
                 blueskyFreedom: true,
                 xLinkedInMode: 'browser_gated',
                 dailyBlueskyQueued: socialQueue.countTodayFor('bluesky'),
+                blueskyCortex: system.socialEngagement?.blueskyCortex?.getStatus?.() || null,
             },
             platforms: {
                 bluesky: {
@@ -187,6 +200,7 @@ export default function createSocialRoutes(system) {
                     canPost: Boolean(blueskeyClient.configured),
                     canPostImages: Boolean(blueskeyClient.configured),
                     canReply: Boolean(blueskeyClient.configured),
+                    canLike: Boolean(blueskeyClient.configured),
                 },
                 x: {
                     configured: browserReady,
@@ -194,6 +208,7 @@ export default function createSocialRoutes(system) {
                     canPost: browserReady,
                     canPostImages: browserReady,
                     canReply: browserReady,
+                    canLike: false,
                 },
                 linkedin: {
                     configured: Boolean(linkedInClient.configured || browserReady),
@@ -201,6 +216,7 @@ export default function createSocialRoutes(system) {
                     canPost: Boolean(linkedInClient.configured || browserReady),
                     canPostImages: false,
                     canReply: Boolean(linkedInClient.configured || browserReady),
+                    canLike: false,
                 },
             },
             daemons: {
@@ -225,7 +241,11 @@ export default function createSocialRoutes(system) {
                 seenCounts: Object.fromEntries(
                     Object.entries(engagement.seenIds || {}).map(([platform, ids]) => [platform, Array.isArray(ids) ? ids.length : 0])
                 ),
+                proactive: engagement.proactive || {},
+                pendingScores: Array.isArray(engagement.pendingScores) ? engagement.pendingScores.length : 0,
+                interactions: Array.isArray(engagement.interactions) ? engagement.interactions.slice(0, 20) : [],
             },
+            socialMemory: socialMemoryState,
         });
     });
 
@@ -264,6 +284,53 @@ export default function createSocialRoutes(system) {
         }
     });
 
+    router.get('/memory', (_req, res) => {
+        try {
+            res.json(socialMemory.getState());
+        } catch (e) {
+            res.status(500).json({ ok: false, error: e.message });
+        }
+    });
+
+    router.get('/bluesky/cortex', (_req, res) => {
+        try {
+            const cortex = system.socialEngagement?.blueskyCortex;
+            if (!cortex) return res.status(503).json({ ok: false, error: 'Bluesky Social Cortex is not loaded' });
+            res.json(cortex.getStatus());
+        } catch (e) {
+            res.status(500).json({ ok: false, error: e.message });
+        }
+    });
+
+    router.post('/bluesky/cortex/run', async (req, res) => {
+        try {
+            const cortex = system.socialEngagement?.blueskyCortex;
+            if (!cortex) return res.status(503).json({ ok: false, error: 'Bluesky Social Cortex is not loaded' });
+            const result = await cortex.processNotifications({
+                limit: Math.min(Number(req.body?.limit || 25), 50),
+                markSeen: req.body?.markSeen !== false,
+            });
+            res.json(result);
+        } catch (e) {
+            res.status(500).json({ ok: false, error: e.message });
+        }
+    });
+
+    router.post('/bluesky/cortex/dms/run', async (req, res) => {
+        try {
+            const cortex = system.socialEngagement?.blueskyCortex;
+            if (!cortex) return res.status(503).json({ ok: false, error: 'Bluesky Social Cortex is not loaded' });
+            const result = await cortex.processDirectMessages({
+                limit: Math.min(Number(req.body?.limit || 20), 50),
+                messagesPerConvo: Math.min(Number(req.body?.messagesPerConvo || 20), 50),
+                markRead: req.body?.markRead !== false,
+            });
+            res.json(result);
+        } catch (e) {
+            res.status(500).json({ ok: false, error: e.message });
+        }
+    });
+
     router.post('/images/register', (req, res) => {
         try {
             const result = socialImageLibrary.register(req.body || {});
@@ -286,11 +353,15 @@ export default function createSocialRoutes(system) {
     router.post('/images/import', (req, res) => {
         try {
             const result = socialImageLibrary.import(req.body || {});
+            const importedCount = Number(result.imported || (result.image ? 1 : 0));
+            const summary = result.sourceDir
+                ? `Imported ${importedCount} image${importedCount === 1 ? '' : 's'} from ${result.sourceDir} into SOMA/social-media/images.`
+                : `Copied ${result.image.filename} into SOMA/social-media/images.`;
             workLedger.record({
                 type: 'social_image_imported',
                 title: 'Imported a social image',
-                summary: `Copied ${result.image.filename} into SOMA/social-media/images.`,
-                evidence: [result.image.path],
+                summary,
+                evidence: result.images?.length ? result.images.map(image => image.path) : [result.image?.path].filter(Boolean),
                 nextStep: 'Attach the image to a Bluesky or X post after review.',
                 status: 'completed',
                 source: 'socialRoutes',
@@ -303,7 +374,61 @@ export default function createSocialRoutes(system) {
     });
 
     router.get('/stories/status', (_req, res) => {
-        res.json(storyWorkspace.getStatus());
+        const status = storyWorkspace.getStatus();
+        socialMemory.updateStoryPlan(status);
+        res.json(status);
+    });
+
+    router.post('/stories/scout', async (req, res) => {
+        try {
+            const result = await storyWorkspace.scoutStoryInfluences(req.body || {});
+            workLedger.record({
+                type: 'story_influence_scout',
+                title: 'Scouted story influence signals',
+                summary: `Collected ${result.signals?.length || 0} abstract writing-market signals for SOMA's creative memory.`,
+                evidence: [],
+                nextStep: 'Distill the signals into a storyboard before drafting chapters.',
+                status: 'completed',
+                source: 'socialRoutes',
+                confidence: 0.85,
+            });
+            res.json(result);
+        } catch (e) {
+            res.status(500).json({ ok: false, error: e.message });
+        }
+    });
+
+    router.get('/stories/structures', (_req, res) => {
+        try {
+            const status = storyWorkspace.getStatus();
+            res.json({
+                ok: true,
+                structures: status.research?.structures || [],
+                latestStoryboard: status.research?.latestStoryboard || null,
+            });
+        } catch (e) {
+            res.status(500).json({ ok: false, error: e.message });
+        }
+    });
+
+    router.post('/stories/storyboard', async (req, res) => {
+        try {
+            const brain = system.quadBrain || system.somArbiter || system.brain;
+            const result = await storyWorkspace.createStoryBoard(brain, req.body || {});
+            workLedger.record({
+                type: 'story_writer_storyboard',
+                title: `Created story board: ${result.board?.title || 'SOMA story'}`,
+                summary: 'Distilled influence signals into an original genre-fusion storyboard and saved it to Reflections.',
+                evidence: [result.board?.reflectionPath].filter(Boolean),
+                nextStep: 'Use the Writer Expertise to draft a full chapter from this board.',
+                status: 'completed',
+                source: 'socialRoutes',
+                confidence: 0.9,
+            });
+            res.json(result);
+        } catch (e) {
+            res.status(500).json({ ok: false, error: e.message });
+        }
     });
 
     router.post('/stories/wattpad/export', (req, res) => {
@@ -352,7 +477,7 @@ export default function createSocialRoutes(system) {
                 type: 'story_full_chapter_draft',
                 title: `Drafted ${result.title} chapter ${result.chapter}`,
                 summary: `Generated a full prose chapter draft (${result.wordCount} words) for human review.`,
-                evidence: [result.draftPath, result.reflectionPath],
+                evidence: [result.draftPath, result.reflectionPath, result.writerReflectionPath].filter(Boolean),
                 nextStep: 'Review and edit the chapter in Reflections before publishing anywhere.',
                 status: 'completed',
                 source: 'socialRoutes',

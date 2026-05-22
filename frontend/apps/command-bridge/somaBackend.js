@@ -303,6 +303,10 @@ class SomaBackend {
       case 'axis.member_removed':
         this.emit(type, payload);
         break;
+      // ── Third Place real-time events ───────────────────────────────────────
+      case 'thirdplace.position':
+        this.emit('thirdplace.position', data);
+        break;
       default:
         // suppress noisy unknown-type logs in production
         break;

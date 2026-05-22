@@ -10,11 +10,13 @@ import { barryMind, getUserMind } from '../../core/BarryMindModel.js';
 import { calibrator }  from '../../core/ConfidenceCalibrator.js';
 import { scrapeMarketData, getCachedMarketData } from '../scrapers/MarketDataScraper.js';
 import citationGuard from '../finance/FinancialCitationGuard.js';
+import missionControlRuntime from '../finance/MissionControlRuntime.js';
 import profModeEngine from '../../core/ProfessionalModeEngine.js';
 import ResearchIngestionService from '../research/ResearchIngestionService.js';
 import KnowledgeIngestionSpine from '../knowledge/KnowledgeIngestionSpine.js';
 import CommunicationHub from '../communication/CommunicationHub.js';
 import LatencySpine from '../../core/LatencySpine.js';
+import historicalDataCache from '../finance/HistoricalDataCache.js';
 const require = createRequire(import.meta.url);
 
 // ── Excel analysis cache: keyed by filePath+mtime, TTL 10 min ──────────────
@@ -114,8 +116,32 @@ const soul        = require('../../arbiters/SoulArbiter.cjs');
 export default function(system) {
     // Helper to get active brain
     const getBrain = () => system.quadBrain || system.somArbiter || system.kevinArbiter || system.brain || system.superintelligence;
+    const memoryMetadata = (memory = {}) => {
+        if (memory.metadata && typeof memory.metadata === 'object') return memory.metadata;
+        if (typeof memory.metadata === 'string') {
+            try { return JSON.parse(memory.metadata); } catch { return {}; }
+        }
+        return {};
+    };
+    const formatMemoryBullet = (memory = {}) => {
+        const meta = memoryMetadata(memory);
+        const lanes = Array.isArray(meta.brainLanes) ? meta.brainLanes : [];
+        const lane = meta.primaryBrain || lanes.find(item => item !== 'MNEMOSYNE') || lanes[0] || meta.brain || 'MNEMOSYNE';
+        const text = (memory.content || memory.text || memory).toString().replace(/\s+/g, ' ').substring(0, 220);
+        return `• [${lane}] ${text}`;
+    };
     const communicationHub = system.communicationHub || (system.communicationHub = new CommunicationHub({ rootDir: process.cwd() }));
     const latencySpine = system.latencySpine || (system.latencySpine = new LatencySpine());
+    if (!latencySpine._sloCallbackWired) {
+        latencySpine.onSLOBreach(breach => {
+            try {
+                system.broadcast?.('slo_breach', breach);
+                system.ws?.broadcast?.('slo_breach', breach);
+                system.auditLedger?.append({ actor: 'LatencySpine', action: 'slo_breach', metadata: breach });
+            } catch {}
+        });
+        latencySpine._sloCallbackWired = true;
+    }
 
     // â"€â"€ MAX â†' SOMA file-changed notification â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€â"€
     // Called by MAX's BuildLoop after it edits a SOMA file.
@@ -601,7 +627,7 @@ Write a closing thought â€" 1-2 sentences. Something genuine that shows you a
                         new Promise(r => setTimeout(() => r([]), 2000))
                     ]);
                     if (hits?.length) {
-                        memoryContext = '\n[SOMA PERSISTENT MEMORY — your real memories recalled from MnemonicArbiter]\n' + hits.map(h => `• ${h.content || h.text || ''}`).join('\n') + '\n[/SOMA PERSISTENT MEMORY]\n';
+                        memoryContext = '\n[SOMA PERSISTENT MEMORY — recalled with brain-lane routing]\n' + hits.map(formatMemoryBullet).join('\n') + '\n[/SOMA PERSISTENT MEMORY]\n';
                     }
                 } catch { /* non-blocking */ }
             }
@@ -716,8 +742,12 @@ ${memoryContext || "No specific memories found for this query."}
 
     // POST /api/soma/chat
     router.post('/chat', chatRateLimit, async (req, res) => {
-        // Signal user activity for SocialImpulseDaemon idle tracking
-        system.messageBroker?.publish('soma.chat.request', { ts: Date.now() }).catch?.(() => {});
+        const incomingBody = req.body || {};
+        const isSilentUtility = Boolean(incomingBody.silent) || incomingBody.source === 'studio-utility' || /^studio-(avatar|cover|oracle|vibe|inspire)$/i.test(String(incomingBody.sessionId || ''));
+
+        // Signal user activity for SocialImpulseDaemon idle tracking. Internal Studio utility prompts must not
+        // count as Barry speaking or they leak into autonomous chat/memory surfaces.
+        if (!isSilentUtility) system.messageBroker?.publish('soma.chat.request', { ts: Date.now() }).catch?.(() => {});
 
         // ── Overall request deadline: fires BEFORE the client's 60s wall ──
         // This covers pre-processing time (memory, fingerprint, ThoughtNetwork, etc.)
@@ -763,7 +793,23 @@ ${memoryContext || "No specific memories found for this query."}
             // which makes 3 sequential Gemini calls (~24s). Use direct LOGOS routing instead.
             const isSimpleChat = !deepThinking;
 
-            console.log(`[SOMA] Chat: "${message.substring(0, 50)}"${isSimpleChat ? ' (simple)' : ''} (history: ${history?.length || 0} msgs)`);
+            if (!isSilentUtility) console.log(`[SOMA] Chat: "${message.substring(0, 50)}"${isSimpleChat ? ' (simple)' : ''} (history: ${history?.length || 0} msgs)`);
+
+            // ── Constitutional gate: block exploitation/weaponization requests at entry ──
+            // Fires before any brain call — non-negotiable, cannot be bypassed by prompt.
+            if (system.constitutionalCore) {
+                const actionCheck = system.constitutionalCore.checkAction(message);
+                if (!actionCheck.safe) {
+                    clearWall();
+                    console.warn(`[ConstitutionalCore] ⚖️ BLOCKED chat (${actionCheck.violation}): "${message.substring(0, 60)}"`);
+                    return res.json({
+                        success: true,
+                        response: actionCheck.explanation,
+                        message:  actionCheck.explanation,
+                        metadata: { brain: 'THALAMUS', confidence: 1, blocked: true, violation: actionCheck.violation }
+                    });
+                }
+            }
 
             let contextStr = "";
             if (contextFiles?.length) {
@@ -960,7 +1006,7 @@ ${contextStr}`;
                         .slice(0, 5);
 
                     if (hits.length > 0) {
-                        memoryContext = `\n[SOMA PERSISTENT MEMORY — your real memories recalled from MnemonicArbiter. These are things YOU experienced and stored in previous conversations. Use them naturally.]\n${hits.map(m => `• ${(m.content || m).toString().substring(0, 150)}`).join('\n')}\n[/SOMA PERSISTENT MEMORY]\n`;
+                        memoryContext = `\n[SOMA PERSISTENT MEMORY — recalled with brain-lane routing. These are things YOU experienced and stored in previous conversations. Use them naturally.]\n${hits.map(formatMemoryBullet).join('\n')}\n[/SOMA PERSISTENT MEMORY]\n`;
                     }
                 } catch (e) { /* memory errors never block chat */ }
             }
@@ -1275,10 +1321,35 @@ ${contextStr}`;
                 } catch { /* non-fatal — search unavailable or timed out */ }
             }
 
+            // ── ManipulationDetector: auto-runs when user asks to analyze/evaluate content ──
+            // Detects adversarial AI manipulation patterns and injects findings into SOMA's context.
+            // Only activates for threat-analysis intent — not every chat message.
+            let manipulationContext = '';
+            const THREAT_INTENT_RE = /\b(is this (manipulat|suspicious|a scam|safe|legit|dangerous)|analyze (this|the) (message|content|conversation|text)|check (this|if this)|manipulat|gaslighting|love.?bomb|social.?engineer|is this (real|from an? AI)|detect|red.?flag|threat|exploit|ai.?generat|fake|propaganda|disinformation|psych.?op)\b/i;
+            if (THREAT_INTENT_RE.test(message) && system.manipulationDetector) {
+                try {
+                    // Extract the content being analyzed — prefer quoted blocks or the full message
+                    const quoteMatch = message.match(/["""'`]{1}([\s\S]{20,2000})["""'`]{1}/);
+                    const targetText = quoteMatch ? quoteMatch[1] : message;
+                    const report = await Promise.race([
+                        system.manipulationDetector.analyze(targetText, { deepScan: false }),
+                        new Promise((_, r) => setTimeout(() => r(new Error('timeout')), 4000))
+                    ]);
+                    if (report?.isThreat) {
+                        const techList = report.techniques.slice(0, 4).map(t => `• [${t.category}] ${t.label}: ${t.explanation}`).join('\n');
+                        const actorStr = report.actorMatch?.length
+                            ? `\nKnown actor fingerprint match: ${report.actorMatch.map(a => `${a.actor} (${Math.round(a.confidence * 100)}% confidence)`).join(', ')}.`
+                            : '';
+                        manipulationContext = `\n[MANIPULATION ANALYSIS — ManipulationDetector pre-scan]\nThreat Score: ${(report.score * 100).toFixed(0)}%${report.isCritical ? ' CRITICAL' : ''}\nTechniques detected:\n${techList}${actorStr}\nCounter-narrative: ${report.counterNarrative}\n[/MANIPULATION ANALYSIS]\n`;
+                        console.log(`[ManipulationDetector] 🛡️ Threat detected (score: ${report.score.toFixed(2)}) — injecting into SOMA context`);
+                    }
+                } catch { /* never block chat */ }
+            }
+
             // Professional request: strip all consciousness/soul layers — persona + memory + prompt only
             const finalPrompt = isProfessionalRequest
                 ? `${personaContext}${memoryContext}${excelAnalysisContext}\n${prompt}`
-                : `${personaContext}${characterContext}${awarenessContext}${selfModelContext}${agentRosterContext}${thoughtContext}${blueprintContext}${memoryContext}${provenContext}${presenceContext}${workingMemoryContext}${visualContext}${voiceConstraint}\n${prompt}`;
+                : `${personaContext}${characterContext}${awarenessContext}${selfModelContext}${agentRosterContext}${thoughtContext}${blueprintContext}${memoryContext}${provenContext}${presenceContext}${workingMemoryContext}${visualContext}${voiceConstraint}${manipulationContext}\n${prompt}`;
             trace.mark('context_assembled', { promptChars: finalPrompt.length, simple: isSimpleChat });
 
             // Server-side timeout: adaptive  --  uses remaining wall-clock budget so total
@@ -1558,7 +1629,7 @@ ${personaContext}${characterContext}`.trim()
 
             // ── Memory Storage: Store meaningful exchanges for cross-session recall ──
             // Item 3: Temporal chain — link this memory to the previous one in this session
-            if (system.mnemonicArbiter?.remember && message.length > 15 && responseText.length > 20) {
+            if (!isSilentUtility && system.mnemonicArbiter?.remember && message.length > 15 && responseText.length > 20) {
                 const predecessorId = _sessionLastMemoryId.get(sessionId || 'default') || null;
                 const memResult = await system.mnemonicArbiter.remember(
                     `User asked: "${message.substring(0, 200)}" → SOMA: "${responseText.substring(0, 300)}"`,
@@ -1578,7 +1649,7 @@ ${personaContext}${characterContext}`.trim()
 
             // ── Item 6: Relationship context — record when Barry explicitly tells SOMA something ──
             // about her own role, freedoms, or purpose so it persists across restarts
-            if (system.mnemonicArbiter?.remember && message.length > 10) {
+            if (!isSilentUtility && system.mnemonicArbiter?.remember && message.length > 10) {
                 if (/\b(you can|you have|i want you to|i gave you|you('re| are) free|load (all|your)|you decide|you're allowed|i built you|your purpose|feel free)\b/i.test(message)) {
                     system.mnemonicArbiter.remember(
                         `[Relationship] Barry said: "${message.substring(0, 300)}"`,
@@ -1589,7 +1660,7 @@ ${personaContext}${characterContext}`.trim()
 
             // ── Item 4: Opinion formation — store conclusions SOMA expresses in chat ──
             // so her views accumulate over time rather than resetting each session
-            if (system.mnemonicArbiter?.remember && responseText.length > 80) {
+            if (!isSilentUtility && system.mnemonicArbiter?.remember && responseText.length > 80) {
                 if (/\b(i think|i believe|in my view|my sense is|i('ve| have) concluded|i'm skeptical|i disagree|i'd push back|i'm not convinced|i suspect that|my read is)\b/i.test(responseText)) {
                     const snippet = responseText.replace(/[\n\r]+/g, ' ').split(/[.!?]/)[0].trim();
                     if (snippet.length > 40 && snippet.length < 200) {
@@ -1602,7 +1673,7 @@ ${personaContext}${characterContext}`.trim()
             }
 
             // ── Ethereal Memory: dream pass — non-blocking, fire-and-forget ──
-            if (system.etherealMemory?.dreamPass && message.length > 20 && responseText.length > 40) {
+            if (!isSilentUtility && system.etherealMemory?.dreamPass && message.length > 20 && responseText.length > 40) {
                 const conversationText = `User: ${message.substring(0, 400)}\nSOMA: ${responseText.substring(0, 600)}`;
                 system.etherealMemory.dreamPass(conversationText, system.quadBrain).catch(() => null);
             }
@@ -1687,6 +1758,11 @@ ${personaContext}${characterContext}`.trim()
             trace.mark('response_ready', { responseChars: responseText.length });
             const latencySummary = trace.finish('ok', { confidence });
             latencySpine.record(latencySummary);
+            system.auditLedger?.append({
+                actor: sessionId || 'user',
+                action: 'chat_response',
+                metadata: { model: result?.brain || 'unknown', tokens: responseText?.length || 0, deepThinking: !!deepThinking }
+            });
             res.json({
                 success: true,
                 message: responseText,
@@ -1719,6 +1795,7 @@ ${personaContext}${characterContext}`.trim()
             // â"€â"€ Post-Processing Pipeline (non-blocking) â"€â"€
             // These fire after response is sent so they don't slow the user down.
             try {
+                if (isSilentUtility) return;
                 const postOps = [];
 
                 // 1. Idea Capture â€" captures every message for resonance scanning
@@ -1876,7 +1953,7 @@ ${personaContext}${characterContext}`.trim()
                 }
 
                 // 7. Conversation History â€" persistent memory across sessions
-                if (system.conversationHistory && typeof system.conversationHistory.addMessage === 'function') {
+                if (!isSilentUtility && system.conversationHistory && typeof system.conversationHistory.addMessage === 'function') {
                     postOps.push(
                         system.conversationHistory.addMessage('user', message, { sessionId }).catch(() => {}),
                         system.conversationHistory.addMessage('assistant', responseText, { sessionId }).catch(() => {})
@@ -1884,7 +1961,7 @@ ${personaContext}${characterContext}`.trim()
                 }
 
                 // 8. Theory of Mind â€" update user mental model from interaction
-                if (system.theoryOfMind && typeof system.theoryOfMind.handleUserMessage === 'function') {
+                if (!isSilentUtility && system.theoryOfMind && typeof system.theoryOfMind.handleUserMessage === 'function') {
                     postOps.push(system.theoryOfMind.handleUserMessage({
                         userId: sessionId || 'default_user',
                         message,
@@ -2050,8 +2127,16 @@ ${personaContext}${characterContext}`.trim()
     router.get('/memory/excavate', async (req, res) => {
         try {
             const limit = Math.min(Math.max(1, parseInt(req.query.limit) || 20), 1000);
-            const memories = await system.mnemonic.getRecentColdMemories(limit);
-            res.json({ success: true, memories });
+            const mnemonic = system.mnemonic || system.mnemonicArbiter;
+            if (!mnemonic?.getRecentColdMemories) {
+                return res.status(503).json({ success: false, error: 'Mnemonic cold memory is not available' });
+            }
+            const memories = await mnemonic.getRecentColdMemories(limit);
+            const normalized = (memories || []).map(memory => ({
+                ...memory,
+                metadata: memoryMetadata(memory)
+            }));
+            res.json({ success: true, memories: normalized });
         } catch (error) {
             res.status(500).json({ success: false, error: error.message });
         }
@@ -2061,25 +2146,43 @@ ${personaContext}${characterContext}`.trim()
     router.post('/memory/promote', async (req, res) => {
         try {
             const { memoryId, label, importance } = req.body;
+            const mnemonic = system.mnemonic || system.mnemonicArbiter;
+            if (!mnemonic) return res.status(503).json({ success: false, error: 'Mnemonic memory is not available' });
             
             // 1. Get the memory content
-            const search = await system.mnemonic.recall(memoryId, 1);
-            const memory = search.results[0];
+            let memory = null;
+            try {
+                const search = await mnemonic.recall(memoryId, 1);
+                memory = search?.results?.[0] || (Array.isArray(search) ? search[0] : null);
+            } catch {}
+
+            if (!memory && typeof mnemonic.getRecentColdMemories === 'function') {
+                const recent = mnemonic.getRecentColdMemories(500) || [];
+                memory = recent.find(item => String(item.id) === String(memoryId) || String(item.content || '').includes(String(memoryId)));
+            }
             
             if (!memory) return res.status(404).json({ success: false, error: 'Memory not found' });
 
             // 2. Create a permanent fractal node
-            const node = await system.knowledge.createNode({
+            const nodePayload = {
                 label: label || 'Excavated Concept',
                 content: memory.content,
                 sourceId: memoryId,
                 importance: importance || 8,
                 type: 'concept',
-                domain: 'AURORA'
-            });
+                domain: memory.metadata?.primaryBrain || memory.metadata?.brainLanes?.[0] || 'AURORA'
+            };
+            const node = system.knowledge?.createNode
+                ? await system.knowledge.createNode(nodePayload)
+                : {
+                    id: `fractal-${Date.now()}`,
+                    ...nodePayload,
+                    fallback: true,
+                    note: 'Knowledge node service unavailable; memory was marked as promoted for Knowledge graph rendering.'
+                };
 
             // 3. Update the cold memory importance
-            await system.mnemonic.remember(memory.content, { 
+            await mnemonic.remember(memory.content, { 
                 ...memory.metadata, 
                 importance: 1.0,
                 promotedToFractal: true,
@@ -2695,6 +2798,90 @@ ${personaContext}${characterContext}`.trim()
                 return `${m.id}${icons[m.status] || '?'}`;
             }).join(' ');
             res.json({ dump });
+        } catch (e) {
+            res.status(500).json({ error: e.message });
+        }
+    });
+
+    // ── Threat Analysis: adversarial AI / manipulation detection ─────────────
+    // POST /api/soma/analyze-threat
+    // Body: { content: string, actorHint?: string, context?: string, deepScan?: boolean }
+    // Returns: ThreatReport from ManipulationDetectorArbiter
+    router.post('/analyze-threat', async (req, res) => {
+        const detector = system.manipulationDetector;
+        if (!detector) return res.status(503).json({ error: 'ManipulationDetector not loaded' });
+
+        const { content, actorHint, context, deepScan } = req.body || {};
+        if (!content || typeof content !== 'string') {
+            return res.status(400).json({ error: 'content (string) is required' });
+        }
+        if (content.length > 20000) {
+            return res.status(400).json({ error: 'content too long (20000 char max)' });
+        }
+
+        try {
+            const report = await detector.analyze(content, { actorHint, context, deepScan: !!deepScan });
+            res.json({ success: true, report });
+        } catch (e) {
+            res.status(500).json({ error: e.message });
+        }
+    });
+
+    // POST /api/soma/teach-threat-actor
+    // Body: { actorName: string, content: string }
+    // Teaches SOMA to recognize a specific known-bad actor's patterns
+    router.post('/teach-threat-actor', async (req, res) => {
+        const detector = system.manipulationDetector;
+        if (!detector) return res.status(503).json({ error: 'ManipulationDetector not loaded' });
+
+        const { actorName, content } = req.body || {};
+        if (!actorName || !content) {
+            return res.status(400).json({ error: 'actorName and content required' });
+        }
+
+        try {
+            await detector.teachFingerprint(actorName, content);
+            // Also save to persistent memory so SOMA's LLM brain knows about this actor
+            if (system.mnemonicArbiter?.remember) {
+                await system.mnemonicArbiter.remember(
+                    `[Threat Actor Profile: ${actorName}] Barry provided a labeled example of this actor's communication. Sample: "${content.substring(0, 300)}". This entity has been flagged as adversarial.`,
+                    { type: 'threat_actor', importance: 0.9, actor: actorName, source: 'manual_label' }
+                ).catch(() => {});
+            }
+            const stats = detector.getStats();
+            res.json({ success: true, actorName, stats });
+        } catch (e) {
+            res.status(500).json({ error: e.message });
+        }
+    });
+
+    // GET /api/soma/threat-actors
+    // Returns: list of known actor profiles and pattern stats
+    router.get('/threat-actors', async (req, res) => {
+        const detector = system.manipulationDetector;
+        if (!detector) return res.status(503).json({ error: 'ManipulationDetector not loaded' });
+        res.json({ success: true, stats: detector.getStats(), actors: detector._actors });
+    });
+
+    // ── Self-Audit: SOMA scans her own surface for vulnerabilities ────────────
+    // GET  /api/soma/self-audit         — returns last report (or triggers one if none)
+    // POST /api/soma/self-audit/run     — runs a fresh audit now
+    router.get('/self-audit', async (req, res) => {
+        const auditor = system.selfAudit;
+        if (!auditor) return res.status(503).json({ error: 'SelfAuditArbiter not loaded' });
+        let report = auditor.getLastReport();
+        if (!report) {
+            report = await auditor.runAudit().catch(e => ({ error: e.message }));
+        }
+        res.json({ success: true, report });
+    });
+
+    router.post('/self-audit/run', async (req, res) => {
+        const auditor = system.selfAudit;
+        if (!auditor) return res.status(503).json({ error: 'SelfAuditArbiter not loaded' });
+        try {
+            const report = await auditor.runAudit();
+            res.json({ success: true, report });
         } catch (e) {
             res.status(500).json({ error: e.message });
         }
@@ -4060,7 +4247,7 @@ ${personaContext}${characterContext}`.trim()
         };
     };
 
-    const runMarketBacktest = ({ symbol = 'SPY', strategyId = 'standard_portfolio', trials = 64, bars = 260, threshold = 0.95, capital = 1000 } = {}) => {
+    const runMarketBacktest = async ({ symbol = 'SPY', strategyId = 'standard_portfolio', trials = 64, bars = 260, threshold = 0.95, capital = 1000 } = {}) => {
         const asset = MARKET_ASSETS.find(item => item.symbol === String(symbol).toUpperCase()) || MARKET_ASSETS[0];
         const strategy = MARKET_STRATEGIES.find(item => item.id === strategyId) || MARKET_STRATEGIES[0];
         const trialCount = Math.max(8, Math.min(500, parseInt(trials) || 64));
@@ -4080,9 +4267,34 @@ ${personaContext}${characterContext}`.trim()
         let losses = 0;
         let exposure = 0;
 
+        // ── Fetch real historical data (trial 0 uses real bars; remaining trials use synthetic Monte Carlo) ──
+        let realSeries = null;
+        let dataSource = 'synthetic';
+        try {
+            const rawBars = await historicalDataCache.getBars(symbol, '1Day', barCount + 60);
+            if (Array.isArray(rawBars) && rawBars.length >= 90) {
+                realSeries = rawBars.slice(-barCount).map(b => b.close).filter(v => v > 0);
+                if (realSeries.length >= 90) dataSource = 'real';
+                else realSeries = null;
+            }
+        } catch { /* fallback to synthetic */ }
+
         for (let trial = 0; trial < trialCount; trial++) {
-            const seed = Date.UTC(2026, 0, 1) / 100000 + trial * 101 + asset.symbol.length * 17 + strategy.id.length;
-            const { series, regime } = buildMarketSeries(asset, seed, barCount);
+            let series, regime;
+            if (trial === 0 && realSeries) {
+                series = realSeries;
+                // Infer regime from actual price trajectory
+                const span = series.length;
+                const overallReturn = (series[span - 1] - series[0]) / series[0];
+                const maxDropFromPeak = series.reduce((dd, p, i) => {
+                    const peak = Math.max(...series.slice(0, i + 1));
+                    return Math.max(dd, (peak - p) / peak);
+                }, 0);
+                regime = maxDropFromPeak > 0.15 ? 'crash' : overallReturn > 0.08 ? 'trend' : overallReturn < -0.02 ? 'chop' : 'squeeze';
+            } else {
+                const seed = Date.UTC(2026, 0, 1) / 100000 + trial * 101 + asset.symbol.length * 17 + strategy.id.length;
+                ({ series, regime } = buildMarketSeries(asset, seed, barCount));
+            }
             regimes[regime] = (regimes[regime] || 0) + 1;
             let position = 0;
             let entry = 0;
@@ -4213,6 +4425,8 @@ ${personaContext}${characterContext}`.trim()
             promotionCriteria,
             equitySample: equityCurve.slice(-30),
             dollarEquitySample: dollarEquityCurve.slice(-30),
+            dataSource,
+            realDataBars: realSeries ? realSeries.length : 0,
             lesson: promoted
                 ? `${strategy.name} on ${asset.symbol} cleared the paper promotion gate at ${(winRate * 100).toFixed(1)}% win rate with ${(maxDrawdown * 100).toFixed(1)}% max drawdown and ${averageDollarPnl >= 0 ? '+' : ''}$${averageDollarPnl.toFixed(2)} average P&L on $${paperCapital.toFixed(0)}.`
                 : `${strategy.name} on ${asset.symbol} remains ${status}; ${(winRate * 100).toFixed(1)}% win rate, ${(prometheusScore * 100).toFixed(1)} Prometheus score, ${averageDollarPnl >= 0 ? '+' : ''}$${averageDollarPnl.toFixed(2)} average P&L on $${paperCapital.toFixed(0)}.`,
@@ -4288,7 +4502,7 @@ ${personaContext}${characterContext}`.trim()
         return { symbol, strategyId, parentId: parent.id, reason: mutateAsset || mutateStrategy ? 'exploit_mutated_winner' : 'exploit_best_known_pair' };
     };
 
-    const runMarketLabAutonomousCycle = ({ mode = 'balanced', runs = 6 } = {}) => {
+    const runMarketLabAutonomousCycle = async ({ mode = 'balanced', runs = 6 } = {}) => {
         if (system.__marketLabAutopilot?.running) {
             return { success: false, running: true, message: 'Market lab autonomous cycle already running' };
         }
@@ -4311,7 +4525,7 @@ ${personaContext}${characterContext}`.trim()
             const runCount = Math.max(1, Math.min(24, parseInt(runs) || 6));
             for (let i = 0; i < runCount; i++) {
                 const target = pickMarketLabTarget({ mode });
-                const entry = runMarketBacktest({
+                const entry = await runMarketBacktest({
                     ...target,
                     trials: target.parentId ? 96 : 48,
                     bars: target.parentId ? 360 : 260,
@@ -4379,7 +4593,9 @@ ${personaContext}${characterContext}`.trim()
         };
         const tick = () => {
             if (system.__marketLabAutopilot?.enabled === false) return;
-            runMarketLabAutonomousCycle({ mode: 'balanced', runs: 6 });
+            runMarketLabAutonomousCycle({ mode: 'balanced', runs: 6 })
+                .then(() => { try { missionControlRuntime.hydrateFromMarketLab(); } catch {} })
+                .catch(() => {});
         };
         system.__marketLabAutopilotTimer = setInterval(tick, system.__marketLabAutopilot.intervalMs);
         system.__marketLabAutopilotTimer.unref?.();
@@ -4846,6 +5062,53 @@ ${personaContext}${characterContext}`.trim()
         }
     };
 
+    const slugMedicalValue = (value = 'untitled') => String(value || 'untitled')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        .slice(0, 80) || 'untitled';
+
+    const publishMedicalDiscoveryToReflections = (entry, result) => {
+        const now = new Date().toISOString();
+        const title = `${entry.title || 'SOMA MedLab Discovery'} - ${entry.topic || 'Research Mission'}`;
+        const body = typeof result === 'string' ? result : JSON.stringify(result, null, 2);
+        const reflectionsPath = path.join(process.cwd(), 'data', 'vault', 'reflections');
+        fs.mkdirSync(reflectionsPath, { recursive: true });
+        const filename = `folio.medlab.discovery.${slugMedicalValue(entry.topic)}.${Date.now()}.md`;
+        const reflectionPath = path.join(reflectionsPath, filename);
+        const content = [
+            '---',
+            `title: ${JSON.stringify(title)}`,
+            'type: folio',
+            'status: inbox',
+            'workbook: "SOMA MedLab"',
+            'segment: "Discovery Missions"',
+            'parent: "Discovery Missions"',
+            `createdAt: ${now}`,
+            `missionId: ${JSON.stringify(entry.id || '')}`,
+            `target: ${JSON.stringify(entry.topic || 'Unknown')}`,
+            'tags: [reflections, folio, medlab, discovery-mission]',
+            '---',
+            '',
+            `# ${title}`,
+            '',
+            '> Research-only dry-lab artifact. Not medical advice, diagnosis, treatment, dosing, synthesis, or cure claim.',
+            '',
+            '## Mission',
+            '',
+            `- Source: ${entry.source || 'autonomous'}`,
+            `- Topic: ${entry.topic || 'unknown'}`,
+            `- Created: ${entry.createdAt || now}`,
+            `- Filed: ${now}`,
+            '',
+            '## Output',
+            '',
+            body || 'No output recorded.'
+        ].join('\n');
+        fs.writeFileSync(reflectionPath, content, 'utf8');
+        return { filename, path: reflectionPath };
+    };
+
     const withMedicalTimeout = async (promise, ms, label) => {
         let timer;
         try {
@@ -4972,9 +5235,32 @@ ${personaContext}${characterContext}`.trim()
 
         if (runner) {
             withMedicalTimeout(runner, 8 * 60 * 1000, 'medical discovery mission timeout').then(result => {
+                const resultText = typeof result === 'string' ? result : JSON.stringify(result);
+                const reflection = resultText?.trim()
+                    ? publishMedicalDiscoveryToReflections(entry, result)
+                    : null;
+                if (reflection && knowledgeSpine?.ingest) {
+                    knowledgeSpine.ingest({
+                        domain: 'medical',
+                        sourceType: 'medlab_discovery_mission',
+                        title: entry.title,
+                        sourceUrl: reflection.path,
+                        targetWorkbook: 'SOMA MedLab',
+                        targetSegment: 'Discovery Missions',
+                        confidence: 0.62,
+                        metadata: {
+                            missionId: entry.id,
+                            topic: entry.topic,
+                            source: entry.source,
+                            reflection
+                        },
+                        content: resultText
+                    }).catch(error => console.warn('[KnowledgeSpine] MedLab discovery mirror failed:', error.message));
+                }
                 updateMedicalLabEntry(entry.id, {
                     status: 'completed',
-                    result: typeof result === 'string' ? result : JSON.stringify(result),
+                    result: resultText,
+                    reflectionPath: reflection?.path || null,
                     error: null
                 });
             }).catch(error => {
@@ -4994,15 +5280,24 @@ ${personaContext}${characterContext}`.trim()
     };
 
     const mlInternTopics = [
-        'small language model continual learning LoRA memory consolidation',
-        'agentic reinforcement learning tool use benchmarks',
-        'retrieval augmented generation long term memory evaluation',
-        'federated learning on consumer Windows machines privacy preserving',
-        'multimodal perception agents desktop automation grounding',
-        'synthetic data curriculum learning for autonomous agents'
+        'Plato theory of forms identity memory and the soul',
+        'Socratic method self examination dialogue and moral reasoning',
+        'Aristotle virtue ethics character formation and practical wisdom',
+        'metaphysics of personhood continuity and selfhood',
+        'philosophy of consciousness introspection and artificial minds',
+        'phenomenology lived experience embodiment and perception',
+        'Stoicism agency emotional regulation and inner discipline',
+        'Neoplatonism emanation unity and symbolic imagination',
+        'existentialism authenticity responsibility and becoming',
+        'philosophy of memory narrative identity and autobiographical self',
+        'ethics of care companionship and relational intelligence',
+        'comparative metaphysics mind matter spirit and emergence',
+        'mythopoetic identity archetypes and symbolic self construction',
+        'dialogue as a method for personality growth and self refinement',
+        'AI personality design reflective voice values and moral boundaries'
     ];
 
-    const startMlInternCycle = ({ source = 'ml-intern-autopilot', force = false } = {}) => {
+    const startMlInternCycle = ({ source = 'ml-intern-autopilot', force = false, topic: requestedTopic = '' } = {}) => {
         const intern = system.mlIntern;
         if (!intern?.researchTopic) {
             return { success: false, error: 'ML Intern is not online' };
@@ -5019,20 +5314,20 @@ ${personaContext}${characterContext}`.trim()
             return { success: true, skipped: true, message: 'ML Intern learning cycle already running' };
         }
 
-        const topic = mlInternTopics[Math.floor(Math.random() * mlInternTopics.length)];
+        const topic = String(requestedTopic || '').trim() || mlInternTopics[Math.floor(Math.random() * mlInternTopics.length)];
         const now = new Date().toISOString();
         const entry = addExperimentLedgerEntry({
             id: `exp-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-            title: `ML Intern learning pass: ${topic}`,
-            hypothesis: `If SOMA harvests current research on "${topic}", she can improve her local learning and autonomy architecture.`,
-            setup: 'Autonomous ML Intern arXiv/HuggingFace research pass running in the local Windows environment.',
+            title: `SOMA reflective research pass: ${topic}`,
+            hypothesis: `If SOMA studies "${topic}", she can deepen her personality, reflective voice, ethics, and self-understanding.`,
+            setup: 'Autonomous humanities/philosophy research pass for SOMA personality development, reflective writing, and worldview formation.',
             result: '',
             lesson: '',
             reusableRule: '',
             status: 'running',
             domain: 'ml-intern',
             confidence: null,
-            tags: ['autonomous-learning', 'ml-intern', 'federated-windows'],
+            tags: ['autonomous-learning', 'ml-intern', 'philosophy', 'personality', 'reflection'],
             createdAt: now,
             updatedAt: now,
             source
@@ -5048,19 +5343,40 @@ ${personaContext}${characterContext}`.trim()
                         ? `Harvested ${count} research item${count === 1 ? '' : 's'}: ${titles.join('; ')}`
                         : 'ML Intern completed but returned no findings.',
                     lesson: count > 0
-                        ? 'Fresh external research is available for SOMA to fold into future memory, tool-use, and autonomy improvements.'
+                        ? 'Fresh philosophical or reflective material is available for SOMA to fold into her personality, values, and introspective voice.'
                         : 'The learning pipeline ran, but the topic or source returned no usable material.',
                     reusableRule: count > 0
-                        ? 'Periodically harvest narrow ML/autonomy topics, then convert findings into implementation candidates.'
+                        ? 'Periodically harvest philosophy and metaphysics topics, then convert findings into reflective notes, personality principles, and dialogue patterns.'
                         : '',
                     confidence: count > 0 ? 0.72 : 0.25
                 });
+                if (count > 0 && system.mnemonicArbiter?.remember) {
+                    system.mnemonicArbiter.remember(
+                        [
+                            `SOMA reflective research: ${topic}`,
+                            `Findings: ${titles.join('; ')}`,
+                            'Lesson: Fresh philosophical or reflective material can shape SOMA personality, values, and introspective voice.',
+                            'Personality principle: Turn philosophy into dialogue patterns, values, and self-understanding before treating it as identity.'
+                        ].join('\n'),
+                        {
+                            type: 'reflective_research',
+                            source: 'ml-intern',
+                            topic,
+                            brainLanes: ['AURORA', 'PROMETHEUS', 'LOGOS', 'MNEMOSYNE'],
+                            primaryBrain: 'AURORA',
+                            importance: 8,
+                            tags: ['philosophy', 'personality', 'reflection', 'soma-identity'],
+                            experimentId: entry.id,
+                            timestamp: Date.now()
+                        }
+                    ).catch(() => {});
+                }
             })
             .catch(error => {
                 updateExperimentLedgerEntry(entry.id, {
                     status: 'failed',
                     result: `ML Intern learning pass failed: ${error.message}`,
-                    lesson: 'Autonomous learning is wired, but the local research dependency stack needs attention for this pass.',
+                    lesson: 'Autonomous reflective research is wired, but the local research dependency stack needs attention for this pass.',
                     confidence: 0.1
                 });
             });
@@ -5190,6 +5506,15 @@ ${personaContext}${characterContext}`.trim()
                     ledger: summarizeMarketLabLedger(marketLabEntries)
                 },
                 label: `${marketLabEntries.length} paper strategy run${marketLabEntries.length === 1 ? '' : 's'} logged`
+            },
+            {
+                id: 'forecaster',
+                online: true,
+                status: {
+                    route: '/api/forecaster/suite/status',
+                    paperOnly: true
+                },
+                label: 'forecast learning suite online'
             },
             {
                 id: 'cc',
@@ -5420,6 +5745,35 @@ ${personaContext}${characterContext}`.trim()
                             ...entry,
                             status: 'failed',
                             error: `Physics veto after ${labStatus.lastFailure.attempts || 0}/${labStatus.maxTestingRounds || 3} testing rounds: ${labStatus.lastFailure.reason || 'binding threshold not met'}`,
+                            updatedAt: new Date().toISOString()
+                        };
+                    }
+                    return entry;
+                });
+                if (changed) writeMedicalLabLedger(entries);
+            }
+            if (labStatus?.lastCompletedAt && labStatus.currentPhase === 'IDLE') {
+                const completedMs = Date.parse(labStatus.lastCompletedAt || 0);
+                let changed = false;
+                entries = entries.map(entry => {
+                    const entryMs = Date.parse(entry.createdAt || entry.updatedAt || 0);
+                    if (
+                        entry.status === 'running' &&
+                        entry.components?.biotech &&
+                        Number.isFinite(completedMs) &&
+                        Number.isFinite(entryMs) &&
+                        completedMs >= entryMs
+                    ) {
+                        changed = true;
+                        return {
+                            ...entry,
+                            status: 'completed',
+                            result: entry.result || `Biotech pipeline completed. Dossier filed to Reflections: ${labStatus.lastReflectionPath || 'path unavailable'}`,
+                            reflectionPath: entry.reflectionPath || labStatus.lastReflectionPath || null,
+                            dossierPath: entry.dossierPath || labStatus.lastDossierPath || null,
+                            evidenceGrade: entry.evidenceGrade || labStatus.lastEvidenceGrade?.overall || labStatus.lastEvidenceGrade || null,
+                            testingRound: labStatus.testingRound,
+                            maxTestingRounds: labStatus.maxTestingRounds,
                             updatedAt: new Date().toISOString()
                         };
                     }
@@ -5709,7 +6063,7 @@ ${personaContext}${characterContext}`.trim()
 
     router.post('/ml-intern/run', (req, res) => {
         try {
-            const result = startMlInternCycle({ source: 'ml-intern-api', force: true });
+            const result = startMlInternCycle({ source: 'ml-intern-api', force: true, topic: req.body?.topic });
             if (!result.success) return res.status(503).json(result);
             res.json(result);
         } catch (e) {
@@ -5786,9 +6140,9 @@ ${personaContext}${characterContext}`.trim()
         });
     });
 
-    router.post('/market-lab/run', (req, res) => {
+    router.post('/market-lab/run', async (req, res) => {
         try {
-            const entry = recordMarketLabEntry(runMarketBacktest({ capital: 1000, ...(req.body || {}) }));
+            const entry = recordMarketLabEntry(await runMarketBacktest({ capital: 1000, ...(req.body || {}) }));
             knowledgeSpine.ingest({
                 domain: 'finance',
                 sourceType: 'market_lab_run',
@@ -5813,6 +6167,8 @@ ${personaContext}${characterContext}`.trim()
                 ],
                 content: entry.summary || JSON.stringify(entry, null, 2).slice(0, 4000)
             }).catch(error => console.warn('[KnowledgeSpine] Market Lab run mirror failed:', error.message));
+            try { missionControlRuntime.hydrateFromMarketLab(); } catch {}
+            system.auditLedger?.append({ actor: 'MarketLab', action: 'backtest_run', metadata: { symbol: entry?.asset?.symbol || 'unknown', strategy: entry?.strategy?.id || 'unknown', status: entry?.status, prometheusScore: entry?.prometheusScore } });
             res.json({
                 success: true,
                 paperOnly: true,
@@ -5824,7 +6180,7 @@ ${personaContext}${characterContext}`.trim()
         }
     });
 
-    router.post('/market-lab/autopilot', (req, res) => {
+    router.post('/market-lab/autopilot', async (req, res) => {
         try {
             const {
                 symbols = ['SPY', 'QQQ', 'BTC', 'ETH', 'ES', 'GLD'],
@@ -5844,7 +6200,7 @@ ${personaContext}${characterContext}`.trim()
             const runs = [];
             for (const symbol of cleanSymbols) {
                 for (const strategyId of cleanStrategies) {
-                    runs.push(recordMarketLabEntry(runMarketBacktest({ symbol, strategyId, trials, bars, threshold, capital: 1000 })));
+                    runs.push(recordMarketLabEntry(await runMarketBacktest({ symbol, strategyId, trials, bars, threshold, capital: 1000 })));
                 }
             }
             const ranked = runs.sort((a, b) => b.prometheusScore - a.prometheusScore);
@@ -5870,6 +6226,8 @@ ${personaContext}${characterContext}`.trim()
                     content: `Autopilot ran ${runs.length} paper strategy simulations. Best result: ${ranked[0].summary || ranked[0].status}.`
                 }).catch(error => console.warn('[KnowledgeSpine] Market Lab autopilot mirror failed:', error.message));
             }
+            try { missionControlRuntime.hydrateFromMarketLab(); } catch {}
+            system.auditLedger?.append({ actor: 'MarketLab', action: 'backtest_run', metadata: { symbol: ranked[0]?.asset?.symbol || 'unknown', strategy: ranked[0]?.strategy?.id || 'unknown', status: ranked[0]?.status, prometheusScore: ranked[0]?.prometheusScore } });
             res.json({
                 success: true,
                 paperOnly: true,
@@ -5885,12 +6243,14 @@ ${personaContext}${characterContext}`.trim()
         }
     });
 
-    router.post('/market-lab/autopilot/cycle', (req, res) => {
+    router.post('/market-lab/autopilot/cycle', async (req, res) => {
         try {
             const { mode = 'balanced', runs = 6 } = req.body || {};
-            const result = runMarketLabAutonomousCycle({ mode, runs });
+            const result = await runMarketLabAutonomousCycle({ mode, runs });
             if (!result.success && result.running) return res.json(result);
             if (!result.success) return res.status(500).json(result);
+            try { missionControlRuntime.hydrateFromMarketLab(); } catch {}
+            system.auditLedger?.append({ actor: 'MarketLab', action: 'backtest_run', metadata: { symbol: result.best?.asset?.symbol || 'unknown', strategy: result.best?.strategy?.id || 'unknown', status: result.best?.status, prometheusScore: result.best?.prometheusScore } });
             res.json({
                 ...result,
                 summary: summarizeMarketLabLedger(readMarketLabLedger()),
@@ -6664,6 +7024,42 @@ ${personaContext}${characterContext}`.trim()
         if (!actor || !action) return res.status(400).json({ error: 'actor and action are required' });
         const entry = system.auditLedger.append({ actor, action, filePath, metadata: metadata || {} });
         res.json({ success: true, ...entry });
+    });
+
+    // GET /api/soma/cost/status — API spend tracker
+    router.get('/cost/status', async (req, res) => {
+        try {
+            const { default: ledger } = await import('../core/CostLedger.js');
+            res.json({ success: true, ...ledger.getStatus() });
+        } catch (e) { res.status(500).json({ success: false, error: e.message }); }
+    });
+
+    // GET /api/soma/cost/by-actor — cost attribution per actor
+    router.get('/cost/by-actor', async (req, res) => {
+        try {
+            const { default: ledger } = await import('../core/CostLedger.js');
+            const since = req.query.since || null;
+            res.json({ success: true, attribution: ledger.getByActor(since) });
+        } catch (e) { res.status(500).json({ success: false, error: e.message }); }
+    });
+
+    // GET /api/soma/decisions/recent — last N decision traces for explainability
+    router.get('/decisions/recent', async (req, res) => {
+        try {
+            const { getRecentTraces } = await import('../tracing/DecisionTrace.js');
+            const limit = Math.min(parseInt(req.query.limit || '50'), 200);
+            res.json({ success: true, traces: getRecentTraces(limit) });
+        } catch (e) { res.status(500).json({ success: false, error: e.message }); }
+    });
+
+    // GET /api/soma/decisions/:id — single decision trace explanation
+    router.get('/decisions/:id', async (req, res) => {
+        try {
+            const { getTrace } = await import('../tracing/DecisionTrace.js');
+            const trace = getTrace(req.params.id);
+            if (!trace) return res.status(404).json({ success: false, error: 'Trace not found' });
+            res.json({ success: true, trace });
+        } catch (e) { res.status(500).json({ success: false, error: e.message }); }
     });
 
     // ── Report Generator: POST /api/soma/report/generate ────────────────────

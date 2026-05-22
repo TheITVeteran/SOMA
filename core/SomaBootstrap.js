@@ -2366,9 +2366,10 @@ export class SomaBootstrap {
             try {
                 const { EngineeringSwarmArbiter } = await import('../arbiters/EngineeringSwarmArbiter.js');
                 this.system.engineeringSwarm = new EngineeringSwarmArbiter({
-                    name:      'EngineeringSwarmArbiter',
-                    quadBrain: this.system.quadBrain,
-                    rootPath:  this.rootPath
+                    name:            'EngineeringSwarmArbiter',
+                    quadBrain:       this.system.quadBrain,
+                    mnemonicArbiter: this.system.mnemonic,
+                    rootPath:        this.rootPath
                 });
                 await this.system.engineeringSwarm.initialize();
                 this.system.messageBroker.registerArbiter('EngineeringSwarmArbiter', {

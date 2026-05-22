@@ -253,8 +253,8 @@ Rules:
       this.runPlanningCycle().catch(() => {});
     });
 
-    // Swarm outcome feedback — EngineeringSwarmArbiter publishes here after every patch attempt
-    messageBroker.subscribe('swarm.experience', (envelope) => {
+    // Swarm outcome feedback — cross-lobe (LOGOS→PROMETHEUS); strategic tier fires first
+    messageBroker.subscribeTiered('strategic', 'swarm.experience', (envelope) => {
       const data = envelope?.data || envelope;
       if (data && typeof data.success === 'boolean') {
         this._swarmHistory.push({ success: data.success, filepath: data.filepath, ts: Date.now() });

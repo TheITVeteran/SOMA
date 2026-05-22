@@ -24,11 +24,12 @@ export const queryForecaster = async (query) => {
         console.warn('[Forecaster] Real data unavailable, trying backend API:', realDataError.message);
         
         try {
-            // Try backend API
-            const response = await fetch('/api/forecaster/predict', {
+            // Try backend API. /moneyball is the active SOMA route; /predict was
+            // an older contract and silently broke the fallback path.
+            const response = await fetch('/api/forecaster/moneyball', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ topic: query })
+                body: JSON.stringify({ query })
             });
 
             if (response.ok) {
@@ -36,6 +37,10 @@ export const queryForecaster = async (query) => {
                 if (data.success && data.prediction) {
                     console.log('[Forecaster] Using backend prediction');
                     return data.prediction;
+                }
+                if (data.success && data.forecast) {
+                    console.log('[Forecaster] Using backend forecast dossier');
+                    return normalizeBackendForecast(query, data.forecast);
                 }
             }
         } catch (error) {
@@ -45,6 +50,53 @@ export const queryForecaster = async (query) => {
         // --- DE-MOCKED: No more simulation fallback ---
         throw new Error(`Forecaster Unavailable: Could not retrieve real-time or backend prediction for "${query}".`);
     }
+};
+
+const parsePercent = (value, fallback = 50) => {
+    if (typeof value === 'number') return value;
+    const parsed = Number.parseFloat(String(value || '').replace('%', ''));
+    return Number.isFinite(parsed) ? parsed : fallback;
+};
+
+const normalizeBackendForecast = (query, forecast) => {
+    const probability = parsePercent(forecast.win_probability || forecast.probability, 50);
+    const confidence = String(forecast.confidence || 'MEDIUM').toUpperCase();
+
+    return {
+        interpretation: {
+            entity: forecast.matchup || query,
+            stat: 'Outcome Forecast',
+            context: 'SOMA backend forecast dossier',
+            intent: 'PROJECTION'
+        },
+        prediction: {
+            expectedValue: probability,
+            range: {
+                low: Math.max(0, probability - 8),
+                high: Math.min(100, probability + 8)
+            },
+            ceiling: Math.min(100, probability + 15),
+            floor: Math.max(0, probability - 15),
+            confidence,
+            confidenceScore: confidence === 'HIGH' ? 0.85 : confidence === 'LOW' ? 0.45 : 0.65,
+            volatility: confidence === 'LOW' ? 'HIGH' : 'MEDIUM',
+            distributionType: 'BERNOULLI'
+        },
+        reasoning: {
+            summary: forecast.details || forecast.prediction || 'Backend forecast returned without a detailed rationale.',
+            keyDrivers: [
+                {
+                    name: 'SOMA Forecast Dossier',
+                    impact: confidence === 'HIGH' ? 'POSITIVE' : 'NEUTRAL',
+                    description: `${forecast.sources_count || 0} source groups contributed to this forecast.`
+                }
+            ],
+            signals: []
+        },
+        comparables: [],
+        timestamp: new Date().toISOString(),
+        modelId: 'FORECASTER-BACKEND-DOSSIER'
+    };
 };
 
 /**

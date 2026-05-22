@@ -5,7 +5,8 @@
  * SOMA's main process, which has Windows Defender HTTPS interference.
  * Session persisted to SOMA/.bluesky-session.json (2h TTL, auto-refresh).
  *
- * Env vars: BLUESKY_IDENTIFIER (handle or email), BLUESKY_PASSWORD (app password)
+ * Env vars: BLUESKY_HANDLE or BLUESKY_IDENTIFIER, BLUESKY_APP_PASSWORD or BLUESKY_PASSWORD.
+ * Use an app password, not the main account password.
  */
 
 import fs   from 'fs';
@@ -130,17 +131,17 @@ export class BlueskeyClient {
     }
 
     get configured() {
-        return !!(process.env.BLUESKY_IDENTIFIER && process.env.BLUESKY_PASSWORD);
+        return !!((process.env.BLUESKY_HANDLE || process.env.BLUESKY_IDENTIFIER) && (process.env.BLUESKY_APP_PASSWORD || process.env.BLUESKY_PASSWORD));
     }
 
     async _ensureSession() {
         if (this.session && Date.now() < this.expiresAt - 60_000) return;
 
-        const identifier = process.env.BLUESKY_IDENTIFIER?.trim();
-        const password   = process.env.BLUESKY_PASSWORD?.trim();
+        const identifier = (process.env.BLUESKY_HANDLE || process.env.BLUESKY_IDENTIFIER)?.trim();
+        const password   = (process.env.BLUESKY_APP_PASSWORD || process.env.BLUESKY_PASSWORD)?.trim();
 
         if (!identifier || !password) {
-            throw new Error('BLUESKY_IDENTIFIER and BLUESKY_PASSWORD env vars required');
+            throw new Error('BLUESKY_HANDLE and BLUESKY_APP_PASSWORD env vars required');
         }
 
         // Try refresh if session was created within the last 24h
@@ -167,10 +168,11 @@ export class BlueskeyClient {
     /** Post to Bluesky. Returns { uri, cid } on success. */
     async post(text, options = {}) {
         await this._ensureSession();
-        const facets = [...buildFacets(text), ...buildLinkFacets(text)];
+        const postText = String(text || '').slice(0, 300);
+        const facets = [...buildFacets(postText), ...buildLinkFacets(postText)];
         return await runWorker({
             type:   'post',
-            text:   text.slice(0, 300),
+            text:   postText,
             facets: facets.length ? facets : undefined,
             images: normalizeImages(options.images || options.imagePath),
             did:    this.session.did,
@@ -181,15 +183,28 @@ export class BlueskeyClient {
     /** Reply to a post. parentRef = { uri, cid }. rootRef = same or the thread root. */
     async reply(text, parentRef, rootRef) {
         await this._ensureSession();
-        const facets   = [...buildFacets(text), ...buildLinkFacets(text)];
+        const replyText = String(text || '').slice(0, 300);
+        const facets   = [...buildFacets(replyText), ...buildLinkFacets(replyText)];
         const replyRef = { root: rootRef || parentRef, parent: parentRef };
         return await runWorker({
             type:     'reply',
-            text:     text.slice(0, 300),
+            text:     replyText,
             facets:   facets.length ? facets : undefined,
             replyRef,
             did:      this.session.did,
             token:    this.session.accessJwt,
+        });
+    }
+
+    /** Like a Bluesky post. postRef = { uri, cid }. */
+    async like(postRef) {
+        await this._ensureSession();
+        if (!postRef?.uri || !postRef?.cid) throw new Error('Bluesky like requires uri and cid');
+        return await runWorker({
+            type:    'likePost',
+            subject: { uri: postRef.uri, cid: postRef.cid },
+            did:     this.session.did,
+            token:   this.session.accessJwt,
         });
     }
 
@@ -198,6 +213,67 @@ export class BlueskeyClient {
         await this._ensureSession();
         const data = await runWorker({ type: 'getNotifications', limit, token: this.session.accessJwt });
         return data.notifications || [];
+    }
+
+    /** Hydrate a Bluesky thread around a post URI. */
+    async getThread(uri, options = {}) {
+        await this._ensureSession();
+        if (!uri) throw new Error('Bluesky getThread requires uri');
+        return await runWorker({
+            type: 'getThread',
+            uri,
+            depth: options.depth || 4,
+            parentHeight: options.parentHeight || 4,
+            token: this.session.accessJwt,
+        });
+    }
+
+    /** List Bluesky DM conversations. Requires an app password with chat access. */
+    async listConvos(limit = 20, cursor = null) {
+        await this._ensureSession();
+        return await runWorker({
+            type: 'listConvos',
+            limit,
+            cursor,
+            token: this.session.accessJwt,
+        });
+    }
+
+    /** Get messages for a Bluesky DM conversation. */
+    async getMessages(convoId, options = {}) {
+        await this._ensureSession();
+        if (!convoId) throw new Error('Bluesky getMessages requires convoId');
+        return await runWorker({
+            type: 'getMessages',
+            convoId,
+            limit: options.limit || 30,
+            cursor: options.cursor || null,
+            token: this.session.accessJwt,
+        });
+    }
+
+    /** Send a Bluesky DM message. */
+    async sendMessage(convoId, text) {
+        await this._ensureSession();
+        if (!convoId) throw new Error('Bluesky sendMessage requires convoId');
+        return await runWorker({
+            type: 'sendMessage',
+            convoId,
+            text: String(text || '').slice(0, 1000),
+            token: this.session.accessJwt,
+        });
+    }
+
+    /** Mark a Bluesky DM conversation read. */
+    async updateRead(convoId, messageId = null) {
+        await this._ensureSession();
+        if (!convoId) throw new Error('Bluesky updateRead requires convoId');
+        return await runWorker({
+            type: 'updateRead',
+            convoId,
+            messageId,
+            token: this.session.accessJwt,
+        });
     }
 
     /** Mark notifications as seen. */

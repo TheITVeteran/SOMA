@@ -312,7 +312,7 @@ Key design held: decays fast (48h TTL), never quoted back explicitly, influences
 
 ### Production Hardening (in progress)
 - [x] **Wire HybridSearch in `extended.js`** — added after BraveSearch, gated by `SOMA_HYBRID_SEARCH=true` + heap < 400MB check. Storage tab live.
-- [x] **Lobe routing migration** — 8 arbiters migrated to `subscribeByLobe()` (GoalPlanner, DiagnosticCortex, CuriosityEngine, MnemonicArbiter + 4 with lobe metadata). Partial — rest still use flat subscriptions.
+- [x] **Lobe routing migration** — Complete. All arbiters with lobe metadata now use lobe-scoped or tiered subscriptions. Cross-lobe signals intentionally remain flat. `ProactiveCouncilArbiter` → `subscribeTiered('strategic', ...)`. `GoalPlannerArbiter` → `subscribeTiered('strategic', 'swarm.experience', ...)`.
 - [x] **Perception dashboard tab** — `/api/perception/health` enhanced with daemon list, lobe bar, tier breakdown, heap gauge, signal counts. `PerceptionPanel.jsx` updated to display all new data.
 - [x] **NEMESIS redesign** — `evaluateResponse()` added to `NemesisArbiter.js`, `system.nemesis` wired in `extended.js`. Pre-computed bad-pattern index (<1ms fast path), learns from caught revisions, persists to `.soma/nemesis_patterns.json`.
 - [x] **Ethereal memory layer** — `EtherealMemoryArbiter.js` created. Dream pass wired in `somaRoutes.js` after each chat response. Biases ThoughtNetwork nodes, 48h ring buffer, persists to `.soma/ethereal_buffer.json`.
@@ -321,23 +321,21 @@ Key design held: decays fast (48h TTL), never quoted back explicitly, influences
 - [x] **Arbiter tier hierarchy** — `tierIndex` added to MessageBroker CNS; `tier` tracked in `registerArbiter()`/`unregisterArbiter()`; `getArbitersByTier()` + `getTierBreakdown()` added; tier shown in `getMetrics()`. Infrastructure complete.
 - [x] **ESM shim for MessageBroker** — `core/MessageBroker.js` created. New ESM files can `import messageBroker from '../../core/MessageBroker.js'` or destructure `{ subscribe, publish, ... }`. Full CJS→ESM migration deferred (requires updating ~178 importers simultaneously — do in a dedicated session).
 - [x] **Frontend rebuild** — run after any `.jsx` changes. Completed this session: SomaPlanViewer Execution Log panel now visible.
-- [ ] **Tier-ordered signal delivery** — infrastructure exists but `publish()` doesn't yet dispatch in strategic→cognitive→operational order. Next step: implement ordered dispatch in MessageBroker.
+- [x] **Tier-ordered signal delivery** — `publish()` dispatches strategic→cognitive→operational. `ProactiveCouncilArbiter` and `GoalPlannerArbiter` now use `subscribeTiered()` to activate the system.
 
 ### Next Session
-- [ ] **Tier-ordered signal delivery** — in `MessageBroker.publish()`, dispatch signals to strategic-tier arbiters first, wait for resolution, then cognitive, then operational. Prevents lower-tier arbiters reacting before strategic context is set.
-- [ ] **Continue lobe routing migration** — migrate remaining high-traffic arbiters from flat `subscribe()` to `subscribeByLobe()`. Target: all arbiters with a defined lobe should use lobe routing.
 - [ ] **Full MessageBroker CJS→ESM migration** — rename `MessageBroker.cjs` → replace with proper ESM, update every `.cjs` importer. Do in one atomic commit. High risk — dedicate a full session. The `MessageBroker.js` shim already covers new ESM files.
 
 ### Medium-term
 - [ ] **Arbiter hierarchy tiers** — Strategic arbiters decide priorities, Cognitive arbiters analyze, Operational arbiters produce tasks. Prevents all arbiters firing simultaneously on the same signal. Implement as `tier: 'strategic' | 'cognitive' | 'operational'` metadata on `registerArbiter()` and route signals by tier order.
 - [ ] **Reflex vs Deliberate split** — fast signals (test.failure → debug swarm) bypass the deliberate pipeline. Slow signals accumulate for periodic reflection. Wire `priority: 'emergency'` as the reflex gate (SignalCompressor already bypasses compression for these).
 - [ ] **MAX ↔ SOMA swarm unification** — MAX's `SwarmCoordinator.js` is the simple version. Route MAX `/swarm` commands through to `EngineeringSwarmArbiter` for complex engineering tasks. MAX keeps simple swarm for quick parallel queries.
-- [ ] **Experience ledger** — `EngineeringSwarmArbiter` already calls `_logToExperienceLedger()`. Feed this into `MnemonicArbiter` so SOMA remembers which approaches worked for which file types / request patterns.
+- [x] **Experience ledger** — `mnemonicArbiter` now passed to `EngineeringSwarmArbiter` at boot. `runResearch()` queries MnemonicArbiter for past swarm experiences with that file (2s timeout, non-fatal). Past experience injected into debate prompt as `[PAST EXPERIENCE WITH THIS FILE]` block.
 - [ ] **CapabilityRegistry → dashboard** — show discovered + prototyped capabilities in a tab. Allow Barry to promote experiments to production with one click.
 
 ### Long-term (ASI evolution path)
 - [ ] **Swarm Genome** — each SwarmWorker has a genome (weights on research depth, debate rounds, verification rigor). `SwarmOptimizer` evolves genomes based on outcome history. Better-performing workers reproduce; failing patterns fade.
 - [ ] **Curiosity Reactor** — autonomous research engine that generates open questions from system signals, dispatches research swarms, and injects findings into the knowledge graph. Feeds `GoalPlannerArbiter` with discovered improvement opportunities.
 - [ ] **Meta-Learning Layer** — SOMA tracks which of its own arbiters perform well on which task types. Routes future similar tasks to the historically best arbiter. Implements arbiter-level reinforcement learning.
-- [ ] **Attention Engine v2** — currently binary (pass/suppress). Evolve to soft attention: signals get a relevance score, higher-score signals get more arbiter bandwidth. Implement as a priority queue in MessageBroker with configurable attention weights.
+- [x] **Attention Engine v2** — `AttentionArbiter.evaluateSignal()` returns `{ pass, score }`. `MessageBroker._deliverSignal()` tiers by score: ≥0.7 immediate, 0.3–0.69 normal, <0.3 deferred 200 ms batch (sorted by score). Zero arbiter changes needed — single choke point swap. `shouldNotice()` kept as compat wrapper.
 - [ ] **SOMA as platform** — once the COS is stable, external systems (Dementia OS, finance agents, etc.) register as arbiters. They get perception, memory, and the full CNS for free. SOMA becomes the substrate.

@@ -417,22 +417,29 @@ class SelfModificationArbiter extends BaseArbiter {
     }
 
     try {
-      // Use ImmuneSystem (GuardianV2) for rigorous verification if available
-      if (this.immuneSystem && this.immuneSystem.runSandboxTests) {
+      // MANDATORY: Use ImmuneSystem (GuardianV2) for rigorous verification
+      if (this.immuneSystem && typeof this.immuneSystem.runSandboxTests === 'function') {
         this.logger.info(`[${this.name}] 🧪 Delegating verification to ImmuneSystem...`);
-        // We need to pass the patch content. Assuming strategy 'manual' has content in mod.patch?
-        // Or if it's generated, we regenerate or retrieve it.
-        // For this architecture, we assume mod object has the 'code' or 'patch'.
-        const patchCode = mod.code || mod.patch || ''; 
         
+        const patchCode = mod.code || mod.patch || ''; 
+        if (!patchCode) {
+            return { success: false, error: 'No code provided for testing' };
+        }
+
         // Use the Guardian's sandbox
-        const result = await this.immuneSystem.runSandboxTests(patchCode);
+        const result = await this.immuneSystem.runSandboxTests(patchCode, mod.filepath);
         
         if (result.success) {
              mod.tested = true;
-             mod.testResults = { passed: true, method: 'vm2_sandbox' };
+             // Calculate real improvement if possible, or use a conservative estimate based on real run
+             // In a full production loop, we'd run the sandbox with a benchmark.
+             mod.testResults = { passed: true, method: 'vm2_sandbox', duration: result.duration };
              this.logger.info(`[${this.name}] ✅ ImmuneSystem Verified: ${mod.functionName}`);
-             return { success: true, method: 'vm2_sandbox' };
+             return { 
+                 success: true, 
+                 method: 'vm2_sandbox', 
+                 improvement: mod.improvement || 'Verified Stable' 
+             };
         } else {
              mod.tested = false;
              this.logger.warn(`[${this.name}] ❌ ImmuneSystem Rejected: ${result.error}`);
@@ -440,28 +447,14 @@ class SelfModificationArbiter extends BaseArbiter {
         }
       }
 
-      // Fallback: Simulate testing (if ImmuneSystem missing)
-      const baseline = 100;
-      const optimized = baseline / 1.5; // 1.5x speedup
-      const speedup = `${(baseline / optimized).toFixed(2)}x`;
-
-      mod.tested = true;
-      mod.testResults = {
-        baseline,
-        optimized,
-        speedup,
-        passed: true
-      };
-
-      this.logger.info(`[${this.name}] ✅ Simulation Testing passed: ${mod.functionName} (${speedup} speedup)`);
-
+      // PRODUCTION MANDATE: No lazy shortcuts. 
+      // If ImmuneSystem is not wired, we CANNOT guarantee safety, so we block the modification.
+      this.logger.error(`[${this.name}] 🛑 Critical Failure: ImmuneSystem not connected. Refusing to test modification.`);
+      
       return {
-        success: true,
-        baseline,
-        optimized,
-        speedup,
-        improvement: speedup,
-        note: 'Simulation only - ImmuneSystem not connected'
+        success: false,
+        error: 'ImmuneSystem (Guardian) connection required for safe verification. Contact System Architect.',
+        note: 'Simulation fallbacks are FORBIDDEN by the Omega Protocol.'
       };
     } catch (err) {
       this.logger.error(`[${this.name}] Testing failed: ${err.message}`);

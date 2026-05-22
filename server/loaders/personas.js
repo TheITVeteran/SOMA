@@ -96,10 +96,12 @@ export async function loadPersonas(systemContext) {
                 metadata.lobe = 'LOGOS';
             }
 
+            const personaDomain = metadata.domain || path.basename(path.dirname(path.dirname(filePath))) || 'general';
+
             // 1. Register in active map (instant, in-memory)
             identityArbiter.registerPersona(metadata.name, {
                 ...metadata,
-                domain,
+                domain: personaDomain,
                 content: personaContent,
                 path: filePath
             });
@@ -128,6 +130,9 @@ export async function loadPersonas(systemContext) {
 
         } catch (error) {
             skippedError++;
+            if (skippedError <= 5) {
+                console.warn(`      ⚠️  Persona load failed for ${path.relative(PROJECT_ROOT, filePath)}: ${error.message}`);
+            }
         }
     }
 

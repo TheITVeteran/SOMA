@@ -1,8 +1,10 @@
 'use strict';
 
-const CLAIM_RE = /\b(i\s+(ran|tested|found|observed|measured|verified|finished|completed)|test(ed|ing)?|result|p-?value|z-?score|null model|permutation|significant|overlap|confidence|success rate|backtest|sensitivity check|\d+(\.\d+)?\s*(%|permutations?|runs?|tests?|cases?|p\s*[<=>≈~±]))/i;
+const CLAIM_RE = /\b(i\s+(ran|tested|found|observed|measured|verified|finished|completed|am running|am pulling|am cross-referencing)|test(ed|ing)?|result|p-?value|z-?score|null model|permutation|significant|overlap|confidence|success rate|backtest|sensitivity check|\d+(\.\d+)?\s*(%|permutations?|runs?|tests?|cases?|p\s*[<=>≈~±]))/i;
 const NUMERIC_RE = /\b\d+(\.\d+)?\s*(%|permutations?|runs?|tests?|cases?)\b|\bp\s*[<=>≈~±]\s*0?\.\d+/i;
 const VAGUE_EVIDENCE_RE = /generated from|current internal signals|recent work ledger|none|n\/a|unknown|provenance guard|unsupported_empirical_claim/i;
+const INTERNAL_LEAK_RE = /\b(refine cluster|dinged|score\s*0\.\d+|quality gate|em-dash|contains em-dash|provenance guard|unsupported_empirical_claim|prompt|system message|internal scoring)\b/i;
+const ACTIVE_UNVERIFIED_RE = /\b(i\s*(am|'m)?\s*(running|pulling|cross-referencing|scraping|testing|measuring|verifying|executing)|going to\s+(pull|cross-reference|test|scrape|run|verify)|about to\s+(pull|cross-reference|test|scrape|run|verify))\b/i;
 const STOPWORDS = new Set([
   'the','and','that','this','with','from','into','next','will','have','been','being','result',
   'test','testing','ran','found','working','planning','checking','verify','verified','evidence',
@@ -55,16 +57,18 @@ function isRelevantEvidence(message = '', entry = {}) {
 }
 
 function needsEvidence(text = '') {
-  return CLAIM_RE.test(text) || NUMERIC_RE.test(text);
+  return CLAIM_RE.test(text) || NUMERIC_RE.test(text) || INTERNAL_LEAK_RE.test(text) || ACTIVE_UNVERIFIED_RE.test(text);
 }
 
 function softenUnsupportedClaims(text = '') {
   const original = String(text || '').trim();
-  const nextMatch = original.match(/\bNext\b[^.?!]*(?:[.?!]|$)/i);
-  const topicMatch = original.match(/\b(?:working on|testing|comparing|checking|mapping|building|analyzing|tracing|running)\b[^.?!]*(?:[.?!]|$)/i);
-  const topic = topicMatch ? topicMatch[0].replace(/\bI ran\b/i, 'I am checking').trim() : 'I am checking an internal process';
-  const next = nextMatch ? nextMatch[0].trim() : 'Next I need to run a verified test and record the evidence.';
-  return `${topic} I don't have verified evidence for those specific numbers yet, so I'm investigating further before reporting. ${next}`;
+  if (INTERNAL_LEAK_RE.test(original)) {
+    return '[NOTHING]';
+  }
+  // Drop messages with unsupported empirical claims rather than rewriting them
+  // into the robotic "Candidate idea: X. No verified run yet." template.
+  // The AutonomousLoop and _groundMessage prompts already handle natural curiosity voice.
+  return '[NOTHING]';
 }
 
 function guardUpdate(text = '', entries = []) {

@@ -14,10 +14,29 @@ export const useVision = (somaBackend, isConnected) => {
         channel: 'desktop',
         lastPerception: null,
         lastFrameUrl: null,
+        lastFrameAt: null,
         ghostCursor: null,
-        metrics: {}
+        metrics: {},
+        health: null,
+        events: [],
+        sceneMemory: null,
+        whatChanged: null
     });
     const pollIntervalRef = useRef(null);
+
+    const pushEvent = useCallback((event) => {
+        setVisionState(prev => ({
+            ...prev,
+            events: [{
+                id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+                ts: Date.now(),
+                type: event.type || 'perception',
+                title: event.title || 'Perception event',
+                detail: event.detail || '',
+                status: event.status || 'info'
+            }, ...(prev.events || [])].slice(0, 24)
+        }));
+    }, []);
 
     // Helper: apply a raw vision_update payload (from WS event or REST poll)
     const applyVisionData = useCallback((data) => {
@@ -36,6 +55,7 @@ export const useVision = (somaBackend, isConnected) => {
                 channel: data.channel || prev.channel,
                 timestamp: data.timestamp || Date.now()
             } : prev.lastPerception);
+            const ts = data.timestamp || newPerception?.timestamp || Date.now();
 
             return {
                 ...prev,
@@ -43,10 +63,33 @@ export const useVision = (somaBackend, isConnected) => {
                 channel: data.channel || prev.channel,
                 lastPerception: newPerception,
                 ghostCursor: data.ghostCursor !== undefined ? data.ghostCursor : prev.ghostCursor,
-                lastFrameUrl: frameUrl
+                lastFrameUrl: frameUrl,
+                lastFrameAt: frameUrl ? ts : prev.lastFrameAt,
+                metrics: data.metrics || prev.metrics,
+                sceneMemory: data.sceneMemory || data.lastPerception?.sceneMemory || prev.sceneMemory
             };
         });
     }, []);
+
+    const fetchHealth = useCallback(async () => {
+        if (!isConnected) return;
+        try {
+            const res = await somaBackend.fetch('/api/perception/health');
+            if (res.ok) {
+                const data = await res.json();
+                setVisionState(prev => ({
+                    ...prev,
+                    health: data,
+                    active: !!data.vision?.active || prev.active,
+                    channel: data.vision?.channel || prev.channel,
+                    metrics: data.vision?.metrics || prev.metrics,
+                    sceneMemory: data.vision?.sceneMemory || prev.sceneMemory
+                }));
+            }
+        } catch (e) {
+            pushEvent({ type: 'health', title: 'Health check failed', detail: e.message, status: 'warn' });
+        }
+    }, [somaBackend, isConnected, pushEvent]);
 
     // REST poll fallback (slower, keeps state in sync on reconnect)
     const fetchVision = useCallback(async () => {
@@ -62,30 +105,75 @@ export const useVision = (somaBackend, isConnected) => {
         }
     }, [somaBackend, isConnected, applyVisionData]);
 
+    const fetchSceneMemory = useCallback(async () => {
+        if (!isConnected) return;
+        try {
+            const res = await somaBackend.fetch('/api/perception/vision/scenes');
+            if (res.ok) {
+                const data = await res.json();
+                if (data.success) {
+                    setVisionState(prev => ({ ...prev, sceneMemory: data.sceneMemory || prev.sceneMemory }));
+                }
+            }
+        } catch (e) {
+            pushEvent({ type: 'scene', title: 'Scene memory sync failed', detail: e.message, status: 'warn' });
+        }
+    }, [somaBackend, isConnected, pushEvent]);
+
+    const askWhatChanged = useCallback(async () => {
+        try {
+            const res = await somaBackend.fetch('/api/perception/vision/what-changed');
+            if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+            const data = await res.json();
+            setVisionState(prev => ({
+                ...prev,
+                whatChanged: data,
+                sceneMemory: data.sceneMemory || prev.sceneMemory
+            }));
+            pushEvent({ type: 'scene', title: 'Scene change reviewed', detail: data.summary, status: 'ok' });
+            return data;
+        } catch (e) {
+            pushEvent({ type: 'scene', title: 'Scene review failed', detail: e.message, status: 'warn' });
+            throw e;
+        }
+    }, [somaBackend, pushEvent]);
+
     // WebSocket event listener — real-time updates from vision.perceived signals
     useEffect(() => {
         if (!isConnected || !somaBackend?.on) return;
 
         const handleVisionUpdate = (payload) => applyVisionData(payload);
+        const handleLocalEvent = (event) => pushEvent(event.detail || {});
         somaBackend.on('vision_update', handleVisionUpdate);
+        window.addEventListener('soma:perception-event', handleLocalEvent);
 
         return () => {
             somaBackend.off?.('vision_update', handleVisionUpdate);
+            window.removeEventListener('soma:perception-event', handleLocalEvent);
         };
-    }, [isConnected, somaBackend, applyVisionData]);
+    }, [isConnected, somaBackend, applyVisionData, pushEvent]);
 
     // Polling: initial fetch + 10s fallback (slower than WS but ensures sync)
     useEffect(() => {
         if (isConnected) {
             fetchVision();
+            fetchHealth();
+            fetchSceneMemory();
             pollIntervalRef.current = setInterval(fetchVision, 10000);
+            const healthInterval = setInterval(fetchHealth, 15000);
+            const sceneInterval = setInterval(fetchSceneMemory, 12000);
+            return () => {
+                if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+                clearInterval(healthInterval);
+                clearInterval(sceneInterval);
+            };
         } else {
             if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
         }
         return () => {
             if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
         };
-    }, [isConnected, fetchVision]);
+    }, [isConnected, fetchVision, fetchHealth, fetchSceneMemory]);
 
     const setChannel = useCallback(async (channel) => {
         try {
@@ -94,14 +182,20 @@ export const useVision = (somaBackend, isConnected) => {
                 body: JSON.stringify({ channel })
             });
             setVisionState(prev => ({ ...prev, channel }));
+            pushEvent({ type: 'channel', title: `Vision channel set to ${channel}`, status: 'ok' });
         } catch (e) {
             console.error('[useVision] Failed to set channel:', e);
+            pushEvent({ type: 'channel', title: 'Channel change failed', detail: e.message, status: 'warn' });
         }
-    }, [somaBackend]);
+    }, [somaBackend, pushEvent]);
 
     return {
         ...visionState,
         setChannel,
-        refresh: fetchVision
+        refresh: fetchVision,
+        refreshHealth: fetchHealth,
+        refreshSceneMemory: fetchSceneMemory,
+        askWhatChanged,
+        pushEvent
     };
 };

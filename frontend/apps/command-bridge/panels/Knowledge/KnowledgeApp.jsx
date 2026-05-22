@@ -18,6 +18,29 @@ import { BrainType } from './types.js';
 import { BRAINS, MOCK_FRAGMENTS, MOCK_LINKS } from './constants.js';
 import { Info, X, Zap, Cpu, Eye, ShieldCheck } from 'lucide-react';
 
+const PERSONA_BRAIN_RULES = [
+    { keys: ['aurora', 'creative', 'artist', 'vision', 'imagination', 'story', 'muse', 'poet', 'dream', 'philosophy', 'empathy'], brain: BrainType.AURORA, reason: 'creative / reflective language' },
+    { keys: ['logos', 'logic', 'deduction', 'inference', 'proof', 'math', 'science', 'research', 'engineer', 'technical', 'data', 'analyst'], brain: BrainType.LOGOS, reason: 'logic / research language' },
+    { keys: ['prometheus', 'strategy', 'perception', 'ops', 'tactics', 'growth', 'execution', 'leader', 'plan', 'foresight', 'market', 'future'], brain: BrainType.PROMETHEUS, reason: 'strategy / execution language' },
+    { keys: ['thalamus', 'security', 'safety', 'guardian', 'gate', 'compliance', 'shield', 'judge', 'law', 'protect', 'ethics', 'firewall'], brain: BrainType.THALAMUS, reason: 'security / governance language' }
+];
+
+const getPersonaBrainAssignment = (persona = {}) => {
+    const explicit = persona.preferredBrain || persona.brain || persona.domain;
+    const explicitUpper = explicit?.toString().trim().toUpperCase();
+    if (BRAINS[explicitUpper]) {
+        return { brain: explicitUpper, confidence: 0.98, reason: 'explicit persona field' };
+    }
+
+    const text = `${persona.name || ''} ${persona.label || ''} ${persona.description || ''} ${persona.bio || ''} ${persona.type || ''}`.toLowerCase();
+    const hit = PERSONA_BRAIN_RULES.find(entry => entry.keys.some(key => text.includes(key)));
+    if (hit) {
+        return { brain: hit.brain, confidence: 0.72, reason: hit.reason };
+    }
+
+    return { brain: BrainType.AURORA, confidence: 0.45, reason: 'fallback: not enough routing metadata' };
+};
+
 const KnowledgeApp = ({ brainStats }) => {
     const [activeBrain, setActiveBrain] = useState(null);
     const [activeFeature, setActiveFeature] = useState(null);
@@ -146,22 +169,6 @@ const KnowledgeApp = ({ brainStats }) => {
     }, []);
 
     const personaFragments = useMemo(() => {
-        const safeBrain = (value) => {
-            if (!value) return BrainType.AURORA;
-            const raw = value.toString().trim().toLowerCase();
-            const upper = raw.toUpperCase();
-            if (BRAINS[upper]) return upper;
-
-            const map = [
-                { keys: ['aurora', 'creative', 'artist', 'vision', 'imagination', 'story', 'muse', 'poet', 'dream', 'philosophy', 'empathy'], brain: BrainType.AURORA },
-                { keys: ['logos', 'logic', 'deduction', 'inference', 'proof', 'math', 'science', 'research', 'engineer', 'technical', 'data', 'analyst'], brain: BrainType.LOGOS },
-                { keys: ['prometheus', 'strategy', 'perception', 'ops', 'tactics', 'growth', 'execution', 'leader', 'plan', 'foresight', 'market', 'future'], brain: BrainType.PROMETHEUS },
-                { keys: ['thalamus', 'security', 'safety', 'guardian', 'gate', 'compliance', 'shield', 'judge', 'law', 'protect', 'ethics', 'firewall'], brain: BrainType.THALAMUS }
-            ];
-            const hit = map.find(entry => entry.keys.some(k => raw.includes(k)));
-            return hit ? hit.brain : BrainType.AURORA;
-        };
-
         const filtered = personas
             .filter(p => {
                 if (!personaSearch) return true;
@@ -169,23 +176,21 @@ const KnowledgeApp = ({ brainStats }) => {
                 return text.includes(personaSearch.toLowerCase());
             });
 
-        const count = filtered.length || 1;
         return filtered.map((p, idx) => {
                 const name = p.name || p.label || `Persona-${idx + 1}`;
                 const id = p.id || `persona-${name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
-                
-                // Smarter mapping: Scan name AND description
-                const searchString = `${name} ${p.description || ''} ${p.label || ''} ${p.domain || ''}`;
-                const domain = safeBrain(searchString);
+                const assignment = getPersonaBrainAssignment(p);
 
                 return {
                     id,
                     label: name,
                     type: 'persona',
-                    domain: domain,
+                    domain: assignment.brain,
+                    routingConfidence: assignment.confidence,
+                    routingReason: assignment.reason,
                     importance: Math.max(4, Math.min(10, (p.priority || p.importance || 6))),
                     usage: p.usage || 1,
-                    confidence: p.confidence || 0.85,
+                    confidence: p.confidence || assignment.confidence,
                     decay: 0.02,
                     isPromoted: Boolean(p.isPrimary || p.primary),
                     isLocked: false // Allow them to move
@@ -315,7 +320,7 @@ const KnowledgeApp = ({ brainStats }) => {
         addLog(`Neural focus shifted to ${brain} system.`, brain);
     }, [addLog]);
 
-    const handleFragmentAction = (action, fragment) => {
+    const handleFragmentAction = async (action, fragment) => {
         switch (action) {
             case 'promote':
                 const isPromoted = !fragment.isPromoted;
@@ -355,6 +360,38 @@ const KnowledgeApp = ({ brainStats }) => {
                 setFragments(prev => [...prev, fork]);
                 setLinks(prev => [...prev, { source: fragment.id, target: newId, type: 'dependency' }]);
                 addLog(`Causal divergence created from "${fragment.label}"`, BrainType.AURORA);
+                break;
+            case 'verify':
+                try {
+                    const res = await fetch('/api/knowledge/operation', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ brainId: BrainType.LOGOS, featureId: 'Verify Fragment', payload: { fragment } })
+                    });
+                    const data = await res.json();
+                    if (data.success && data.verification?.score) {
+                        setFragments(prev => prev.map(f => f.id === fragment.id ? {
+                            ...f,
+                            quality: data.verification.score,
+                            confidence: data.verification.score.score || f.confidence,
+                            isContradiction: (data.verification.tensions || []).length > 0
+                        } : f));
+                        setSelectedFragment(prev => prev?.id === fragment.id ? {
+                            ...prev,
+                            quality: data.verification.score,
+                            confidence: data.verification.score.score || prev.confidence,
+                            isContradiction: (data.verification.tensions || []).length > 0
+                        } : prev);
+                        addLog(`Verified "${fragment.label}" at ${(data.verification.score.score * 100).toFixed(0)}% quality.`, BrainType.LOGOS, 0.08);
+                    }
+                } catch (error) {
+                    addLog(`Verification failed: ${error.message}`, BrainType.THALAMUS, -0.08);
+                }
+                break;
+            case 'tensions':
+                setActiveBrain(BrainType.LOGOS);
+                setActiveFeature({ brain: BrainType.LOGOS, feature: 'Contradiction Scanner' });
+                addLog(`Scanning tensions around "${fragment.label}"`, BrainType.LOGOS, 0.05);
                 break;
         }
     };
@@ -584,32 +621,35 @@ const KnowledgeApp = ({ brainStats }) => {
                 </div>
             )}
 
-            {viewMode === 'mind' && <SomaMind />}
-
-            <FragmentRegistry
-                onFragmentClick={(item) => {
-                    if (viewMode === 'mind') return;
-                    if (viewMode === 'personas') {
-                        const persona = personas.find(p => `persona-${(p.name || p.label || '').toLowerCase().replace(/[^a-z0-9]+/g, '-')}` === item.id)
-                            || personas.find(p => p.id === item.id || p.name === item.label || p.label === item.label);
-                        if (persona) {
-                            setSelectedPersona(persona);
-                            setTracedFragmentId(item.id); // Reveal name
-                            addLog(`Persona selected: ${persona.name || persona.label}`, BrainType.AURORA, 0.05);
+            {viewMode === 'mind' ? (
+                <SomaMind />
+            ) : (
+                <FragmentRegistry
+                    onFragmentClick={(item) => {
+                        if (viewMode === 'personas') {
+                            const persona = personas.find(p => `persona-${(p.name || p.label || '').toLowerCase().replace(/[^a-z0-9]+/g, '-')}` === item.id)
+                                || personas.find(p => p.id === item.id || p.name === item.label || p.label === item.label);
+                            if (persona) {
+                                setSelectedPersona(persona);
+                                setTracedFragmentId(item.id);
+                                addLog(`Persona selected: ${persona.name || persona.label}`, BrainType.AURORA, 0.05);
+                            }
+                            return;
                         }
-                        return;
-                    }
-                    setSelectedFragment(item);
-                    setTracedFragmentId(item.id); // Reveal name
-                }}
-                highlightBrain={activeBrain}
-                fragments={viewMode === 'mind' ? [] : viewMode === 'personas' ? personaFragments : fragments}
-                links={viewMode === 'mind' || viewMode === 'personas' ? [] : links}
-                rotation={rotation}
-                onRotate={viewMode === 'mind' ? undefined : setRotation}
-                tracedFragmentId={viewMode === 'nodes' ? tracedFragmentId : null}
-                showVisuals={viewMode !== 'mind' && showParticles}
-            />
+                        setSelectedFragment(item);
+                        setTracedFragmentId(item.id);
+                    }}
+                    highlightBrain={activeBrain}
+                    fragments={viewMode === 'personas' ? personaFragments : fragments}
+                    links={viewMode === 'personas' ? [] : links}
+                    rotation={rotation}
+                    onRotate={setRotation}
+                    tracedFragmentId={tracedFragmentId}
+                    showVisuals={showParticles}
+                    emptyTitle={viewMode === 'personas' ? 'Persona Map' : 'Neural Mesh'}
+                    emptyDescription={viewMode === 'personas' ? 'No personas loaded from IdentityArbiter yet.' : 'Awaiting fragments from Knowledge.'}
+                />
+            )}
 
             <ControlBar
                 onAction={handleControlAction}
@@ -624,7 +664,7 @@ const KnowledgeApp = ({ brainStats }) => {
                 }}
             />
 
-            <ThreeBrains onSelectBrain={handleBrainSelect} activeBrain={activeBrain} />
+            {viewMode !== 'mind' && <ThreeBrains onSelectBrain={handleBrainSelect} activeBrain={activeBrain} />}
 
             <InputModal isOpen={isInputModalOpen} onClose={() => setIsInputModalOpen(false)} onSubmit={() => { }} />
 
@@ -657,6 +697,7 @@ const KnowledgeApp = ({ brainStats }) => {
 
             <PersonaDetail
                 persona={selectedPersona}
+                assignment={selectedPersona ? getPersonaBrainAssignment(selectedPersona) : null}
                 onClose={() => setSelectedPersona(null)}
                 onActivate={async (p) => {
                     await fetch('/api/identity/active', {

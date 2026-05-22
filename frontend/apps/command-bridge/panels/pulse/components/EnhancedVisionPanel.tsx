@@ -45,12 +45,13 @@ const EnhancedVisionPanel: React.FC<EnhancedVisionPanelProps> = ({ isVisible, on
       setSelectedAnalysis(newAnalysis.id);
 
       try {
-        const res = await fetch('/api/vision/analyze', {
+        const res = await fetch('/api/perception/analyze-image', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             type: selectedType,
-            image: base64.split(',')[1]
+            imageData: base64,
+            mimeType: file.type
           })
         });
 

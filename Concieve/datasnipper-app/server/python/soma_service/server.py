@@ -8,6 +8,8 @@ from typing import Dict, List, Optional, Any
 import uvicorn
 import logging
 
+from sentence_transformers import SentenceTransformer
+
 # Add SOMA engine to path
 sys.path.append(os.path.join(os.path.dirname(__file__), '../soma_engine/src'))
 
@@ -25,6 +27,7 @@ app = FastAPI(title="SOMA Finance Engine", version="1.0.0")
 
 # Global SOMA System Instance
 soma_system = None
+embedding_model = None
 
 class AnalysisRequest(BaseModel):
     content: str
@@ -36,22 +39,41 @@ class ChatRequest(BaseModel):
     history: List[Dict[str, str]] = []
 
 def get_embedding(text: str):
-    # TODO: Replace with real SentenceTransformer for production
-    # For now, deterministic random embedding based on hash to ensure consistency
-    seed = hash(text) % (2**32)
-    torch.manual_seed(seed)
-    return torch.randn(1, 512)
+    """Generate a real semantic embedding using SentenceTransformers."""
+    global embedding_model
+    if embedding_model is None:
+        # Fallback initialization if startup event hasn't fired
+        embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
+    
+    # Generate embedding and ensure it's a torch tensor on the correct device
+    embedding = embedding_model.encode(text, convert_to_tensor=True)
+    
+    # Ensure shape is (1, dim) for the neural core
+    if embedding.dim() == 1:
+        embedding = embedding.unsqueeze(0)
+    
+    return embedding
 
 @app.on_event("startup")
 async def startup_event():
-    global soma_system
-    logger.info("Initializing SOMA System...")
+    global soma_system, embedding_model
+    
+    logger.info("Initializing SentenceTransformer (all-MiniLM-L6-v2)...")
+    try:
+        embedding_model = SentenceTransformer('all-MiniLM-L6-v2')
+        model_dim = embedding_model.get_sentence_embedding_dimension()
+        logger.info(f"Embedding model loaded. Dimensions: {model_dim}")
+    except Exception as e:
+        logger.error(f"Failed to load embedding model: {e}")
+        sys.exit(1)
+
+    logger.info("Initializing SOMA System with dynamic dimensions...")
     soma_system = create_self_learning_system({
-        'input_dim': 512,
-        'embedding_dim': 512,
+        'input_dim': model_dim,
+        'embedding_dim': model_dim,
         'max_knowledge_nodes': 10000
     })
-    logger.info("SOMA System Initialized!")
+    logger.info("SOMA System Initialized and Synced!")
 
 @app.get("/health")
 async def health_check():

@@ -45,6 +45,11 @@ export const FeatureOverlay = ({
     const [anomalyBuffer, setAnomalyBuffer] = useState([]);
     const [encryptionStatus, setEncryptionStatus] = useState(null);
     const [safetyDirectives, setSafetyDirectives] = useState([]);
+    const [contradictions, setContradictions] = useState([]);
+    const [ruleGraph, setRuleGraph] = useState({ stats: null, rules: [] });
+    const [creativeMemories, setCreativeMemories] = useState([]);
+    const [dreamspace, setDreamspace] = useState(null);
+    const [mutationResult, setMutationResult] = useState('');
 
     const [inferenceNodes, setInferenceNodes] = useState([
          { id: 1, label: 'Core Axiom: Non-Contradiction', depth: 0, status: 'valid' },
@@ -109,12 +114,14 @@ export const FeatureOverlay = ({
             setScanProgress(p => {
                 if (p >= 100) {
                     clearInterval(interval);
-                    // Hit real contradiction endpoint
                     fetch('/api/knowledge/operation', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ brainId: 'LOGOS', featureId: 'Contradiction Scanner' })
-                    });
+                        body: JSON.stringify({ brainId: 'LOGOS', featureId: 'Contradiction Scanner', payload: { fragment: selectedFragment } })
+                    })
+                        .then(r => r.json())
+                        .then(data => { if (data.success) setContradictions(data.contradictions || []); })
+                        .catch(() => {});
                     return 100;
                 }
                 return p + 5;
@@ -143,14 +150,14 @@ export const FeatureOverlay = ({
     };
 
     useEffect(() => {
-        if (!['PROMETHEUS', 'THALAMUS'].includes(brainId)) return;
+        if (!['PROMETHEUS', 'THALAMUS', 'LOGOS', 'AURORA'].includes(brainId)) return;
         
         const fetchData = async () => {
             try {
                 const res = await fetch('/api/knowledge/operation', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ brainId, featureId })
+                    body: JSON.stringify({ brainId, featureId, payload: { fragment: selectedFragment } })
                 });
                 const data = await res.json();
                 if (data.success) {
@@ -165,12 +172,19 @@ export const FeatureOverlay = ({
                         if (featureId === 'Anomaly Buffer') setAnomalyBuffer(data.anomalies);
                         if (featureId === 'Neural Encryption') setEncryptionStatus(data.status);
                         if (featureId === 'Protocol Guard') setSafetyDirectives(data.directives);
+                    } else if (brainId === 'LOGOS') {
+                        if (featureId === 'Inference Tree' && data.nodes?.length) setInferenceNodes(data.nodes);
+                        if (featureId === 'Contradiction Scanner') setContradictions(data.contradictions || []);
+                        if (featureId === 'Rule Graph') setRuleGraph({ stats: data.stats || null, rules: data.rules || [] });
+                    } else if (brainId === 'AURORA') {
+                        if (featureId === 'Creative Memory') setCreativeMemories(data.memories || []);
+                        if (featureId === 'Dreamspace') setDreamspace(data.dreamspace || null);
                     }
                 }
             } catch (e) {}
         };
         fetchData();
-    }, [featureId, brainId]);
+    }, [featureId, brainId, selectedFragment]);
 
     const runForge = async () => {
         if (!hypothesis.trim()) return;
@@ -198,8 +212,9 @@ export const FeatureOverlay = ({
         setIsForging(false);
     };
 
-    const runMutation = async () => {
+    const runMutation = async (mode = 'evolve') => {
         if (!selectedFragment) return;
+        setMutationResult('');
         
         try {
             const res = await fetch('/api/knowledge/operation', {
@@ -208,12 +223,13 @@ export const FeatureOverlay = ({
                 body: JSON.stringify({
                     brainId: 'AURORA',
                     featureId: 'Pattern Mutation',
-                    payload: { label: selectedFragment.label }
+                    payload: { label: selectedFragment.label, mode }
                 })
             });
             const data = await res.json();
             if (data.success) {
                 // We emit a log of the mutation
+                setMutationResult(data.mutation || '');
                 onAction('Pattern Mutation', { mutation: data.mutation });
             }
         } catch (e) {}
@@ -237,15 +253,12 @@ export const FeatureOverlay = ({
             const data = await res.json();
             if (data.success) {
                 if (data.chains) {
-                    setCausalImpacts(data.chains.map(c => ({ target: c.effect, effect: 'Dependency', prob: `${(c.confidence * 100).toFixed(0)}%` })));
+                    setCausalImpacts(data.chains.map(c => ({ target: c.effect || c.to || c.target || 'Unknown effect', effect: c.type || 'Dependency', prob: `${(((c.confidence ?? c.strength ?? 0.5) * 100)).toFixed(0)}%` })));
+                } else if (data.impacts) {
+                    setCausalImpacts(data.impacts);
                 } else if (data.projection) {
-                    // Extract from text projection
-                    const results = [
-                        { target: 'System State', effect: 'Mutation', prob: '75%' },
-                        { target: 'Memory Synapse', effect: 'Update', prob: '90%' },
-                        { target: 'Knowledge Hub', effect: 'Sync', prob: '100%' }
-                    ];
-                    setCausalImpacts(results);
+                    const lines = String(data.projection).split('\n').filter(line => line.trim()).slice(0, 5);
+                    setCausalImpacts(lines.map((line, index) => ({ target: line.replace(/^[-*\d.)\s]+/, '').slice(0, 64), effect: 'Projected', prob: index === 0 ? 'High' : 'Review' })));
                 }
             }
         } catch (e) {}
@@ -254,10 +267,10 @@ export const FeatureOverlay = ({
 
     // Stable Stats for Rule Graph (Prevents flickering numbers)
     const ruleStats = useMemo(() => ({
-        Immutable: 12 + Math.floor(Math.random() * 5),
-        Heuristic: 28 + Math.floor(Math.random() * 15),
-        Derived: 45 + Math.floor(Math.random() * 20)
-    }), [featureId]);
+        Immutable: ruleGraph.stats?.Immutable ?? fragments.filter(f => f.isLocked || f.quality?.status === 'strong').length,
+        Heuristic: ruleGraph.stats?.Heuristic ?? fragments.filter(f => f.type === 'memory').length,
+        Derived: ruleGraph.stats?.Derived ?? fragments.filter(f => f.type !== 'memory').length
+    }), [featureId, fragments, ruleGraph.stats]);
 
     // --- RENDER HELPERS (No Hooks inside these) ---
     const content = useMemo(() => {
@@ -620,22 +633,20 @@ export const FeatureOverlay = ({
                             <div className="h-full bg-cyan-500 transition-all duration-300" style={{ width: `${scanProgress}%` }}></div>
                         </div>
                         <div className="grid grid-cols-2 gap-3 mt-4">
-                            {[
-                                { id: 'C-104', type: 'Temporal', status: 'Resolved' },
-                                { id: 'C-209', type: 'Definition', status: 'Pending' },
-                                { id: 'C-310', type: 'Causal', status: 'Scanning...' },
-                                { id: 'C-415', type: 'Ontology', status: 'Safe' }
-                            ].map((item, i) => (
+                            {(contradictions.length ? contradictions : [
+                                { id: 'SCAN-IDLE', type: 'No unresolved tension loaded', status: 'Idle', confidence: 0 }
+                            ]).map((item, i) => (
                                 <div key={i} className="bg-slate-900/50 border border-slate-800 p-3 rounded flex items-center justify-between">
                                     <div className="flex items-center space-x-2">
-                                        <AlertTriangle size={12} className={item.status === 'Resolved' ? 'text-green-500' : item.status === 'Pending' ? 'text-amber-500' : 'text-slate-600'} />
+                                        <AlertTriangle size={12} className={item.status === 'Resolved' ? 'text-green-500' : item.status === 'Review' || item.status === 'Pending' ? 'text-amber-500' : 'text-slate-600'} />
                                         <div>
                                             <div className="text-[10px] font-bold text-slate-300">{item.id}</div>
                                             <div className="text-[9px] text-slate-500 uppercase">{item.type}</div>
+                                            {item.summary && <div className="mt-1 line-clamp-2 text-[9px] normal-case leading-relaxed text-slate-600">{item.summary}</div>}
                                         </div>
                                     </div>
-                                    <div className={`text-[9px] font-bold uppercase ${item.status === 'Resolved' ? 'text-green-500' : item.status === 'Pending' ? 'text-amber-500 animate-pulse' : 'text-slate-600'}`}>
-                                        {item.status}
+                                    <div className={`text-[9px] font-bold uppercase ${item.status === 'Resolved' ? 'text-green-500' : item.status === 'Review' || item.status === 'Pending' ? 'text-amber-500 animate-pulse' : 'text-slate-600'}`}>
+                                        {item.status || `${((item.confidence || 0) * 100).toFixed(0)}%`}
                                     </div>
                                 </div>
                             ))}
@@ -674,6 +685,17 @@ export const FeatureOverlay = ({
                                      <div className="text-sm font-mono text-white">{val}</div>
                                  </div>
                              ))}
+                        </div>
+                        <div className="space-y-2 max-h-32 overflow-y-auto custom-scrollbar pr-1">
+                            {(ruleGraph.rules || []).slice(0, 6).map(rule => (
+                                <div key={rule.id} className="rounded border border-cyan-500/10 bg-cyan-500/[0.04] px-3 py-2">
+                                    <div className="flex items-center justify-between gap-3">
+                                        <span className="truncate text-[10px] font-bold text-cyan-200">{rule.label}</span>
+                                        <span className="shrink-0 text-[9px] text-cyan-500">{((rule.confidence || 0) * 100).toFixed(0)}%</span>
+                                    </div>
+                                    <div className="mt-0.5 text-[9px] uppercase tracking-widest text-slate-600">{rule.type}</div>
+                                </div>
+                            ))}
                         </div>
                     </div>
                 );
@@ -753,14 +775,16 @@ export const FeatureOverlay = ({
 
                             <div className="z-10 flex flex-col items-center">
                                 <Sparkles className="w-8 h-8 text-purple-400 animate-pulse mb-3" />
-                                <span className="text-[10px] font-mono text-purple-300 uppercase tracking-[0.3em] animate-pulse">Synthesis in progress</span>
+                                <span className="text-[10px] font-mono text-purple-300 uppercase tracking-[0.3em] animate-pulse">
+                                    {dreamspace?.seedCount ? `${dreamspace.seedCount} seeds active` : 'Synthesis in progress'}
+                                </span>
                                 <div className="mt-2 flex space-x-1.5">
                                     {[1, 2, 3].map(i => <div key={i} className="w-1 h-1 bg-purple-500 rounded-full animate-bounce" style={{ animationDelay: `${i * 0.2}s` }} />)}
                                 </div>
                             </div>
 
                             <div className="absolute inset-0 pointer-events-none overflow-hidden">
-                                {['Paradox', 'Entropy', 'Nexus', 'Resonance'].map((word, i) => (
+                                {(dreamspace?.clusters?.length ? dreamspace.clusters.map(c => c.topic) : ['Paradox', 'Entropy', 'Nexus', 'Resonance']).map((word, i) => (
                                     <span key={word} className="absolute text-[8px] font-bold text-purple-500/40 uppercase tracking-widest transition-all duration-[4000ms]"
                                         style={{
                                             top: `${20 + i * 20}%`,
@@ -770,6 +794,11 @@ export const FeatureOverlay = ({
                                 ))}
                             </div>
                         </div>
+                        {dreamspace?.summary && (
+                            <p className="rounded-lg border border-purple-500/10 bg-purple-500/[0.04] p-3 text-[11px] leading-relaxed text-purple-100/70">
+                                {dreamspace.summary}
+                            </p>
+                        )}
                         <button className="w-full py-2 bg-purple-900/20 border border-purple-500/30 text-purple-400 text-[10px] font-bold rounded uppercase hover:bg-purple-900/40 transition-all">
                             Collapse Dream Layers
                         </button>
@@ -829,20 +858,23 @@ export const FeatureOverlay = ({
                     <div className="space-y-4">
                         <p className="text-sm text-slate-400">Recalling memories through a "Creative Lens" - allowing for symbolic drift and metaphoric retrieval.</p>
                         <div className="space-y-2 h-64 overflow-y-auto custom-scrollbar pr-2">
-                            {[
-                                { title: 'The Ghost in the Shell', drift: 'High', color: 'text-purple-400' },
-                                { title: 'Recursive Learning Loop', drift: 'Low', color: 'text-cyan-400' },
-                                { title: 'Temporal Dissonance Pattern', drift: 'Medium', color: 'text-amber-400' },
-                                { title: 'Quantum Entropy State', drift: 'Critical', color: 'text-rose-400' }
-                            ].map((mem, i) => (
+                            {(creativeMemories.length ? creativeMemories : []).map((mem, i) => (
                                 <div key={i} className="bg-slate-900/50 border border-white/5 p-3 rounded group hover:border-purple-500/30 transition-all cursor-pointer">
                                     <div className="flex justify-between items-center mb-1">
-                                        <span className={`text-xs font-bold ${mem.color}`}>{mem.title}</span>
+                                        <span className="text-xs font-bold text-purple-300">{mem.title}</span>
                                         <span className="text-[9px] uppercase font-bold text-slate-600">Drift: {mem.drift}</span>
                                     </div>
-                                    <p className="text-[10px] text-slate-500 leading-relaxed italic">"Refracted memory through current creative bias..."</p>
+                                    <p className="line-clamp-3 text-[10px] text-slate-500 leading-relaxed italic">"{mem.content}"</p>
+                                    {mem.lanes?.length > 0 && (
+                                        <div className="mt-2 flex flex-wrap gap-1">
+                                            {mem.lanes.map(lane => <span key={lane} className="rounded-full border border-purple-500/20 px-1.5 py-0.5 text-[8px] uppercase text-purple-400">{lane}</span>)}
+                                        </div>
+                                    )}
                                 </div>
                             ))}
+                            {creativeMemories.length === 0 && (
+                                <div className="py-14 text-center text-xs italic text-slate-600">No Aurora-routed memories found yet.</div>
+                            )}
                         </div>
                     </div>
                 );
@@ -859,13 +891,18 @@ export const FeatureOverlay = ({
                                         <span className="text-sm font-bold text-white">{selectedFragment.label}</span>
                                     </div>
                                     <div className="flex space-x-3 w-full">
-                                        <button onClick={runMutation} className="flex-1 py-2 bg-purple-600 text-white text-[10px] font-bold rounded uppercase hover:bg-purple-500 transition-all shadow-lg shadow-purple-500/20">
+                                        <button onClick={() => runMutation('evolve')} className="flex-1 py-2 bg-purple-600 text-white text-[10px] font-bold rounded uppercase hover:bg-purple-500 transition-all shadow-lg shadow-purple-500/20">
                                             Evolve Structure
                                         </button>
-                                        <button className="flex-1 py-2 bg-slate-800 text-slate-300 text-[10px] font-bold rounded uppercase hover:bg-slate-700 transition-all">
+                                        <button onClick={() => runMutation('inverse')} className="flex-1 py-2 bg-slate-800 text-slate-300 text-[10px] font-bold rounded uppercase hover:bg-slate-700 transition-all">
                                             Inverse Logic
                                         </button>
                                     </div>
+                                    {mutationResult && (
+                                        <div className="max-h-40 w-full overflow-y-auto rounded border border-purple-500/20 bg-black/30 p-3 text-xs leading-relaxed text-purple-100 custom-scrollbar whitespace-pre-wrap">
+                                            {mutationResult}
+                                        </div>
+                                    )}
                                 </>
                             ) : (
                                 <div className="text-center space-y-3 opacity-40">
@@ -931,7 +968,7 @@ export const FeatureOverlay = ({
                     </div>
                 );
         }
-    }, [featureId, inferenceNodes, scanProgress, proofSteps, inputValue, ticker, selectedFragment, brain.color, onAction, causalCause, isSimulatingCausal, causalImpacts, ruleStats, hypothesis, isForging, forgeResults, entropyLevel, isPredicting, predictionScenario, predictionResult, worldState, threatAlerts, strategicGoals, driftStats, firewallLogs, gateStatus, anomalyBuffer, encryptionStatus, safetyDirectives]);
+    }, [featureId, inferenceNodes, scanProgress, proofSteps, inputValue, ticker, selectedFragment, brain.color, onAction, causalCause, isSimulatingCausal, causalImpacts, ruleStats, ruleGraph, contradictions, hypothesis, isForging, forgeResults, entropyLevel, isPredicting, predictionScenario, predictionResult, worldState, threatAlerts, strategicGoals, driftStats, firewallLogs, gateStatus, anomalyBuffer, encryptionStatus, safetyDirectives, creativeMemories, dreamspace, mutationResult]);
 
     return (
         <div className="absolute inset-0 z-[60] flex items-center justify-center p-6 bg-black/80 backdrop-blur-md animate-in fade-in duration-300" onClick={onClose}>

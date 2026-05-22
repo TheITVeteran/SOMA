@@ -112,6 +112,17 @@ export async function loadEssentialSystems(system) {
         console.log('    🔗 TrainingDataExporter ← ConversationHistory, Memory, LearningPipeline');
     }
 
+    // Initialize blockchain audit ledger
+    try {
+        const { AuditLedger } = await import('../../server/finance/AuditLedger.js');
+        const auditPath = path.join(rootPath, 'data', 'audit', 'soma_audit_ledger.db');
+        system.auditLedger = new AuditLedger(auditPath);
+        system.auditLedger.append({ actor: 'SOMA', action: 'system_boot', metadata: { version: '1.0', timestamp: new Date().toISOString() } });
+        console.log('    ✅ Blockchain AuditLedger initialized — hash chain active');
+    } catch (e) {
+        console.warn('    ⚠️  AuditLedger init failed:', e.message);
+    }
+
     const loaded = Object.values(ext).filter(v => v !== null).length;
     const heapMB = (process.memoryUsage().heapUsed / 1024 / 1024).toFixed(0);
     console.log(`\n[Essential] ═══ ${loaded} ASI-core arbiters activated (heap: ${heapMB}MB) ═══\n`);
@@ -434,6 +445,37 @@ export async function loadExtendedSystems(system) {
         console.log('    ⚔️  NEMESIS quality gate ARMED');
     } catch (e) {
         console.warn(`    ⚠️ NEMESIS skipped: ${e.message}`);
+    }
+
+    // ── ConstitutionalCore: hardcoded safety principles (self-mod + runtime action gate) ──
+    try {
+        const { ConstitutionalCore } = await import('../../core/ConstitutionalCore.js');
+        system.constitutionalCore = new ConstitutionalCore();
+        await system.constitutionalCore.initialize();
+        console.log(`    ⚖️  ConstitutionalCore ARMED (${system.constitutionalCore.getConstraints().length} principles)`);
+    } catch (e) {
+        console.warn(`    ⚠️ ConstitutionalCore skipped: ${e.message}`);
+    }
+
+    // ── SelfAuditArbiter: scans SOMA's own surface for vulnerabilities ──
+    try {
+        const { SelfAuditArbiter } = await import('../../arbiters/SelfAuditArbiter.js');
+        system.selfAudit = new SelfAuditArbiter({ system });
+        await system.selfAudit.initialize();
+        console.log('    🔍 SelfAuditArbiter ONLINE (boot audit scheduled in 90s)');
+    } catch (e) {
+        console.warn(`    ⚠️ SelfAuditArbiter skipped: ${e.message}`);
+    }
+
+    // ── ManipulationDetector: outward-facing adversarial AI detection ──
+    try {
+        const { ManipulationDetectorArbiter } = await import('../../arbiters/ManipulationDetectorArbiter.js');
+        const brain = system.quadBrain || system.somArbiter || null;
+        system.manipulationDetector = new ManipulationDetectorArbiter({ brain, system });
+        await system.manipulationDetector.initialize();
+        console.log('    🛡️  ManipulationDetector ONLINE (adversarial AI counter-system)');
+    } catch (e) {
+        console.warn(`    ⚠️ ManipulationDetector skipped: ${e.message}`);
     }
 
     // ── Ethereal Memory: third memory tier (soft concept biases) ──

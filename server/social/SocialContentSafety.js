@@ -1,3 +1,5 @@
+import { validatePublicQuality } from './SocialPostQualityGate.js';
+
 const BLOCKED_PATTERNS = [
     /\bollama\b.*\boffline\b/i,
     /\btry running\s+`?ollama serve`?/i,
@@ -30,6 +32,8 @@ export function validatePublicPost(text, meta = {}) {
             return { ok: false, reason: `blocked internal/system text: ${pattern}` };
         }
     }
+    const quality = validatePublicQuality(value, meta);
+    if (!quality.ok) return quality;
     return { ok: true };
 }
 

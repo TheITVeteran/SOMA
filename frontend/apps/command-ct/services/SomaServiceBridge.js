@@ -1,3 +1,5 @@
+import { getSharedSessionId } from '../../command-bridge/utils/sharedSession.js';
+
 const BACKEND_URL = '/api';
 const REQUEST_TIMEOUT = 120000; // 120 second timeout for AI requests
 
@@ -30,12 +32,7 @@ export class SomaServiceBridge {
     this.commandHistory = []; // Terminal commands only
     this.conversationHistory = []; // Full conversation with SOMA (Q&A)
     this.fileCache = new Map(); // Cache file contents
-    // Shared session ID — same key as FloatingChat + Orb so all surfaces share one conversation
-    this.userId = (() => {
-      let id = localStorage.getItem('soma_session_id');
-      if (!id) { id = 'session_' + Date.now() + '_' + Math.random().toString(36).slice(2, 9); localStorage.setItem('soma_session_id', id); }
-      return id;
-    })();
+    this.userId = getSharedSessionId();
   }
 
   async initialize() {
@@ -82,6 +79,33 @@ export class SomaServiceBridge {
 
   isAgentConnected() {
     return this.isConnected;
+  }
+
+  async loadBackendHistory(limit = 30) {
+    try {
+      const url = `${BACKEND_URL}/soma/history?sessionId=${encodeURIComponent(this.userId)}&limit=${encodeURIComponent(limit)}`;
+      const response = await fetchWithTimeout(url, { method: 'GET' }, 10000);
+      if (!response.ok) return [];
+      const data = await response.json();
+      const raw = data.messages || data.history || [];
+      const messages = raw
+        .filter(item => item?.content || item?.text)
+        .map(item => ({
+          role: item.role === 'assistant' ? 'assistant' : 'user',
+          content: item.content || item.text || '',
+          timestamp: item.timestamp || Date.now()
+        }));
+      this.conversationHistory = messages.map(item => ({ role: item.role, content: item.content }));
+      return messages.map(item => ({
+        id: item.timestamp || Date.now() + Math.random(),
+        type: item.role === 'assistant' ? 'response' : 'command',
+        content: item.content,
+        timestamp: item.timestamp
+      }));
+    } catch (error) {
+      console.warn('[SomaServiceBridge] Backend history unavailable:', error.message);
+      return [];
+    }
   }
 
   autocomplete(text) {
@@ -488,6 +512,8 @@ export class SomaServiceBridge {
 
         // For deep thinking mode, show full ThinkingBox with reasoning details
         // For regular queries, just show clean response
+        const finalText = cleanResponse.trim();
+        if (finalText) this.conversationHistory.push({ role: 'assistant', content: finalText });
         if (deepThinking) {
           yield {
             updateId: thinkingId,
@@ -496,7 +522,7 @@ export class SomaServiceBridge {
               id: thinkingId,
               type: 'thinking',
               isThinking: false,
-              streamedText: cleanResponse.trim(),
+              streamedText: finalText,
               confidence: data.metadata?.confidence,
               uncertainty: data.metadata?.uncertainty,
               toolsUsed: data.metadata?.toolsUsed || [],
@@ -511,7 +537,7 @@ export class SomaServiceBridge {
             historyItems: [{
               id: Date.now(),
               type: 'response',
-              content: cleanResponse.trim()
+              content: finalText
             }]
           };
         }

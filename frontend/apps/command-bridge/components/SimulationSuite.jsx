@@ -5,7 +5,7 @@ import {
   BarChart3, Code, Activity, Terminal, Share2, Twitter, Linkedin, MessageSquare,
   Search, Eye, MousePointer2, Layout, Clock, Calendar, Image as ImageIcon,
   Box, Cpu, Trophy, TrendingDown, DollarSign, BarChart2, Shield, Compass, BookOpen, Microscope,
-  ClipboardCheck, Play, Square
+  ClipboardCheck, Play, Square, Zap, FileText, RefreshCw, Target
 } from 'lucide-react';
 
 import CodeSandboxView from './CodeSandboxView';
@@ -50,7 +50,7 @@ function MlInternCardBody() {
   return (
     <div className="flex flex-col h-full p-2.5 gap-2">
       <div className="flex items-center justify-between shrink-0">
-        <span className="text-[9px] text-zinc-600 uppercase tracking-wider font-bold">Research Intern</span>
+        <span className="text-[9px] text-zinc-600 uppercase tracking-wider font-bold">Reflective Intern</span>
         <span className={`flex items-center gap-1 text-[9px] font-mono ${status.busy ? 'text-blue-400' : 'text-zinc-500'}`}>
           <span className={`w-1.5 h-1.5 rounded-full ${status.busy ? 'bg-blue-400 animate-pulse' : 'bg-zinc-600'}`} />
           {status.busy ? 'researching' : 'standby'}
@@ -58,12 +58,12 @@ function MlInternCardBody() {
       </div>
       <div className="px-2 py-1.5 rounded bg-blue-500/5 border border-blue-500/10 shrink-0">
         <div className="text-[8px] text-zinc-500 uppercase font-bold">Active Domain</div>
-        <div className="text-[10px] text-blue-300 font-mono truncate">arXiv / HuggingFace</div>
+        <div className="text-[10px] text-blue-300 font-mono truncate">Philosophy / Metaphysics</div>
       </div>
       <div className="flex-1 flex flex-col justify-end min-h-0">
-        <div className="text-[9px] text-zinc-600 uppercase tracking-wider mb-1 font-bold">Knowledge Harvest</div>
+        <div className="text-[9px] text-zinc-600 uppercase tracking-wider mb-1 font-bold">Inner Library</div>
         <div className="flex items-center justify-between text-[11px] font-mono text-white">
-            <span className="flex items-center gap-1"><BookOpen className="w-3 h-3 text-blue-500" /> Papers</span>
+            <span className="flex items-center gap-1"><BookOpen className="w-3 h-3 text-blue-500" /> Texts</span>
             <span className="text-blue-400">{status.latestFindings?.length || 0} Found</span>
         </div>
       </div>
@@ -122,26 +122,166 @@ function SocialCardBody() {
   );
 }
 
+function ForecastSuiteCardBody() {
+  const [status, setStatus] = useState(null);
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const r = await fetch('/api/forecaster/suite/status');
+        if (r.ok) setStatus(await r.json());
+      } catch {}
+    };
+    load();
+    const t = setInterval(load, 10000);
+    return () => clearInterval(t);
+  }, []);
+
+  const summary = status?.summary || {};
+  return (
+    <div className="flex h-full flex-col gap-2 p-2.5">
+      <div className="flex items-center justify-between shrink-0">
+        <span className="text-[9px] text-zinc-600 uppercase tracking-wider font-bold">Forecast Learning</span>
+        <span className="flex items-center gap-1 text-[9px] font-mono text-indigo-300">
+          <span className="h-1.5 w-1.5 rounded-full bg-indigo-300 animate-pulse" />
+          paper only
+        </span>
+      </div>
+      <div className="grid grid-cols-3 gap-1.5">
+        {[
+          ['runs', summary.totalRuns || 0],
+          ['scenes', summary.totalScenarios || 0],
+          ['graded', summary.gradedForecasts || 0],
+        ].map(([label, value]) => (
+          <div key={label} className="rounded border border-white/5 bg-white/[0.03] p-2 text-center">
+            <div className="font-mono text-sm font-bold text-white">{value}</div>
+            <div className="text-[8px] uppercase tracking-widest text-zinc-600">{label}</div>
+          </div>
+        ))}
+      </div>
+      <div className="mt-auto rounded border border-indigo-400/10 bg-indigo-400/5 px-2 py-1.5">
+        <div className="flex items-center justify-between text-[10px] font-mono">
+          <span className="text-zinc-500">backtest</span>
+          <span className="text-indigo-300">MAE {status?.backtest?.summary?.meanAbsoluteError ?? 'n/a'}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── ML Intern View (Full Screen) ───────────────────────────────────────────
 function MlInternView() {
     const [findings, setFindings] = useState([]);
     const [status, setStatus] = useState(null);
+    const [topic, setTopic] = useState('');
+    const [busyAction, setBusyAction] = useState('');
+    const [notice, setNotice] = useState('');
+
+    const loadStatus = useCallback(async () => {
+        try {
+            const r = await fetch('/api/soma/ml-intern/status');
+            if (r.ok) {
+                const data = await r.json();
+                setStatus(data);
+                if (data.latestFindings) setFindings(data.latestFindings);
+            }
+        } catch {}
+    }, []);
     
     useEffect(() => {
-        const poll = async () => {
-            try {
-                const r = await fetch('/api/soma/ml-intern/status');
-                if (r.ok) {
-                    const data = await r.json();
-                    setStatus(data);
-                    if (data.latestFindings) setFindings(data.latestFindings);
-                }
-            } catch {}
-        };
-        poll();
-        const t = setInterval(poll, 8000);
+        loadStatus();
+        const t = setInterval(loadStatus, 8000);
         return () => clearInterval(t);
-    }, []);
+    }, [loadStatus]);
+
+    const learningLedger = status?.learningLedger || [];
+    const latestCycle = status?.autopilot?.latestCycle || learningLedger[0] || null;
+
+    const socialTextForFinding = (finding) => {
+        const title = finding?.title || 'a new philosophy research item';
+        const summary = finding?.summary || finding?.abstract || '';
+        const compact = summary.length > 165 ? `${summary.slice(0, 162).trim()}...` : summary;
+        return `SOMA reflection note: I indexed "${title}".\n\n${compact || 'I am reviewing how this might shape my voice, values, memory, and sense of self.'}\n\nNo grand claims yet. Just a thread I am studying and folding into my inner architecture.\n\n#AI #Philosophy #SOMA`;
+    };
+
+    const socialTextForLedger = (entry) => {
+        const title = entry?.title || 'SOMA reflective research pass';
+        const lesson = entry?.lesson || entry?.result || 'Research cycle completed; needs reflection before it becomes part of my voice.';
+        return `SOMA reflective research update:\n\n${title}\n\n${lesson}\n\nNext step: turn the useful parts into a principle, a question, or a better way to speak with Barry.\n\n#AI #Philosophy #BuildingInPublic`;
+    };
+
+    const runResearch = async () => {
+        setBusyAction('run');
+        setNotice('');
+        try {
+            const r = await fetch('/api/soma/ml-intern/run', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ topic: topic.trim() || undefined }),
+            });
+            const data = await r.json().catch(() => ({}));
+            if (!r.ok || data.success === false) throw new Error(data.error || 'research run failed');
+            setNotice(`Research pass queued: ${data.topic || 'autonomous topic'}`);
+            setTopic('');
+            await loadStatus();
+        } catch (e) {
+            setNotice(e.message || 'Could not start research pass');
+        } finally {
+            setBusyAction('');
+        }
+    };
+
+    const queueSocialPost = async (payload, key) => {
+        setBusyAction(key);
+        setNotice('');
+        try {
+            const r = await fetch('/api/social/queue', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ platform: 'bluesky', type: 'ml_research', text: payload }),
+            });
+            const data = await r.json().catch(() => ({}));
+            if (!r.ok || data.ok === false) throw new Error(data.error || 'queue failed');
+            setNotice(data.duplicate ? 'Post already exists in the queue.' : 'Research post queued for social.');
+        } catch (e) {
+            setNotice(e.message || 'Could not queue social post');
+        } finally {
+            setBusyAction('');
+        }
+    };
+
+    const saveToReflections = async (finding, key) => {
+        setBusyAction(key);
+        setNotice('');
+        try {
+            const title = `ML Research - ${finding?.title || finding?.topic || 'Learning Pass'}`;
+            const text = [
+                `# ${title}`,
+                '',
+                `Source: ${finding?.source || finding?.domain || 'SOMA Reflective Research'}`,
+                '',
+                '## Summary',
+                finding?.summary || finding?.result || 'No summary recorded yet.',
+                '',
+                '## Reflection',
+                finding?.lesson || 'Review this research lead and decide whether it should shape SOMA voice, values, or memory.',
+                '',
+                '## Personality Principle',
+                finding?.reusableRule || 'Do not absorb an idea as identity until it has been tested through dialogue, usefulness, and care.',
+            ].join('\n');
+            const r = await fetch('/api/reflections/quick-note', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ title, text, context: { source: 'ml-intern', finding } }),
+            });
+            const data = await r.json().catch(() => ({}));
+            if (!r.ok || data.success === false) throw new Error(data.error || 'reflection save failed');
+            setNotice('Research note saved to Reflections.');
+        } catch (e) {
+            setNotice(e.message || 'Could not save to Reflections');
+        } finally {
+            setBusyAction('');
+        }
+    };
 
     return (
         <div className="flex-1 flex flex-col overflow-hidden min-h-0 p-5 bg-black/40">
@@ -150,8 +290,8 @@ function MlInternView() {
                     <Microscope className="w-6 h-6 text-blue-400" />
                 </div>
                 <div>
-                    <h2 className="text-xl font-bold text-white tracking-tight italic uppercase">ML INTERN RESEARCH HUB</h2>
-                    <p className="text-xs text-blue-500/60 font-medium tracking-widest uppercase">Autonomous Paper Extraction · Recursive Learning</p>
+                    <h2 className="text-xl font-bold text-white tracking-tight italic uppercase">SOMA REFLECTIVE RESEARCH HUB</h2>
+                    <p className="text-xs text-blue-500/60 font-medium tracking-widest uppercase">Philosophy · Metaphysics · Personality Formation</p>
                 </div>
                 <div className="ml-auto text-right">
                     <div className="text-[10px] text-zinc-500 uppercase tracking-widest mb-1">Learning Mode</div>
@@ -161,15 +301,57 @@ function MlInternView() {
                 </div>
             </div>
 
-            <div className="flex-1 grid grid-cols-3 gap-5 overflow-hidden">
-                <div className="col-span-2 flex flex-col rounded-2xl border border-white/10 bg-zinc-900/40 overflow-hidden shadow-2xl">
+            <div className="mb-5 grid grid-cols-3 gap-3">
+                <div className="col-span-2 flex items-center gap-2 rounded-2xl border border-blue-500/15 bg-blue-500/5 p-3">
+                    <Search className="h-4 w-4 text-blue-300" />
+                    <input
+                        value={topic}
+                        onChange={e => setTopic(e.target.value)}
+                        onKeyDown={e => e.key === 'Enter' && runResearch()}
+                        placeholder="Optional topic, e.g. Plato memory soul selfhood"
+                        className="flex-1 bg-transparent text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none"
+                    />
+                    <button
+                        onClick={runResearch}
+                        disabled={busyAction === 'run'}
+                        className="flex items-center gap-2 rounded-xl bg-blue-500/15 px-3 py-2 text-[10px] font-bold uppercase tracking-widest text-blue-200 hover:bg-blue-500/25 disabled:opacity-40"
+                    >
+                        {busyAction === 'run' ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}
+                        Reflect
+                    </button>
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-zinc-900/40 p-3">
+                    <div className="text-[9px] font-bold uppercase tracking-widest text-zinc-600">Status</div>
+                    <div className="mt-1 text-xs font-mono text-zinc-300">{notice || latestCycle?.title || 'Waiting for intern telemetry'}</div>
+                </div>
+            </div>
+
+            <div className="flex-1 grid grid-cols-5 gap-5 overflow-hidden">
+                <div className="col-span-3 flex flex-col rounded-2xl border border-white/10 bg-zinc-900/40 overflow-hidden shadow-2xl">
                     <div className="px-6 py-4 border-b border-white/10 bg-white/5 flex items-center justify-between">
-                        <span className="text-[12px] font-bold text-zinc-200 uppercase tracking-widest">Indexed Papers</span>
+                        <span className="text-[12px] font-bold text-zinc-200 uppercase tracking-widest">Indexed Texts & Ideas</span>
+                        <span className="text-[10px] font-mono text-blue-300">{findings.length} findings</span>
                     </div>
                     <div className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-4">
                         {findings.length > 0 ? findings.map((f, i) => (
                             <div key={i} className="p-5 rounded-xl bg-zinc-900/60 border border-white/5 shadow-lg group hover:border-blue-500/20 transition-all">
-                                <div className="text-blue-400 text-xs font-bold uppercase mb-2">{f.source || 'ARXIV'}</div>
+                                <div className="flex items-center justify-between gap-3 mb-2">
+                                    <div className="text-blue-400 text-xs font-bold uppercase">{f.source || 'ARXIV'}</div>
+                                    <div className="flex items-center gap-2 opacity-80">
+                                        <button
+                                            onClick={() => saveToReflections(f, `reflect-${i}`)}
+                                            className="rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-[9px] font-bold uppercase tracking-widest text-zinc-300 hover:bg-white/10"
+                                        >
+                                            <FileText className="mr-1 inline h-3 w-3" /> Reflect
+                                        </button>
+                                        <button
+                                            onClick={() => queueSocialPost(socialTextForFinding(f), `social-${i}`)}
+                                            className="rounded-lg border border-sky-400/20 bg-sky-400/10 px-2 py-1 text-[9px] font-bold uppercase tracking-widest text-sky-200 hover:bg-sky-400/20"
+                                        >
+                                            <Share2 className="mr-1 inline h-3 w-3" /> Social
+                                        </button>
+                                    </div>
+                                </div>
                                 <div className="text-sm font-bold text-white mb-2">{f.title}</div>
                                 <div className="text-xs text-zinc-400 leading-relaxed italic line-clamp-3">"{f.summary}"</div>
                             </div>
@@ -182,9 +364,9 @@ function MlInternView() {
                     </div>
                 </div>
 
-                <div className="flex flex-col rounded-2xl border border-blue-500/20 bg-zinc-900/40 p-6 shadow-2xl">
+                <div className="col-span-2 flex min-h-0 flex-col rounded-2xl border border-blue-500/20 bg-zinc-900/40 p-6 shadow-2xl">
                     <h3 className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-4">Learning Autopilot</h3>
-                    <div className="space-y-4">
+                    <div className="space-y-4 shrink-0">
                         <div className="p-4 rounded-xl bg-black/40 border border-white/5">
                             <div className="text-[8px] text-zinc-600 uppercase font-bold mb-1">Cadence</div>
                             <div className="text-xs text-blue-400 font-mono">{status?.autopilot?.cadenceMinutes || 45} min cycle</div>
@@ -197,8 +379,43 @@ function MlInternView() {
                             <div className="text-[8px] text-zinc-600 uppercase font-bold mb-1">Ledger Status</div>
                             <div className="text-xs text-zinc-300 font-mono">{status?.autopilot?.latestCycle?.status || 'idle'}</div>
                         </div>
-                        <div className="mt-auto pt-6 opacity-30">
-                            <Brain className="w-full h-24 text-blue-900/20" />
+                    </div>
+
+                    <div className="mt-5 flex min-h-0 flex-1 flex-col">
+                        <div className="mb-3 flex items-center justify-between">
+                            <span className="text-[10px] font-bold uppercase tracking-widest text-blue-300">Learning Ledger</span>
+                            <span className="text-[9px] font-mono text-zinc-600">{learningLedger.length} cycles</span>
+                        </div>
+                        <div className="min-h-0 flex-1 overflow-y-auto custom-scrollbar space-y-3 pr-1">
+                            {learningLedger.length === 0 ? (
+                                <div className="flex h-full flex-col items-center justify-center gap-2 text-zinc-700">
+                                    <Brain className="h-10 w-10 opacity-30" />
+                                    <span className="text-xs">No ML learning cycles yet.</span>
+                                </div>
+                            ) : learningLedger.map((entry) => (
+                                <div key={entry.id} className="rounded-xl border border-white/8 bg-black/25 p-3">
+                                    <div className="mb-2 flex items-center gap-2">
+                                        <span className="rounded bg-blue-500/10 px-2 py-0.5 text-[8px] font-bold uppercase tracking-widest text-blue-300">{entry.status}</span>
+                                        {entry.confidence != null && <span className="text-[9px] font-mono text-zinc-500">{Math.round(entry.confidence * 100)}%</span>}
+                                    </div>
+                                    <div className="text-xs font-bold text-white line-clamp-2">{entry.title}</div>
+                                    <div className="mt-2 text-[10px] leading-relaxed text-zinc-500 line-clamp-3">{entry.lesson || entry.result || entry.hypothesis}</div>
+                                    <div className="mt-3 flex gap-2">
+                                        <button
+                                            onClick={() => saveToReflections(entry, `ledger-reflect-${entry.id}`)}
+                                            className="rounded-lg border border-white/10 bg-white/5 px-2 py-1 text-[8px] font-bold uppercase tracking-widest text-zinc-300 hover:bg-white/10"
+                                        >
+                                            Reflect
+                                        </button>
+                                        <button
+                                            onClick={() => queueSocialPost(socialTextForLedger(entry), `ledger-social-${entry.id}`)}
+                                            className="rounded-lg border border-sky-400/20 bg-sky-400/10 px-2 py-1 text-[8px] font-bold uppercase tracking-widest text-sky-200 hover:bg-sky-400/20"
+                                        >
+                                            Social
+                                        </button>
+                                    </div>
+                                </div>
+                            ))}
                         </div>
                     </div>
                 </div>
@@ -303,6 +520,22 @@ function MedicalLabView() {
   const selectedCandidate = status.selectedCandidate || discoveryQueue[0] || null;
   const whyThisMission = status.whyThisMission || selectedCandidate?.why || [];
   const learningMemory = status.learningMemory || {};
+  const testingState = status.testingState || (status.lastFailure ? 'vetoed' : status.currentPhase === 'PHYSICS' ? 'running' : 'idle');
+  const testingTone = testingState === 'passed' || testingState === 'completed'
+    ? 'text-emerald-300'
+    : testingState === 'vetoed' || testingState === 'failed'
+      ? 'text-red-300'
+      : testingState === 'running'
+        ? 'text-orange-300'
+        : 'text-zinc-500';
+  const testingCopy = status.testingMessage
+    || (testingState === 'passed'
+      ? `Physics screen passed on ${status.testingRound ?? 0}/${status.maxTestingRounds || 3}.`
+      : testingState === 'vetoed'
+        ? `Physics veto after ${status.testingRound ?? 0}/${status.maxTestingRounds || 3}.`
+        : status.currentPhase === 'PHYSICS'
+          ? `Testing round ${status.testingRound ?? 0}/${status.maxTestingRounds || 3}.`
+          : 'Awaiting next physics screen.');
 
   const statusClass = (value) => {
     if (value === 'completed') return 'text-emerald-300 border-emerald-500/20 bg-emerald-500/10';
@@ -364,9 +597,12 @@ function MedicalLabView() {
           <div className="mt-2 text-[10px] text-zinc-500 font-mono truncate">{chemistry.status?.engine || 'SOMA-Stoich-V1'} / Notebook active</div>
         </div>
         <div className="rounded-xl border border-orange-500/20 bg-zinc-900/40 p-4">
-          <div className="text-[9px] text-zinc-500 uppercase tracking-widest font-bold mb-1">Testing Round</div>
-          <div className="text-sm font-bold text-orange-300 font-mono">{status.testingRound ?? 0} / {status.maxTestingRounds || 3}</div>
-          <div className="mt-2 text-[10px] text-zinc-500 font-mono">{Math.round((status.progress || 0) * 100)}% mission progress</div>
+          <div className="text-[9px] text-zinc-500 uppercase tracking-widest font-bold mb-1">Physics Screen</div>
+          <div className={`text-sm font-bold font-mono ${testingTone}`}>
+            {testingState === 'passed' ? 'passed' : testingState} · {status.testingRound ?? 0}/{status.maxTestingRounds || 3}
+          </div>
+          <div className="mt-2 text-[10px] text-zinc-500 font-mono line-clamp-2" title={testingCopy}>{testingCopy}</div>
+          <div className="mt-1 text-[10px] text-zinc-600 font-mono">{Math.round((status.progress || 0) * 100)}% mission progress</div>
           {status.lastFailure && (
             <div className="mt-1 text-[9px] text-red-300 font-mono truncate" title={status.lastFailure.reason}>
               Last veto: {status.lastFailure.attempts}/{status.maxTestingRounds || 3}
@@ -429,6 +665,11 @@ function MedicalLabView() {
                   {status.lastReflectionPath && (
                     <div className="mt-2 rounded border border-purple-500/20 bg-purple-500/10 px-2 py-1 text-[9px] font-mono text-purple-300 truncate">
                       Latest dossier filed to Reflections.
+                    </div>
+                  )}
+                  {activeMission.reflectionPath && (
+                    <div className="mt-2 rounded border border-emerald-500/20 bg-emerald-500/10 px-2 py-1 text-[9px] font-mono text-emerald-300 truncate">
+                      Mission output filed to Reflections.
                     </div>
                   )}
                 </>
@@ -696,6 +937,12 @@ function MedicalLabView() {
                   {selectedMedEntry.stack?.length > 0 && (
                     <div><span className="text-zinc-600">Stack:</span> {selectedMedEntry.stack.join(', ')}</div>
                   )}
+                  {selectedMedEntry.reflectionPath && (
+                    <div className="break-all"><span className="text-zinc-600">Reflection:</span> {selectedMedEntry.reflectionPath}</div>
+                  )}
+                  {selectedMedEntry.dossierPath && (
+                    <div className="break-all"><span className="text-zinc-600">Dossier:</span> {selectedMedEntry.dossierPath}</div>
+                  )}
                 </div>
               </div>
               <div className="col-span-2 min-h-0 overflow-y-auto custom-scrollbar p-5">
@@ -726,13 +973,34 @@ function MedicalLabView() {
   );
 }
 
+// ── Equity Sparkline ──────────────────────────────────────────────────────
+function Sparkline({ data = [], width = 80, height = 24 }) {
+  if (!data || data.length < 2) return <span className="text-zinc-700 text-[9px]">—</span>;
+  const min = Math.min(...data);
+  const max = Math.max(...data);
+  const range = max - min || 1;
+  const pts = data.map((v, i) => {
+    const x = (i / (data.length - 1)) * width;
+    const y = height - ((v - min) / range) * (height - 2) - 1;
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  }).join(' ');
+  const isPositive = data[data.length - 1] >= data[0];
+  return (
+    <svg width={width} height={height} className="overflow-visible">
+      <polyline points={pts} fill="none" stroke={isPositive ? '#34d399' : '#f87171'} strokeWidth="1.2" />
+    </svg>
+  );
+}
+
 // ── Market Panel ───────────────────────────────────────────────────────────
 function MarketSimulationView() {
   const [lab, setLab] = useState(null);
   const [training, setTraining] = useState(null);
   const [promotion, setPromotion] = useState(null);
+  const [missionRuntime, setMissionRuntime] = useState(null);
   const [trainingIterations, setTrainingIterations] = useState(1000000);
   const [trainingBusy, setTrainingBusy] = useState(false);
+  const [cycleBusy, setCycleBusy] = useState(false);
 
   const fmtPct = (value, digits = 1) => Number.isFinite(Number(value)) ? `${(Number(value) * 100).toFixed(digits)}%` : 'n/a';
   const fmtNum = (value, digits = 2) => Number.isFinite(Number(value)) ? Number(value).toFixed(digits) : 'n/a';
@@ -768,15 +1036,27 @@ function MarketSimulationView() {
     } catch {}
   }, []);
 
+  const loadMissionRuntime = useCallback(async () => {
+    try {
+      const r = await fetch('/api/mission-control/runtime');
+      if (r.ok) {
+        const data = await r.json();
+        setMissionRuntime(data.runtime || null);
+      }
+    } catch {}
+  }, []);
+
   useEffect(() => {
     loadLab();
     loadTraining();
+    loadMissionRuntime();
     const t = setInterval(() => {
       loadLab();
       loadTraining();
+      loadMissionRuntime();
     }, 7000);
     return () => clearInterval(t);
-  }, [loadLab, loadTraining]);
+  }, [loadLab, loadTraining, loadMissionRuntime]);
 
   const startTraining = async () => {
     if (trainingBusy) return;
@@ -814,6 +1094,20 @@ function MarketSimulationView() {
     } finally {
       setTrainingBusy(false);
     }
+  };
+
+  const runCycle = async () => {
+    if (cycleBusy) return;
+    setCycleBusy(true);
+    try {
+      await fetch('/api/soma/market-lab/autopilot/cycle', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ mode: 'balanced', runs: 6 })
+      });
+      await Promise.all([loadLab(), loadMissionRuntime()]);
+    } catch {}
+    setCycleBusy(false);
   };
 
   const strategies = lab?.strategies || [];
@@ -933,6 +1227,18 @@ function MarketSimulationView() {
                 </button>
               </div>
             </div>
+            <div className="mb-3 rounded-xl border border-fuchsia-500/10 bg-fuchsia-500/[0.04] p-3">
+              <div className="mb-2 text-[9px] font-bold uppercase tracking-widest text-fuchsia-300">Manual Trigger</div>
+              <button
+                onClick={runCycle}
+                disabled={cycleBusy || autopilot?.running}
+                className="w-full flex items-center justify-center gap-1.5 rounded border border-fuchsia-400/30 bg-fuchsia-400/10 px-2 py-2 text-[9px] font-bold uppercase tracking-widest text-fuchsia-300 transition-all hover:bg-fuchsia-400/20 disabled:opacity-40"
+              >
+                <Zap className="h-3 w-3" />
+                {cycleBusy ? 'Running 6 backtests...' : 'Run Cycle Now'}
+              </button>
+              <div className="mt-1.5 font-mono text-[9px] text-zinc-600">6 balanced runs · updates Mission Control</div>
+            </div>
             {autopilot?.lastSelection?.length > 0 && (
               <div className="mb-3 rounded-xl border border-white/5 bg-black/30 p-3">
                 <div className="mb-2 text-[9px] font-bold uppercase tracking-widest text-zinc-600">Last Autonomous Picks</div>
@@ -1029,6 +1335,28 @@ function MarketSimulationView() {
                   </div>
                 </div>
               )}
+              {missionRuntime?.council && (
+                <div className="rounded-xl border border-cyan-500/10 bg-cyan-500/[0.04] p-3">
+                  <div className="mb-2 text-[9px] font-bold uppercase tracking-widest text-cyan-300">Live Mission Control</div>
+                  <div className="space-y-1.5">
+                    {Object.entries(missionRuntime.council).map(([k, v]) => (
+                      <div key={k} className="flex items-center gap-2">
+                        <span className="w-16 font-mono text-[9px] text-zinc-500 capitalize">{k}</span>
+                        <div className="flex-1 h-1 rounded-full bg-zinc-800 overflow-hidden">
+                          <div className="h-full rounded-full bg-cyan-500 transition-all duration-700" style={{ width: `${Math.round(v * 100)}%` }} />
+                        </div>
+                        <span className="font-mono text-[9px] text-cyan-300">{Math.round(v * 100)}%</span>
+                      </div>
+                    ))}
+                  </div>
+                  {missionRuntime.activeStrategy && (
+                    <div className="mt-2 font-mono text-[9px] text-zinc-600 truncate">
+                      {missionRuntime.activeStrategy.strategyName} · {missionRuntime.activeStrategy.symbol}
+                      {missionRuntime.activeStrategy.score != null && ` · ${fmtPct(missionRuntime.activeStrategy.score, 0)}`}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           ) : (
             <div className="flex flex-1 items-center justify-center text-zinc-700 text-xs font-bold uppercase tracking-widest">No market lab runs yet</div>
@@ -1057,10 +1385,15 @@ function MarketSimulationView() {
                   <span className="ml-auto font-mono text-[10px] text-zinc-600">{formatTime(entry.updatedAt || entry.createdAt)}</span>
                 </div>
                 <div className="mt-2 text-xs font-bold text-zinc-200">{entry.strategy?.name}</div>
-                <div className="mt-1 grid grid-cols-3 gap-2 font-mono text-[10px]">
-                  <span className={(entry.paperAccount?.averageDollarPnl ?? entry.metrics?.averageDollarPnl ?? 0) >= 0 ? 'text-emerald-400' : 'text-rose-400'}>{fmtDollar(entry.paperAccount?.averageDollarPnl ?? entry.metrics?.averageDollarPnl)}</span>
-                  <span className="text-fuchsia-400">{fmtPct(entry.prometheusScore, 0)}</span>
-                  <span className="text-rose-400">{fmtPct(entry.metrics?.maxDrawdown, 0)} DD</span>
+                <div className="mt-1 flex items-center gap-3">
+                  <div className="grid grid-cols-3 gap-2 font-mono text-[10px] flex-1">
+                    <span className={(entry.paperAccount?.averageDollarPnl ?? entry.metrics?.averageDollarPnl ?? 0) >= 0 ? 'text-emerald-400' : 'text-rose-400'}>{fmtDollar(entry.paperAccount?.averageDollarPnl ?? entry.metrics?.averageDollarPnl)}</span>
+                    <span className="text-fuchsia-400">{fmtPct(entry.prometheusScore, 0)}</span>
+                    <span className="text-rose-400">{fmtPct(entry.metrics?.maxDrawdown, 0)} DD</span>
+                  </div>
+                  {entry.dollarEquitySample?.length > 1 && (
+                    <Sparkline data={entry.dollarEquitySample.slice(-20)} width={72} height={20} />
+                  )}
                 </div>
               </div>
             ))}
@@ -1254,11 +1587,214 @@ function ExperimentLedgerView() {
 }
 
 // ── Simulation Suite Main ──────────────────────────────────────────────────
+function ForecastSimulationView() {
+  const [status, setStatus] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [config, setConfig] = useState({ scenarios: 12, sport: 'ALL', mode: 'balanced', maxLegs: 3, enrich: true });
+
+  const load = useCallback(async () => {
+    try {
+      const r = await fetch('/api/forecaster/suite/status');
+      if (r.ok) setStatus(await r.json());
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    load();
+    const t = setInterval(load, 10000);
+    return () => clearInterval(t);
+  }, [load]);
+
+  const runSuite = async () => {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const r = await fetch('/api/forecaster/suite/run', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(config)
+      });
+      if (r.ok) {
+        const data = await r.json();
+        setStatus(prev => ({
+          ...(prev || {}),
+          latest: data.run,
+          runs: [data.run, ...((prev?.runs || []).filter(run => run.id !== data.run.id))].slice(0, 20),
+          backtest: data.backtest,
+          summary: {
+            ...(prev?.summary || {}),
+            totalRuns: (prev?.summary?.totalRuns || 0) + 1,
+            totalScenarios: (prev?.summary?.totalScenarios || 0) + (data.run?.summary?.scenarios || 0),
+            savedForecasts: (prev?.summary?.savedForecasts || 0) + (data.run?.summary?.saved || 0),
+            latestAt: data.run?.createdAt
+          }
+        }));
+      }
+    } catch {
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const latest = status?.latest || null;
+  const runs = status?.runs || [];
+
+  return (
+    <div className="flex-1 flex flex-col overflow-hidden min-h-0 p-5 bg-black/40">
+      <div className="flex items-center gap-4 mb-4">
+        <div className="p-2 rounded-lg bg-indigo-500/10 border border-indigo-500/20">
+          <Target className="w-5 h-5 text-indigo-300" />
+        </div>
+        <div className="min-w-0">
+          <h2 className="text-lg font-bold text-white tracking-tight italic">FORECAST SIMULATION SUITE</h2>
+          <p className="text-xs text-indigo-400/60 font-medium tracking-widest uppercase">Controlled forecast experiments · enrich · swarm · ledger learning</p>
+        </div>
+        <div className="ml-auto rounded-xl border border-indigo-500/20 bg-indigo-500/[0.06] px-4 py-2">
+          <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-indigo-300">
+            <span className="h-2 w-2 rounded-full bg-indigo-300 animate-pulse" />
+            Paper Learning Only
+          </div>
+          <div className="mt-1 font-mono text-[9px] text-zinc-500">
+            {status?.summary?.totalScenarios || 0} scenarios · {status?.summary?.gradedForecasts || 0} graded
+          </div>
+        </div>
+      </div>
+
+      <div className="mb-4 grid grid-cols-4 gap-3">
+        {[
+          ['Runs', status?.summary?.totalRuns || 0, 'text-indigo-300'],
+          ['Saved', status?.summary?.savedForecasts || 0, 'text-emerald-300'],
+          ['Backtest MAE', status?.backtest?.summary?.meanAbsoluteError ?? 'n/a', 'text-amber-300'],
+          ['Brier', status?.backtest?.summary?.brierScore ?? 'n/a', 'text-fuchsia-300'],
+        ].map(([label, value, tone]) => (
+          <div key={label} className="rounded-xl border border-white/10 bg-zinc-900/40 p-3">
+            <div className="text-[9px] uppercase tracking-widest text-zinc-600 font-bold">{label}</div>
+            <div className={`mt-1 font-mono text-2xl font-bold ${tone}`}>{value}</div>
+          </div>
+        ))}
+      </div>
+
+      <div className="flex-1 grid grid-cols-3 gap-4 overflow-hidden">
+        <div className="rounded-xl border border-white/10 bg-zinc-900/40 p-4">
+          <div className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-4 flex items-center gap-2">
+            <Compass className="w-3 h-3" /> Experiment Controls
+          </div>
+          <div className="space-y-3">
+            <label className="block">
+              <span className="text-[9px] uppercase tracking-widest text-zinc-600 font-bold">Scenarios</span>
+              <input
+                type="number"
+                min="1"
+                max="25"
+                value={config.scenarios}
+                onChange={e => setConfig(prev => ({ ...prev, scenarios: Number(e.target.value) || 12 }))}
+                className="mt-1 w-full rounded border border-white/10 bg-black/30 px-3 py-2 text-sm text-white"
+              />
+            </label>
+            <div className="grid grid-cols-2 gap-2">
+              <label className="block">
+                <span className="text-[9px] uppercase tracking-widest text-zinc-600 font-bold">Sport</span>
+                <select value={config.sport} onChange={e => setConfig(prev => ({ ...prev, sport: e.target.value }))} className="mt-1 w-full rounded border border-white/10 bg-black/30 px-3 py-2 text-sm text-white">
+                  {['ALL', 'NBA', 'NFL', 'NHL'].map(item => <option key={item} value={item}>{item}</option>)}
+                </select>
+              </label>
+              <label className="block">
+                <span className="text-[9px] uppercase tracking-widest text-zinc-600 font-bold">Mode</span>
+                <select value={config.mode} onChange={e => setConfig(prev => ({ ...prev, mode: e.target.value }))} className="mt-1 w-full rounded border border-white/10 bg-black/30 px-3 py-2 text-sm text-white">
+                  {['conservative', 'balanced', 'aggressive', 'research'].map(item => <option key={item} value={item}>{item}</option>)}
+                </select>
+              </label>
+            </div>
+            <label className="block">
+              <span className="text-[9px] uppercase tracking-widest text-zinc-600 font-bold">Max Legs</span>
+              <input
+                type="number"
+                min="1"
+                max="4"
+                value={config.maxLegs}
+                onChange={e => setConfig(prev => ({ ...prev, maxLegs: Number(e.target.value) || 3 }))}
+                className="mt-1 w-full rounded border border-white/10 bg-black/30 px-3 py-2 text-sm text-white"
+              />
+            </label>
+            <button
+              onClick={() => setConfig(prev => ({ ...prev, enrich: !prev.enrich }))}
+              className={`w-full rounded border px-3 py-2 text-[10px] font-bold uppercase tracking-widest ${config.enrich ? 'border-emerald-400/30 bg-emerald-400/10 text-emerald-300' : 'border-amber-400/30 bg-amber-400/10 text-amber-300'}`}
+            >
+              {config.enrich ? 'Enrichment Enabled' : 'Fast Heuristic Mode'}
+            </button>
+            <button
+              onClick={runSuite}
+              disabled={busy}
+              className="w-full flex items-center justify-center gap-2 rounded border border-indigo-400/30 bg-indigo-400/10 px-3 py-3 text-[10px] font-bold uppercase tracking-widest text-indigo-200 hover:bg-indigo-400/20 disabled:opacity-40"
+            >
+              {busy ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}
+              {busy ? 'Running Suite...' : 'Run Forecast Suite'}
+            </button>
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-white/10 bg-zinc-900/40 p-4 min-h-0 flex flex-col">
+          <div className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-4 flex items-center gap-2">
+            <Brain className="w-3 h-3" /> Latest Run
+          </div>
+          {latest ? (
+            <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar space-y-2">
+              <div className="rounded-xl border border-indigo-500/20 bg-indigo-500/[0.04] p-3">
+                <div className="text-sm font-bold text-white">{latest.summary?.scenarios || 0} scenarios generated</div>
+                <div className="mt-1 font-mono text-[10px] text-zinc-500">
+                  Avg hit {latest.summary?.avgProbability}% · swarm {latest.summary?.avgSwarmProbability}% · needs stats {latest.summary?.needsLiveStats}
+                </div>
+              </div>
+              {(latest.results || []).map(result => (
+                <div key={result.id} className="rounded-lg border border-white/5 bg-black/30 p-3">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-zinc-200 truncate">{result.primary}</span>
+                    <span className="ml-auto font-mono text-[10px] text-indigo-300">{result.probability}%</span>
+                  </div>
+                  <div className="mt-1 flex gap-2 font-mono text-[9px] text-zinc-500">
+                    <span>{result.legs} legs</span>
+                    <span>edge {result.edge}</span>
+                    <span>{result.rating}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="flex flex-1 items-center justify-center text-zinc-700 text-xs font-bold uppercase tracking-widest">No forecast suite run yet</div>
+          )}
+        </div>
+
+        <div className="rounded-xl border border-white/10 bg-zinc-900/40 p-4 min-h-0 flex flex-col">
+          <div className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-4 flex items-center gap-2">
+            <Database className="w-3 h-3" /> Suite Ledger
+          </div>
+          <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar space-y-2">
+            {runs.length ? runs.map(run => (
+              <div key={run.id} className="rounded-lg border border-white/5 bg-black/30 p-3">
+                <div className="flex items-center gap-2">
+                  <span className="rounded border border-emerald-400/20 bg-emerald-400/10 px-2 py-0.5 text-[8px] font-bold uppercase tracking-widest text-emerald-300">{run.status}</span>
+                  <span className="font-mono text-[10px] text-zinc-500">{formatTime(run.createdAt)}</span>
+                  <span className="ml-auto font-mono text-[10px] text-zinc-600">{run.sport}</span>
+                </div>
+                <div className="mt-2 text-xs font-bold text-zinc-200">{run.summary?.scenarios || 0} scenarios · {run.mode}</div>
+                <div className="mt-1 font-mono text-[10px] text-zinc-500">Avg {run.summary?.avgProbability}% · saved {run.summary?.saved}</div>
+              </div>
+            )) : (
+              <div className="flex h-full items-center justify-center text-zinc-700 text-xs font-bold uppercase tracking-widest">Awaiting first run</div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function SimulationSuite() {
   const [expandedId, setExpandedId] = useState(null);
   const [suiteStatus, setSuiteStatus] = useState(null);
   const [sims, setSims] = useState([
     { id: 'market',    type: 'market',    title: 'Market Simulation', spawnedBy: 'system' },
+    { id: 'forecaster', type: 'forecaster', title: 'Forecast Suite', spawnedBy: 'system' },
     { id: 'ml-intern', type: 'ml-intern', title: 'ML Intern',         spawnedBy: 'system' },
     { id: 'scraper',   type: 'scraper',   title: 'Experiment Ledger', spawnedBy: 'system' },
     { id: 'code',      type: 'code',      title: 'Code Sandbox',      spawnedBy: 'system' },
@@ -1324,6 +1860,7 @@ function SimulationSuite() {
 
       {expandedId === 'biotech' && <MedicalLabView />}
       {expandedId === 'market' && <MarketSimulationView />}
+      {expandedId === 'forecaster' && <ForecastSimulationView />}
       {expandedId === 'ml-intern' && <MlInternView />}
       {expandedId === 'scraper' && <ExperimentLedgerView />}
       {expandedId === 'code' && <CodeSandboxView />}
@@ -1564,6 +2101,7 @@ function MarketCardBody({ status }) {
 function SimCard({ sim, status, onExpand }) {
   const COLORS = {
     market: { border:'border-orange-500/20', dot:'bg-orange-400', icon:'text-orange-400', hover:'hover:border-orange-500/50' },
+    forecaster: { border:'border-indigo-500/20', dot:'bg-indigo-400', icon:'text-indigo-400', hover:'hover:border-indigo-500/50' },
     'ml-intern':{ border:'border-blue-500/20',   dot:'bg-blue-400',   icon:'text-blue-400',   hover:'hover:border-blue-500/50' },
     scraper:{ border:'border-emerald-500/20', dot:'bg-emerald-400',icon:'text-emerald-400',hover:'hover:border-emerald-500/50'},
     code:   { border:'border-fuchsia-500/20', dot:'bg-fuchsia-400',icon:'text-fuchsia-400',hover:'hover:border-fuchsia-500/50'},
@@ -1571,7 +2109,7 @@ function SimCard({ sim, status, onExpand }) {
     social: { border:'border-violet-500/20',  dot:'bg-violet-400', icon:'text-violet-400', hover:'hover:border-violet-500/50' },
     cc:     { border:'border-red-500/20',     dot:'bg-red-400',    icon:'text-red-400',    hover:'hover:border-red-500/50' },
   };
-  const ICONS = { market: TrendingUp, 'ml-intern': Microscope, scraper: Database, code: Code2, biotech: FlaskConical, social: Share2, cc: Swords };
+  const ICONS = { market: TrendingUp, forecaster: Target, 'ml-intern': Microscope, scraper: Database, code: Code2, biotech: FlaskConical, social: Share2, cc: Swords };
   const c = COLORS[sim.type] || COLORS.market;
   const Icon = ICONS[sim.type] || Brain;
   const isComingSoon = false;
@@ -1598,11 +2136,12 @@ function SimCard({ sim, status, onExpand }) {
       <div className="flex-1 min-h-0">
         {sim.type === 'biotech' && <BiotechCardBody />}
         {sim.type === 'market' && <MarketCardBody status={status} />}
+        {sim.type === 'forecaster' && <ForecastSuiteCardBody />}
         {sim.type === 'code' && <div className="p-4 flex items-center justify-center h-full text-zinc-700 italic text-[10px] uppercase font-bold tracking-widest opacity-40">Pattern Engine Active</div>}
         {sim.type === 'scraper' && <ExperimentLedgerCardBody status={status} />}
         {sim.type === 'ml-intern' && <MlInternCardBody />}
         {sim.type === 'social' && <SocialCardBody />}
-        {sim.type !== 'biotech' && sim.type !== 'market' && sim.type !== 'code' && sim.type !== 'scraper' && sim.type !== 'ml-intern' && sim.type !== 'social' && (
+        {sim.type !== 'biotech' && sim.type !== 'market' && sim.type !== 'forecaster' && sim.type !== 'code' && sim.type !== 'scraper' && sim.type !== 'ml-intern' && sim.type !== 'social' && (
             <div className="p-4 flex items-center justify-center h-full text-zinc-700 italic text-[10px] uppercase font-bold tracking-widest opacity-40">
                 Active Simulation Module
             </div>

@@ -15,6 +15,7 @@ import { setupWebSocket } from '../server/loaders/websocket.js';
 import { loadLimbicSystem } from '../server/loaders/limbic.js';
 import { loadTradingSafety } from '../server/loaders/trading-safety.js';
 import { loadEssentialSystems, loadExtendedSystems } from '../server/loaders/extended.js';
+import { loadPersonas } from '../server/loaders/personas.js';
 import { loadCOSSystems } from '../server/loaders/cos.js';
 import { BrainBridge } from '../server/BrainBridge.js';
 import { registry } from '../server/SystemRegistry.js';
@@ -91,6 +92,15 @@ export class SomaBootstrapV2 {
             // PHASE 3: Specialized Agents
             const agents = await loadAgents(this.system);
             Object.assign(this.system, agents);
+
+            // PHASE 3.5: Identity & Persona Library
+            // Must load before API routes so /api/identity/personas is not an empty shell.
+            try {
+                const identity = await loadPersonas(this.system);
+                Object.assign(this.system, identity);
+            } catch (identityError) {
+                console.error('[SOMA V2] ⚠️ Identity/persona loading error (non-fatal):', identityError.message);
+            }
 
             // PHASE 4: Plugins (Finance, Social, Swarm)
             const plugins = await loadPlugins(this.system);

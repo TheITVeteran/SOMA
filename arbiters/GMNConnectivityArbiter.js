@@ -342,6 +342,11 @@ export class GMNConnectivityArbiter extends BaseArbiterV4 {
                     // Cleanup this listener
                     socket.removeListener('message', responseHandler);
 
+                    // General post-handshake message handler
+                    socket.on('message', (raw) => {
+                        try { this._handlePeerMessage(JSON.parse(raw), nodeId); } catch {}
+                    });
+
                     socket.on('close', () => {
                         this.log('warn', `Node ${nodeId} disconnected.`);
                         this.peers.delete(nodeId);
@@ -355,6 +360,35 @@ export class GMNConnectivityArbiter extends BaseArbiterV4 {
         };
 
         socket.on('message', responseHandler);
+    }
+
+    /**
+     * Handle a general message from a verified peer
+     */
+    _handlePeerMessage(msg, fromNodeId) {
+        if (!msg?.type) return;
+
+        if (msg.type === 'thirdplace.position') {
+            // Relay to local clients via messageBroker
+            try { messageBroker.publish('gmn.relay.thirdplace.position', msg.data); } catch {}
+            return;
+        }
+
+        if (msg.type === 'gmn_gossip') {
+            this._processGossip(msg).catch(() => {});
+        }
+    }
+
+    /**
+     * Send a typed message to all verified connected peers
+     */
+    sendToNetwork(type, data) {
+        const msg = JSON.stringify({ type, data });
+        for (const [, peer] of this.peers.entries()) {
+            if (peer.socket?.readyState === WebSocket.OPEN) {
+                try { peer.socket.send(msg); } catch {}
+            }
+        }
     }
 
     /**

@@ -245,6 +245,32 @@ export class EngineeringSwarmArbiter extends BaseArbiterV4 {
       this.auditLogger.error('[EngSwarm] Cannot modifyCode — quadBrain is null (QuadBrain not yet ready)');
       return { success: false, error: 'quadBrain not initialized — try again after system is fully booted' };
     }
+
+    // Human-in-the-loop gate: if humanInLoopOverride is enabled in commandBridgeSettings,
+    // queue a WebSocket approval request before touching production code.
+    const commandBridgeSettings = this.system?.commandBridgeSettings;
+    const humanInLoop = commandBridgeSettings?.authority?.humanInLoopOverride === true;
+    if (humanInLoop) {
+      const approvalGate = this.system?.ws?.approvalGate || this.system?.approvalGate;
+      if (approvalGate) {
+        try {
+          const approved = await approvalGate.request({
+            type:    'code_modification',
+            file:    filepath,
+            request: request.slice(0, 300),
+            timeout: 120000
+          });
+          if (!approved) {
+            this.auditLogger.warn(`[EngSwarm] 🛑 Human rejected code modification for "${filepath}"`);
+            return { success: false, error: 'Modification rejected by human-in-the-loop gate', humanRejected: true };
+          }
+        } catch (gateErr) {
+          // Approval gate unavailable — fail open (log and continue) so SOMA doesn't deadlock
+          this.auditLogger.warn(`[EngSwarm] ⚠️ Approval gate unavailable (${gateErr.message}) — proceeding without gate`);
+        }
+      }
+    }
+
     const emit = (phase, message) => { if (onProgress) onProgress(phase, message); };
 
     this.auditLogger.info(`⚡ [EngSwarm] Engineering loop started for ${filepath}`);
@@ -384,12 +410,29 @@ export class EngineeringSwarmArbiter extends BaseArbiterV4 {
     this.auditLogger.info(`[Researcher] Analyzing ${filepath}...`);
     const fullPath = path.resolve(this.rootPath, filepath);
     const content = await fs.readFile(fullPath, 'utf8');
-    
+
+    let pastExperience = '';
+    const mnemonic = this.mnemonicArbiter || this.quadBrain?.mnemonic;
+    if (mnemonic && typeof mnemonic.recall === 'function') {
+        try {
+            const recalled = await Promise.race([
+                mnemonic.recall(`Engineering Swarm ${filepath}`, { topK: 3 }),
+                new Promise(r => setTimeout(() => r(null), 2000))
+            ]);
+            const hits = recalled?.results?.filter(r => r.content?.includes(filepath));
+            if (hits?.length) {
+                pastExperience = hits.map(r => `- ${r.content}`).join('\n');
+                this.auditLogger.info(`[Researcher] Recalled ${hits.length} past experience(s) for ${filepath}`);
+            }
+        } catch { /* non-fatal */ }
+    }
+
     return {
         timestamp: Date.now(),
         filepath,
         content,
-        request
+        request,
+        pastExperience
     };
   }
 
@@ -424,11 +467,14 @@ export class EngineeringSwarmArbiter extends BaseArbiterV4 {
 
   async runDebate(state, context) {
     this.auditLogger.info(`[Swarm] Running Structured Debate...`);
+    const pastBlock = context.pastExperience
+        ? `[PAST EXPERIENCE WITH THIS FILE]:\n${context.pastExperience}\n`
+        : '';
     const prompt = `[NORTH STAR]: ${state.northStar}
     [PREVIOUS ERROR]: ${state.lastError || "None"}
-    
+    ${pastBlock}
     Debate this engineering change for FILE: ${context.filepath}
-    
+
     Return ONLY JSON matching this schema:
     { "architect": "...", "maintainer": "...", "security": "...", "consensus": "..." }`;
 

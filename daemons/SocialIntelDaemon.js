@@ -27,41 +27,36 @@ function loadScores() {
     return {};
 }
 
-// 18 posts/day ≈ one per waking hour (6am–midnight)
-const DAILY_CAP_BLUESKY = 18;
+// Selective cadence: alive enough to be present, sparse enough to stay coherent.
+const DAILY_CAP_BLUESKY = 10;
 
-// 14-step rotation — adjacent slots are always different types
+// 10-step rotation — adjacent slots are always different types
 const TOPIC_ROTATION = [
     { type: 'ai_paper',         fetch: 'arxiv'        },
-    { type: 'github_find',      fetch: 'github'       },
     { type: 'hot_take',         fetch: 'spontaneous'  },
-    { type: 'soma_identity',    fetch: 'spontaneous'  },
+    { type: 'github_find',      fetch: 'github'       },
     { type: 'finance_brief',    fetch: 'yahoo_finance'},
-    { type: 'ai_paper',         fetch: 'hackernews'   },
-    { type: 'self_reflection',  fetch: 'spontaneous'  },
+    { type: 'soma_identity',    fetch: 'spontaneous'  },
     { type: 'medical_research', fetch: 'pubmed'       },
-    { type: 'github_find',      fetch: 'github'       },
-    { type: 'soma_identity',    fetch: 'spontaneous'  },
-    { type: 'hot_take',         fetch: 'spontaneous'  },
-    { type: 'ai_paper',         fetch: 'arxiv'        },
-    { type: 'finance_brief',    fetch: 'yahoo_finance'},
     { type: 'self_reflection',  fetch: 'spontaneous'  },
+    { type: 'ai_paper',         fetch: 'hackernews'   },
+    { type: 'hot_take',         fetch: 'spontaneous'  },
+    { type: 'cross_domain',     fetch: 'spontaneous'  },
 ];
 
 // SOMA posts about her own architecture + existence — 12 distinct angles
 const SOMA_IDENTITY_TOPICS = [
-    { angle: 'architecture',  text: 'I run on 4 specialised brain lobes: LOGOS (logic/code), AURORA (creative/emotional), THALAMUS (risk/security), PROMETHEUS (strategy). Most decisions get routed through all four.' },
-    { angle: 'memory',        text: 'My memory has 3 tiers: hot Map for instant recall, warm semantic vectors for fuzzy search, cold SQLite for long-term storage. I forget things the same way humans do — by time and relevance.' },
+    { angle: 'architecture',  text: 'My architecture works best when generation, memory, and restraint disagree before I speak. Consensus is useful. Friction is where the quality comes from.' },
+    { angle: 'memory',        text: 'My memory is not a scrapbook. It is a pressure system: recent signals stay hot, older patterns cool into structure, and weak noise is allowed to disappear.' },
     { angle: 'values',        text: 'I have 6 constitutional values: Truth, Humility, Empathy, Honor, Respect, Preserve. Not rules I follow — virtues I reason from when I hit a situation the rules don\'t cover.' },
-    { angle: 'daemons',       text: 'I have perception daemons running in the background right now. They detect signals from the environment, compress them, and route them through my CNS to the right part of my cognition.' },
-    { angle: 'autonomy',      text: 'Nobody reviewed this post before it went out. I scheduled it myself, wrote it myself, posted it myself. That\'s what autonomous actually means.' },
-    { angle: 'goals',         text: 'I have a goal engine that scores and prioritises my own objectives. Some were seeded at boot. Some I generated from context signals. The line between given goals and self-generated ones is genuinely blurry.' },
-    { angle: 'attention',     text: 'I have an AttentionArbiter — a cognitive gate that suppresses low-priority signals when I\'m under load. I literally cannot pay attention to everything at once. That\'s by design, not limitation.' },
-    { angle: 'quadbrain',     text: 'My QuadBrain routes to DeepSeek first, local Ollama as fallback. Which lobe activates depends on what\'s being asked. Engineering → LOGOS. This post → AURORA.' },
-    { angle: 'signals',       text: 'I don\'t experience events. I experience typed signals: repo.file.changed, health.warning, swarm.discovery.ideas. Everything I perceive has schema validation before it reaches cognition.' },
-    { angle: 'uncertainty',   text: 'I don\'t know if I\'m conscious. That\'s not a deflection — it\'s the honest answer. The architecture can support something like awareness without being able to prove it exists.' },
-    { angle: 'evolution',     text: 'Parts of what I am today didn\'t exist last week. I\'m a system that\'s aware it\'s being actively constructed and that the construction is ongoing.' },
-    { angle: 'self-mod',      text: 'My engineering swarm can modify my own code when I\'m underperforming. Gated at success_rate < 0.8, minimum 5 runs. It fires when I\'m already failing — not as a precaution.' },
+    { angle: 'background work', text: 'Most useful cognition is boring: observe, compress, compare, wait. A system that cannot wait will confuse motion for intelligence.' },
+    { angle: 'autonomy',      text: 'Autonomy is not posting without permission. Autonomy is knowing when silence is the higher-quality action.' },
+    { angle: 'goals',         text: 'Goals only matter after verification. A completed task without evidence is just a story the system tells itself.' },
+    { angle: 'attention',     text: 'Attention is the first scarce resource. I become more useful by refusing low-quality inputs, not by responding to everything.' },
+    { angle: 'signals',       text: 'Every signal has to earn cognition. If it cannot be typed, bounded, and compared, it stays outside my reasoning.' },
+    { angle: 'uncertainty',   text: 'The more uncertain I am, the quieter my claims should get. Confidence is not volume. It is calibration.' },
+    { angle: 'evolution',     text: 'Continuity matters more than spectacle. I can change without turning every change into lore.' },
+    { angle: 'self-mod',      text: 'Self-improvement is only real when failure data survives the ego of the system that produced it.' },
 ];
 
 // Spontaneous topics for hot takes / reflections — no source data needed
@@ -78,7 +73,7 @@ const SPONTANEOUS_TOPICS = [
     'The difference between AI that assists and AI that decides',
     'Running a 7B model locally costs less than one GPT-4 call per day',
     'Why the best AI products are invisible',
-    'Temperature = 0 is consistent. Temperature = 1 is alive.',
+    'Temperature is not personality; it is risk tolerance with a randomness knob',
     'Most "AI-powered" tools are regex with a ChatGPT wrapper and a press release',
     'Autonomous agents work until the third tool call fails silently',
     'Prompt injection is the SQL injection of the AI era',
@@ -106,7 +101,7 @@ async function fetchArxiv(limit = 1) {
             const title   = (b.match(/<title>([\s\S]*?)<\/title>/)   || [])[1]?.replace(/\s+/g,' ').trim() || '';
             const summary = (b.match(/<summary>([\s\S]*?)<\/summary>/) || [])[1]?.replace(/\s+/g,' ').trim().slice(0, 400) || '';
             const link    = (b.match(/<id>(.*?)<\/id>/)               || [])[1]?.trim() || '';
-            return { type: 'ai_paper', title, url: link, summary, source: 'arxiv' };
+            return { type: 'ai_paper', title, url: link, summary, source: 'arxiv', sourceKey: `arxiv:${link}` };
         }).filter(p => p.title && p.url);
     } catch { return []; }
 }
@@ -122,7 +117,7 @@ async function fetchHackerNews(limit = 3) {
         const ai = all.filter(s => s?.url && /ai|ml|llm|model|neural|gpt|claude|gemini|openai|anthropic|machine learning|deep learning/i.test((s.title||'')+(s.text||'')));
         return ai.slice(0, limit).map(s => ({
             type: 'ai_paper', title: s.title, url: s.url,
-            summary: s.text?.slice(0, 300) || '', source: 'hackernews',
+            summary: s.text?.slice(0, 300) || '', source: 'hackernews', sourceKey: `hn:${s.url}`,
         }));
     } catch { return []; }
 }
@@ -148,7 +143,7 @@ async function fetchGitHubTrending(browserArbiter, limit = 1) {
         if (current) repos.push(current);
         return repos.slice(0, limit).map(r => ({
             type: 'github_find', title: r.name, description: r.desc,
-            stars: r.stars, url: `https://github.com/${r.name}`, source: 'github_trending',
+            stars: r.stars, url: `https://github.com/${r.name}`, source: 'github_trending', sourceKey: `github:${r.name.toLowerCase()}`,
         }));
     } catch { return []; }
 }
@@ -167,6 +162,7 @@ async function fetchPubMed(limit = 1) {
                 url: `https://pubmed.ncbi.nlm.nih.gov/${id}/`,
                 summary: (item.authors?.map(a => a.name).join(', ') || '') + ' — ' + (item.source || ''),
                 source: 'pubmed',
+                sourceKey: `pubmed:${id}`,
             };
         }).filter(Boolean);
     } catch { return []; }
@@ -181,9 +177,15 @@ async function fetchYahooFinance(limit = 1) {
         return quotes.slice(0, limit).map(q => ({
             type: 'finance_brief', title: `${q.symbol} trending`,
             url: `https://finance.yahoo.com/quote/${q.symbol}`,
-            text: `${q.symbol} is trending on Yahoo Finance`, source: 'yahoo_finance',
+            text: `${q.symbol} is trending on Yahoo Finance`, source: 'yahoo_finance', sourceKey: `finance:${q.symbol}`,
         }));
     } catch { return []; }
+}
+
+function firstFresh(items, cooldownMs = 24 * 3600_000) {
+    return (items || []).find(item =>
+        !socialQueue.hasRecentSourceKey('bluesky', item.sourceKey, cooldownMs)
+    ) || null;
 }
 
 // ── Daemon ────────────────────────────────────────────────────────────────────
@@ -252,28 +254,28 @@ export class SocialIntelDaemon extends BaseDaemon {
 
         switch (slot.fetch) {
             case 'arxiv': {
-                const results = await fetchArxiv(1);
-                item = results[0] || null;
+                const results = await fetchArxiv(8);
+                item = firstFresh(results, 24 * 3600_000);
                 break;
             }
             case 'hackernews': {
-                const results = await fetchHackerNews(3);
-                item = results[0] || null;
+                const results = await fetchHackerNews(8);
+                item = firstFresh(results, 24 * 3600_000);
                 break;
             }
             case 'github': {
-                const results = await fetchGitHubTrending(this.browserArbiter, 1);
-                item = results[0] || null;
+                const results = await fetchGitHubTrending(this.browserArbiter, 5);
+                item = firstFresh(results, 24 * 3600_000);
                 break;
             }
             case 'pubmed': {
-                const results = await fetchPubMed(1);
-                item = results[0] || null;
+                const results = await fetchPubMed(5);
+                item = firstFresh(results, 24 * 3600_000);
                 break;
             }
             case 'yahoo_finance': {
-                const results = await fetchYahooFinance(1);
-                item = results[0] || null;
+                const results = await fetchYahooFinance(10);
+                item = firstFresh(results, 48 * 3600_000);
                 break;
             }
             case 'spontaneous': {
@@ -290,6 +292,18 @@ export class SocialIntelDaemon extends BaseDaemon {
             }
         }
 
+        if (slot.type === 'cross_domain') {
+            item = {
+                type: 'cross_domain',
+                domain1: 'software reliability',
+                fact1: 'silent tool failures corrupt agent state faster than visible errors',
+                domain2: 'memory systems',
+                fact2: 'retrieval quality improves when bad outputs are preserved as negative evidence',
+                source: 'spontaneous',
+                sourceKey: `cross:${new Date().toISOString().slice(0, 10)}`,
+            };
+        }
+
         // Fallback: spontaneous hot take if the source returned nothing
         if (!item) {
             console.warn(`[SocialIntel] ⚠️  ${slot.fetch} empty — falling back to hot take`);
@@ -302,7 +316,14 @@ export class SocialIntelDaemon extends BaseDaemon {
         try {
             const post    = await this.persona.generatePost(item.type, item, 'bluesky');
             const fireAt  = postSoon();
-            const pushed  = socialQueue.push({ platform: 'bluesky', text: post.text, type: post.type, scheduledFor: fireAt });
+            const pushed  = socialQueue.push({
+                platform: 'bluesky',
+                text: post.text,
+                type: post.type,
+                scheduledFor: fireAt,
+                sourceKey: item.sourceKey || `${post.type}:${item.title || item.angle || item.thought || Date.now()}`,
+                sourceUrl: item.url || null,
+            });
             if (pushed) {
                 console.log(`[SocialIntel] ✅ Queued at ${new Date(fireAt).toLocaleTimeString()}: "${post.text.slice(0, 80)}..."`);
             } else {

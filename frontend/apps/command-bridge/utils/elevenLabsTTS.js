@@ -48,16 +48,15 @@ export async function textToSpeech(
         // High energy = Lower stability (more expressive/varied)
         if (emotion.energy && emotion.energy > 0.7) {
             stability = 0.35;
-            style = 0.5; // More exaggeration
-        } 
-        // Low energy = Higher stability (calmer)
-        else if (emotion.energy && emotion.energy < 0.4) {
+            style = 0.5;
+        } else if (emotion.energy && emotion.energy < 0.4) {
             stability = 0.8;
             style = 0.0;
         }
-        
-        // Override if stability explicitly provided
-        if (emotion.stability) stability = emotion.stability;
+        // Direct overrides take precedence
+        if (emotion.stability !== undefined) stability = emotion.stability;
+        if (emotion.similarity_boost !== undefined) similarity_boost = emotion.similarity_boost;
+        if (emotion.style !== undefined) style = emotion.style;
     }
 
     console.log(`🎙️ Voice Settings: Stability=${stability}, Style=${style}`);

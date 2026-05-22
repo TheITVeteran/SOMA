@@ -60,14 +60,13 @@ const ImageUpload: React.FC<ImageUploadProps> = ({ onImageAnalyzed, onClose }) =
 
     setAnalyzing(true);
     try {
-      // Call vision analysis API
-      const response = await fetch('/api/pulse/arbiter/analyze-vision', {
+      const response = await fetch('/api/perception/analyze-image', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           imageData,
           mimeType,
-          analysisType: 'ui_mockup'
+          analysisType: 'ui-to-code'
         })
       });
 

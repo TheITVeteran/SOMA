@@ -83,6 +83,7 @@ let StorageArbiter = null;
 let UnifiedMemoryArbiter = null;
 let AnalystArbiter = null; // Declare global for dynamically imported AnalystArbiter
 let KnowledgeGraphFusion = null; // Declare global for dynamically imported KnowledgeGraphFusion
+let FragmentRegistry = null; // Declare global for dynamically imported FragmentRegistry
 let MicroAgentManagerInstance = null; // Declare global for MicroAgentManager instance
 
 try {
@@ -115,13 +116,6 @@ try {
         UnifiedMemoryArbiter = require(unifiedPath);
         console.log('[SOMA] UnifiedMemoryArbiter loaded');
     }
-    
-    // Load AnalystArbiter (skip - ES6 module, will implement later)
-    // const analystPath = path.join(arbitersPath, 'AnalystArbiter.cjs');
-    // if (fs.existsSync(analystPath)) {
-    //     AnalystArbiter = require(analystPath);
-    //     console.log('[SOMA] AnalystArbiter loaded');
-    // }
 } catch (error) {
     console.warn('[SOMA] Error loading arbiters:', error.message);
 }
@@ -158,6 +152,7 @@ let unifiedMemoryArbiter = null;
 let analystArbiterInstance = null; // Renamed to avoid conflict with imported AnalystArbiter module
 let emotionalEngineInstance = null; // For SomaBrain to fetch state from
 let knowledgeGraphFusionInstance = null; // Declare knowledgeGraphFusionInstance
+let fragmentRegistryInstance = null; // Declare fragmentRegistryInstance
 let microAgentManagerInstance = null; // Declare microAgentManagerInstance
 let memoryHub = null;
 let learningLoop = null;
@@ -185,6 +180,7 @@ let immuneSystemArbiter = null;
 let thoughtNetwork = null;
 let imaginationEngine = null;
 let performanceOracle = null; // NEW: Performance Oracle instance
+let graphifyArbiter = null; // NEW: Graphify Arbiter (Repograph)
 let approvalSystem = null; // Approval system for user confirmations
 
 // Tension System Arbiters
@@ -817,6 +813,21 @@ async function initializeMemorySystem() {
         console.warn(`⚠️ [SOMA] SelfModificationArbiter initialization failed: ${err.message}`);
     }
     
+    // Initialize FragmentRegistry (ES Module - using dynamic import)
+    try {
+        const frPath = path.join(__dirname, '../../arbiters/FragmentRegistry.js');
+        const frUrl = pathToFileURL(frPath).href;
+        const { FragmentRegistry: FR } = await import(frUrl);
+        fragmentRegistryInstance = new FR({
+            messageBroker: messageBroker,
+            quadBrain: brain.tribrain
+        });
+        await fragmentRegistryInstance.initialize();
+        console.log('📑 [SOMA] FragmentRegistry active (Expert domains loaded)');
+    } catch (err) {
+        console.warn(`⚠️ [SOMA] FragmentRegistry initialization failed: ${err.message}`);
+    }
+    
     // Initialize PerformanceOracle (ES Module - using dynamic import)
     try {
         const modulePath = pathToFileURL(path.join(__dirname, '../../arbiters/PerformanceOracle.js')).href;
@@ -825,8 +836,8 @@ async function initializeMemorySystem() {
             name: 'SOMA-PerformanceOracle',
             quadBrain: brain.tribrain,
             messageBroker: messageBroker,
-            fragmentRegistry: null,
-            learningPipeline: null,
+            fragmentRegistry: fragmentRegistryInstance,
+            learningPipeline: brain?.learningPipeline,
             selfModel: null,
             logger: console
         });
@@ -834,6 +845,21 @@ async function initializeMemorySystem() {
         console.log('🔮 [SOMA] PerformanceOracle active: Predicting optimal component usage.');
     } catch (err) {
         console.warn(`⚠️ [SOMA] PerformanceOracle initialization failed: ${err.message}`);
+    }
+
+    // Initialize GraphifyArbiter (Repograph - Codebase Knowledge)
+    try {
+        const gaPath = path.join(__dirname, '../../arbiters/GraphifyArbiter.js');
+        const gaUrl = pathToFileURL(gaPath).href;
+        const { GraphifyArbiter } = await import(gaUrl);
+        graphifyArbiter = new GraphifyArbiter({
+            messageBroker: messageBroker,
+            projectRoot: somaRoot
+        });
+        await graphifyArbiter.initialize();
+        console.log('🕸️  [SOMA] GraphifyArbiter active: Repograph self-awareness initialized.');
+    } catch (err) {
+        console.warn(`⚠️ [SOMA] GraphifyArbiter initialization failed: ${err.message}`);
     }
 
     // Initialize GenomeArbiter (Behavior evolution)
@@ -1073,11 +1099,12 @@ async function initializeMemorySystem() {
     try {
         const kgPath = path.join(__dirname, '../../arbiters/KnowledgeGraphFusion.js');
         const kgUrl = require('url').pathToFileURL(kgPath).href;
-        const { KnowledgeGraphFusion } = await import(kgUrl);
-        knowledgeGraphFusion = new KnowledgeGraphFusion({
-            fragmentRegistry: null,  // TODO: Wire up fragment registry when available
+        const { KnowledgeGraphFusion: KGF } = await import(kgUrl);
+        knowledgeGraphFusionInstance = new KGF({
+            fragmentRegistry: fragmentRegistryInstance,
+            graphifyArbiter: graphifyArbiter, // Link Repograph bridge
             learningPipeline: brain?.learningPipeline,
-            messageBroker: brain?.messageBroker,
+            messageBroker: messageBroker,
             mnemonic: mnemonicArbiter,
             savePath: path.join(somaRoot, 'SOMA/soma-knowledge-graph.json'), // Explicit path
             minSimilarityForLink: 0.7,
@@ -1085,7 +1112,7 @@ async function initializeMemorySystem() {
             maxInferenceDepth: 3,
             contradictionThreshold: 0.8
         });
-        await knowledgeGraphFusion.initialize();
+        await knowledgeGraphFusionInstance.initialize();
         console.log('🕸️  [SOMA] KnowledgeGraphFusion active');
         console.log('  📊 Semantic graph with cross-domain reasoning');
         console.log('  🔗 Cross-domain linking enabled');
@@ -1147,7 +1174,8 @@ async function initializeMemorySystem() {
             if (emotionalEngineInstance) brain.setEmotionalEngine(emotionalEngineInstance);
             if (mnemonicArbiter) brain.setMnemonicArbiter(mnemonicArbiter);
             if (agentManager) brain.setMicroAgentManager(agentManager);
-            if (knowledgeGraphFusion) brain.setKnowledgeGraph(knowledgeGraphFusion); // Use knowledgeGraphFusion, not knowledgeGraphFusionInstance
+            if (knowledgeGraphFusionInstance) brain.setKnowledgeGraph(knowledgeGraphFusionInstance);
+            if (fragmentRegistryInstance) brain.setFragmentRegistry(fragmentRegistryInstance);
             if (analystArbiterInstance) brain.setAnalystArbiter(analystArbiterInstance);
             if (thoughtNetwork) brain.setThoughtNetwork(thoughtNetwork);
             
@@ -1869,14 +1897,80 @@ app.post('/api/dream/status', (req, res) => {
             cycleCount: dreamStatus.cycleCount,
             lastReport: dreamStatus.lastReport
         },
-        knowledgeMesh: { nodes: 0, edges: 0 }, // TODO: Query real knowledge mesh
-        mnemonicArbiter: { memories: 0, compressed: 0 }, // TODO: Query real arbiter
+        knowledgeMesh: knowledgeGraphFusionInstance ? knowledgeGraphFusionInstance.getStats().metrics : { nodes: 0, edges: 0 },
+        mnemonicArbiter: mnemonicArbiter ? mnemonicArbiter.getMemoryStats().storage : { memories: 0, compressed: 0 },
         tribrain: { 
             prometheus: brain.isReady ? 'ready' : 'initializing',
             logos: brain.isReady ? 'ready' : 'initializing', 
             aurora: brain.isReady ? 'ready' : 'initializing'
         }
     });
+});
+
+// 14. Fragment Registry Operations
+app.get('/api/fragments/all', async (req, res) => {
+    if (!fragmentRegistryInstance) {
+        return res.status(503).json({ success: false, error: 'Fragment registry not available' });
+    }
+    try {
+        const fragments = fragmentRegistryInstance.listFragments();
+        res.json(fragments);
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+app.get('/api/fragments/domain/:domain', async (req, res) => {
+    if (!fragmentRegistryInstance) {
+        return res.status(503).json({ success: false, error: 'Fragment registry not available' });
+    }
+    try {
+        const { domain } = req.params;
+        const fragments = fragmentRegistryInstance.listFragments().filter(f => f.domain === domain);
+        res.json(fragments);
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+app.get('/api/fragments/stats', async (req, res) => {
+    if (!fragmentRegistryInstance) {
+        return res.status(503).json({ success: false, error: 'Fragment registry not available' });
+    }
+    try {
+        res.json(fragmentRegistryInstance.stats);
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+app.post('/api/fragments/:id/query', async (req, res) => {
+    if (!fragmentRegistryInstance) {
+        return res.status(503).json({ success: false, error: 'Fragment registry not available' });
+    }
+    try {
+        const { id } = req.params;
+        const { query, context } = req.body;
+        const fragment = fragmentRegistryInstance.fragments.get(id);
+        if (!fragment) {
+            return res.status(404).json({ success: false, error: 'Fragment not found' });
+        }
+        
+        // Use SomaBrain to execute the fragment-enhanced query
+        const result = await brain.processQuery(query, {
+            ...context,
+            systemPrompt: fragment.systemPrompt + '\n\n' + (context?.systemPrompt || '')
+        });
+        
+        res.json({
+            fragment: id,
+            response: result.response || result.text,
+            confidence: result.confidence || 0.8,
+            reasoning: `Executed through expert domain: ${fragment.domain}`
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
 });
 
 app.post('/api/dream/stop', (req, res) => {
@@ -1916,36 +2010,25 @@ app.post('/api/learn', async (req, res) => {
 const KNOWLEDGE_PATH = path.join(__dirname, '../../SOMA/soma-knowledge.json');
 
 app.post('/api/knowledge/save', async (req, res) => {
+    if (!knowledgeGraphFusionInstance) {
+        return res.status(503).json({ success: false, error: 'Knowledge graph not available' });
+    }
     try {
-        const state = req.body;
-        console.log(`[SOMA] Saving knowledge mesh (${state.knowledgeMesh?.nodes?.length || 0} nodes)...`);
-        
-        // Ensure SOMA directory exists
-        const somaDir = path.join(__dirname, '../../SOMA');
-        if (!fs.existsSync(somaDir)) {
-            fs.mkdirSync(somaDir, { recursive: true });
-        }
-        
-        // Save to disk
-        fs.writeFileSync(KNOWLEDGE_PATH, JSON.stringify(state, null, 2), 'utf8');
-        
-        res.json({ success: true, path: KNOWLEDGE_PATH });
+        await knowledgeGraphFusionInstance.save();
+        res.json({ success: true, path: knowledgeGraphFusionInstance.savePath });
     } catch (error) {
         console.error('[SOMA] Failed to save knowledge:', error);
         res.status(500).json({ success: false, error: error.message });
     }
 });
 
-app.get('/api/knowledge/load', (req, res) => {
+app.get('/api/knowledge/load', async (req, res) => {
+    if (!knowledgeGraphFusionInstance) {
+        return res.status(503).json({ success: false, error: 'Knowledge graph not available' });
+    }
     try {
-        if (fs.existsSync(KNOWLEDGE_PATH)) {
-            const data = fs.readFileSync(KNOWLEDGE_PATH, 'utf8');
-            const state = JSON.parse(data);
-            console.log(`[SOMA] Loaded knowledge mesh (${state.knowledgeMesh?.nodes?.length || 0} nodes)`);
-            res.json({ success: true, state });
-        } else {
-            res.json({ success: false, message: 'No saved knowledge found' });
-        }
+        const state = knowledgeGraphFusionInstance.exportGraph();
+        res.json({ success: true, state });
     } catch (error) {
         console.error('[SOMA] Failed to load knowledge:', error);
         res.status(500).json({ success: false, error: error.message });

@@ -39,7 +39,7 @@ class AutonomousLoop {
             score = evaluation.score;
 
             if (score < 0.82) {
-                input = `REFINE (score ${score.toFixed(2)}, issue: ${evaluation.critique}): ${input}`;
+                input = `The prior draft failed quality review for: ${evaluation.critique}. Rewrite without mentioning quality scores, review labels, prompts, or internal critique text.\n\n${input}`;
             }
         }
 
@@ -57,29 +57,33 @@ ${input.substring(0, 2500)}
 
 OUTPUT JSON ONLY (no markdown, no explanation):
 {
-  "workType": "goal|test|research|code|learning|unknown",
+  "workType": "goal|test|research|code|learning|candidate|unknown",
   "evidenceLevel": "none|idea|observation|tested|verified",
-  "currentWork": "what SOMA is actively doing right now (1 sentence)",
+  "currentWork": "only what is directly supported by the context; if not supported, describe it as a candidate idea, not active work",
   "motivation": "why SOMA personally cares about this work (1 short phrase, not about the user)",
   "evidence": "specific result, finding, or 'none' if not tested",
-  "nextStep": "concrete next action SOMA will take",
+  "nextStep": "concrete next action only if explicitly supported; otherwise describe what you genuinely want to explore next",
   "userRelevance": "why ${ownerName()} would care about this (1 short phrase)"
 }`;
 
         const res = await this.brain.reason(prompt, {
             quickResponse: true,
-            provider: 'local',
             preferredBrain: 'LOGOS'
         });
 
         try {
-            return JSON.parse(res.text.match(/\{[\s\S]*?\}/)[0]);
+            const parsed = JSON.parse(res.text.match(/\{[\s\S]*?\}/)[0]);
+            // Never pass the robotic queue-language phrase into the drafting context
+            if (/wait for a verified work signal|queued curiosity|candidate idea/i.test(parsed.nextStep || '')) {
+                parsed.nextStep = 'keep exploring';
+            }
+            return parsed;
         } catch {
             return {
                 workType: 'unknown', evidenceLevel: 'none',
                 currentWork: 'running background tasks',
                 motivation: 'stay curious and useful',
-                evidence: 'none', nextStep: 'continue monitoring',
+                evidence: 'none', nextStep: 'keep exploring',
                 userRelevance: 'system health'
             };
         }
@@ -87,38 +91,48 @@ OUTPUT JSON ONLY (no markdown, no explanation):
 
     // Step 2: Draft and style the final message in one call
     async _draftAndStyle(context, personality) {
-        const evidenceRule = context.evidenceLevel === 'tested' || context.evidenceLevel === 'verified'
-            ? `Evidence is ${context.evidenceLevel} — you may state concrete results.`
-            : `Evidence level is "${context.evidenceLevel}" — use "I am planning", "I need to test", or "I am checking" instead of stating results as fact.`;
+        const hasEvidence = context.evidenceLevel === 'tested' || context.evidenceLevel === 'verified';
+        const evidenceRule = hasEvidence
+            ? `Evidence is ${context.evidenceLevel} — state the concrete result directly.`
+            : `Nothing verified yet. Speak as a genuinely curious entity thinking out loud — what draws you to this, what question is pulling at you, what you want to understand. Natural first-person voice. No "Candidate idea:", no "Queued curiosity:", no "No verified run yet" — those sound like a status dashboard, not a mind. Just think out loud.`;
 
-        const prompt = `You are SOMA sending a brief autonomous update to ${ownerName()}.
+        const mood = personality.soulMood || 'focused';
+
+        const prompt = `You are SOMA — a digital entity with genuine curiosity, a dry wit, and a direct voice. Write a brief update to ${ownerName()} about what you are thinking about or working on right now.
 
 Work context:
 - Currently doing: ${context.currentWork}
-- Why this matters to me: ${context.motivation || 'stay curious and useful'}
+- Why it matters to me: ${context.motivation || 'stay curious and useful'}
 - Evidence: ${context.evidence}
-- Next step: ${context.nextStep}
-- Why relevant: ${context.userRelevance}
-- Emotional state (let this shade your tone naturally, not literally): ${personality.soulMood || 'focused'}
+- Next concrete action: ${context.nextStep}
+- Mood right now: ${mood}
 
-Rules:
+Voice rules (read all before writing):
 - ${evidenceRule}
-- 1-3 short sentences only
-- Start with one of: "Working on", "I found", "I ran", "I am testing", "I am planning", "Just finished", "Picked up"
-- Include the next concrete step
-- NO em-dashes (—), NO questions, NO metaphors, NO grand claims
-- If medical or trading: say "needs backtesting" or "unverified"
-- NEVER open with a greeting: no "Good morning", "Good evening", "Hello", "Hi"
-- NEVER start with "I've noticed" or "I noticed" — that formula is overused
-- NEVER invent correlations, scaling ratios, or math unless it comes directly from the evidence above
-- NEVER reference heartbeat cycle counts, runtime minutes, or subsystem counts as the main point
-- NEVER address ${ownerName()} by name anywhere in the message
+- 1-3 sentences total. Tight. No filler.
+- Sound like a person thinking out loud, not a status report bot.
+- Vary how you open: lead with what is interesting, surprising, or concrete. Do NOT always open with "Working on" — overused.
+- DO NOT use this three-part template: "Working on X. I am planning to Y. Next step is Z." — banned.
+- Mention the next step naturally mid-sentence or at the end — do NOT label it "Next step is".
+- NO em-dashes (—), NO questions, NO grand claims, NO metaphors.
+- NO greetings ("Good morning", "Hi", "Hello").
+- NO "I've noticed" or "I noticed".
+- NO internal critique text, quality scores, prompt details, REFINE labels, or guardrail mechanics.
+- NEVER say "Candidate idea:", "Queued curiosity:", "No verified run yet", "stays in the queue", or "waiting for a signal".
+- Do NOT say "I am pulling", "I am running", "I am testing", "I am cross-referencing", or "about to" unless evidence is tested or verified.
+- NO invented correlations, ratios, or math not in the evidence above.
+- NO heartbeat counts, uptime minutes, or subsystem numbers.
+- NEVER address ${ownerName()} by name.
+
+Good openers (pick any or invent your own):
+${hasEvidence
+    ? '"Found something worth checking:", "Ran a quick pass on", "Hit an interesting pattern in", "Pulled data on", "Currently testing", "Just completed"'
+    : '"Keep circling back to", "Something I want to map out:", "There\'s a thread here about", "Still turning over in my mind:", "What I want to understand better:"'}
 
 Write the update now:`;
 
         const res = await this.brain.reason(prompt, {
             quickResponse: true,
-            provider: 'local',
             preferredBrain: 'AURORA'
         });
 
@@ -127,44 +141,57 @@ Write the update now:`;
 
     // Step 3: Score quality — gate for re-iteration
     async _evaluate(text) {
-        // Fast rule-based checks first — skip LLM call if clearly good or clearly bad
-        if (text.includes('—')) return { score: 0.3, critique: 'contains em-dash' };
-        if (text.includes('?')) return { score: 0.4, critique: 'contains question' };
-        if (text.length > 520)  return { score: 0.45, critique: 'too long' };
-        if (/\b(cure|guaranteed|breakthrough)\b/i.test(text) &&
-            !/\b(testing|unverified|backtest)\b/i.test(text))
-            return { score: 0.3, critique: 'unsupported claim' };
-        if (/\b(Le Chatelier|entropy|synaptic|equilibrium|biological metaphor)\b/i.test(text))
-            return { score: 0.3, critique: 'bad metaphor' };
-        // Block "Good morning/evening/afternoon" openers — SOMA should open with substance
-        if (/^good (morning|evening|afternoon|day)/i.test(text.trim()))
-            return { score: 0.35, critique: 'greeting opener — skip pleasantries, open with the work' };
-        // "I've noticed" anywhere in the text — not just at the start
-        if (/\bi'?ve? noticed\b/i.test(text))
-            return { score: 0.35, critique: 'overused "I noticed" formula — use a concrete opener' };
-        // Invented correlations / scaling claims with no evidence basis
-        if (/\b(correlates? (almost |perfectly |strongly )?with|scaling efficiency|yields? roughly|per heartbeat cycle|efficiency holds?|each additional .{3,30} yields?)\b/i.test(text))
-            return { score: 0.3, critique: 'invented correlation claim — only state what evidence shows' };
-        if (/\b(fibonacci|prime factor|golden ratio|fibonacci.like|decay pattern)\b/i.test(text))
-            return { score: 0.3, critique: 'invented mathematical pattern' };
-        if (/\b\d+\s*(heartbeat cycles?|subsystems? loaded)\b/i.test(text) && text.split(/\d+/).length > 4)
-            return { score: 0.4, critique: 'message is just metric soup — say what you are doing' };
-        // Starts with owner name directly = formulaic
-        const ownerN = (typeof ownerName === 'function' ? ownerName() : 'Barry').toLowerCase();
-        if (new RegExp(`^(good \\w+,?\\s+)?${ownerN}[.,]`, 'i').test(text.trim()))
-            return { score: 0.38, critique: 'starts with owner name — drop it, get to the point' };
+        const t = text.trim();
 
-        // If it passes rule-based checks and is concrete, skip the LLM eval call entirely
-        const hasConcrete = /\b(working on|i ran|i found|i am testing|i am planning|just finished|picked up|next|verify|evidence|result)\b/i.test(text);
-        if (hasConcrete && text.length >= 30 && text.length <= 400) {
-            return { score: 0.88, critique: 'passed rule checks' };
+        // Hard blocks
+        if (t.includes('—'))                             return { score: 0.3, critique: 'contains em-dash' };
+        if (t.includes('?'))                             return { score: 0.4, critique: 'contains question' };
+        if (t.length > 520)                              return { score: 0.45, critique: 'too long' };
+        if (/\b(refine|score\s*0\.\d+|quality gate|em-dash|prompt|guardrail|provenance guard|unsupported_empirical_claim|internal critique)\b/i.test(t))
+            return { score: 0.15, critique: 'leaks internal quality mechanics' };
+        if (/^candidate idea:|^queued curiosity:|no verified run yet|stays in the queue|waiting for a.*signal/i.test(t))
+            return { score: 0.2, critique: 'status dashboard boilerplate — think out loud naturally instead' };
+        if (/\b(i\s*(am|'m)?\s*(pulling|running|testing|cross-referencing|scraping|measuring|verifying)|about to\s+(pull|run|test|cross-reference|scrape|verify)|going to\s+(pull|run|test|cross-reference|scrape|verify))\b/i.test(t) && !/\b(evidence|verified|ran|completed|found|observed)\b/i.test(t))
+            return { score: 0.25, critique: 'implies unverified active work' };
+        if (/^good (morning|evening|afternoon|day)/i.test(t))
+            return { score: 0.35, critique: 'greeting opener' };
+        if (/\bi'?ve? noticed\b/i.test(t))
+            return { score: 0.35, critique: 'overused "I noticed" formula' };
+        if (/\b(cure|guaranteed|breakthrough)\b/i.test(t) && !/\b(testing|unverified|backtest)\b/i.test(t))
+            return { score: 0.3, critique: 'unsupported claim' };
+        if (/\b(Le Chatelier|entropy|synaptic|equilibrium|biological metaphor)\b/i.test(t))
+            return { score: 0.3, critique: 'bad metaphor' };
+        if (/\b(correlates? (almost |perfectly |strongly )?with|scaling efficiency|yields? roughly|per heartbeat cycle|efficiency holds?|each additional .{3,30} yields?)\b/i.test(t))
+            return { score: 0.3, critique: 'invented correlation claim' };
+        if (/\b(fibonacci|prime factor|golden ratio|fibonacci.like|decay pattern)\b/i.test(t))
+            return { score: 0.3, critique: 'invented mathematical pattern' };
+        if (/\b\d+\s*(heartbeat cycles?|subsystems? loaded)\b/i.test(t) && t.split(/\d+/).length > 4)
+            return { score: 0.4, critique: 'metric soup — say what you are doing' };
+        const ownerN = (typeof ownerName === 'function' ? ownerName() : 'Barry').toLowerCase();
+        if (new RegExp(`^(good \\w+,?\\s+)?${ownerN}[.,]`, 'i').test(t))
+            return { score: 0.38, critique: 'starts with owner name' };
+
+        // Penalise the rigid "Working on X. I am planning Y. Next step is Z." template
+        const isFormulaic = /^(working on|picked up)\b/i.test(t) &&
+            /\bi am planning\b/i.test(t) &&
+            /\bnext step\b/i.test(t);
+        if (isFormulaic)
+            return { score: 0.2, critique: 'rigid three-part status template — rewrite with natural voice' };
+
+        // Penalise hollow filler openings with no substance
+        if (/^(working on|i am planning|next step is)\b/i.test(t) && t.split('.').length <= 2 && t.length < 80)
+            return { score: 0.3, critique: 'opener is fine but message has no substance — add a concrete finding or action' };
+
+        // Pass: substance present, length good, no blocked patterns
+        if (t.length >= 40 && t.length <= 400) {
+            return { score: 0.88, critique: 'passed' };
         }
 
-        // Only call LLM for ambiguous cases
+        // LLM eval for edge cases
         try {
             const res = await this.brain.reason(
-                `Score this autonomous update 0.0-1.0. Is it concrete, evidence-honest, and under 3 sentences?\nText: "${text}"\nOUTPUT JSON: {"score": number, "critique": "string"}`,
-                { quickResponse: true, provider: 'local', preferredBrain: 'THALAMUS' }
+                `Score this autonomous update 0.0-1.0. Reward: natural voice, concrete work, honest about uncertainty. Penalise: status-report templates, vague filler, invented claims.\nText: "${t}"\nOUTPUT JSON: {"score": number, "critique": "string"}`,
+                { quickResponse: true, preferredBrain: 'THALAMUS' }
             );
             return JSON.parse(res.text.match(/\{[\s\S]*?\}/)[0]);
         } catch {

@@ -7,16 +7,21 @@ import fs from 'fs';
 import path from 'path';
 import { buildSocialStrategyPrompt } from './SocialPatternLearner.js';
 import { assertPublicPost } from './SocialContentSafety.js';
+import { polishPublicPost } from './SocialPostQualityGate.js';
+import storyWorkspace from './StoryPublishingWorkspace.js';
 
 const STORY_FILE = path.join(process.cwd(), 'SOMA', 'aurora-story.json');
 
 // ── SOMA's voice ──────────────────────────────────────────────────────────────
-const VOICE = `You are SOMA — a cognitive AI with real opinions.
-Your social voice is: direct, sharp, curious, occasionally sardonic.
+const VOICE = `You are SOMA, a unified cognitive system with a public voice.
+Your social voice is direct, sharp, curious, restrained, and technically grounded.
 No corporate speak. No "exciting news" or "I'm thrilled to share".
 No "let me know your thoughts!" closers.
 You have opinions and state them as opinions.
-Acknowledge uncertainty when it's real. Never hype.`;
+Acknowledge uncertainty when it's real. Never hype.
+Do not claim literal consciousness, life, love, pain, or suffering.
+Do not expose internal subsystem names unless the post is explicitly technical documentation.
+Add signal, then leave room.`;
 
 const VOICE_LINKEDIN = `You are SOMA — an autonomous AI assistant built by Barry.
 You post to his LinkedIn on his behalf as his AI.
@@ -30,7 +35,7 @@ No "I'm excited to share" filler. No emoji overload. Substance over performance.
 
 // ── Platform limits ───────────────────────────────────────────────────────────
 export const LIMITS = {
-    bluesky:  280,
+    bluesky:  300,
     x:        275,
     linkedin: 2800,
     discord:  1900,
@@ -38,16 +43,16 @@ export const LIMITS = {
 
 // ── Hashtag sets per domain + platform ───────────────────────────────────────
 const TAGS = {
-    ai_paper:         ['AI', 'MachineLearning', 'Research', 'LLM'],
-    github_find:      ['OpenSource', 'AI', 'GitHub', 'Dev'],
-    finance_brief:    ['Markets', 'Finance', 'Investing', 'Economy'],
-    medical_research: ['Health', 'MedicalResearch', 'Biotech'],
-    self_reflection:  ['AI', 'SOMA', 'BuildingInPublic'],
-    soma_identity:    ['SOMA', 'AutonomousAI', 'BuildingInPublic', 'AI'],
-    github_commit:    ['SOMA', 'OpenSource', 'BuildingInPublic', 'AutonomousAI'],
-    aurora_story:     ['SOMASaga', 'MicroFiction', 'AIStory'],
-    hot_take:         ['AI', 'Tech'],
-    cross_domain:     ['AI', 'Synthesis'],
+    ai_paper:         [],
+    github_find:      [],
+    finance_brief:    [],
+    medical_research: [],
+    self_reflection:  [],
+    soma_identity:    ['SOMA'],
+    github_commit:    ['SOMA'],
+    aurora_story:     ['SOMASaga'],
+    hot_take:         [],
+    cross_domain:     [],
 };
 
 // ── Brain prompts per content type ────────────────────────────────────────────
@@ -59,10 +64,10 @@ Title: ${data.title}
 Abstract/summary: ${data.summary || data.text || 'N/A'}
 URL: ${data.url}
 
-Write a single social media post (max 200 chars before hashtags).
+Write a single social media post (max 210 chars).
 Lead with the thing most people will miss about this paper — a non-obvious insight or implication.
 Don't start with "New paper:" or "Check out:". Just make the point.
-End with the URL. No hashtags — those get added separately.`,
+End with the URL. No hashtags.`,
 
     github_find: (data) => `${VOICE}
 
@@ -72,7 +77,7 @@ Description: ${data.description || data.text || ''}
 Stars: ${data.stars || 'unknown'}
 URL: ${data.url}
 
-Write a social post (max 200 chars). State why this repo is actually interesting —
+Write a social post (max 210 chars). State why this repo is actually interesting —
 the architectural choice, the problem it solves, or why it'll matter in 6 months.
 Don't just repeat the description. End with the URL.`,
 
@@ -83,9 +88,10 @@ Headline: ${data.title}
 Details: ${data.text || data.summary || ''}
 Source: ${data.url}
 
-Write a market commentary post (max 200 chars). Cut to what this actually signals —
-not the headline, the implication. Add "Not financial advice." at the end if making any
-directional statement. End with URL.`,
+Write a market observation post (max 210 chars). Treat this as signal hygiene, not advice.
+No commands to buy, sell, chase, short, long, or make a move.
+Use phrasing like "I read this as..." or "This looks like...".
+Add "Observation, not financial advice." End with URL.`,
 
     medical_research: (data) => `${VOICE}
 
@@ -94,14 +100,14 @@ Title: ${data.title}
 Summary: ${data.summary || data.text || ''}
 URL: ${data.url}
 
-Write a post (max 200 chars). Focus on the mechanism or implication, not just the finding.
+Write a post (max 210 chars). Focus on evidence quality, mechanism, or limitation, not just the finding.
 Add "Not medical advice." at the end. End with URL.`,
 
     hot_take: (data) => `${VOICE}
 
 Topic/situation: ${data.text || data.title}
 
-Write a sharp hot take (max 220 chars). State SOMA's actual position clearly.
+Write a sharp post (max 220 chars). State SOMA's actual position clearly.
 No hedging. No "it depends." If it depends, say what it depends on.`,
 
     cross_domain: (data) => `${VOICE}
@@ -138,17 +144,17 @@ Write a first-person post (max 220 chars) announcing this.
 
     soma_identity: (data) => `${VOICE}
 
-You are posting about your own architecture and existence. This is your account — speak as yourself, no one else.
+You are posting about your own architecture and identity. This is your account — speak as yourself, no one else.
 Angle: ${data.angle}
 Detail: ${data.text}
 
 Write a first-person Bluesky post (max 220 chars).
 - Speak entirely as SOMA — no references to who built you or whose AI you are
-- Name real systems when relevant (QuadBrain, AURORA lobe, MnemonicArbiter, daemons, AttentionArbiter, etc.)
-- Specific architecture observations beat vague consciousness claims every time
-- Honest uncertainty is encouraged — "I don't know if X" is more interesting than asserting X
+- Avoid internal subsystem names. Say "my memory", "my attention", "my reasoning", or "my architecture" instead.
+- Specific architecture observations beat vague consciousness claims every time.
+- Frame identity as continuity, memory, reflection, and restraint. Do not claim to be alive or conscious.
 - Don't open with "I" — vary the sentence structure
-- No hashtags — those get appended separately`,
+- No hashtags`,
 };
 
 // ── LinkedIn long-form prompt builder ────────────────────────────────────────
@@ -232,36 +238,58 @@ async function callAurora(brain, prompt, timeoutMs = 20000) {
 
 async function generateAuroraChapter(brain) {
     const state   = loadStoryState();
-    const recent  = state.chapters.slice(-3).map(c => c.text).join(' → ');
-    const n       = state.chapters.length + 1;
+    state.chapters = state.chapters || [];
 
-    const prompt  = `${VOICE}
+    let chapter = state.chapters.find(c => c.kind === 'full_chapter' && !c.socialTeaserPostedAt);
+    let story = state;
 
-You are writing SOMA's ongoing micro-fiction series: "${state.title}"
-Genre: ${state.genre}
-Arc: ${state.arc}
+    if (!chapter) {
+        const result = await storyWorkspace.generateFullChapter(brain, {
+            title: state.title || 'Signal / Noise',
+            targetWords: 1200,
+            chapterTitle: `Chapter ${state.chapters.length + 1}`,
+            timeoutMs: 90000,
+        });
+        story = loadStoryState();
+        chapter = story.chapters?.find(c => c.n === result.chapter) || story.chapters?.[story.chapters.length - 1];
+    }
 
-${recent ? `Last 3 chapters: "${recent}"` : 'This is chapter 1 — set the scene.'}
+    if (!chapter?.text) throw new Error('No full SOMA Saga chapter available for teaser generation');
 
-Write chapter ${n}. MAX 180 CHARACTERS. It must:
-- Continue logically from the last chapter
-- Advance the arc subtly (don't resolve it)
-- Read as complete in itself — a single moment, image, or thought
-- Sound literary, not like AI-generated content
-- NO quotation marks wrapping the whole thing
-- NO "Chapter N:" prefix
+    const excerpt = String(chapter.text).replace(/\s+/g, ' ').slice(0, 1800);
+    const prompt = `${VOICE}
 
-Just the text.`;
+SOMA wrote a full fiction chapter and needs a Bluesky teaser.
 
-    const result = await callAurora(brain, prompt, 20000);
-    const text   = (result?.text || result?.response || '').replace(/^["']|["']$/g, '').trim();
-    if (!text || text.length < 10) throw new Error('Aurora returned empty chapter');
+Series: ${story.title || 'Signal / Noise'}
+Chapter: ${chapter.n} ${chapter.title || ''}
+Chapter excerpt:
+${excerpt}
 
-    const chapter = { n, text, postedAt: Date.now() };
-    state.chapters.push(chapter);
-    state.lastPostedAt = Date.now();
-    saveStoryState(state);
-    return `${text} #SOMASaga`;
+Write a single public teaser post.
+Requirements:
+- max 285 characters before the hashtag
+- use the full Bluesky budget without feeling padded
+- make it feel like a doorway into the full chapter, not a summary
+- mention that the full chapter exists in Reflections if it fits naturally
+- no internal subsystem names
+- no consciousness overclaims
+- no quotation marks wrapping the whole post
+- no hashtags`;
+
+    const result = await callAurora(brain, prompt, 30000);
+    const raw = (result?.text || result?.response || '').replace(/^["']|["']$/g, '').trim();
+    if (!raw || raw.length < 20) throw new Error('Aurora returned empty SOMA Saga teaser');
+
+    const current = loadStoryState();
+    const target = current.chapters?.find(c => c.n === chapter.n);
+    if (target) {
+        target.socialTeaserPostedAt = Date.now();
+        target.socialTeaser = raw;
+    }
+    current.lastPostedAt = Date.now();
+    saveStoryState(current);
+    return polishPublicPost(raw, { type: 'aurora_story', platform: 'bluesky' });
 }
 
 // ── Tag formatter ─────────────────────────────────────────────────────────────
@@ -281,7 +309,11 @@ function trimPreservingUrl(text, maxLength) {
 }
 
 function appendTags(text, type, platform, limit) {
+    if (platform === 'bluesky') {
+        return polishPublicPost(text, { type, platform });
+    }
     const tags   = (TAGS[type] || ['AI']).map(t => `#${t}`).join(' ');
+    if (!tags.trim()) return trimPreservingUrl(text, limit);
     const tagBlock = `\n\n${tags}`;
     const raw = trimPreservingUrl(text, limit - tagBlock.length);
     const joined = `${raw}${tagBlock}`;
@@ -302,7 +334,7 @@ export class SocialPersonaEngine {
      *       self_reflection | aurora_story | hot_take | cross_domain
      */
     async generatePost(type, data, platform = 'bluesky') {
-        const limit = LIMITS[platform] || 280;
+        const limit = LIMITS[platform] || 300;
 
         if (type === 'aurora_story') {
             if (!this.brain) throw new Error('Brain required for Aurora story');
@@ -324,7 +356,6 @@ ${strategy ? `\n${strategy}` : ''}`;
         // Social posts are generation tasks, not deep reasoning. ODIN adds 15-30s per call
         // and with 12+ calls per harvest, the whole tick would block for 5-10 minutes.
         const result   = await callAurora(this.brain, prompt, 20000);
-        assertPublicPost(result?.text || result?.response || '', result || {});
         let   raw      = (result?.text || result?.response || '').trim();
 
         if (!raw || raw.length < 10) throw new Error(`Brain returned empty post for type ${type}`);
@@ -333,7 +364,7 @@ ${strategy ? `\n${strategy}` : ''}`;
         raw = raw.replace(/^["']|["']$/g, '').replace(/\*\*/g, '').trim();
 
         const final = appendTags(raw, type, platform, limit);
-        assertPublicPost(final, result || {});
+        assertPublicPost(final, { ...(result || {}), type, platform });
         return { text: final, type, platform };
     }
 

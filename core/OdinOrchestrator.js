@@ -100,6 +100,41 @@ IMPORTANT: NEVER use em-dashes (—).`;
             return s.quadBrain._callProviderCascade(prompt, { activeLobe: lobe });
         }
 
+        // Pattern C: bootstrap has the reasoning surface under another common brain key.
+        const candidates = [
+            s.brain,
+            s.somArbiter,
+            s.somaArbiter,
+            s.arbiter,
+            s.reasoningCore,
+            s.cognitiveCore,
+        ];
+        for (const candidate of candidates) {
+            if (candidate && typeof candidate._callProviderCascade === 'function') {
+                return candidate._callProviderCascade(prompt, { activeLobe: lobe });
+            }
+            if (candidate && typeof candidate.reason === 'function') {
+                return candidate.reason(prompt, { activeLobe: lobe, preferredBrain: lobe });
+            }
+        }
+
+        // Pattern D: maps/registries sometimes hold the active QuadBrain under a named key.
+        const registryCandidates = [
+            s.arbiters?.get?.('quadBrain'),
+            s.arbiters?.get?.('somArbiter'),
+            s.arbiters?.get?.('SOMArbiter'),
+            s.registry?.get?.('quadBrain'),
+            s.registry?.get?.('somArbiter'),
+        ].filter(Boolean);
+        for (const candidate of registryCandidates) {
+            if (typeof candidate._callProviderCascade === 'function') {
+                return candidate._callProviderCascade(prompt, { activeLobe: lobe });
+            }
+            if (typeof candidate.reason === 'function') {
+                return candidate.reason(prompt, { activeLobe: lobe, preferredBrain: lobe });
+            }
+        }
+
         throw new Error('OdinOrchestrator: no _callProviderCascade found on system or system.quadBrain');
     }
 

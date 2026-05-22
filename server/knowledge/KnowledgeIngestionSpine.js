@@ -2,13 +2,13 @@ import fs from 'fs';
 import path from 'path';
 
 const DOMAIN_TARGETS = {
-  medical: { workbook: 'SOMA Research', segment: 'Medical Literature' },
-  finance: { workbook: 'Mission Control Research', segment: 'Market Evidence' },
-  code: { workbook: 'Code Lab Research', segment: 'Repository Evidence' },
-  creative: { workbook: 'Creative Studio', segment: 'Story Notes' },
-  social: { workbook: 'Social Presence', segment: 'Audience Learning' },
-  system: { workbook: 'SOMA Operating Memory', segment: 'Decisions And Lessons' },
-  general: { workbook: 'SOMA Knowledge', segment: 'Inbox' }
+  medical: { workbook: 'SOMA Research', segment: 'Medical Literature', section: 'Evidence Folios' },
+  finance: { workbook: 'Mission Control Research', segment: 'Market Evidence', section: 'Research Folios' },
+  code: { workbook: 'Code Lab Research', segment: 'Repository Evidence', section: 'Implementation Notes' },
+  creative: { workbook: 'Creative Studio', segment: 'Story Notes', section: 'Creative Research' },
+  social: { workbook: 'Social Presence', segment: 'Audience Learning', section: 'Social Signals' },
+  system: { workbook: 'SOMA Operating Memory', segment: 'Decisions And Lessons', section: 'Operating Lessons' },
+  general: { workbook: 'SOMA Knowledge', segment: 'Inbox', section: 'General Folios' }
 };
 
 const slugValue = (value = 'untitled') => String(value)
@@ -93,11 +93,12 @@ export class KnowledgeIngestionSpine {
     return {
       domain,
       workbook: payload.targetWorkbook || defaults.workbook,
-      segment: payload.targetSegment || defaults.segment
+      segment: payload.targetSegment || defaults.segment,
+      section: payload.targetSection || defaults.section
     };
   }
 
-  _ensureScaffold(workbook, segment, domain) {
+  _ensureScaffold(workbook, segment, domain, section = 'General Folios') {
     fs.mkdirSync(this.reflectionsPath, { recursive: true });
     const now = new Date().toISOString();
     const workbookFile = path.join(this.reflectionsPath, `workbook.${slugValue(workbook)}.md`);
@@ -135,6 +136,27 @@ export class KnowledgeIngestionSpine {
         `# ${segment}`,
         '',
         'Structured notes, evidence units, contradictions, and reusable lessons.'
+      ].join('\n'), 'utf8');
+    }
+
+    const sectionFile = path.join(this.reflectionsPath, `section.${slugValue(workbook)}.${slugValue(segment)}.${slugValue(section)}.md`);
+    if (!fs.existsSync(sectionFile)) {
+      fs.writeFileSync(sectionFile, [
+        '---',
+        `title: ${frontmatterValue(section)}`,
+        'type: section',
+        `workbook: ${frontmatterValue(workbook)}`,
+        `segment: ${frontmatterValue(segment)}`,
+        `parent: ${frontmatterValue(segment)}`,
+        'status: active',
+        `createdAt: ${now}`,
+        `domain: ${frontmatterValue(domain)}`,
+        'tags: [reflections, knowledge-spine, section]',
+        '---',
+        '',
+        `# ${section}`,
+        '',
+        'Structured folios for this segment.'
       ].join('\n'), 'utf8');
     }
   }
@@ -216,10 +238,10 @@ export class KnowledgeIngestionSpine {
   }
 
   publishToReflections(entry, units, comparison, target) {
-    this._ensureScaffold(target.workbook, target.segment, target.domain);
+    this._ensureScaffold(target.workbook, target.segment, target.domain, target.section);
     const now = new Date().toISOString();
     const title = entry.title || 'Knowledge Ingestion';
-    const filename = `folio.${slugValue(target.workbook)}.${slugValue(target.segment)}.${slugValue(title)}.${Date.now()}.md`;
+    const filename = `folio.${slugValue(target.workbook)}.${slugValue(target.segment)}.${slugValue(target.section)}.${slugValue(title)}.${Date.now()}.md`;
     const filePath = path.join(this.reflectionsPath, filename);
     const sourceLines = [
       `- Domain: ${target.domain}`,
@@ -245,7 +267,8 @@ export class KnowledgeIngestionSpine {
       'status: inbox',
       `workbook: ${frontmatterValue(target.workbook)}`,
       `segment: ${frontmatterValue(target.segment)}`,
-      `parent: ${frontmatterValue(target.segment)}`,
+      `section: ${frontmatterValue(target.section)}`,
+      `parent: ${frontmatterValue(target.section)}`,
       `createdAt: ${now}`,
       `domain: ${frontmatterValue(target.domain)}`,
       `sourceType: ${frontmatterValue(entry.sourceType || 'unknown')}`,

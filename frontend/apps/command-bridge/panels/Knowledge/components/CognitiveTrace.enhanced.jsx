@@ -1,7 +1,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { BRAINS } from '../constants.js';
 import { BrainType } from '../types.js';
-import { Activity, Search, Zap, Globe, ChevronDown, ChevronUp, Database } from 'lucide-react';
+import { Activity, Search, Zap, ChevronDown, ChevronUp, Database } from 'lucide-react';
 import { MemoryExcavator } from './MemoryExcavator.jsx';
 
 export const CognitiveTrace = ({
@@ -124,27 +124,6 @@ export const CognitiveTrace = ({
                         />
                     </div>
 
-                    <div className="flex items-center space-x-1">
-                        {orderedBrains.map((brain) => (
-                            <div
-                                key={brain}
-                                className="group cursor-help relative"
-                                onClick={() => onShowInfluenceInfo?.(brain)}
-                                title={BRAINS[brain]?.name}
-                            >
-                                <div className="w-12 h-1 bg-zinc-800 rounded-full overflow-hidden">
-                                    <div
-                                        className="h-full transition-all duration-1000"
-                                        style={{
-                                            width: `${brainInfluence[brain] || 0}%`,
-                                            backgroundColor: BRAINS[brain]?.color
-                                        }}
-                                    />
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-
                     <button
                         onClick={onToggleCollapse}
                         className="p-1.5 hover:text-white text-zinc-500 transition-colors"
@@ -163,28 +142,13 @@ export const CognitiveTrace = ({
                                 <span>Cognitive Stream</span>
                             </div>
 
-                            <div className="flex items-center space-x-4 pl-4 border-l border-white/10">
-                                {orderedBrains.map((brain) => (
-                                    <div
-                                        key={brain}
-                                        className="flex flex-col items-center group cursor-help w-16"
-                                        onClick={() => onShowInfluenceInfo?.(brain)}
-                                    >
-                                        <div className="w-full h-1 bg-zinc-800 rounded-full overflow-hidden mb-1">
-                                            <div
-                                                className="h-full transition-all duration-700 ease-out shadow-[0_0_10px_currentColor]"
-                                                style={{
-                                                    width: `${brainInfluence[brain] || 5}%`,
-                                                    backgroundColor: BRAINS[brain]?.color,
-                                                    color: BRAINS[brain]?.color
-                                                }}
-                                            />
-                                        </div>
-                                        <div className="text-[9px] text-zinc-600 uppercase font-bold group-hover:text-zinc-300 transition-colors">
-                                            {BRAINS[brain]?.name.substring(0, 3)}
-                                        </div>
-                                    </div>
-                                ))}
+                            <div className="flex items-center gap-2 pl-4 border-l border-white/10">
+                                <span className="rounded-full border border-white/10 bg-white/[0.03] px-2 py-1 text-[9px] font-bold uppercase tracking-widest text-zinc-500">
+                                    {filterBrain ? `${BRAINS[filterBrain]?.name || filterBrain} focus` : 'All lanes'}
+                                </span>
+                                <span className="text-[9px] uppercase tracking-widest text-zinc-700">
+                                    Live activity, debate, memory excavation
+                                </span>
                             </div>
                         </div>
 

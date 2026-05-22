@@ -386,11 +386,14 @@ export class PulseClient {
   /**
    * Analyze vision data via VisionProcessingArbiter
    */
-  analyzeVision(imageData: string, mimeType: string, analysisType: string = 'ui_mockup') {
-    return this.call('/arbiter/analyze-vision', {
+  async analyzeVision(imageData: string, mimeType: string, analysisType: string = 'ui-to-code') {
+    const res = await somaFetch('/api/perception/analyze-image', {
       method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ imageData, mimeType, analysisType })
     });
+    if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+    return res.json();
   }
 
   /**

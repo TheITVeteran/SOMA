@@ -18,6 +18,7 @@ import messageBroker from '../core/MessageBroker.cjs';
 import fs from 'fs/promises';
 import path from 'path';
 import toolRegistry from '../core/ToolRegistry.js';
+import costLedger from '../server/core/CostLedger.js';
 import { SOMA_VALUES_PROMPT } from '../core/SomaValues.js';
 import { OdinOrchestrator } from '../core/OdinOrchestrator.js';
 
@@ -516,7 +517,9 @@ INTEGRATED RESPONSE:`;
         if (!assistantMsg.tool_calls?.length) {
             const text = assistantMsg.content;
             if (!text) throw new Error('DeepSeek returned empty content');
-            return { text, provider: 'deepseek' };
+            const usage = data.usage || {};
+            try { costLedger.record({ model: body.model || 'deepseek-chat', inputTokens: usage.prompt_tokens || 0, outputTokens: usage.completion_tokens || 0, actor: 'QuadBrain', action: 'chat' }); } catch {}
+            return { text, provider: 'deepseek', usage };
         }
 
         // Has tool calls — execute each one and feed results back

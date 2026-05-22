@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { GlobalControls } from './components/GlobalControls.jsx';
-import { ChevronDown, ChevronUp, Activity, MessageSquare, CheckCircle, XCircle, AlertTriangle, Send, X, Clock, Swords, BookOpen, FlaskConical, BarChart2, Bell, Bot, ScrollText, Target, Database } from 'lucide-react';
+import { ChevronDown, ChevronUp, Activity, MessageSquare, CheckCircle, XCircle, AlertTriangle, Send, X, Clock, Swords, BookOpen, FlaskConical, BarChart2, Bell, Bot, ScrollText, Target, Database, Wallet, TrendingUp, TrendingDown } from 'lucide-react';
 import { useMarketEngine, MarketMonitor, MarketDeepScan } from './components/MarketRadar.jsx';
 import { StrategyBrain } from './components/StrategyBrain.jsx';
 import { TradeStream } from './components/TradeStream.jsx';
@@ -25,6 +25,131 @@ import { TradeMode, AssetType } from './types.js';
 
 import { INITIAL_TICKERS, STRATEGY_PRESETS } from './constants.js';
 import './mission-control.css';
+
+const fmt = (n, decimals = 2) => n == null ? '—' : Number(n).toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
+const fmtUsd = (n) => n == null ? '—' : `$${fmt(n)}`;
+const pnlColor = (n) => n == null ? 'text-zinc-500' : n >= 0 ? 'text-emerald-400' : 'text-rose-400';
+
+const PortfolioPanel = ({ riskMetrics, positions = [], orders = [], trades = [], isDemoMode, autonomousStatus }) => {
+    const sessionPnl = autonomousStatus?.stats?.sessionPnL ?? null;
+    const totalTrades = autonomousStatus?.stats?.tradesExecuted ?? trades.length;
+    const winRate = autonomousStatus?.stats?.winRate ?? null;
+    const unrealizedPnl = positions.reduce((s, p) => s + (p.unrealizedPnl ?? parseFloat(p.unrealized_pl ?? 0)), 0);
+    const totalPnl = (sessionPnl ?? 0) + unrealizedPnl;
+
+    return (
+        <div className="h-full overflow-y-auto custom-scrollbar p-3 flex flex-col gap-3">
+            {/* Mode badge */}
+            <div className={`flex items-center gap-2 px-2 py-1 rounded text-[9px] font-bold uppercase tracking-widest w-fit ${isDemoMode ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'}`}>
+                <div className={`w-1.5 h-1.5 rounded-full ${isDemoMode ? 'bg-amber-400' : 'bg-rose-400 animate-pulse'}`} />
+                {isDemoMode ? 'Paper Mode' : 'Live Mode'}
+            </div>
+
+            {/* Balance cards */}
+            <div className="grid grid-cols-2 gap-2">
+                {[
+                    { label: 'Equity', value: fmtUsd(riskMetrics?.equity) },
+                    { label: 'Wallet', value: fmtUsd(riskMetrics?.walletBalance) },
+                ].map(({ label, value }) => (
+                    <div key={label} className="bg-black/40 border border-white/5 rounded p-2">
+                        <div className="text-[9px] text-zinc-600 uppercase tracking-wider mb-1">{label}</div>
+                        <div className="text-sm font-mono font-bold text-zinc-200">{value}</div>
+                    </div>
+                ))}
+            </div>
+
+            {/* Session P&L */}
+            <div className="bg-black/40 border border-white/5 rounded p-2">
+                <div className="text-[9px] text-zinc-600 uppercase tracking-wider mb-2">Session P&amp;L</div>
+                <div className="flex items-end justify-between">
+                    <div>
+                        <div className={`text-lg font-mono font-bold ${pnlColor(totalPnl)}`}>
+                            {totalPnl >= 0 ? '+' : ''}{fmtUsd(totalPnl)}
+                        </div>
+                        <div className="text-[9px] text-zinc-600 mt-0.5">
+                            {sessionPnl != null ? `Realized: ${fmtUsd(sessionPnl)}` : 'No session data'}
+                            {unrealizedPnl !== 0 && ` · Unrealized: ${fmtUsd(unrealizedPnl)}`}
+                        </div>
+                    </div>
+                    <div className="text-right">
+                        <div className="text-xs font-mono text-zinc-300">{totalTrades} trades</div>
+                        {winRate != null && <div className="text-[9px] text-zinc-500">{(winRate * 100).toFixed(0)}% win rate</div>}
+                    </div>
+                </div>
+            </div>
+
+            {/* Open positions */}
+            <div>
+                <div className="text-[9px] text-zinc-600 uppercase tracking-wider mb-1.5">Open Positions</div>
+                {positions.length === 0 ? (
+                    <div className="text-[10px] text-zinc-600 italic py-2 text-center">No open positions</div>
+                ) : (
+                    <div className="flex flex-col gap-1">
+                        {positions.map((p, i) => {
+                            const sym = p.symbol || p.Symbol || '—';
+                            const qty = p.qty ?? p.Qty ?? p.quantity ?? 0;
+                            const upnl = p.unrealizedPnl ?? parseFloat(p.unrealized_pl ?? 0);
+                            const side = parseFloat(qty) >= 0 ? 'LONG' : 'SHORT';
+                            return (
+                                <div key={i} className="flex items-center justify-between bg-black/30 border border-white/5 rounded px-2 py-1.5">
+                                    <div>
+                                        <div className="text-xs font-mono font-bold text-zinc-200">{sym}</div>
+                                        <div className="text-[9px] text-zinc-600">{side} · {Math.abs(qty)}</div>
+                                    </div>
+                                    <div className={`text-xs font-mono font-bold ${pnlColor(upnl)}`}>
+                                        {upnl >= 0 ? '+' : ''}{fmtUsd(upnl)}
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                )}
+            </div>
+
+            {/* Pending orders */}
+            {orders.length > 0 && (
+                <div>
+                    <div className="text-[9px] text-zinc-600 uppercase tracking-wider mb-1.5">Pending Orders</div>
+                    <div className="flex flex-col gap-1">
+                        {orders.slice(0, 5).map((o, i) => {
+                            const side = o.side || o.Side || '?';
+                            const sym = o.symbol || o.Symbol || '—';
+                            const qty = o.qty || o.Qty || o.quantity || 0;
+                            const price = o.limit_price ?? o.stop_price ?? null;
+                            return (
+                                <div key={i} className="flex items-center justify-between bg-black/20 border border-white/5 rounded px-2 py-1">
+                                    <div className="text-[10px] font-mono text-zinc-400">
+                                        <span className={side === 'buy' ? 'text-emerald-400' : 'text-rose-400'}>{side.toUpperCase()}</span>
+                                        {' '}{qty} {sym}
+                                    </div>
+                                    {price != null && <div className="text-[9px] font-mono text-zinc-500">@ {fmtUsd(price)}</div>}
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+            )}
+
+            {/* Risk metrics */}
+            <div>
+                <div className="text-[9px] text-zinc-600 uppercase tracking-wider mb-1.5">Risk Metrics</div>
+                <div className="grid grid-cols-2 gap-1">
+                    {[
+                        { label: 'Daily Drawdown', value: riskMetrics?.dailyDrawdown != null ? `${fmt(riskMetrics.dailyDrawdown)}%` : '—' },
+                        { label: 'DD Limit', value: riskMetrics?.maxDrawdownLimit != null ? `${fmt(riskMetrics.maxDrawdownLimit)}%` : '—' },
+                        { label: 'Sharpe', value: riskMetrics?.sharpeRatio != null ? fmt(riskMetrics.sharpeRatio) : '—' },
+                        { label: 'Sortino', value: riskMetrics?.sortinoRatio != null ? fmt(riskMetrics.sortinoRatio) : '—' },
+                    ].map(({ label, value }) => (
+                        <div key={label} className="bg-black/30 border border-white/5 rounded px-2 py-1">
+                            <div className="text-[8px] text-zinc-600 uppercase">{label}</div>
+                            <div className="text-[10px] font-mono text-zinc-300">{value}</div>
+                        </div>
+                    ))}
+                </div>
+            </div>
+        </div>
+    );
+};
 
 const MissionControlApp = ({ somaBackend, isConnected }) => {
     // --- STATE MANAGEMENT ---
@@ -2118,6 +2243,7 @@ const MissionControlApp = ({ somaBackend, isConnected }) => {
                                             {[
                                                 { id: 'decisions', label: 'Decision Stream', icon: Activity },
                                                 { id: 'thesis', label: 'Trade Thesis', icon: Target },
+                                                { id: 'portfolio', label: 'Portfolio', icon: Wallet },
                                                 { id: 'evidence', label: 'Evidence Brief', icon: Database },
                                                 { id: 'timeline', label: 'Evidence Timeline', icon: ScrollText },
                                             ].map(({ id, label, icon: Icon }) => (
@@ -2137,6 +2263,15 @@ const MissionControlApp = ({ somaBackend, isConnected }) => {
                                                 <TradeStream trades={trades} embedded />
                                             ) : decisionPanelTab === 'thesis' ? (
                                                 <TradeThesisPanel thesis={activeTradeThesis} />
+                                            ) : decisionPanelTab === 'portfolio' ? (
+                                                <PortfolioPanel
+                                                    riskMetrics={riskMetrics}
+                                                    positions={brokerPositions}
+                                                    orders={brokerOrders}
+                                                    trades={trades}
+                                                    isDemoMode={isDemoMode}
+                                                    autonomousStatus={autonomousStatus}
+                                                />
                                             ) : decisionPanelTab === 'evidence' ? (
                                                 <EvidenceBriefPanel
                                                     symbol={selectedSymbol}

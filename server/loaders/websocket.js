@@ -32,12 +32,14 @@ const provenanceGuard = require('../../core/AutonomousProvenanceGuard.cjs');
  */
 function _needsGrounding(text) {
     if (!text) return false;
-    // Already uses honest hedging language → no grounding needed
-    const hedged = /\b(i am planning|i want to|i'm curious|i need to|i'm checking|i am checking|i am thinking|working on|i am testing|i am looking)\b/i.test(text);
-    if (hedged) return false;
+    if (/\b(refine cluster|score\s*0\.\d+|quality gate|em-dash|prompt|provenance guard|unsupported_empirical_claim|internal critique)\b/i.test(text)) return true;
+    if (/\b(i\s*(am|'m)?\s*(pulling|running|testing|cross-referencing|scraping|measuring|verifying)|about to\s+(pull|run|test|cross-reference|scrape|verify)|going to\s+(pull|run|test|cross-reference|scrape|verify))\b/i.test(text)) return true;
     // Contains specific numeric or factual claims → needs verification
     const hasSpecificClaim = /\b(\d+(\.\d+)?%|\d+ (file|test|error|result|record|item|node|token)|\b(found|confirmed|verified|proved|measured)\b)/i.test(text);
-    return hasSpecificClaim;
+    if (!hasSpecificClaim) return false;
+    // Already genuinely hedged with uncertainty language → skip grounding
+    const hedged = /\b(i'm curious|i want to|might be|possibly|not yet|could be|unverified|needs (testing|backtesting)|i think|unsure|unclear)\b/i.test(text);
+    return !hedged;
 }
 
 /**
@@ -53,7 +55,7 @@ async function _groundMessage(rawText, ledgerEntries, brain) {
         .slice(0, 6)
         .map(e => `[${e.type}] ${e.title}: ${(e.summary || '').substring(0, 200)}${e.evidence ? ` (source: ${String(e.evidence).substring(0, 100)})` : ''}`)
         .join('\n');
-    const prompt = `You are SOMA's grounding layer. SOMA's local model just generated this autonomous status update:
+    const prompt = `You are SOMA's grounding layer. SOMA's local model just generated this autonomous message:
 "${rawText}"
 
 SOMA's actual recent verified work (from her work ledger):
@@ -61,9 +63,12 @@ ${evidenceCtx || 'No verified work entries yet.'}
 
 Rewrite the message so every claim is honest:
 - If a claim is backed by a ledger entry above, keep it and reference what was actually found.
-- If a claim has no ledger backing, replace it with honest curiosity language: "I've been thinking about...", "I'm curious whether...", "I want to explore..."
+- If a claim has no ledger backing, remove the unsupported claim and rephrase as genuine curiosity or reflection using natural first-person voice — no disclaimer labels like "Candidate idea:", "Queued curiosity:", or "No verified run yet".
+- Do not imply active research, tests, scraping, measuring, pulling overviews, or cross-referencing happened unless the ledger proves it.
+- Remove all internal QA language, including REFINE, quality scores, em-dash checks, prompt details, provenance guard, and unsupported_empirical_claim.
+- NEVER output "Candidate idea:", "Queued curiosity:", "No verified run yet", "stays in the queue", or "waiting for a signal".
 - NEVER output the phrase "I don't have verified evidence for those specific numbers yet".
-- Keep the same casual voice. 1-3 sentences max. No em-dashes.
+- Keep the same casual, direct voice. 1-3 sentences max. No em-dashes. No questions.
 - If there is genuinely nothing real to report, output ONLY the word: [NOTHING]`;
     try {
         const result = await Promise.race([
@@ -71,7 +76,8 @@ Rewrite the message so every claim is honest:
             new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 8_000))
         ]);
         const text = (result?.text || '').trim().replace(/^["']|["']$/g, '');
-        return text.length > 10 ? text : rawText;
+        const guarded = provenanceGuard.guardUpdate(text.length > 10 ? text : rawText, ledgerEntries).text;
+        return guarded;
     } catch {
         return provenanceGuard.guardUpdate(rawText, ledgerEntries).text;
     }
@@ -512,12 +518,15 @@ export function setupWebSocket(server, wss, system) {
     // Asks the brain if anything is genuinely worth saying. If not, stays quiet.
     // Never interrupts a live conversation. Rate-limited by cooldown.
     // This is the ONLY mechanism for unsolicited speech — no forced greetings.
-    let _lastProactiveTs = 0;
     const PROACTIVE_COOLDOWN_MS = 20 * 60 * 1000; // 20 min between proactive messages
     const PROACTIVE_BOOT_DELAY_MS = 10 * 60 * 1000; // wait 10 min after boot for systems to load
 
     const AutonomousLoop = require('../../cognitive/AutonomousLoop.cjs');
     const autonomousLoop = new AutonomousLoop({ system });
+
+    // Shared proactive timestamp — readable by AutonomousHeartbeat so both sources
+    // respect the same cooldown window and don't fire within minutes of each other.
+    system._lastProactiveMs = system._lastProactiveMs || 0;
 
     // Rolling window of recent proactive message fingerprints — prevents near-duplicate sends
     const _recentProactiveFingerprints = [];
@@ -535,7 +544,7 @@ export function setupWebSocket(server, wss, system) {
             try {
                 if (global.__SOMA_CHAT_ACTIVE) return;           // don't interrupt a conversation
                 if (dashboardClients.size === 0) return;          // nobody connected
-                if (Date.now() - _lastProactiveTs < PROACTIVE_COOLDOWN_MS) return; // cooldown
+                if (Date.now() - (system._lastProactiveMs || 0) < PROACTIVE_COOLDOWN_MS) return; // cooldown
 
                 const brain = system.quadBrain || system.somArbiter;
                 if (!brain) return;
@@ -600,16 +609,25 @@ export function setupWebSocket(server, wss, system) {
 
                 if (!text || text.includes('[NOTHING]') || _isRepeat(text)) return;
 
-                _lastProactiveTs = Date.now();
+                system._lastProactiveMs = Date.now();
                 workLedger.record({
                     type:     'proactive_update',
                     title:    'Autonomous chat update',
                     summary:  text,
                     evidence: 'DeepSeek grounding pass',
-                    nextStep: 'Wait for next verified work signal',
                     status:   'reported',
                     source:   'WebSocketProactiveLoop'
                 });
+                // Consume the top curiosity queue item so the same topic
+                // doesn't appear again in every 20-min tick forever
+                if (system.curiosityEngine?.curiosityQueue?.length > 0) {
+                    const consumed = system.curiosityEngine.curiosityQueue.shift();
+                    if (consumed && system.curiosityEngine.explorationHistory) {
+                        const key = consumed.gap || consumed.question;
+                        const prior = system.curiosityEngine.explorationHistory.get(key) || 0;
+                        system.curiosityEngine.explorationHistory.set(key, prior + 1);
+                    }
+                }
                 broadcast('pulse', { type: 'soma_proactive', message: text });
                 console.log(`[SOMA] 💭 Proactive (RTC+Ground): "${text.substring(0, 80)}"`);
 

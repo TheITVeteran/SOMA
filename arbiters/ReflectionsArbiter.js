@@ -51,7 +51,7 @@ export class ReflectionsArbiter extends BaseArbiter {
     try {
       const prompt = `[CRYSTALLIZATION PROTOCOL] 
 Analyze this brainstorming transcript and extract the RAW IDEAS, FUTURE CONCEPTS, and TECHNICAL PREREQUISITES.
-Format as high-quality Obsidian-style Markdown with [[Links]] to related concepts.
+Format as high-quality SOMA reflection Markdown with [[Links]] to related concepts.
 
 TRANSCRIPT:
 ${chatLog}`;
@@ -214,6 +214,10 @@ ${content}
 
   async appendQuickNote(text, metadata = {}) {
     const date = new Date().toISOString();
+    const yamlScalar = (value) => JSON.stringify(String(value ?? ''));
+    const contextValue = metadata.context
+      ? Buffer.from(JSON.stringify(metadata.context)).toString('base64')
+      : '';
 
     // Use provided title or auto-slug from first 6 words
     const titleSlug = metadata.title
@@ -226,9 +230,12 @@ ${content}
     const tags = Object.entries(freq).sort((a, b) => b[1] - a[1]).slice(0, 5).map(([w]) => w);
 
     const filename = `note_${titleSlug}_${Date.now()}.md`;
-    const titleLine = metadata.title ? `title: ${metadata.title}\n` : '';
-    const contextLine = metadata.context ? `context: ${metadata.context}\n` : '';
-    const mdContent = `---\ncreated: ${date}\n${titleLine}${contextLine}type: quick-note\ntags: [${tags.join(', ')}]\n---\n\n${text}\n`;
+    const titleLine = metadata.title ? `title: ${yamlScalar(metadata.title)}\n` : '';
+    const contextLine = contextValue ? `context_b64: ${contextValue}\n` : '';
+    const sourceLine = metadata.context?.source ? `source: ${yamlScalar(metadata.context.source)}\n` : '';
+    const brainLanes = Array.isArray(metadata.brainLanes) ? metadata.brainLanes : [];
+    const brainLine = brainLanes.length ? `brain_lanes: [${brainLanes.map(yamlScalar).join(', ')}]\n` : '';
+    const mdContent = `---\ncreated: ${date}\n${titleLine}${sourceLine}${contextLine}${brainLine}type: quick-note\ntags: [${tags.map(yamlScalar).join(', ')}]\n---\n\n${text}\n`;
     const fullPath = path.join(this.vaultPath, filename);
     await fs.writeFile(fullPath, mdContent);
 

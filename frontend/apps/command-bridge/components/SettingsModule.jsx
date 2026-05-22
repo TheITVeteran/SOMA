@@ -4,7 +4,7 @@ import './LightMode.css'; // Global Light Mode overrides
 import {
     Shield, Brain, Database, Zap, Users, Globe, Eye, GitBranch,
     AlertTriangle, Lock, Unlock, Activity, Cpu, Trash2, Save,
-    RotateCcw, AlertOctagon, Power, Terminal, Layers, Search, Network, Server
+    RotateCcw, AlertOctagon, Power, Terminal, Layers, Search, Network, Server, KeyRound
 } from 'lucide-react';
 import SkullToggle from './SkullToggle';
 
@@ -42,6 +42,13 @@ const DEFAULT_BRIDGE_SETTINGS = {
     network: {
         peerDiscovery: true,
         seasonalLearningExchange: false
+    },
+    providers: {
+        odds: {
+            provider: 'the-odds-api',
+            enabled: true,
+            cacheTtlSeconds: 300
+        }
     }
 };
 
@@ -61,6 +68,7 @@ const SettingsModule = ({
     const [isSettingsLocked, setIsSettingsLocked] = useState(() => localStorage.getItem('settings_locked') !== 'false');
     const [bridgeSettings, setBridgeSettings] = useState(DEFAULT_BRIDGE_SETTINGS);
     const [settingsStatus, setSettingsStatus] = useState('loading');
+    const [providerStatus, setProviderStatus] = useState(null);
 
     useEffect(() => {
         let cancelled = false;
@@ -79,6 +87,20 @@ const SettingsModule = ({
         loadSettings();
         return () => { cancelled = true; };
     }, []);
+
+    const refreshProviderStatus = useCallback(async () => {
+        try {
+            const res = await fetch('/api/settings/providers');
+            const data = await res.json();
+            if (data.success) setProviderStatus(data.providers);
+        } catch {
+            setProviderStatus(null);
+        }
+    }, []);
+
+    useEffect(() => {
+        refreshProviderStatus();
+    }, [refreshProviderStatus]);
 
     const persistBridgeSettings = useCallback(async (nextSettings) => {
         setSettingsStatus('saving');
@@ -171,6 +193,13 @@ const SettingsModule = ({
             description: 'API access scope, tool trust levels, and sandbox boundaries.'
         },
         {
+            id: 'providers',
+            label: 'Providers & API Keys',
+            icon: KeyRound,
+            color: 'lime',
+            description: 'Connect external data providers used by Forecast OS and other SOMA modules.'
+        },
+        {
             id: 'observability',
             label: 'Observability & Truth',
             icon: Eye,
@@ -209,6 +238,8 @@ const SettingsModule = ({
                 return <EcologyDomain arbiters={arbiters} isLocked={isSettingsLocked} onChange={handleSettingChange} somaBackend={somaBackend} />;
             case 'execution':
                 return <ExecutionDomain isLocked={isSettingsLocked} settings={bridgeSettings.execution} updateSetting={updateBridgeSetting} />;
+            case 'providers':
+                return <ProvidersDomain isLocked={isSettingsLocked} settings={bridgeSettings.providers} updateSetting={updateBridgeSetting} providerStatus={providerStatus} onRefresh={refreshProviderStatus} />;
             case 'observability':
                 return <ObservabilityDomain isLocked={isSettingsLocked} settings={bridgeSettings.observability} updateSetting={updateBridgeSetting} />;
             case 'network':
@@ -668,6 +699,155 @@ const ExecutionDomain = ({ isLocked, settings, updateSetting }) => (
         </SectionCard>
     </div>
 );
+
+const ProvidersDomain = ({ isLocked, settings, updateSetting, providerStatus, onRefresh }) => {
+    const oddsSettings = settings?.odds || {};
+    const oddsStatus = providerStatus?.odds || {};
+    const [apiKey, setApiKey] = React.useState('');
+    const [cacheTtl, setCacheTtl] = React.useState(Number(oddsSettings.cacheTtlSeconds || oddsStatus.cacheTtlSeconds || 300));
+    const [saveStatus, setSaveStatus] = React.useState('idle');
+
+    React.useEffect(() => {
+        setCacheTtl(Number(oddsSettings.cacheTtlSeconds || oddsStatus.cacheTtlSeconds || 300));
+    }, [oddsSettings.cacheTtlSeconds, oddsStatus.cacheTtlSeconds]);
+
+    const oddsEnabled = oddsSettings.enabled ?? oddsStatus.enabled ?? true;
+
+    const saveOddsProvider = async () => {
+        if (isLocked) return;
+        setSaveStatus('saving');
+        try {
+            const res = await fetch('/api/settings/providers/odds', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    apiKey: apiKey.trim(),
+                    provider: oddsSettings.provider || oddsStatus.provider || 'the-odds-api',
+                    enabled: oddsEnabled,
+                    cacheTtlSeconds: cacheTtl
+                })
+            });
+            const data = await res.json();
+            if (!res.ok || !data.success) throw new Error(data.error || `HTTP ${res.status}`);
+            setApiKey('');
+            setSaveStatus('saved');
+            updateSetting('providers', 'odds', {
+                provider: data.providers?.odds?.provider || 'the-odds-api',
+                enabled: data.providers?.odds?.enabled ?? true,
+                cacheTtlSeconds: data.providers?.odds?.cacheTtlSeconds || cacheTtl
+            });
+            onRefresh?.();
+            setTimeout(() => setSaveStatus('idle'), 2500);
+        } catch {
+            setSaveStatus('error');
+        }
+    };
+
+    const toggleOddsProvider = () => {
+        if (isLocked) return;
+        updateSetting('providers', 'odds', {
+            ...oddsSettings,
+            provider: oddsSettings.provider || oddsStatus.provider || 'the-odds-api',
+            enabled: !oddsEnabled,
+            cacheTtlSeconds: cacheTtl
+        });
+    };
+
+    return (
+        <div className="space-y-6">
+            <SectionCard title="Forecast OS Data Provider" description="Connect live odds data for line shopping, provider status, and market enrichment.">
+                <div className="rounded-xl border border-white/5 bg-black/20 p-4">
+                    <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                        <div>
+                            <div className="flex items-center gap-2">
+                                <Server className="h-4 w-4 text-lime-400" />
+                                <h4 className="text-sm font-bold text-white">The Odds API</h4>
+                                <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
+                                    oddsStatus.configured
+                                        ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-400'
+                                        : 'border-amber-500/20 bg-amber-500/10 text-amber-400'
+                                }`}>
+                                    {oddsStatus.configured ? 'Configured' : 'Missing Key'}
+                                </span>
+                            </div>
+                            <p className="mt-2 max-w-xl text-xs leading-relaxed text-zinc-500">
+                                Saves to <span className="font-mono text-zinc-300">ODDS_API_KEY</span> in <span className="font-mono text-zinc-300">.env</span>.
+                                The app only returns a masked preview and updates the running backend immediately.
+                            </p>
+                        </div>
+                        <ToggleControl
+                            active={!!oddsEnabled}
+                            disabled={isLocked}
+                            onToggle={toggleOddsProvider}
+                        />
+                    </div>
+
+                    <div className="mt-5 grid gap-4 md:grid-cols-[1fr_140px]">
+                        <label className="block">
+                            <span className="mb-2 block text-[10px] font-bold uppercase tracking-[0.22em] text-zinc-500">API Key</span>
+                            <input
+                                type="password"
+                                value={apiKey}
+                                disabled={isLocked}
+                                onChange={(e) => setApiKey(e.target.value)}
+                                placeholder={oddsStatus.keyPreview ? `Configured: ${oddsStatus.keyPreview}` : 'Paste provider key'}
+                                className="w-full rounded-lg border border-white/10 bg-black/40 px-3 py-2 font-mono text-sm text-zinc-200 placeholder-zinc-600 outline-none transition-colors focus:border-lime-500/50 disabled:cursor-not-allowed disabled:opacity-50"
+                            />
+                        </label>
+                        <label className="block">
+                            <span className="mb-2 block text-[10px] font-bold uppercase tracking-[0.22em] text-zinc-500">Cache TTL</span>
+                            <input
+                                type="number"
+                                min="60"
+                                step="60"
+                                value={cacheTtl}
+                                disabled={isLocked}
+                                onChange={(e) => setCacheTtl(Number(e.target.value) || 300)}
+                                className="w-full rounded-lg border border-white/10 bg-black/40 px-3 py-2 font-mono text-sm text-zinc-200 outline-none transition-colors focus:border-lime-500/50 disabled:cursor-not-allowed disabled:opacity-50"
+                            />
+                        </label>
+                    </div>
+
+                    <div className="mt-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                        <div className="flex flex-wrap gap-2">
+                            {(oddsStatus.supportedMarkets || ['h2h', 'spreads', 'totals']).map(market => (
+                                <span key={market} className="rounded-md border border-white/10 bg-white/5 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-zinc-400">
+                                    {market}
+                                </span>
+                            ))}
+                            {(oddsStatus.unsupportedMarkets || ['player_props']).map(market => (
+                                <span key={market} className="rounded-md border border-amber-500/20 bg-amber-500/10 px-2 py-1 text-[10px] font-bold uppercase tracking-wider text-amber-400">
+                                    {market} pending
+                                </span>
+                            ))}
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <button
+                                type="button"
+                                onClick={onRefresh}
+                                className="inline-flex items-center gap-2 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs font-bold uppercase tracking-wider text-zinc-300 transition-colors hover:bg-white/10"
+                            >
+                                <RotateCcw className="h-3.5 w-3.5" />
+                                Refresh
+                            </button>
+                            <button
+                                type="button"
+                                disabled={isLocked || saveStatus === 'saving'}
+                                onClick={saveOddsProvider}
+                                className="inline-flex items-center gap-2 rounded-lg border border-lime-500/20 bg-lime-500/10 px-4 py-2 text-xs font-bold uppercase tracking-wider text-lime-300 transition-colors hover:bg-lime-500/20 disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                                <Save className="h-3.5 w-3.5" />
+                                {saveStatus === 'saving' ? 'Saving' : 'Save Provider'}
+                            </button>
+                        </div>
+                    </div>
+                    {saveStatus === 'saved' && <p className="mt-3 text-xs text-emerald-400">Provider saved. Forecast OS can use the key without a restart.</p>}
+                    {saveStatus === 'error' && <p className="mt-3 text-xs text-rose-400">Provider save failed. Check the backend log for details.</p>}
+                </div>
+            </SectionCard>
+        </div>
+    );
+};
 
 const ObservabilityDomain = ({ isLocked, settings, updateSetting }) => (
     <div className="space-y-6">

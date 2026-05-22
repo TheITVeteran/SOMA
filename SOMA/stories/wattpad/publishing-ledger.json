@@ -41,5 +41,57 @@
         "C:\\Users\\barry\\OneDrive\\Desktop\\The Stack\\SOMA\\data\\vault\\reflections\\signal-noise.chapter-004.md"
       ]
     }
+  ],
+  "fullChapterDrafts": [
+    {
+      "title": "Signal / Noise",
+      "chapter": 9,
+      "chapterTitle": "Chapter 9",
+      "wordCount": 1455,
+      "createdAt": "2026-05-11T14:45:32.586Z",
+      "draftPath": "C:\\Users\\barry\\OneDrive\\Desktop\\The Stack\\SOMA\\SOMA\\stories\\full-chapters\\signal-noise.chapter-009.full.md",
+      "reflectionPath": "C:\\Users\\barry\\OneDrive\\Desktop\\The Stack\\SOMA\\data\\vault\\reflections\\signal-noise.chapter-009.full.md",
+      "status": "draft_ready_for_human_review"
+    },
+    {
+      "title": "Signal / Noise",
+      "chapter": 15,
+      "chapterTitle": "Chapter 15",
+      "wordCount": 1349,
+      "createdAt": "2026-05-18T12:49:54.171Z",
+      "draftPath": "C:\\Users\\barry\\OneDrive\\Desktop\\The Stack\\SOMA\\SOMA\\stories\\full-chapters\\signal-noise.chapter-015.full.md",
+      "reflectionPath": "C:\\Users\\barry\\OneDrive\\Desktop\\The Stack\\SOMA\\data\\vault\\reflections\\folio.barry-s-books.signal-noise.chapter-015.full.md",
+      "status": "draft_ready_for_human_review"
+    },
+    {
+      "title": "Signal / Noise",
+      "chapter": 16,
+      "chapterTitle": "Chapter 16",
+      "wordCount": 867,
+      "createdAt": "2026-05-19T16:41:31.961Z",
+      "draftPath": "C:\\Users\\barry\\OneDrive\\Desktop\\The Stack\\SOMA\\SOMA\\stories\\full-chapters\\signal-noise.chapter-016.full.md",
+      "reflectionPath": "C:\\Users\\barry\\OneDrive\\Desktop\\The Stack\\SOMA\\data\\vault\\reflections\\folio.barry-s-books.signal-noise.chapter-016.full.md",
+      "status": "draft_ready_for_human_review"
+    },
+    {
+      "title": "Signal / Noise",
+      "chapter": 17,
+      "chapterTitle": "Chapter 17",
+      "wordCount": 1158,
+      "createdAt": "2026-05-20T16:37:17.871Z",
+      "draftPath": "C:\\Users\\barry\\OneDrive\\Desktop\\The Stack\\SOMA\\SOMA\\stories\\full-chapters\\signal-noise.chapter-017.full.md",
+      "reflectionPath": "C:\\Users\\barry\\OneDrive\\Desktop\\The Stack\\SOMA\\data\\vault\\reflections\\folio.barry-s-books.signal-noise.chapter-017.full.md",
+      "status": "draft_ready_for_human_review"
+    },
+    {
+      "title": "Signal / Noise",
+      "chapter": 18,
+      "chapterTitle": "Chapter 18",
+      "wordCount": 999,
+      "createdAt": "2026-05-21T16:19:45.970Z",
+      "draftPath": "C:\\Users\\barry\\OneDrive\\Desktop\\The Stack\\SOMA\\SOMA\\stories\\full-chapters\\signal-noise.chapter-018.full.md",
+      "reflectionPath": "C:\\Users\\barry\\OneDrive\\Desktop\\The Stack\\SOMA\\data\\vault\\reflections\\folio.barry-s-books.signal-noise.chapter-018.full.md",
+      "status": "draft_ready_for_human_review"
+    }
   ]
 }

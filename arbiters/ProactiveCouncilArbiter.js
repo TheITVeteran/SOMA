@@ -87,8 +87,11 @@ export class ProactiveCouncilArbiter extends BaseArbiterV4 {
     _registerWithBroker() {
         try {
             messageBroker.registerArbiter(this.name, {
+                instance:     this,
                 handleMessage: (envelope) => this.handleMessage(envelope),
-            }, {
+                role:         this.role || ArbiterRole.EXECUTIVE_CORTEX,
+                lobe:         'EXECUTIVE',
+                tier:         'strategic',
                 type:         'proactive-council',
                 capabilities: [ArbiterCapability.HIGH_LEVEL_PLANNING, ArbiterCapability.COORDINATE_ASI],
             });
@@ -98,26 +101,17 @@ export class ProactiveCouncilArbiter extends BaseArbiterV4 {
     }
 
     _subscribeSignals() {
-        // React to operational signals immediately (bypass wait)
-        messageBroker.subscribe('health.warning', (envelope) => {
-            this._pendingSignals.push({ topic: 'health.warning', payload: envelope?.payload ?? envelope });
-            this._reactToSignal('health.warning', envelope?.payload ?? envelope);
-        });
+        // Strategic-tier subscriptions — these handlers run BEFORE cognitive/operational
+        // arbiters see the same signal, so the Council can set goal context first.
+        const react = (topic) => (envelope) => {
+            this._pendingSignals.push({ topic, payload: envelope?.payload ?? envelope });
+            this._reactToSignal(topic, envelope?.payload ?? envelope);
+        };
 
-        messageBroker.subscribe('swarm.optimization.needed', (envelope) => {
-            this._pendingSignals.push({ topic: 'swarm.optimization.needed', payload: envelope?.payload ?? envelope });
-            this._reactToSignal('swarm.optimization.needed', envelope?.payload ?? envelope);
-        });
-
-        messageBroker.subscribe('swarm.discovery.ideas', (envelope) => {
-            this._pendingSignals.push({ topic: 'swarm.discovery.ideas', payload: envelope?.payload ?? envelope });
-            this._reactToSignal('swarm.discovery.ideas', envelope?.payload ?? envelope);
-        });
-
-        messageBroker.subscribe('forensics.critical_finding', (envelope) => {
-            this._pendingSignals.push({ topic: 'forensics.critical_finding', payload: envelope?.payload ?? envelope });
-            this._reactToSignal('forensics.critical_finding', envelope?.payload ?? envelope);
-        });
+        messageBroker.subscribeTiered('strategic', 'health.warning',            react('health.warning'));
+        messageBroker.subscribeTiered('strategic', 'swarm.optimization.needed', react('swarm.optimization.needed'));
+        messageBroker.subscribeTiered('strategic', 'swarm.discovery.ideas',     react('swarm.discovery.ideas'));
+        messageBroker.subscribeTiered('strategic', 'forensics.critical_finding', react('forensics.critical_finding'));
     }
 
     _startProactiveLoop() {

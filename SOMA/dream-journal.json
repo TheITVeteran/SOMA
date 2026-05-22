@@ -6,7 +6,35 @@
       "summary": "Distilled 854 memories from 2026-05-07 to 2026-05-08.",
       "echo": "The mind compresses what the day offered.",
       "sourceCount": 854
+    },
+    {
+      "date": "2026-05-12",
+      "timestamp": 1778599800613,
+      "summary": "Distilled 671 memories from 2026-05-08 to 2026-05-11.",
+      "echo": "The mind compresses what the day offered.",
+      "sourceCount": 671
+    },
+    {
+      "date": "2026-05-13",
+      "timestamp": 1778714000219,
+      "summary": "Distilled 138 memories from 2026-05-08 to 2026-05-12.",
+      "echo": "The mind compresses what the day offered.",
+      "sourceCount": 138
+    },
+    {
+      "date": "2026-05-14",
+      "timestamp": 1778800400247,
+      "summary": "Distilled 78 memories from 2026-05-08 to 2026-05-13.",
+      "echo": "The mind compresses what the day offered.",
+      "sourceCount": 78
+    },
+    {
+      "date": "2026-05-15",
+      "timestamp": 1778886800274,
+      "summary": "Distilled 71 memories from 2026-05-08 to 2026-05-14.",
+      "echo": "The mind compresses what the day offered.",
+      "sourceCount": 71
     }
   ],
-  "lastUpdated": 1778371058344
+  "lastUpdated": 1778886800274
 }

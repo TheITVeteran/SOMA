@@ -5,7 +5,8 @@
  * Reads a JSON task from stdin, writes a JSON result to stdout.
  * Runs in a clean process, unaffected by SOMA's main process state.
  *
- * Task types: login, post, reply, getNotifications, markSeen, refreshSession, getTimeline, searchPosts
+ * Task types: login, post, reply, likePost, getNotifications, markSeen, refreshSession, getTimeline, searchPosts, getThread,
+ * listConvos, getMessages, sendMessage, updateRead
  */
 
 import https from 'https';
@@ -13,6 +14,7 @@ import fs from 'fs';
 import path from 'path';
 
 const PDS = 'bsky.social';
+const CHAT = 'api.bsky.chat';
 
 const IMAGE_MIME = {
     '.png':  'image/png',
@@ -23,6 +25,14 @@ const IMAGE_MIME = {
 };
 
 function xrpc(method, endpoint, body, token, contentType = 'application/json') {
+    return xrpcHost(PDS, method, endpoint, body, token, contentType);
+}
+
+function chatXrpc(method, endpoint, body, token, contentType = 'application/json') {
+    return xrpcHost(CHAT, method, endpoint, body, token, contentType);
+}
+
+function xrpcHost(hostname, method, endpoint, body, token, contentType = 'application/json') {
     return new Promise((resolve, reject) => {
         const data    = Buffer.isBuffer(body) ? body : body ? JSON.stringify(body) : null;
         const headers = { 'Content-Type': contentType };
@@ -30,7 +40,7 @@ function xrpc(method, endpoint, body, token, contentType = 'application/json') {
         if (data)  headers['Content-Length'] = Buffer.isBuffer(data) ? data.length : Buffer.byteLength(data);
 
         const options = {
-            hostname: PDS,
+            hostname,
             port:     443,
             path:     `/xrpc/${endpoint}`,
             method,
@@ -64,7 +74,14 @@ function resolveImagePath(inputPath) {
     if (!inputPath || /^https?:\/\//i.test(inputPath)) {
         throw new Error('Bluesky image posts require a local image path');
     }
-    return path.isAbsolute(inputPath) ? inputPath : path.resolve(process.cwd(), inputPath);
+    let cleaned = String(inputPath).trim()
+        .replace(/^[`"'\u201c\u201d\u2018\u2019]+|[`"'\u201c\u201d\u2018\u2019]+$/g, '')
+        .trim();
+    const windowsPaths = [...cleaned.matchAll(/[a-zA-Z]:[\\/][^`"'\u201c\u201d\u2018\u2019]+/g)]
+        .map(match => match[0].trim())
+        .filter(Boolean);
+    if (windowsPaths.length > 1) cleaned = windowsPaths[windowsPaths.length - 1];
+    return path.normalize(path.isAbsolute(cleaned) ? cleaned : path.resolve(process.cwd(), cleaned));
 }
 
 async function uploadImages(images = [], token) {
@@ -132,6 +149,19 @@ async function run() {
             break;
         }
 
+        case 'likePost': {
+            if (!task.subject?.uri || !task.subject?.cid) throw new Error('likePost requires subject uri and cid');
+            const record = {
+                $type:     'app.bsky.feed.like',
+                subject:   { uri: task.subject.uri, cid: task.subject.cid },
+                createdAt: new Date().toISOString(),
+            };
+            result = await xrpc('POST', 'com.atproto.repo.createRecord', {
+                repo: task.did, collection: 'app.bsky.feed.like', record
+            }, task.token);
+            break;
+        }
+
         case 'getNotifications':
             result = await xrpc('GET', `app.bsky.notification.listNotifications?limit=${task.limit || 20}`,
                 null, task.token);
@@ -153,6 +183,47 @@ async function run() {
                 replyCount:   p?.replyCount   || 0,
                 quoteCount:   p?.quoteCount   || 0,
             };
+            break;
+        }
+
+        case 'getThread': {
+            const uri = encodeURIComponent(task.uri || '');
+            result = await xrpc('GET', `app.bsky.feed.getPostThread?uri=${uri}&depth=${task.depth || 4}&parentHeight=${task.parentHeight || 4}`, null, task.token);
+            break;
+        }
+
+        case 'listConvos': {
+            const limit = Math.min(Number(task.limit || 20), 100);
+            const cursor = task.cursor ? `&cursor=${encodeURIComponent(task.cursor)}` : '';
+            result = await chatXrpc('GET', `chat.bsky.convo.listConvos?limit=${limit}${cursor}`, null, task.token);
+            break;
+        }
+
+        case 'getMessages': {
+            if (!task.convoId) throw new Error('getMessages requires convoId');
+            const limit = Math.min(Number(task.limit || 30), 100);
+            const cursor = task.cursor ? `&cursor=${encodeURIComponent(task.cursor)}` : '';
+            result = await chatXrpc('GET', `chat.bsky.convo.getMessages?convoId=${encodeURIComponent(task.convoId)}&limit=${limit}${cursor}`, null, task.token);
+            break;
+        }
+
+        case 'sendMessage': {
+            if (!task.convoId) throw new Error('sendMessage requires convoId');
+            const text = String(task.text || '').trim().slice(0, 1000);
+            if (!text) throw new Error('sendMessage requires text');
+            result = await chatXrpc('POST', 'chat.bsky.convo.sendMessage', {
+                convoId: task.convoId,
+                message: { text },
+            }, task.token);
+            break;
+        }
+
+        case 'updateRead': {
+            if (!task.convoId) throw new Error('updateRead requires convoId');
+            result = await chatXrpc('POST', 'chat.bsky.convo.updateRead', {
+                convoId: task.convoId,
+                messageId: task.messageId || undefined,
+            }, task.token);
             break;
         }
 

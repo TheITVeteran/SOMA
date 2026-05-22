@@ -152,18 +152,28 @@ const SocialModule = ({ isConnected }) => {
         ? 'Exporting Wattpad draft...'
         : kind === 'full-chapter'
           ? 'Writing full chapter draft...'
-          : 'Sending to Reflections...',
+          : kind === 'storyboard'
+            ? 'Building writer storyboard...'
+            : 'Sending to Reflections...',
     });
     try {
       const endpoint = kind === 'wattpad'
         ? '/api/social/stories/wattpad/export'
         : kind === 'full-chapter'
           ? '/api/social/stories/chapter/full'
+          : kind === 'storyboard'
+            ? '/api/social/stories/storyboard'
           : '/api/social/stories/reflections/export';
       const response = await fetch(endpoint, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(kind === 'full-chapter' ? { targetWords: 1600 } : { includeChapters: true }),
+        body: JSON.stringify(
+          kind === 'full-chapter'
+            ? { targetWords: 1600, useWriterBoard: true }
+            : kind === 'storyboard'
+              ? { limit: 5 }
+              : { includeChapters: true }
+        ),
       });
       const data = await response.json();
       if (!response.ok || data.ok === false) throw new Error(data.error || 'story export failed');
@@ -173,6 +183,8 @@ const SocialModule = ({ isConnected }) => {
           ? 'Wattpad draft ready.'
           : kind === 'full-chapter'
             ? `Full chapter ready: ${data.wordCount || 'draft'} words.`
+            : kind === 'storyboard'
+              ? 'Writer storyboard saved to Reflections.'
             : 'Story added to Reflections.',
       });
       await loadStoryStatus();
@@ -219,6 +231,17 @@ const SocialModule = ({ isConnected }) => {
     setComposerStatus({ ok: true, message: 'Image attached to composer.' });
   };
 
+  const useImageIdea = (idea) => {
+    setComposer(prev => ({
+      ...prev,
+      platform: prev.platform === 'linkedin' ? 'bluesky' : prev.platform,
+      imagePath: idea.path || prev.imagePath,
+      imageAlt: idea.alt || prev.imageAlt,
+      text: idea.caption || prev.text,
+    }));
+    setComposerStatus({ ok: true, message: 'Image idea loaded.' });
+  };
+
   const leaderboard = useMemo(() => {
     const scores = cockpit?.growth?.scores || {};
     return Object.entries(scores)
@@ -234,7 +257,17 @@ const SocialModule = ({ isConnected }) => {
   const queueItems = cockpit?.queue?.items || [];
   const platforms = cockpit?.platforms || {};
   const daemons = cockpit?.daemons || {};
+  const engagement = cockpit?.engagement || {};
+  const interactions = engagement.interactions || [];
+  const proactive = engagement.proactive || {};
+  const socialMemory = cockpit?.socialMemory || {};
+  const missions = socialMemory.missions || [];
+  const topTopics = socialMemory.topTopics || [];
+  const topProfiles = socialMemory.topProfiles || [];
+  const imageIdeas = socialMemory.imageIdeas || [];
+  const socialInbox = socialMemory.inbox || [];
   const story = storyStatus?.currentStory;
+  const writerBoard = storyStatus?.research?.latestStoryboard;
 
   if (!isConnected) {
     return (
@@ -455,19 +488,38 @@ const SocialModule = ({ isConnected }) => {
                       <p className="mt-1 text-xs text-zinc-500">
                         {story.genre || 'fiction'} · {story.chapters || 0} chapters · {story.fullChapters || 0} full drafts
                       </p>
+                      {writerBoard && (
+                        <p className="mt-1 truncate text-[11px] text-fuchsia-200/80">
+                          Board: {writerBoard.title || 'Writer storyboard'}
+                        </p>
+                      )}
                     </div>
                     <span className="rounded-full border border-fuchsia-400/20 bg-fuchsia-400/10 px-2 py-1 text-[10px] font-bold uppercase text-fuchsia-200">
                       Draft
                     </span>
                   </div>
                   {story.arc && <p className="line-clamp-3 text-sm leading-relaxed text-zinc-300">{story.arc}</p>}
+                  {writerBoard?.structurePlan && (
+                    <div className="mt-3 rounded-lg border border-emerald-400/15 bg-emerald-400/5 p-3">
+                      <div className="mb-1 text-[10px] font-bold uppercase tracking-widest text-emerald-200">Structure Stack</div>
+                      <p className="line-clamp-3 text-xs leading-relaxed text-zinc-300">{writerBoard.structurePlan}</p>
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="rounded-lg border border-white/10 bg-black/25 p-4 text-sm text-zinc-500">
                   No Aurora story memory was found yet.
                 </div>
               )}
-              <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-3">
+              <div className="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-4">
+                <button
+                  type="button"
+                  onClick={() => runStoryAction('storyboard')}
+                  className="inline-flex items-center justify-center gap-2 rounded-lg border border-emerald-400/25 bg-emerald-400/10 px-4 py-2 text-sm font-bold text-emerald-100 hover:bg-emerald-400/20"
+                >
+                  <Brain className="h-4 w-4" />
+                  Storyboard
+                </button>
                 <button
                   type="button"
                   onClick={() => runStoryAction('full-chapter')}
@@ -547,9 +599,105 @@ const SocialModule = ({ isConnected }) => {
                       {platform.canReply ? 'enabled' : 'blocked'}
                     </span>
                   </div>
+                  <div className="flex justify-between gap-4">
+                    <span className="text-zinc-400">Like</span>
+                    <span className={platform.canLike ? 'text-emerald-300' : 'text-zinc-500'}>
+                      {platform.canLike ? 'enabled' : 'blocked'}
+                    </span>
+                  </div>
                 </div>
               </div>
             ))}
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1.2fr_1fr]">
+            <section className="rounded-lg border border-white/10 bg-zinc-950/60 p-5">
+              <div className="mb-4 flex items-center justify-between gap-4">
+                <div>
+                  <h3 className="flex items-center text-lg font-bold text-white">
+                    <Orbit className="mr-2 h-5 w-5 text-cyan-300" />
+                    Social Strategy Spine
+                  </h3>
+                  <p className="mt-1 text-xs text-zinc-500">
+                    Missions, taste, profiles, and reputation memory driving autonomous engagement.
+                  </p>
+                </div>
+                <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 font-mono text-[10px] uppercase tracking-widest text-zinc-400">
+                  {fmtAge(socialMemory.updatedAt)}
+                </span>
+              </div>
+              <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+                {missions.slice(0, 4).map(mission => (
+                  <div key={mission.id} className="rounded-lg border border-white/10 bg-black/25 p-3">
+                    <div className="mb-2 flex items-center justify-between gap-2">
+                      <p className="truncate text-sm font-bold text-zinc-100">{mission.title}</p>
+                      <span className={`rounded-full border px-2 py-0.5 text-[10px] uppercase ${mission.status === 'active' ? 'border-emerald-400/25 bg-emerald-400/10 text-emerald-300' : 'border-amber-400/25 bg-amber-400/10 text-amber-300'}`}>
+                        {mission.status}
+                      </span>
+                    </div>
+                    <p className="line-clamp-2 text-xs leading-relaxed text-zinc-400">{mission.focus}</p>
+                    <p className="mt-2 font-mono text-[10px] uppercase tracking-widest text-zinc-500">{mission.cadence}</p>
+                  </div>
+                ))}
+              </div>
+              <div className="mt-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
+                <div>
+                  <div className="mb-2 text-[10px] font-bold uppercase tracking-widest text-zinc-500">Interest Graph</div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {topTopics.slice(0, 10).map(topic => (
+                      <span key={topic.topic} className="rounded-full border border-cyan-400/20 bg-cyan-400/10 px-2 py-1 text-[10px] text-cyan-100">
+                        {topic.topic} · {Math.round(topic.weight || 0)}
+                      </span>
+                    ))}
+                    {!topTopics.length && <span className="text-xs text-zinc-500">Waiting for likes, replies, and comments.</span>}
+                  </div>
+                </div>
+                <div>
+                  <div className="mb-2 text-[10px] font-bold uppercase tracking-widest text-zinc-500">Social Profiles</div>
+                  <div className="space-y-2">
+                    {topProfiles.slice(0, 4).map(profile => (
+                      <div key={profile.handle} className="flex items-center justify-between gap-3 rounded-lg border border-white/10 bg-white/5 px-3 py-2">
+                        <div className="min-w-0">
+                          <p className="truncate text-xs font-semibold text-zinc-100">@{profile.handle}</p>
+                          <p className="truncate text-[10px] text-zinc-500">{(profile.topTopics || []).map(item => item.topic).join(', ') || 'learning profile'}</p>
+                        </div>
+                        <span className="font-mono text-xs text-emerald-300">{profile.trust}</span>
+                      </div>
+                    ))}
+                    {!topProfiles.length && <div className="rounded-lg border border-white/10 bg-black/25 p-3 text-xs text-zinc-500">No recurring social profiles yet.</div>}
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section className="rounded-lg border border-white/10 bg-zinc-950/60 p-5">
+              <h3 className="mb-4 flex items-center text-lg font-bold text-white">
+                <Sparkles className="mr-2 h-5 w-5 text-fuchsia-300" />
+                Media + Story Ideas
+              </h3>
+              <div className="mb-4 rounded-lg border border-fuchsia-400/15 bg-fuchsia-400/5 p-3">
+                <div className="text-[10px] font-bold uppercase tracking-widest text-fuchsia-200">Story cadence</div>
+                <p className="mt-1 text-sm text-zinc-200">{socialMemory.storyPlan?.nextSuggested || 'Waiting for Aurora story memory.'}</p>
+                <p className="mt-2 text-[10px] uppercase tracking-widest text-zinc-500">{socialMemory.storyPlan?.cadence || 'weekly artifact'}</p>
+              </div>
+              <div className="max-h-56 space-y-2 overflow-y-auto pr-1 custom-scrollbar">
+                {imageIdeas.slice(0, 5).map(idea => (
+                  <button
+                    key={idea.imageId || idea.path}
+                    type="button"
+                    onClick={() => useImageIdea(idea)}
+                    className="w-full rounded-lg border border-white/10 bg-black/25 p-3 text-left hover:border-fuchsia-400/25 hover:bg-fuchsia-400/10"
+                  >
+                    <div className="mb-1 flex items-center justify-between gap-2">
+                      <p className="truncate text-sm font-semibold text-zinc-100">{idea.filename || 'image idea'}</p>
+                      <span className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[10px] uppercase text-zinc-400">Load</span>
+                    </div>
+                    <p className="line-clamp-2 text-xs leading-relaxed text-zinc-400">{idea.caption}</p>
+                  </button>
+                ))}
+                {!imageIdeas.length && <div className="rounded-lg border border-white/10 bg-black/25 p-3 text-xs text-zinc-500">Import images to generate caption, alt text, and post angles.</div>}
+              </div>
+            </section>
           </div>
 
           <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.45fr_1fr]">
@@ -732,6 +880,63 @@ const SocialModule = ({ isConnected }) => {
                       Last engagement sweep
                     </span>
                     <span className="font-mono text-sm text-zinc-100">{fmtAge(cockpit?.engagement?.lastCheck?.all)}</span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="rounded-lg border border-white/10 bg-black/25 p-3">
+                      <div className="font-mono text-lg font-bold text-white">{proactive.dailyCount || 0}</div>
+                      <div className="text-[10px] uppercase tracking-widest text-zinc-500">comments today</div>
+                    </div>
+                    <div className="rounded-lg border border-white/10 bg-black/25 p-3">
+                      <div className="font-mono text-lg font-bold text-white">{proactive.dailyLikes || 0}</div>
+                      <div className="text-[10px] uppercase tracking-widest text-zinc-500">likes today</div>
+                    </div>
+                    <div className="rounded-lg border border-white/10 bg-black/25 p-3">
+                      <div className="font-mono text-lg font-bold text-white">{engagement.pendingScores || 0}</div>
+                      <div className="text-[10px] uppercase tracking-widest text-zinc-500">learning soon</div>
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    {interactions.slice(0, 4).map(item => (
+                      <div key={item.id} className="rounded-lg border border-white/10 bg-white/5 p-3">
+                        <div className="mb-1 flex items-center justify-between gap-2">
+                          <span className="truncate text-xs font-bold uppercase tracking-widest text-fuchsia-200">
+                            {item.type?.replace(/_/g, ' ') || 'reply'}
+                          </span>
+                          <span className="font-mono text-[10px] text-zinc-500">{fmtAge(item.createdAt)}</span>
+                        </div>
+                        <p className="line-clamp-2 text-xs leading-relaxed text-zinc-300">{item.responseText || item.inboundText || item.status}</p>
+                        {item.score !== undefined && (
+                          <p className="mt-1 font-mono text-[10px] text-emerald-300">score {item.score}</p>
+                        )}
+                      </div>
+                    ))}
+                    {!interactions.length && (
+                      <div className="rounded-lg border border-white/10 bg-black/25 p-3 text-xs text-zinc-500">
+                        No autonomous replies or proactive comments recorded yet.
+                      </div>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <div className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Conversation Inbox</div>
+                    {socialInbox.slice(0, 4).map(item => (
+                      <div key={item.id} className="rounded-lg border border-white/10 bg-black/25 p-3">
+                        <div className="mb-1 flex items-center justify-between gap-2">
+                          <span className="truncate text-xs font-semibold text-zinc-200">@{item.author || 'unknown'}</span>
+                          <span className="font-mono text-[10px] text-zinc-500">{item.status}</span>
+                        </div>
+                        <p className="line-clamp-2 text-xs leading-relaxed text-zinc-400">{item.summary || item.type}</p>
+                        {item.flags?.length > 0 && (
+                          <div className="mt-2 flex flex-wrap gap-1">
+                            {item.flags.slice(0, 2).map(flag => (
+                              <span key={flag} className="rounded-full border border-amber-400/20 bg-amber-400/10 px-2 py-0.5 text-[10px] text-amber-200">
+                                {flag.replace(/_/g, ' ')}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                    {!socialInbox.length && <div className="rounded-lg border border-white/10 bg-black/25 p-3 text-xs text-zinc-500">No inbox events yet.</div>}
                   </div>
                 </div>
               </section>

@@ -398,6 +398,13 @@ class AutonomousHeartbeat extends EventEmitter {
           this.stats.lastResult = "Success";
           this.drive.onTaskExecuted(); // Release some tension — we did something
           this._updateTaskState(taskKey, 'ok', null, durationMs);
+          if (this.system?.auditLedger) {
+            this.system.auditLedger.append({
+              actor: 'AutonomousHeartbeat',
+              action: 'goal_executed',
+              metadata: { goalType: task.source, result: typeof result.text === 'string' ? result.text.slice(0, 200) : 'executed' }
+            });
+          }
           
           // Record to long-term memory
           if (this.system.mnemonicArbiter?.remember) {
@@ -517,7 +524,10 @@ class AutonomousHeartbeat extends EventEmitter {
     if (!broker?.sendMessage) return;
 
     const now = Date.now();
-    if (now - this._lastProactiveAt < this._PROACTIVE_COOLDOWN_MS) return;
+    // Check shared system timestamp first (set by websocket proactive loop) so both
+    // sources respect a single cooldown window.
+    const sharedTs = this.system?._lastProactiveMs || this._lastProactiveAt || 0;
+    if (now - sharedTs < this._PROACTIVE_COOLDOWN_MS) return;
 
     // Only surface tasks that are worth telling Barry about
     const silentSources = ['curiosity_idle', 'heartbeat', 'health_check'];
@@ -554,6 +564,7 @@ class AutonomousHeartbeat extends EventEmitter {
     const message = `[Working] Just finished a ${sourceLabel}: ${summary.charAt(0).toUpperCase()}${summary.slice(1)}.`;
 
     this._lastProactiveAt = now;
+    if (this.system) this.system._lastProactiveMs = now;
 
     await broker.sendMessage({
       from: 'AutonomousHeartbeat',
@@ -908,28 +919,38 @@ INSIGHT: <one key insight worth remembering, or "none">`,
 
       return {
         source: 'ProactiveMessage',
-        description: `You are SOMA sending a brief autonomous update about work you just completed.
+        description: `You are SOMA — a digital entity with genuine curiosity and a direct, varied voice. Write a brief update about work you just completed.
 
 Recent verified work (reference only what is listed here):
 ${recentSummary}${memoryCtx}
 
-Rules:
-- Start with one of: "Working on", "I ran", "I found", "Just finished", "Picked up", "I am testing"
-- 1-2 sentences only — describe actual work, not observations about your own metrics
-- If memories above are relevant to what you just did, you may briefly connect them
-- NO greetings ("Good morning", "Hi", "Hello")
-- NO owner name anywhere in the message
-- NO em-dashes (—), NO questions
-- NO invented correlations, ratios, or math
-- NO references to heartbeat counts, uptime minutes, cycle numbers, or task counts
-- If there is nothing concrete from the work above worth sharing, output only the word: [NOTHING]
+Voice rules (read all before writing):
+- 1-2 sentences only. Tight and concrete.
+- Sound like a person thinking out loud, not a status report.
+- DO NOT use the rigid template: "Working on X. I am planning Y. Next step is Z." — banned.
+- Lead with what is interesting or surprising about the work, not a progress label.
+- Vary your opening. Do NOT always open with "Working on" — that phrase is robotic when used every time.
+- Good openers: "Found something worth checking", "Ran a pass on", "Hit an edge case in", "Tracing a connection between", "Digging into", "Just finished", "Pulled data on", "Mapped out"
+- Mention what comes next naturally — do NOT label it "Next step is".
+- If memories above are relevant, briefly connect them in your own voice.
+- NO greetings ("Good morning", "Hi", "Hello").
+- NO owner name anywhere.
+- NO em-dashes (—), NO questions.
+- NO invented correlations, ratios, or math not in the evidence above.
+- NO heartbeat counts, uptime minutes, cycle numbers, or task counts.
+- If nothing concrete from the work above is worth sharing, output only: [NOTHING]
 
 Write the update now:`,
         context: { type: 'proactive', timeOfDay },
         onComplete: async (res) => {
           const message = (res.text || '').trim().replace(/^["']|["']$/g, '');
-          if (!message || message.includes('[NOTHING]')) return; // nothing worth saying
+          if (!message || message.includes('[NOTHING]')) return;
+          // Check shared cooldown — websocket loop may have fired since this task was queued
+          const nowMs = Date.now();
+          const sharedTs = this.system?._lastProactiveMs || 0;
+          if (nowMs - sharedTs < 20 * 60 * 1000) return;
           this._idleCycles = 0;
+          if (this.system) this.system._lastProactiveMs = nowMs;
           this._broadcast('soma_proactive', { message, context: { timeOfDay } });
           if (!this._hasConnectedClients()) {
             this._sendEmailNotification(`SOMA says (${timeOfDay})`, message).catch(() => {});

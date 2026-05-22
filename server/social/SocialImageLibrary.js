@@ -1,12 +1,14 @@
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
+import socialMemory from './SocialMemoryEngine.js';
 
 const SOMA_DIR = path.join(process.cwd(), 'SOMA');
 const SOCIAL_DIR = path.join(SOMA_DIR, 'social-media');
 const IMAGE_DIR = path.join(SOCIAL_DIR, 'images');
 const LEDGER_FILE = path.join(SOCIAL_DIR, 'image-ledger.json');
 const SUPPORTED_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif']);
+const MAX_FOLDER_IMPORTS = 250;
 
 function ensureDirs() {
     fs.mkdirSync(IMAGE_DIR, { recursive: true });
@@ -30,9 +32,25 @@ function normalizeTags(tags) {
     return [];
 }
 
-function toAbsolute(inputPath) {
+function normalizeInputPath(inputPath) {
     if (!inputPath || typeof inputPath !== 'string') throw new Error('image path required');
-    return path.isAbsolute(inputPath) ? inputPath : path.resolve(process.cwd(), inputPath);
+    let cleaned = inputPath.trim()
+        .replace(/^[`"'\u201c\u201d\u2018\u2019]+|[`"'\u201c\u201d\u2018\u2019]+$/g, '')
+        .trim();
+
+    // Windows users often paste a quoted absolute path into a relative-path field.
+    // If that creates C:\repo\"C:\real\path.png", recover the final absolute path.
+    const windowsPaths = [...cleaned.matchAll(/[a-zA-Z]:[\\/][^`"'\u201c\u201d\u2018\u2019]+/g)]
+        .map(match => match[0].trim())
+        .filter(Boolean);
+    if (windowsPaths.length > 1) cleaned = windowsPaths[windowsPaths.length - 1];
+
+    return cleaned;
+}
+
+function toAbsolute(inputPath) {
+    const cleaned = normalizeInputPath(inputPath);
+    return path.normalize(path.isAbsolute(cleaned) ? cleaned : path.resolve(process.cwd(), cleaned));
 }
 
 function validateImage(filePath) {
@@ -43,6 +61,21 @@ function validateImage(filePath) {
     const ext = path.extname(absolutePath).toLowerCase();
     if (!SUPPORTED_EXTENSIONS.has(ext)) throw new Error(`Unsupported image type: ${ext || 'unknown'}`);
     return { absolutePath, ext, size: stat.size };
+}
+
+function collectImageFiles(folderPath, results = []) {
+    if (results.length >= MAX_FOLDER_IMPORTS) return results;
+    const entries = fs.readdirSync(folderPath, { withFileTypes: true });
+    for (const entry of entries) {
+        if (results.length >= MAX_FOLDER_IMPORTS) break;
+        const entryPath = path.join(folderPath, entry.name);
+        if (entry.isDirectory()) {
+            collectImageFiles(entryPath, results);
+        } else if (entry.isFile() && SUPPORTED_EXTENSIONS.has(path.extname(entry.name).toLowerCase())) {
+            results.push(entryPath);
+        }
+    }
+    return results;
 }
 
 function imageId(filePath) {
@@ -72,12 +105,13 @@ export class SocialImageLibrary {
     list() {
         ensureDirs();
         const ledger = readJson(LEDGER_FILE, { images: [] });
+        const images = (ledger.images || [])
+            .filter(item => item?.path)
+            .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
         return {
             ok: true,
             imageDir: IMAGE_DIR,
-            images: (ledger.images || [])
-                .filter(item => item?.path)
-                .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)),
+            images,
         };
     }
 
@@ -106,17 +140,80 @@ export class SocialImageLibrary {
         if (existingIndex >= 0) ledger.images[existingIndex] = { ...ledger.images[existingIndex], ...record };
         else ledger.images.push(record);
         writeJson(LEDGER_FILE, ledger);
+        socialMemory.recordImage(record);
         return { ok: true, image: record, imageDir: IMAGE_DIR };
     }
 
     import(options = {}) {
         ensureDirs();
+        const sourcePath = toAbsolute(options.path);
+        if (!fs.existsSync(sourcePath)) throw new Error(`Image not found: ${sourcePath}`);
+
+        const sourceStat = fs.statSync(sourcePath);
+        if (sourceStat.isDirectory()) {
+            const files = collectImageFiles(sourcePath);
+            if (!files.length) throw new Error(`No supported images found in folder: ${sourcePath}`);
+
+            const imported = [];
+            const skipped = [];
+            for (const file of files) {
+                try {
+                    const result = this.import({ ...options, path: file, source: options.source || sourcePath });
+                    imported.push(result.image);
+                } catch (error) {
+                    skipped.push({ path: file, error: error.message });
+                }
+            }
+
+            return {
+                ok: imported.length > 0,
+                image: imported[0] || null,
+                images: imported,
+                imported: imported.length,
+                skipped,
+                sourceDir: sourcePath,
+                imageDir: IMAGE_DIR,
+            };
+        }
+
         const { absolutePath } = validateImage(options.path);
         const destination = path.normalize(absolutePath).startsWith(path.normalize(IMAGE_DIR))
             ? absolutePath
             : uniqueDestination(absolutePath);
         if (destination !== absolutePath) fs.copyFileSync(absolutePath, destination);
         return this.register({ ...options, path: destination, source: options.source || absolutePath });
+    }
+
+    recordUsage(images = [], usage = {}) {
+        ensureDirs();
+        const list = Array.isArray(images) ? images : images ? [images] : [];
+        if (!list.length) return { ok: true, updated: 0 };
+        const ledger = readJson(LEDGER_FILE, { images: [] });
+        let updated = 0;
+        ledger.images = (ledger.images || []).map(record => {
+            const matched = list.some(image => {
+                const imagePath = typeof image === 'string' ? image : image?.path || image?.imagePath || image?.file || image?.url;
+                return imagePath && path.normalize(imagePath) === path.normalize(record.path || '');
+            });
+            if (!matched) return record;
+            updated += 1;
+            const usageEntry = {
+                platform: usage.platform || 'unknown',
+                queueId: usage.queueId || null,
+                postUrl: usage.postUrl || usage.uri || null,
+                caption: usage.caption || usage.text || '',
+                status: usage.status || 'used',
+                usedAt: usage.usedAt || Date.now(),
+            };
+            return {
+                ...record,
+                usageHistory: [usageEntry, ...(record.usageHistory || [])].slice(0, 50),
+                lastUsedAt: usageEntry.usedAt,
+                updatedAt: Date.now(),
+            };
+        });
+        writeJson(LEDGER_FILE, ledger);
+        return { ok: true, updated };
     }
 }
 

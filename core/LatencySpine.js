@@ -34,6 +34,14 @@ class RequestTrace {
   }
 }
 
+// SLO thresholds — override via SOMA_SLO_CHAT_MS / SOMA_SLO_DEEP_MS env vars
+const SLO_THRESHOLDS = {
+  chat:         parseInt(process.env.SOMA_SLO_CHAT_MS  || '12000'),
+  deep:         parseInt(process.env.SOMA_SLO_DEEP_MS  || '60000'),
+  action:       parseInt(process.env.SOMA_SLO_ACTION_MS || '20000'),
+  default:      parseInt(process.env.SOMA_SLO_DEFAULT_MS || '15000'),
+};
+
 export default class LatencySpine {
   constructor({ maxHistory = 300, maxQueue = 500, defaultTtlMs = 30000 } = {}) {
     this.maxHistory = maxHistory;
@@ -50,7 +58,54 @@ export default class LatencySpine {
       cacheMisses: 0,
       queued: 0,
       completed: 0,
-      failed: 0
+      failed: 0,
+      sloBreaches: 0
+    };
+    this._sloAlertCallback = null;
+  }
+
+  /** Register a callback that fires whenever an SLO breach is detected */
+  onSLOBreach(fn) {
+    this._sloAlertCallback = fn;
+  }
+
+  /** Check if a completed trace breached its SLO, fire alert if so */
+  _checkSLO(traceSummary) {
+    const mode = traceSummary.mode || 'default';
+    const threshold = SLO_THRESHOLDS[mode] || SLO_THRESHOLDS.default;
+    if (traceSummary.totalMs > threshold) {
+      this.stats.sloBreaches++;
+      const breach = {
+        traceId:   traceSummary.id,
+        route:     traceSummary.route,
+        mode,
+        totalMs:   traceSummary.totalMs,
+        threshold,
+        exceededBy: traceSummary.totalMs - threshold,
+        ts:        new Date().toISOString()
+      };
+      try { this._sloAlertCallback?.(breach); } catch {}
+      return breach;
+    }
+    return null;
+  }
+
+  getSLOStatus() {
+    const recent = this.history.slice(0, 100);
+    if (!recent.length) return { sloBreaches: 0, breachRate: 0, p95Ms: 0, p99Ms: 0 };
+    const sorted = [...recent].sort((a, b) => (a.totalMs || 0) - (b.totalMs || 0));
+    const p95 = sorted[Math.floor(sorted.length * 0.95)]?.totalMs || 0;
+    const p99 = sorted[Math.floor(sorted.length * 0.99)]?.totalMs || 0;
+    return {
+      sloBreaches:  this.stats.sloBreaches,
+      breachRate:   parseFloat(((this.stats.sloBreaches / Math.max(1, this.stats.traces)) * 100).toFixed(1)),
+      p95Ms:        p95,
+      p99Ms:        p99,
+      thresholds:   SLO_THRESHOLDS,
+      recentBreaches: recent.filter(t => {
+        const thr = SLO_THRESHOLDS[t.mode] || SLO_THRESHOLDS.default;
+        return (t.totalMs || 0) > thr;
+      }).slice(0, 5)
     };
   }
 
@@ -63,6 +118,7 @@ export default class LatencySpine {
     this.stats.traces++;
     this.history.unshift(traceSummary);
     if (this.history.length > this.maxHistory) this.history.length = this.maxHistory;
+    this._checkSLO(traceSummary);
   }
 
   getCached(key) {

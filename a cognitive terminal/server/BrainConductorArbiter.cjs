@@ -14,6 +14,7 @@ const { EventEmitter } = require('events');
 const { TransmitterManager } = require('../../transmitters/TransmitterManager.cjs');
 const path = require('path');
 const { QueryRouter } = require(path.join(__dirname, '../../cognitive/QueryRouter.cjs'));
+const { pipeline } = require('@xenova/transformers');
 
 class BrainConductorArbiter extends EventEmitter {
   constructor(config = {}) {
@@ -39,6 +40,10 @@ class BrainConductorArbiter extends EventEmitter {
       preferCost: 'minimize'
     });
     
+    // Real embedding pipeline (Xenova/all-MiniLM-L6-v2)
+    this.embedder = null;
+    this._initEmbedder();
+
     // Brain interaction history (for learning)
     this.interactionHistory = [];
     this.maxHistorySize = 1000;
@@ -57,6 +62,9 @@ class BrainConductorArbiter extends EventEmitter {
     this.activeBrains = new Set();
     this.brainResponses = new Map(); // sessionId -> {PROMETHEUS, LOGOS, AURORA}
     
+    // Fragment Registry for lobe-specific expertise
+    this.fragmentRegistry = null;
+    
     console.log(`[${this.name}] Initialized with neural routing`);
   }
   
@@ -71,6 +79,11 @@ class BrainConductorArbiter extends EventEmitter {
   setReasoningChamber(chamber) {
     this.reasoningChamber = chamber;
     console.log(`[${this.name}] ReasoningChamber connected`);
+  }
+
+  setFragmentRegistry(registry) {
+    this.fragmentRegistry = registry;
+    console.log(`[${this.name}] FragmentRegistry linked (Expertise Injection active)`);
   }
   
   /**
@@ -354,6 +367,22 @@ class BrainConductorArbiter extends EventEmitter {
         }
       };
       
+      // 🧠 LOBE-ATTACHED FRAGMENT INJECTION
+      // If we have a fragment registry, find a fragment for this specific brain (pillar)
+      if (this.fragmentRegistry && typeof this.fragmentRegistry.routeToFragment === 'function') {
+        try {
+          const match = await this.fragmentRegistry.routeToFragment(query, brainName);
+          if (match && match.fragment) {
+            console.log(`[${this.name}] 🧩 Lobe ${brainName} enhanced with fragment: ${match.fragment.id}`);
+            // Prepend fragment system prompt to sharpen this lobe's focus
+            routedContext.systemPrompt = (match.fragment.systemPrompt || '') + '\n\n' + (routedContext.systemPrompt || '');
+            routedContext.fragmentId = match.fragment.id;
+          }
+        } catch (e) {
+          console.warn(`[${this.name}] Fragment routing for ${brainName} failed:`, e.message);
+        }
+      }
+
       // Call the actual brain
       let result;
       
@@ -585,20 +614,47 @@ class BrainConductorArbiter extends EventEmitter {
   }
   
   /**
-   * Get embedding for text (using simple hash for now, can be upgraded)
+   * Initialize real embedding model (Xenova)
+   */
+  async _initEmbedder() {
+    try {
+      this.embedder = await pipeline('feature-extraction', 'Xenova/all-MiniLM-L6-v2');
+      console.log(`[${this.name}] 🧠 Neural Synthesis active (real embeddings)`);
+    } catch (e) {
+      console.error(`[${this.name}] 🛑 Failed to load embedding model:`, e.message);
+    }
+  }
+
+  /**
+   * Get embedding for text (Real semantic embedding)
    */
   async getEmbedding(text) {
-    // Simple hash-based embedding (128-dim)
-    // TODO: Replace with real embedding model
+    // If still loading, wait up to 5s
+    if (!this.embedder) {
+      for (let i = 0; i < 10; i++) {
+        if (this.embedder) break;
+        await new Promise(r => setTimeout(r, 500));
+      }
+    }
+
+    if (this.embedder) {
+      try {
+        const output = await this.embedder(text, { pooling: 'mean', normalize: true });
+        return Array.from(output.data);
+      } catch (e) {
+        console.error(`[${this.name}] Embedding failed:`, e.message);
+      }
+    }
+
+    // Fallback: Deterministic hash (128-dim) - only if model fails
     const embedding = new Array(128).fill(0);
     for (let i = 0; i < text.length; i++) {
       embedding[i % 128] += text.charCodeAt(i);
     }
-    
-    // Normalize
     const norm = Math.sqrt(embedding.reduce((sum, val) => sum + val * val, 0));
     return embedding.map(val => val / (norm || 1));
   }
+
   
   /**
    * Update metrics

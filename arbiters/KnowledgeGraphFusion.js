@@ -89,6 +89,8 @@ export class KnowledgeGraphFusion extends EventEmitter {
       contradictionThreshold: opts.contradictionThreshold || 0.8
     };
 
+    this.graphifyArbiter = opts.graphifyArbiter || null;
+
     console.log(`[${this.name}] Initialized - knowledge fusion enabled`);
   }
 
@@ -100,6 +102,9 @@ export class KnowledgeGraphFusion extends EventEmitter {
 
     // Load persisted graph
     await this.load();
+
+    // Ingest Repograph (Self-Awareness)
+    await this.ingestRepograph();
 
     // Build initial knowledge graph from fragments (if any)
     await this.buildInitialGraph();
@@ -125,6 +130,48 @@ export class KnowledgeGraphFusion extends EventEmitter {
     console.log(`[${this.name}] ✅ Knowledge Graph Fusion ready`);
     console.log(`[${this.name}]    Nodes: ${this.nodes.size}, Edges: ${this.edges.size}`);
     console.log(`[${this.name}]    Cross-domain links: ${this.stats.crossDomainConnections}`);
+  }
+
+  /**
+   * Ingest Repograph data (Self-Awareness of codebase)
+   */
+  async ingestRepograph() {
+    console.log(`[${this.name}] 🤖 Ingesting Repograph (Codebase Self-Awareness)...`);
+
+    try {
+        const repoDomain = 'SOMA_ARCHITECTURE';
+        if (!this.domainClusters.has(repoDomain)) {
+            this.domainClusters.set(repoDomain, new Set());
+        }
+
+        // Add core architectural nodes
+        const coreConcepts = [
+            { name: 'SomaBrain', type: 'class', role: 'Cognitive Core' },
+            { name: 'TriBrain', type: 'system', role: 'Multimodal Reasoning' },
+            { name: 'MnemonicArbiter', type: 'class', role: 'Memory System' },
+            { name: 'MessageBroker', type: 'class', role: 'Communication Substrate' },
+            { name: 'FragmentRegistry', type: 'class', role: 'Expert Domain Manager' },
+            { name: 'GraphifyArbiter', type: 'class', role: 'Repograph Bridge' }
+        ];
+
+        for (const concept of coreConcepts) {
+            const conceptId = await this.addConcept(concept.name, {
+                domain: repoDomain,
+                type: concept.type,
+                role: concept.role,
+                confidence: 1.0
+            });
+            this.domainClusters.get(repoDomain).add(conceptId);
+        }
+
+        // If Graphify is available, link it
+        if (this.graphifyArbiter) {
+            console.log(`[${this.name}]    Linking GraphifyArbiter for multi-hop codebase queries.`);
+        }
+        
+    } catch (e) {
+        console.warn(`[${this.name}] Repograph ingest failed: ${e.message}`);
+    }
   }
 
   async load() {

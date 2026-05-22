@@ -8,6 +8,7 @@ import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 import { assertPublicPost } from './SocialContentSafety.js';
+import socialImageLibrary from './SocialImageLibrary.js';
 
 const QUEUE_FILE = path.join(process.cwd(), 'SOMA', 'social-queue.json');
 const MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // drop unposted items after 7 days
@@ -52,25 +53,43 @@ function hash(text, images = []) {
 
 export class SocialQueue {
     /** Add a post to the queue. Returns false if duplicate. */
-    push({ platform, text, scheduledFor, type = 'post', images, imagePath, imageAlt }) {
+    push({ platform, text, scheduledFor, type = 'post', images, imagePath, imageAlt, sourceKey, sourceUrl }) {
         assertPublicPost(text, { type, platform });
         const items = load();
         const normalizedImages = normalizeImages(images || (imagePath ? [{ path: imagePath, alt: imageAlt }] : []));
         const h     = hash(text, normalizedImages);
         if (items.some(i => i.contentHash === h)) return false;
+        const cooldownMs = type === 'finance_brief' ? 48 * 3600_000 : 24 * 3600_000;
+        if (sourceKey && items.some(i =>
+            i.platform === platform &&
+            i.sourceKey === sourceKey &&
+            !i.failed &&
+            Date.now() - (i.postedAt || i.createdAt || 0) < cooldownMs
+        )) return false;
 
-        items.push({
+        const item = {
             id:          `sq-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
             platform,
             text,
             images:       normalizedImages,
             type,
+            sourceKey:    sourceKey || null,
+            sourceUrl:    sourceUrl || null,
             scheduledFor: scheduledFor || Date.now(),
             contentHash:  h,
             createdAt:    Date.now(),
             postedAt:     null,
-        });
+        };
+        items.push(item);
         save(items);
+        if (normalizedImages.length) {
+            socialImageLibrary.recordUsage(normalizedImages, {
+                platform,
+                queueId: item.id,
+                text,
+                status: 'queued',
+            });
+        }
         return true;
     }
 
@@ -85,7 +104,20 @@ export class SocialQueue {
     markPosted(id, result = {}) {
         const items = load();
         const item  = items.find(i => i.id === id);
-        if (item) { item.postedAt = Date.now(); item.postResult = result; }
+        if (item) {
+            item.postedAt = Date.now();
+            item.postResult = result;
+            if (item.images?.length) {
+                socialImageLibrary.recordUsage(item.images, {
+                    platform: item.platform,
+                    queueId: item.id,
+                    text: item.text,
+                    status: 'posted',
+                    postUrl: result?.url || result?.uri || result?.link || null,
+                    usedAt: item.postedAt,
+                });
+            }
+        }
         save(items);
     }
 
@@ -116,6 +148,26 @@ export class SocialQueue {
             i.scheduledFor >= midnight.getTime() &&
             !i.failed
         ).length;
+    }
+
+    countTodayForType(platform, type) {
+        const midnight = new Date(); midnight.setHours(0,0,0,0);
+        return load().filter(i =>
+            i.platform === platform &&
+            i.type === type &&
+            i.scheduledFor >= midnight.getTime() &&
+            !i.failed
+        ).length;
+    }
+
+    hasRecentSourceKey(platform, sourceKey, cooldownMs = 24 * 3600_000) {
+        if (!sourceKey) return false;
+        return load().some(i =>
+            i.platform === platform &&
+            i.sourceKey === sourceKey &&
+            !i.failed &&
+            Date.now() - (i.postedAt || i.createdAt || 0) < cooldownMs
+        );
     }
 
     getAll() { return load(); }

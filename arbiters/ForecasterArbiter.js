@@ -123,6 +123,40 @@ export class ForecasterArbiter extends BaseArbiterV4 {
     // 🕵️ PHASE 2: DATA COLLECTION (Real Web Research)
     // =========================================================================
 
+    async _identifyEvent(query) {
+        const raw = String(query || '').trim();
+        if (!raw) return null;
+
+        const cleaned = raw
+            .replace(/^(sports prediction|forecast|moneyball|oracle)\s*:\s*/i, '')
+            .replace(/\s+/g, ' ')
+            .trim();
+
+        const sport = this._inferSport(cleaned);
+        const matchup = cleaned
+            .replace(/\b(nba|nfl|mlb|nhl|epl|soccer|football|basketball|baseball|hockey)\b/ig, '')
+            .replace(/\s+(game|matchup|forecast|prediction)\b/ig, '')
+            .replace(/\s+/g, ' ')
+            .trim() || cleaned;
+
+        return {
+            matchup,
+            sport,
+            time: 'upcoming or current slate',
+            originalQuery: raw
+        };
+    }
+
+    _inferSport(query) {
+        const q = String(query || '').toLowerCase();
+        if (/\b(nba|basketball|points|rebounds|assists)\b/.test(q)) return 'NBA';
+        if (/\b(nfl|football|passing|rushing|receiving|touchdown|yards)\b/.test(q)) return 'NFL';
+        if (/\b(mlb|baseball|hits|runs|rbi|strikeouts)\b/.test(q)) return 'MLB';
+        if (/\b(nhl|hockey|goals|shots)\b/.test(q)) return 'NHL';
+        if (/\b(epl|soccer|premier league|goals)\b/.test(q)) return 'SOCCER';
+        return 'SPORTS';
+    }
+
     async _scrapeModels(ctx) {
         if (!this.enrichmentArbiter) return [50];
         this.log('info', `Scraping real predictive models for ${ctx.matchup}...`);

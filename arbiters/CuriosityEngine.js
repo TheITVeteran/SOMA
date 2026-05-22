@@ -60,6 +60,9 @@ export class CuriosityEngine extends EventEmitter {
     this.explorationHistory = new Map(); // topic -> times explored
     this.knowledgeGaps = new Map(); // gap -> priority
     this.interestingPatterns = new Map(); // pattern -> interestingness score
+    // Outcome tracking: domain -> { valuable, shallow } counts for the current session.
+    // Used by detectKnowledgeGaps() to avoid re-queueing domains that consistently yield nothing.
+    this._topicOutcomes = new Map();
 
     // Motivation metrics
     this.motivation = {
@@ -352,14 +355,22 @@ export class CuriosityEngine extends EventEmitter {
       fragments.forEach(f => exploredDomains.add(f.domain));
     }
 
+    // Domains grounded in what SOMA actually does — not generic academia
     const potentialDomains = [
-      'physics', 'chemistry', 'biology', 'mathematics', 'philosophy',
-      'history', 'economics', 'psychology', 'linguistics', 'astronomy',
-      'geology', 'environmental_science', 'political_science', 'sociology'
+      'agent_architecture', 'llm_engineering', 'autonomous_systems',
+      'knowledge_representation', 'social_media_strategy', 'content_creation',
+      'web_scraping', 'real_time_systems', 'cognitive_architecture',
+      'digital_identity', 'react_frontend', 'nodejs_backend',
+      'financial_markets', 'trading_algorithms', 'self_improvement_loops',
+      'memory_systems', 'reasoning_engines', 'creative_writing',
+      'signal_routing', 'prompt_engineering'
     ];
 
     for (const domain of potentialDomains) {
       if (!exploredDomains.has(domain)) {
+        // Skip domains the engine has explored multiple times and found nothing
+        const outcome = this._topicOutcomes.get(domain);
+        if (outcome && outcome.shallow >= 3 && outcome.valuable < 1) continue;
         gaps.push({
           type: 'unexplored_domain',
           gap: domain,
@@ -623,17 +634,17 @@ Return ONLY the search query, nothing else. DO NOT use em-dashes (—).`;
     const label = this._humanize(gap.gap);
     switch (gap.type) {
       case 'capability_gap':
-        return `Best techniques for improving ${label} in AI systems`;
+        return `What is the single most effective technique for improving ${label} in a production AI system?`;
       case 'limitation':
-        return `How to implement ${label} effectively in modern software`;
+        return `What is the most practical workaround for the ${label} limitation in real-world deployments?`;
       case 'fragment_expertise_gap':
-        return `Advanced concepts and practical applications of ${label}`;
+        return `What is one non-obvious insight about ${label} that most practitioners get wrong?`;
       case 'graph_sparsity':
-        return `Connections between ${label} and related knowledge domains`;
+        return `What unexpected connection exists between ${label} and a domain I already understand well?`;
       case 'unexplored_domain':
-        return `Overview and key concepts of ${label}`;
+        return `What is the most immediately useful concept in ${label} for an autonomous AI agent that builds software?`;
       default:
-        return `Latest developments and best practices in ${label}`;
+        return `What changed in ${label} in the last year that most people haven't caught up with yet?`;
     }
   }
 
@@ -641,6 +652,12 @@ Return ONLY the search query, nothing else. DO NOT use em-dashes (—).`;
    * Add item to curiosity queue
    */
   addToCuriosityQueue(item) {
+    // Drop topics that were already spoken about recently (explorationHistory > 0 means
+    // the websocket proactive loop consumed this topic within the last session)
+    const key = item.gap || item.question;
+    const timesSpoken = this.explorationHistory.get(key) || 0;
+    if (timesSpoken > 0 && item.type === 'unexplored_domain') return; // only re-queue after explore()
+
     // Calculate final priority
     let finalPriority = item.priority;
 
@@ -650,9 +667,8 @@ Return ONLY the search query, nothing else. DO NOT use em-dashes (—).`;
     }
 
     // Reduce priority if already explored
-    if (this.explorationHistory.has(item.gap || item.question)) {
-      const timesExplored = this.explorationHistory.get(item.gap || item.question);
-      finalPriority *= Math.exp(-timesExplored * 0.5); // Exponential decay
+    if (timesSpoken > 0) {
+      finalPriority *= Math.exp(-timesSpoken * 0.5); // Exponential decay
     }
 
     item.finalPriority = finalPriority;
@@ -841,6 +857,17 @@ Respond as SOMA thinking to herself: first person, genuine, not a textbook. Keep
           links:    webResult.links || webResult.sources || []
         });
       } catch { /* non-critical */ }
+    }
+
+    // Record outcome so the domain can be skipped if it consistently yields nothing
+    {
+      const domainKey = item?.gap || topic;
+      const prev = this._topicOutcomes.get(domainKey) || { valuable: 0, shallow: 0 };
+      const isValuable = insight.length > 80 && (webResult?.summary?.length > 30 || webResult?.sources?.length > 0);
+      this._topicOutcomes.set(domainKey, {
+        valuable: prev.valuable + (isValuable ? 1 : 0),
+        shallow:  prev.shallow  + (isValuable ? 0 : 1)
+      });
     }
 
     // For deep skill curiosities: consider building an expertise pack

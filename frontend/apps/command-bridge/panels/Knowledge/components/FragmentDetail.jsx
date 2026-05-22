@@ -1,11 +1,15 @@
 import React from 'react';
 import { BRAINS } from '../constants.js';
-import { X, Network, Trash2, Anchor, Star, GitBranch } from 'lucide-react';
+import { X, Network, Trash2, Anchor, Star, GitBranch, CheckCircle, AlertTriangle } from 'lucide-react';
 
 export const FragmentDetail = ({ fragment, onClose, onAction, isTraced }) => {
     if (!fragment) return null;
 
-    const brain = BRAINS[fragment.domain];
+    const brain = BRAINS[fragment.domain] || BRAINS[fragment.primaryBrain] || BRAINS.AURORA;
+    const quality = fragment.quality || {};
+    const qualityScore = typeof quality.score === 'number' ? quality.score : fragment.confidence || 0;
+    const qualityColor = qualityScore >= 0.82 ? 'text-emerald-400' : qualityScore >= 0.62 ? 'text-cyan-400' : qualityScore >= 0.42 ? 'text-amber-400' : 'text-rose-400';
+    const lanes = fragment.brainLanes || [fragment.primaryBrain || fragment.domain].filter(Boolean);
 
     const CommandButton = ({
         icon: Icon,
@@ -70,9 +74,45 @@ export const FragmentDetail = ({ fragment, onClose, onAction, isTraced }) => {
                         </div>
                     </div>
 
+                    <div className="mb-6 rounded-lg border border-slate-800 bg-slate-950/40 p-4">
+                        <div className="mb-3 flex items-center justify-between">
+                            <div>
+                                <div className="text-[10px] text-slate-500 uppercase tracking-widest font-bold">Knowledge Quality</div>
+                                <div className="text-[10px] text-slate-600 uppercase">{quality.status || 'unverified'}</div>
+                            </div>
+                            <div className={`text-2xl font-mono font-bold ${qualityColor}`}>
+                                {(qualityScore * 100).toFixed(0)}
+                                <span className="text-xs text-slate-600">%</span>
+                            </div>
+                        </div>
+                        <div className="grid grid-cols-3 gap-2 text-center">
+                            <div className="rounded border border-white/5 bg-black/30 p-2">
+                                <div className="text-[9px] uppercase text-slate-600">Evidence</div>
+                                <div className="text-sm font-mono text-slate-200">{quality.evidenceCount ?? 0}</div>
+                            </div>
+                            <div className="rounded border border-white/5 bg-black/30 p-2">
+                                <div className="text-[9px] uppercase text-slate-600">Tensions</div>
+                                <div className="text-sm font-mono text-slate-200">{quality.contradictionCount ?? 0}</div>
+                            </div>
+                            <div className="rounded border border-white/5 bg-black/30 p-2">
+                                <div className="text-[9px] uppercase text-slate-600">Source</div>
+                                <div className="truncate text-[10px] font-mono text-slate-300">{quality.sourceType || fragment.source || fragment.type}</div>
+                            </div>
+                        </div>
+                        {lanes.length > 0 && (
+                            <div className="mt-3 flex flex-wrap gap-1">
+                                {lanes.map(lane => (
+                                    <span key={lane} className="rounded-full border border-white/10 bg-white/5 px-2 py-0.5 text-[8px] font-bold uppercase tracking-widest text-slate-400">
+                                        {lane}
+                                    </span>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+
                     <div className="border-t border-slate-800 pt-5 mt-2">
                         <div className="text-[10px] text-slate-600 uppercase tracking-widest font-bold mb-3 text-center">Fragment Command</div>
-                        <div className="flex justify-between px-2">
+                        <div className="flex flex-wrap justify-center gap-3 px-2">
                             <CommandButton
                                 icon={Anchor}
                                 label="Anchor"
@@ -95,6 +135,20 @@ export const FragmentDetail = ({ fragment, onClose, onAction, isTraced }) => {
                                 action="fork"
                                 colorClass="hover:text-purple-400"
                                 description="Duplicate this idea. Let a twin version evolve independently to test alternate theories."
+                            />
+                            <CommandButton
+                                icon={CheckCircle}
+                                label="Verify"
+                                action="verify"
+                                colorClass="hover:text-emerald-400"
+                                description="Ask Logos to re-score this fragment against available evidence and tensions."
+                            />
+                            <CommandButton
+                                icon={AlertTriangle}
+                                label="Tensions"
+                                action="tensions"
+                                colorClass="hover:text-amber-400"
+                                description="Search for contradictions or weak assumptions connected to this fragment."
                             />
                             <CommandButton
                                 icon={Star}

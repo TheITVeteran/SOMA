@@ -13,11 +13,12 @@ const MindsEye = ({ isConnected }) => {
 
     const fetchVision = async () => {
       try {
-        const res = await fetch('/api/soma/vision/last');
+        const res = await fetch('/api/perception/vision/last');
         if (res.ok) {
           const data = await res.json();
-          if (data.success && (data.memory || data.url)) {
-            setLastVision(data.memory || { path: data.url });
+          const frameUrl = data.frameUrl || data.url || data.memory?.path;
+          if (data.success && frameUrl) {
+            setLastVision({ ...(data.memory || {}), path: frameUrl });
           }
         }
       } catch (e) {}

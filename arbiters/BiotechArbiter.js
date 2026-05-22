@@ -136,6 +136,8 @@ export class BiotechArbiter extends EventEmitter {
         this._lastMissionStatus = {
             testingRound: 0,
             maxTestingRounds: 3,
+            testingState: 'idle',
+            testingMessage: null,
             lastFailure: null,
             lastDossierPath: null,
             lastReflectionPath: null,
@@ -179,6 +181,11 @@ export class BiotechArbiter extends EventEmitter {
 
         const target = targetObj.id;
         const currentStrand = strand || this.strands[target]?.[0] || 'WildType';
+        this._lastMissionStatus.testingRound = 0;
+        this._lastMissionStatus.maxTestingRounds = 3;
+        this._lastMissionStatus.testingState = 'queued';
+        this._lastMissionStatus.testingMessage = `Queued physics screen for ${target}/${currentStrand}.`;
+        this._lastMissionStatus.lastFailure = null;
         this._currentMission = {
             target,
             strand: currentStrand,
@@ -245,6 +252,9 @@ export class BiotechArbiter extends EventEmitter {
             let attempts = 0;
             const MAX_EVOLUTION_ROUNDS = 3;
             this._phaseResults.maxAttempts = MAX_EVOLUTION_ROUNDS;
+            this._lastMissionStatus.maxTestingRounds = MAX_EVOLUTION_ROUNDS;
+            this._lastMissionStatus.testingState = 'running';
+            this._lastMissionStatus.testingMessage = `Running up to ${MAX_EVOLUTION_ROUNDS} physics screening rounds.`;
 
             while (attempts < MAX_EVOLUTION_ROUNDS) {
                 attempts++;
@@ -252,10 +262,14 @@ export class BiotechArbiter extends EventEmitter {
                 this._lastMissionStatus.testingRound = attempts;
                 this._lastMissionStatus.maxTestingRounds = MAX_EVOLUTION_ROUNDS;
                 this._lastMissionStatus.lastFailure = null;
+                this._lastMissionStatus.testingState = 'running';
+                this._lastMissionStatus.testingMessage = `Physics round ${attempts}/${MAX_EVOLUTION_ROUNDS} running.`;
                 physicsResult = await this.physics.simulateDocking(moleculeProbe, pocketData);
                 
                 if (physicsResult.passed) {
                     console.log(`🧬 [${this.name}]    ✅ SUCCESS: Affinity ${physicsResult.affinity} kcal/mol achieved on round ${attempts}.`);
+                    this._lastMissionStatus.testingState = 'passed';
+                    this._lastMissionStatus.testingMessage = `Physics screen passed on round ${attempts}/${MAX_EVOLUTION_ROUNDS}.`;
                     break;
                 }
 
@@ -286,6 +300,8 @@ export class BiotechArbiter extends EventEmitter {
                     memoPath: negativeMemo?.reflectionPath || null,
                     timestamp: new Date().toISOString()
                 };
+                this._lastMissionStatus.testingState = 'vetoed';
+                this._lastMissionStatus.testingMessage = `Physics veto after ${attempts}/${MAX_EVOLUTION_ROUNDS} rounds.`;
                 this._lastMissionStatus.lastNegativeMemoPath = negativeMemo?.reflectionPath || null;
                 this._lastMissionStatus.lastEvidenceGrade = negativeMemo?.evidenceGrade || null;
                 this._lastMissionStatus.lastSafetyReport = negativeMemo?.safetyReport || null;
@@ -360,6 +376,8 @@ export class BiotechArbiter extends EventEmitter {
             this._lastMissionStatus.lastReflectionPath = publication?.reflectionPath || null;
             this._lastMissionStatus.lastCompletedAt = new Date().toISOString();
             this._lastMissionStatus.lastFailure = null;
+            this._lastMissionStatus.testingState = this._lastMissionStatus.testingState === 'passed' ? 'passed' : 'completed';
+            this._lastMissionStatus.testingMessage = this._lastMissionStatus.testingMessage || 'Physics screen completed.';
             this._lastMissionStatus.lastEvidenceGrade = publication?.evidenceGrade || null;
             this._lastMissionStatus.lastSafetyReport = publication?.safetyReport || null;
             this._lastMissionStatus.lastSourceLedger = publication?.sourceLedger || null;
@@ -424,6 +442,8 @@ export class BiotechArbiter extends EventEmitter {
 
         } catch (e) {
             console.error(`🧬 [${this.name}] Mission Failed at Phase ${this._currentPhase}:`, e.message);
+            this._lastMissionStatus.testingState = 'failed';
+            this._lastMissionStatus.testingMessage = `Mission failed during ${this._currentPhase}: ${e.message}`;
             this._resetMission();
         } finally {
             global.__SOMA_MEDICAL_MISSION = false;
@@ -448,9 +468,23 @@ Focus on:
 Respond with ONLY the new molecular string or name.`;
 
         const res = await this._reason(prompt, 'prometheus', 'standard', 'molecular evolution timeout');
-        const evolved = res.response.trim().split('\n')[0]; // Get first line/word
+        const evolved = this._normalizeMolecularEvolution(res.response, moleculeProbe, targetPocket); // Get safe molecular probe
         console.log(`🧬 [${this.name}]    🧬 Evolution: ${moleculeProbe} ➔ ${evolved}`);
         return evolved;
+    }
+
+    _normalizeMolecularEvolution(raw, previousProbe, targetPocket = {}) {
+        const text = String(raw || '').trim();
+        const invalid = !text ||
+            /\b(timeout|no _callProviderCascade|placeholder|retry with stronger evidence|OdinOrchestrator|error)\b/i.test(text) ||
+            text.length > 80;
+        if (invalid) {
+            const pocketName = String(targetPocket.name || 'target').replace(/[^A-Za-z0-9]+/g, '_');
+            const base = String(previousProbe || pocketName).replace(/[^A-Za-z0-9_+\-()[\]=#@/\\]+/g, '_').slice(0, 42);
+            return `${base}_${pocketName}_variant`;
+        }
+        const first = text.split(/\r?\n/)[0].replace(/^["'`]+|["'`.]+$/g, '').trim();
+        return first.length > 80 ? first.slice(0, 80) : first;
     }
 
     async _metabolicPause() {
@@ -1134,6 +1168,8 @@ Safety boundary: no diagnosis, treatment, dosing, synthesis, or real-world exper
             discoveryMode: this._phaseResults.discoveryMode || null,
             testingRound: this._phaseResults.attempts ?? this._lastMissionStatus.testingRound ?? 0,
             maxTestingRounds: this._phaseResults.maxAttempts || this._lastMissionStatus.maxTestingRounds || 3,
+            testingState: this._lastMissionStatus.testingState || 'idle',
+            testingMessage: this._lastMissionStatus.testingMessage || null,
             lastFailure: this._lastMissionStatus.lastFailure,
             lastDossierPath: this._lastMissionStatus.lastDossierPath,
             lastReflectionPath: this._lastMissionStatus.lastReflectionPath,
