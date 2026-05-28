@@ -1196,6 +1196,23 @@ Trust: ${state.trust?.toFixed(3)}, Sadness: ${state.sadness?.toFixed(3)}, Anger:
         }
     });
 
+    toolRegistry.registerTool({
+        name: 'aperture_control',
+        description: 'Send a UI action directly to the Aperture OS desktop. This allows you to open apps, browse paths, select workspaces, adjust settings, and operate the desktop shell.',
+        parameters: {
+            action: 'string (open_app|close_app|select_workspace|change_theme|search_universal|file_operate|browser_navigate|task_modify)',
+            payload: 'object (details for the action)'
+        },
+        execute: async ({ action, payload }) => {
+            const liveSystem = getSystem();
+            if (!liveSystem.ws || typeof liveSystem.ws.broadcast !== 'function') {
+                return 'Aperture OS control channel is offline (no active dashboard WebSocket)';
+            }
+            liveSystem.ws.broadcast('aperture_action', { action, payload, timestamp: Date.now() });
+            return `Aperture OS action "${action}" successfully dispatched to desktop.`;
+        }
+    });
+
     const totalTools = toolRegistry.tools ? toolRegistry.tools.size : 0;
 
     // Final Validation

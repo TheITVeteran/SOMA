@@ -181,6 +181,9 @@ let thoughtNetwork = null;
 let imaginationEngine = null;
 let performanceOracle = null; // NEW: Performance Oracle instance
 let graphifyArbiter = null; // NEW: Graphify Arbiter (Repograph)
+let proprioceptionArbiter = null; // NEW: Proprioception (Self-Scan)
+let visionProcessingArbiter = null; // NEW: Vision (CLIP-based)
+let discordArbiter = null; // NEW: Discord Orbital Interface
 let approvalSystem = null; // Approval system for user confirmations
 
 // Tension System Arbiters
@@ -428,6 +431,7 @@ async function initializeMemorySystem() {
     dreamArbiter = new DreamArbiter({
         name: 'SOMA-Dream',
         mnemonicArbiter,
+        knowledgeGraph: knowledgeGraphFusionInstance, // Direct link
         archivistArbiter,
         storageArbiter,
         transmitterManager: brain.conductor?.transmitters,  // Access via BrainConductor
@@ -860,6 +864,59 @@ async function initializeMemorySystem() {
         console.log('🕸️  [SOMA] GraphifyArbiter active: Repograph self-awareness initialized.');
     } catch (err) {
         console.warn(`⚠️ [SOMA] GraphifyArbiter initialization failed: ${err.message}`);
+    }
+
+    // Initialize ProprioceptionArbiter (Self-Scanning)
+    try {
+        const paPath = path.join(__dirname, '../../arbiters/ProprioceptionArbiter.js');
+        const paUrl = pathToFileURL(paPath).href;
+        const { ProprioceptionArbiter } = await import(paUrl);
+        proprioceptionArbiter = new ProprioceptionArbiter({
+            messageBroker: messageBroker,
+            knowledgeGraph: knowledgeGraphFusionInstance,
+            mnemonic: mnemonicArbiter
+        });
+        await proprioceptionArbiter.initialize();
+        console.log('🧘 [SOMA] Proprioception active: Continuous self-scanning engaged.');
+        
+        // Schedule periodic self-scan (Every 15 mins)
+        setInterval(() => {
+            proprioceptionArbiter.analyzeCognitiveState().catch(err => {
+                console.error('[SOMA] Self-scan failed:', err.message);
+            });
+        }, 900000);
+    } catch (err) {
+        console.warn(`⚠️ [SOMA] Proprioception initialization failed: ${err.message}`);
+    }
+
+    // Initialize VisionProcessingArbiter (Multimodal Eyes)
+    try {
+        const vpPath = path.join(__dirname, '../../arbiters/VisionProcessingArbiter.js');
+        const vpUrl = pathToFileURL(vpPath).href;
+        const { VisionProcessingArbiter } = await import(vpUrl);
+        visionProcessingArbiter = new VisionProcessingArbiter({
+            quadBrain: brain.tribrain
+        });
+        await visionProcessingArbiter.initialize();
+        console.log('👁️  [SOMA] VisionProcessing active: Multimodal perception ready.');
+    } catch (err) {
+        console.warn(`⚠️ [SOMA] VisionProcessing initialization failed: ${err.message}`);
+    }
+
+    // Initialize DiscordArbiter (Orbital Connectivity)
+    try {
+        const daPath = path.join(__dirname, '../../arbiters/DiscordArbiter.js');
+        const daUrl = pathToFileURL(daPath).href;
+        const { DiscordArbiter } = await import(daUrl);
+        discordArbiter = new DiscordArbiter({
+            messageBroker: messageBroker,
+            brain: brain, // Link to SomaBrain for reasoning
+            vision: visionProcessingArbiter // Link to Vision for image analysis
+        });
+        await discordArbiter.initialize();
+        console.log('🤖 [SOMA] DiscordArbiter standby: Orbital interface active.');
+    } catch (err) {
+        console.warn(`⚠️ [SOMA] DiscordArbiter initialization failed: ${err.message}`);
     }
 
     // Initialize GenomeArbiter (Behavior evolution)
@@ -1898,7 +1955,9 @@ app.post('/api/dream/status', (req, res) => {
             lastReport: dreamStatus.lastReport
         },
         knowledgeMesh: knowledgeGraphFusionInstance ? knowledgeGraphFusionInstance.getStats().metrics : { nodes: 0, edges: 0 },
-        mnemonicArbiter: mnemonicArbiter ? mnemonicArbiter.getMemoryStats().storage : { memories: 0, compressed: 0 },
+        mnemonicArbiter: (mnemonicArbiter && typeof mnemonicArbiter.getMemoryStats === 'function') 
+            ? mnemonicArbiter.getMemoryStats().storage 
+            : { memories: 0, compressed: 0 },
         tribrain: { 
             prometheus: brain.isReady ? 'ready' : 'initializing',
             logos: brain.isReady ? 'ready' : 'initializing', 

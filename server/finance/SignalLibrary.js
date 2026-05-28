@@ -10,8 +10,13 @@
  * combined they produce a robust edge.
  */
 
+import fs from 'fs';
+import path from 'path';
+
 export class SignalLibrary {
     constructor() {
+        this._weightsFile = path.join(process.cwd(), 'data', 'trading', 'signal-weights.json');
+
         // Initial equal weights — adapt over time via recordOutcome()
         this._weights = {
             rsi:            1.0,
@@ -22,10 +27,47 @@ export class SignalLibrary {
             macd:           1.0,
             breakout:       1.0,
             microstructure: 0.8,   // Noisier — lower initial weight
+            optionsIV:      0.7,   // IV/VIX regime signal (async, scored externally)
         };
+        this._lastIVScore = null; // set by AutonomousTrader after each IV fetch
 
         this._outcomeHistory = []; // { signalScores, pnlPct, timestamp }
         this._maxHistory = 200;
+        this._outcomesSinceLastSave = 0;
+
+        this._loadWeights();
+    }
+
+    _loadWeights() {
+        try {
+            if (fs.existsSync(this._weightsFile)) {
+                const saved = JSON.parse(fs.readFileSync(this._weightsFile, 'utf8'));
+                if (saved.weights) {
+                    for (const [k, v] of Object.entries(saved.weights)) {
+                        if (this._weights[k] !== undefined) this._weights[k] = v;
+                    }
+                }
+                if (saved.outcomeHistory) {
+                    this._outcomeHistory = saved.outcomeHistory.slice(-this._maxHistory);
+                }
+                console.log('[SignalLibrary] Restored learned weights from disk');
+            }
+        } catch { /* fresh start */ }
+    }
+
+    saveWeights() {
+        try {
+            const dir = path.dirname(this._weightsFile);
+            if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+            fs.writeFileSync(this._weightsFile, JSON.stringify({
+                weights: { ...this._weights },
+                outcomeHistory: this._outcomeHistory.slice(-50), // save last 50 for context
+                savedAt: new Date().toISOString()
+            }, null, 2));
+            this._outcomesSinceLastSave = 0;
+        } catch (err) {
+            console.warn('[SignalLibrary] Failed to save weights:', err.message);
+        }
     }
 
     /**
@@ -265,6 +307,7 @@ export class SignalLibrary {
         const inAgreement = Object.values(signals).filter(s =>
             (composite > 0 && s.score > 0.1) || (composite < 0 && s.score < -0.1)
         ).length;
+        const totalSignals = Object.keys(signals).length; // 8 internal + optionsIV tracked externally
         const agreementBonus = inAgreement >= 6 ? 0.1 : inAgreement >= 4 ? 0.05 : 0;
 
         const finalConf   = Math.min(0.97, confidence + agreementBonus);
@@ -280,7 +323,7 @@ export class SignalLibrary {
             action,
             confidence: finalConf,
             composite,
-            reason:         `SignalLib(${composite.toFixed(3)}) ${inAgreement}/8 agree | ${top3.join(' ')}`,
+            reason:         `SignalLib(${composite.toFixed(3)}) ${inAgreement}/${totalSignals} agree | ${top3.join(' ')}`,
             recommendation: action,
             signals:        details,
             inAgreement,
@@ -300,8 +343,16 @@ export class SignalLibrary {
         const lr    = 0.04;  // Learning rate
         const wasUp = pnlPct > 0;
 
-        for (const [name, score] of Object.entries(signalScoresAtEntry)) {
+        // Include the IV score captured at entry time (if set by caller)
+        const allScores = { ...signalScoresAtEntry };
+        if (this._lastIVScore !== null && typeof this._lastIVScore === 'number') {
+            allScores.optionsIV = this._lastIVScore;
+            this._lastIVScore = null; // consume
+        }
+
+        for (const [name, score] of Object.entries(allScores)) {
             if (Math.abs(score) < 0.15) continue; // Signal wasn't decisive — skip
+            if (!(name in this._weights)) continue; // Unknown signal — skip
             const predicted = score > 0;
             const correct   = (wasUp && predicted) || (!wasUp && !predicted);
             if (correct) {
@@ -313,6 +364,19 @@ export class SignalLibrary {
 
         this._outcomeHistory.push({ signalScoresAtEntry, pnlPct, timestamp: Date.now() });
         if (this._outcomeHistory.length > this._maxHistory) this._outcomeHistory.shift();
+
+        this._outcomesSinceLastSave++;
+        if (this._outcomesSinceLastSave >= 10) this.saveWeights();
+    }
+
+    /** Returns current signal weights snapshot */
+    getWeights() {
+        return { ...this._weights };
+    }
+
+    /** Returns recent outcome history (trimmed to last N) */
+    getOutcomeHistory(limit = 100) {
+        return this._outcomeHistory.slice(-limit);
     }
 
     /** Recent signal performance stats */

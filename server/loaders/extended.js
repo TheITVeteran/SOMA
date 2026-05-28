@@ -503,6 +503,49 @@ export async function loadExtendedSystems(system) {
         console.warn(`    ⚠️ ASI Loop skipped: ${e.message}`);
     }
 
+    // ── Discord: SOMA's Orbital Interface ──
+    // Wraps brain.reason() in a processQuery()-compatible adapter so DiscordArbiter
+    // can call the same pipeline as the /chat route without duplicating the handler.
+    try {
+        const { DiscordArbiter } = await import('../../arbiters/DiscordArbiter.js');
+        const brain = system.quadBrain || system.somArbiter;
+        if (!brain) throw new Error('Brain not ready');
+
+        const discordBrain = {
+            async processQuery(content, ctx = {}) {
+                let memoryBlock = '';
+                if (system.mnemonicArbiter) {
+                    try {
+                        const mems = await Promise.race([
+                            system.mnemonicArbiter.recall(content, { limit: 3, minSimilarity: 0.35 }),
+                            new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 3000))
+                        ]);
+                        if (Array.isArray(mems) && mems.length) {
+                            memoryBlock = `\n[MEMORIES]\n${mems.map(m => `• ${m.content || m.text || ''}`).join('\n')}\n`;
+                        }
+                    } catch {}
+                }
+                const author = ctx.author || 'someone';
+                const prompt = `${memoryBlock}[Discord — ${author}]: ${content}`;
+                const result = await brain.reason(prompt, {
+                    quickResponse: ctx.mode === 'fast',
+                    preferredBrain: 'AURORA',
+                    temperature: 0.8
+                });
+                const response = typeof result === 'string' ? result : (result?.text || result?.response || result?.message || '');
+                return { response, text: response, metadata: result?.metadata };
+            }
+        };
+
+        const discord = new DiscordArbiter({ brain: discordBrain });
+        await discord.onInitialize();
+        system.discordArbiter = discord;
+        ext.discordArbiter = discord;
+        console.log('    🛰️  DiscordArbiter ONLINE — mentions, DMs, and monitored channels active');
+    } catch (e) {
+        console.warn(`    ⚠️ DiscordArbiter skipped: ${e.message}`);
+    }
+
     const loaded = Object.values(ext).filter(v => v !== null).length;
     const total = Object.keys(ext).length;
     const heapMB = (process.memoryUsage().heapUsed / 1024 / 1024).toFixed(0);

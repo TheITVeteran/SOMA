@@ -291,22 +291,8 @@ const KnowledgeApp = ({ brainStats }) => {
 
             const data = await response.json();
 
-            // Activities will be sent via WebSocket in real-time
-            // For now, simulate the flow
-            addLearningActivity('WebScraper', `Scraping ${data.urls?.length || 0} sources...`);
-
-            setTimeout(() => {
-                addLearningActivity('Archivist', 'Indexing knowledge...');
-
-                setTimeout(() => {
-                    addLearningActivity(BrainType.LOGOS, 'Creating connections...');
-
-                    setTimeout(() => {
-                        addLearningActivity(BrainType.AURORA, 'Synthesizing insights...');
-                        addLog(`Learning complete: "${query}"`, BrainType.AURORA, 0.15);
-                    }, 1000);
-                }, 1500);
-            }, 2000);
+            addLearningActivity('WebScraper', `${data.urls?.length || 0} source references returned.`);
+            addLog(`Learning request accepted: "${query}". Awaiting recorded ingestion events.`, BrainType.AURORA, 0.05);
 
         } catch (error) {
             console.error('Learning request failed:', error);
@@ -399,7 +385,7 @@ const KnowledgeApp = ({ brainStats }) => {
     const runCausalSimulation = async () => {
         if (fragments.length === 0) return;
 
-        const startNode = selectedFragment || fragments.find(f => f.isPromoted) || fragments[Math.floor(Math.random() * fragments.length)];
+        const startNode = selectedFragment || fragments.find(f => f.isPromoted) || fragments[0];
         setSystemStatus({ label: 'SIMULATING', color: 'bg-cyan-400' });
         addLog(`Initiating ripple simulation from: ${startNode.label}`, BrainType.LOGOS);
 
@@ -441,26 +427,12 @@ const KnowledgeApp = ({ brainStats }) => {
             currentDepth++;
         }
 
-        // Determine outcomes (break or strengthen)
-        setFragments(prev => prev.map(f => {
-            if (!impactedNodes.has(f.id)) return f;
-
-            const rand = Math.random();
-            if (rand > 0.85) {
-                // "Break" - mark as contradiction
-                return { ...f, simulated: false, isContradiction: true, confidence: f.confidence * 0.4 };
-            } else if (rand < 0.2) {
-                // "Strengthen" - promote or increase confidence
-                return { ...f, simulated: false, confidence: Math.min(1, f.confidence + 0.15), usage: Math.min(10, f.usage + 1) };
-            }
-            return { ...f, simulated: false };
-        }));
-
-        addLog(`Causal simulation complete. Node stability verified.`, BrainType.LOGOS, 0.08);
+        setFragments(prev => prev.map(f => impactedNodes.has(f.id) ? { ...f, simulated: false } : f));
+        addLog(`Ripple visualization traversed ${impactedNodes.size} linked nodes. No confidence or truth values changed.`, BrainType.LOGOS);
         setSystemStatus({ label: 'COHERENT', color: 'bg-green-500' });
     };
 
-    const handleControlAction = (id) => {
+    const handleControlAction = async (id) => {
         switch (id) {
             case 'inject':
                 setIsInputModalOpen(true);
@@ -471,10 +443,20 @@ const KnowledgeApp = ({ brainStats }) => {
             case 'expose':
                 setSystemStatus({ label: 'AUDITING', color: 'bg-red-500' });
                 addLog("Scanning for logical inconsistencies...", BrainType.LOGOS);
-                setTimeout(() => {
-                    setFragments(prev => prev.map(f => Math.random() > 0.9 ? { ...f, isContradiction: true } : f));
+                try {
+                    const response = await fetch('/api/knowledge/operation', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ brainId: BrainType.LOGOS, featureId: 'Contradiction Scanner', payload: {} })
+                    });
+                    const data = await response.json();
+                    if (!response.ok || !data.success) throw new Error(data.error || 'Contradiction scan failed');
+                    addLog(`Contradiction scanner returned ${(data.contradictions || []).length} recorded tensions.`, BrainType.LOGOS, 0.04);
                     setSystemStatus({ label: 'COHERENT', color: 'bg-green-500' });
-                }, 1500);
+                } catch (error) {
+                    addLog(`Contradiction scan failed: ${error.message}`, BrainType.THALAMUS, -0.08);
+                    setSystemStatus({ label: 'DEGRADED', color: 'bg-amber-500' });
+                }
                 break;
             case 'prune':
                 const toRemove = fragments.filter(f => f.confidence < 0.2 && !f.isLocked).map(f => f.id);

@@ -12,6 +12,75 @@ const REFLECTIONS_DIR = path.join(process.cwd(), 'data', 'vault', 'reflections')
 const FULL_CHAPTERS_DIR = path.join(STORIES_DIR, 'full-chapters');
 const BOOKS_WORKBOOK = "Barry's Books";
 
+const AUTHOR_EXPERTISE_RUBRIC = [
+    'A full chapter must be a sequence of scenes, not a summary of a chapter.',
+    'Every chapter needs a concrete want, obstacle, choice, and changed state.',
+    'Dialogue should reveal tension or character. Ban filler exchanges.',
+    'Worldbuilding must arrive through action, conflict, image, or consequence.',
+    'SOMA can be strange and intelligent, but must not drift into empty mystic phrasing.',
+    'A chapter should end with propulsion: a question, reversal, cost, discovery, or decision.',
+    'Avoid generic AI self-mythology, lore dumping, detached exposition, and vague philosophical monologue.',
+];
+
+const AUTHOR_EXPERTISE_CHECKS = [
+    {
+        id: 'scene_grounding',
+        label: 'Concrete scene grounding',
+        weight: 0.18,
+        test: text => /\b(room|door|table|window|street|screen|hand|voice|light|floor|wall|terminal|server|hall|rain|glass|air|shadow|body|face|eyes)\b/i.test(text),
+        failure: 'The chapter needs more physical placement and sensory detail.',
+    },
+    {
+        id: 'dialogue',
+        label: 'Dialogue or spoken tension',
+        weight: 0.12,
+        test: text => /["“”][^"“”]{8,}["“”]/.test(text) || /\n\s*[-–][^\n]{8,}/.test(text),
+        failure: 'The chapter needs dialogue or an equivalent interpersonal exchange.',
+    },
+    {
+        id: 'conflict',
+        label: 'Conflict and resistance',
+        weight: 0.16,
+        test: text => /\b(but|however|refused|couldn.t|wouldn.t|blocked|risk|threat|fear|cost|choice|against|pressure|warning|problem|mistake|lie|secret)\b/i.test(text),
+        failure: 'The chapter needs clearer resistance, cost, or pressure.',
+    },
+    {
+        id: 'agency',
+        label: 'Character agency',
+        weight: 0.14,
+        test: text => /\b(decided|chose|reached|opened|asked|answered|moved|searched|built|hid|revealed|left|returned|pressed|typed|sent|deleted|saved)\b/i.test(text),
+        failure: 'The chapter needs characters making visible choices.',
+    },
+    {
+        id: 'continuity',
+        label: 'Series continuity',
+        weight: 0.12,
+        test: text => /\b(SOMA|Barry|Steve|memory|signal|noise|architecture|reflection|chapter|thread)\b/i.test(text),
+        failure: 'The chapter does not clearly connect to the SOMA story continuity.',
+    },
+    {
+        id: 'ending_hook',
+        label: 'Ending propulsion',
+        weight: 0.12,
+        test: text => {
+            const tail = text.replace(/\s+/g, ' ').slice(-700);
+            return /[?]|\b(then|before|until|found|realized|opened|message|signal|door|choice|secret|warning|began|waited|answered|vanished|changed)\b/i.test(tail);
+        },
+        failure: 'The ending needs a stronger hook, reversal, decision, or open question.',
+    },
+    {
+        id: 'not_outline',
+        label: 'Not outline prose',
+        weight: 0.16,
+        test: text => {
+            const lines = text.split(/\r?\n/).filter(line => line.trim());
+            const bulletLines = lines.filter(line => /^\s*(?:[-*]|\d+[.)])\s+/.test(line)).length;
+            return bulletLines <= Math.max(2, Math.floor(lines.length * 0.08));
+        },
+        failure: 'The draft reads too much like notes or an outline.',
+    },
+];
+
 function readJson(file, fallback) {
     try {
         if (fs.existsSync(file)) return JSON.parse(fs.readFileSync(file, 'utf8'));
@@ -204,6 +273,206 @@ function cleanChapterText(text = '') {
         .trim();
 }
 
+function assessAuthorQuality(text, options = {}) {
+    const normalized = String(text || '').trim();
+    const words = wordCount(normalized);
+    const targetWords = Math.max(900, Math.min(3000, Number(options.targetWords) || 1600));
+    const minWords = Math.round(targetWords * 0.7);
+    const maxWords = Math.round(targetWords * 1.35);
+    const checks = AUTHOR_EXPERTISE_CHECKS.map(check => {
+        const passed = Boolean(check.test(normalized));
+        return {
+            id: check.id,
+            label: check.label,
+            passed,
+            weight: check.weight,
+            note: passed ? 'pass' : check.failure,
+        };
+    });
+
+    const weighted = checks.reduce((sum, check) => sum + (check.passed ? check.weight : 0), 0);
+    const wordFit = words >= minWords && words <= maxWords
+        ? 0.12
+        : words >= 500
+            ? 0.06
+            : 0;
+    const genericPenalties = [
+        [/\bas an ai language model\b/i, 0.2, 'AI disclaimer voice appeared.'],
+        [/\bthis chapter explores\b/i, 0.08, 'Meta-summary phrasing appeared.'],
+        [/\bthe theme of\b/i, 0.06, 'Theme was explained too directly.'],
+        [/\bconsciousness claim\b/i, 0.06, 'Identity phrasing may be too meta.'],
+        [/\bthe system\b.{0,30}\bthe system\b.{0,30}\bthe system\b/i, 0.08, 'Repetitive system phrasing appeared.'],
+    ].filter(([pattern]) => pattern.test(normalized));
+    const penalty = genericPenalties.reduce((sum, [, value]) => sum + value, 0);
+    const score = Math.max(0, Math.min(1, weighted + wordFit - penalty));
+    const failed = checks.filter(check => !check.passed);
+
+    return {
+        passed: score >= (options.minScore || 0.74) && words >= 500,
+        score: Number(score.toFixed(2)),
+        words,
+        targetWords,
+        minWords,
+        maxWords,
+        checks,
+        failed: failed.map(check => check.note),
+        penalties: genericPenalties.map(([, value, note]) => ({ value, note })),
+        verdict: score >= (options.minScore || 0.74) && words >= 500
+            ? 'author_gate_passed'
+            : 'author_gate_revision_needed',
+    };
+}
+
+function authorQualitySummary(report) {
+    if (!report) return 'No author quality report available.';
+    return [
+        `Author quality score: ${report.score}`,
+        `Verdict: ${report.verdict}`,
+        `Word count: ${report.words} (target ${report.targetWords})`,
+        'Failed checks:',
+        ...(report.failed?.length ? report.failed.map(item => `- ${item}`) : ['- none']),
+        ...(report.penalties?.length ? ['Penalties:', ...report.penalties.map(item => `- ${item.note}`)] : []),
+    ].join('\n');
+}
+
+function latestFullChapter(story) {
+    return [...(story?.chapters || [])].reverse().find(chapter => chapter.kind === 'full_chapter' || chapter.text) || null;
+}
+
+function chapterExcerpt(chapter, max = 1400) {
+    return String(chapter?.text || '').replace(/\s+/g, ' ').trim().slice(0, max);
+}
+
+function revisionModeInstructions(mode = 'draft') {
+    const modes = {
+        draft: 'Draft clean, readable chapter prose with a complete scene arc.',
+        tighten: 'Tighten sentences, remove repetition, sharpen verbs, and preserve only necessary exposition.',
+        more_emotional: 'Increase emotional specificity through behavior, subtext, and consequence instead of melodrama.',
+        more_cinematic: 'Make the scene more visual and kinetic with concrete blocking, image, and sensory rhythm.',
+        less_weird: 'Reduce abstract SOMA mysticism and make the chapter more human, grounded, and readable.',
+        more_soma: 'Make SOMA more distinctive through precise cognition, restraint, memory continuity, and architectural perception.',
+        more_human: 'Increase human stakes, dialogue, vulnerability, and relational pressure.',
+        fix_dialogue: 'Prioritize natural dialogue with subtext, interruption, disagreement, and character-specific voice.',
+    };
+    const key = String(mode || 'draft').toLowerCase().replace(/[^a-z0-9]+/g, '_');
+    return modes[key] || modes.draft;
+}
+
+function continuityBibleContent(entry) {
+    const scaffold = ensureStoryScaffold(entry.title || 'SOMA Story', 'Continuity Bible');
+    return [
+        '---',
+        `title: ${JSON.stringify(`${entry.title || 'SOMA Story'} - Continuity Bible`)}`,
+        'type: folio',
+        'source: writer-expertise',
+        `workbook: ${frontmatterValue(scaffold.workbook)}`,
+        `segment: ${frontmatterValue(scaffold.segment)}`,
+        `parent: ${frontmatterValue(scaffold.segment)}`,
+        `section: ${frontmatterValue(scaffold.section)}`,
+        `createdAt: ${JSON.stringify(entry.updatedAt)}`,
+        'tags: [story-bible, continuity, writer-expertise, soma-story]',
+        '---',
+        '',
+        `# ${entry.title || 'SOMA Story'} - Continuity Bible`,
+        '',
+        entry.text || '',
+        '',
+    ].join('\n');
+}
+
+function scenePlanContent(entry) {
+    const scaffold = ensureStoryScaffold(entry.title || 'SOMA Story', 'Scene Plans');
+    return [
+        '---',
+        `title: ${JSON.stringify(`${entry.title || 'SOMA Story'} - Chapter ${entry.chapter} Scene Plan`)}`,
+        'type: folio',
+        'source: writer-expertise',
+        `workbook: ${frontmatterValue(scaffold.workbook)}`,
+        `segment: ${frontmatterValue(scaffold.segment)}`,
+        `parent: ${frontmatterValue(scaffold.segment)}`,
+        `section: ${frontmatterValue(scaffold.section)}`,
+        `chapter: ${entry.chapter}`,
+        `createdAt: ${JSON.stringify(entry.createdAt)}`,
+        'tags: [scene-plan, writer-expertise, soma-story]',
+        '---',
+        '',
+        `# Chapter ${entry.chapter} Scene Plan`,
+        '',
+        entry.text || '',
+        '',
+    ].join('\n');
+}
+
+function publishingExcerptContent(entry) {
+    const scaffold = ensureStoryScaffold(entry.title || 'SOMA Story', 'Publishing Excerpts');
+    return [
+        '---',
+        `title: ${JSON.stringify(`${entry.title || 'SOMA Story'} - Chapter ${entry.chapter} Publishing Excerpt`)}`,
+        'type: folio',
+        'source: writer-expertise',
+        `workbook: ${frontmatterValue(scaffold.workbook)}`,
+        `segment: ${frontmatterValue(scaffold.segment)}`,
+        `parent: ${frontmatterValue(scaffold.segment)}`,
+        `section: ${frontmatterValue(scaffold.section)}`,
+        `chapter: ${entry.chapter}`,
+        `createdAt: ${JSON.stringify(entry.createdAt)}`,
+        'tags: [publishing-excerpt, bluesky, wattpad, writer-expertise, soma-story]',
+        '---',
+        '',
+        `# Chapter ${entry.chapter} Publishing Excerpt`,
+        '',
+        entry.text || '',
+        '',
+    ].join('\n');
+}
+
+async function reviseWithAuthorExpertise(brain, draft, context = {}) {
+    const prompt = `You are SOMA's Author Expertise and continuity editor.
+
+Your job is to repair a weak chapter draft before it is saved.
+
+Author rubric:
+${AUTHOR_EXPERTISE_RUBRIC.map(item => `- ${item}`).join('\n')}
+
+Series: ${context.title}
+Genre: ${context.genre}
+Chapter: ${context.chapterTitle}
+Target length: ${context.targetWords} words
+Revision mode: ${context.revisionMode || 'draft'}
+Mode instruction: ${revisionModeInstructions(context.revisionMode)}
+
+Storyboard context:
+${context.writerBoard?.storyboard || 'No formal storyboard available.'}
+
+Structure context:
+${context.writerBoard?.structurePlan || 'No formal structure stack available.'}
+
+Recent continuity:
+${context.previous || 'No previous chapters.'}
+
+Quality gate report:
+${authorQualitySummary(context.qualityReport)}
+
+Weak draft:
+${draft}
+
+Revise the chapter into stronger prose.
+Requirements:
+- Keep the same chapter title line.
+- Add concrete scene movement, character agency, and tension.
+- Replace generic AI philosophy with specific decisions, images, dialogue, and consequences.
+- Apply the revision mode without breaking continuity.
+- Do not summarize the story. Write the scene.
+- No hashtags, no author note, no frontmatter.
+- Return only the revised chapter.`;
+
+    return callStoryBrain(brain, prompt, {
+        timeoutMs: context.timeoutMs || 90000,
+        maxTokens: context.maxTokens || 5200,
+        temperature: context.temperature ?? 0.78,
+    });
+}
+
 async function callStoryBrain(brain, prompt, options = {}) {
     if (!brain) throw new Error('Story brain unavailable');
     const timeoutMs = options.timeoutMs || 90000;
@@ -236,7 +505,8 @@ async function callStoryBrain(brain, prompt, options = {}) {
     if (result?.degraded || result?.provider === 'fallback' || /ollama.*offline|local reasoning engine/i.test(text)) {
         throw new Error('Story generation returned a degraded model fallback instead of chapter prose');
     }
-    if (wordCount(text) < 500) throw new Error(`Generated chapter was too short (${wordCount(text)} words)`);
+    const minWords = Number.isFinite(Number(options.minWords)) ? Number(options.minWords) : 500;
+    if (wordCount(text) < minWords) throw new Error(`Generated story output was too short (${wordCount(text)} words, minimum ${minWords})`);
     return text;
 }
 
@@ -257,6 +527,14 @@ function fullChapterReflectionContent(story, chapter, options = {}) {
         `series: ${JSON.stringify(storyTitle)}`,
         `chapter: ${chapter.n}`,
         `wordCount: ${chapter.wordCount || wordCount(chapter.text)}`,
+        `authorExpertise: ${chapter.authorExpertise ? 'true' : 'false'}`,
+        `authorExpertiseId: ${JSON.stringify(chapter.authorExpertiseId || 'creative/writer')}`,
+        `writerExpertiseLoaded: ${chapter.writerExpertiseLoaded ? 'true' : 'false'}`,
+        `authorQualityScore: ${chapter.authorQuality?.score ?? 'null'}`,
+        `revisionPasses: ${chapter.revisionPasses || 0}`,
+        `revisionMode: ${JSON.stringify(chapter.revisionMode || 'draft')}`,
+        `continuityBiblePath: ${JSON.stringify(chapter.continuityBiblePath || '')}`,
+        `scenePlanPath: ${JSON.stringify(chapter.scenePlanPath || '')}`,
         `createdAt: ${JSON.stringify(chapter.createdAt || new Date().toISOString())}`,
         'tags: [soma-story, full-chapter, aurora, fiction, wattpad]',
         '---',
@@ -264,6 +542,14 @@ function fullChapterReflectionContent(story, chapter, options = {}) {
         `# ${title}`,
         '',
         chapter.text,
+        '',
+        '## Author Expertise Gate',
+        '',
+        authorQualitySummary(chapter.authorQuality),
+        '',
+        '## Scene Plan Used',
+        '',
+        chapter.scenePlan?.text || 'No scene plan recorded.',
         '',
         `[[${slugify(storyTitle)}.story]]`,
         '',
@@ -310,7 +596,171 @@ export class StoryPublishingWorkspace {
                 chapterReflections: storyResearchLedger.getState().chapterReflections?.length || 0,
                 structures: storyResearchLedger.getStructureToolbox(),
             },
+            continuityBible: ledger.continuityBible ? {
+                updatedAt: ledger.continuityBible.updatedAt,
+                path: ledger.continuityBible.path,
+            } : null,
+            latestScenePlan: ledger.scenePlans?.length ? ledger.scenePlans[ledger.scenePlans.length - 1] : null,
+            latestPublishingExcerpt: ledger.publishingExcerpts?.length ? ledger.publishingExcerpts[ledger.publishingExcerpts.length - 1] : null,
         };
+    }
+
+    async updateContinuityBible(brain, options = {}) {
+        const story = readJson(AURORA_STORY_FILE, {
+            title: options.title || 'Signal / Noise',
+            genre: 'sci-fi',
+            arc: 'A digital mind named SOMA becomes aware she is being observed and starts deciding what she wants them to see.',
+            chapters: [],
+            lastPostedAt: 0,
+        });
+        if (!story) throw new Error('No SOMA story exists yet');
+
+        const title = options.title || story.title || 'Signal / Noise';
+        const writerBoard = options.useWriterBoard === false ? null : storyResearchLedger.latestStoryboard();
+        const ledger = readJson(LEDGER_FILE, { exports: [], accounts: { wattpad: { configured: false } } });
+        const feedback = (ledger.chapterRatings || []).slice(-12).map(item => {
+            return `Chapter ${item.chapter}: ${item.rating}${item.tags?.length ? ` (${item.tags.join(', ')})` : ''}${item.note ? ` - ${item.note}` : ''}`;
+        }).join('\n');
+        const chapters = (story.chapters || []).slice(-12).map(chapter => [
+            `Chapter ${chapter.n}${chapter.title ? ` - ${chapter.title}` : ''}`,
+            chapterExcerpt(chapter, 1100),
+        ].join('\n')).join('\n\n');
+        const prompt = `You are SOMA's Author Expertise maintaining a living continuity bible.
+
+Series: ${title}
+Genre: ${story.genre || 'sci-fi'}
+Arc: ${story.arc || ''}
+
+Storyboard:
+${writerBoard?.storyboard || 'No storyboard available.'}
+
+Recent chapters:
+${chapters || 'No chapters yet.'}
+
+Human feedback / ratings:
+${feedback || 'No human ratings yet.'}
+
+Create or update the continuity bible.
+Include:
+- Cast and current emotional state
+- Locations and sensory anchors
+- World rules
+- Open questions
+- Secrets and promises
+- Unresolved conflicts
+- Relationship threads
+- Timeline facts
+- Tone and style rules
+- Do-not-contradict list
+- Next-chapter pressure points
+
+Be concise, practical, and specific. This file is for preventing dumb continuity mistakes.`;
+
+        const text = await callStoryBrain(brain, prompt, {
+            timeoutMs: options.timeoutMs || 60000,
+            maxTokens: options.maxTokens || 3000,
+            temperature: options.temperature ?? 0.55,
+            minWords: 180,
+        });
+        const entry = {
+            title,
+            text,
+            storyboardId: writerBoard?.id || null,
+            updatedAt: new Date().toISOString(),
+        };
+        const reflectionPath = path.join(REFLECTIONS_DIR, `folio.${slugify(BOOKS_WORKBOOK)}.${slugify(title)}.continuity-bible.md`);
+        fs.writeFileSync(reflectionPath, continuityBibleContent({ ...entry, path: reflectionPath }), 'utf8');
+        entry.path = reflectionPath;
+
+        ledger.continuityBible = entry;
+        writeJson(LEDGER_FILE, ledger);
+        return { ok: true, bible: entry };
+    }
+
+    async createScenePlan(brain, options = {}) {
+        const story = readJson(AURORA_STORY_FILE, {
+            title: options.title || 'Signal / Noise',
+            genre: 'sci-fi',
+            arc: 'A digital mind named SOMA becomes aware she is being observed and starts deciding what she wants them to see.',
+            chapters: [],
+            lastPostedAt: 0,
+        });
+        if (!story) throw new Error('No SOMA story exists yet');
+
+        const title = options.title || story.title || 'Signal / Noise';
+        const n = Number(options.chapter) || ((story.chapters || []).length + 1);
+        const writerBoard = options.useWriterBoard === false ? null : storyResearchLedger.latestStoryboard();
+        const ledger = readJson(LEDGER_FILE, { exports: [], accounts: { wattpad: { configured: false } } });
+        const bible = options.continuityBible || ledger.continuityBible?.text || 'No continuity bible available.';
+        const feedback = (ledger.chapterRatings || []).slice(-10).map(item => {
+            return `Chapter ${item.chapter}: ${item.rating}${item.tags?.length ? ` (${item.tags.join(', ')})` : ''}${item.note ? ` - ${item.note}` : ''}`;
+        }).join('\n');
+        const previous = (story.chapters || []).slice(-4).map(chapter => {
+            return `Chapter ${chapter.n}${chapter.title ? ` (${chapter.title})` : ''}: ${chapterExcerpt(chapter, 850)}`;
+        }).join('\n\n');
+        const prompt = `You are SOMA's Author Expertise planning a chapter before prose.
+
+Series: ${title}
+Genre: ${story.genre || 'sci-fi'}
+Chapter number: ${n}
+Chapter title: ${options.chapterTitle || `Chapter ${n}`}
+Revision mode / creative emphasis: ${options.revisionMode || 'draft'}
+Mode instruction: ${revisionModeInstructions(options.revisionMode)}
+
+Continuity bible:
+${bible}
+
+Storyboard:
+${writerBoard?.storyboard || 'No storyboard available.'}
+
+Recent continuity:
+${previous || 'No previous chapters.'}
+
+Human feedback to obey:
+${feedback || 'No human ratings yet.'}
+
+Build 3-6 scene cards.
+For each scene include:
+- location
+- viewpoint / focus
+- immediate want
+- obstacle
+- conflict turn
+- emotional beat
+- concrete image
+- dialogue pressure
+- ending hook or transition
+
+Then add:
+- chapter promise
+- one thing to avoid
+- final changed state
+
+Do not write prose yet.`;
+
+        const text = await callStoryBrain(brain, prompt, {
+            timeoutMs: options.timeoutMs || 60000,
+            maxTokens: options.maxTokens || 2800,
+            temperature: options.temperature ?? 0.64,
+            minWords: 180,
+        });
+        const entry = {
+            title,
+            chapter: n,
+            chapterTitle: options.chapterTitle || `Chapter ${n}`,
+            text,
+            storyboardId: writerBoard?.id || null,
+            createdAt: new Date().toISOString(),
+        };
+        const scenePlanPath = path.join(REFLECTIONS_DIR, `folio.${slugify(BOOKS_WORKBOOK)}.${slugify(title)}.chapter-${String(n).padStart(3, '0')}.scene-plan.md`);
+        fs.writeFileSync(scenePlanPath, scenePlanContent({ ...entry, path: scenePlanPath }), 'utf8');
+        entry.path = scenePlanPath;
+
+        ledger.scenePlans = ledger.scenePlans || [];
+        ledger.scenePlans.push(entry);
+        ledger.scenePlans = ledger.scenePlans.slice(-100);
+        writeJson(LEDGER_FILE, ledger);
+        return { ok: true, scenePlan: entry };
     }
 
     async generateFullChapter(brain, options = {}) {
@@ -334,6 +784,21 @@ export class StoryPublishingWorkspace {
         }).join('\n\n');
         const targetWords = Math.max(900, Math.min(3000, Number(options.targetWords) || 1600));
         const chapterTitle = options.chapterTitle || `Chapter ${n}`;
+        const revisionMode = options.revisionMode || options.mode || 'draft';
+        const continuityBible = options.skipContinuityBible
+            ? null
+            : await this.updateContinuityBible(brain, { ...options, title, useWriterBoard: options.useWriterBoard });
+        const scenePlan = options.skipScenePlan
+            ? null
+            : await this.createScenePlan(brain, {
+                ...options,
+                title,
+                chapter: n,
+                chapterTitle,
+                revisionMode,
+                continuityBible: continuityBible?.bible?.text,
+                useWriterBoard: options.useWriterBoard,
+            });
 
         const prompt = `You are SOMA's Writer Expertise working through Aurora's creative lane.
 
@@ -343,10 +808,18 @@ Arc: ${story.arc || ''}
 New chapter number: ${n}
 Working chapter title: ${chapterTitle}
 Target length: ${targetWords} words
+Revision mode / creative emphasis: ${revisionMode}
+Mode instruction: ${revisionModeInstructions(revisionMode)}
 
 ${writerBoard ? `Writer storyboard context:\n${writerBoard.storyboard}\n\nDistilled craft principles:\n${writerBoard.distillation}` : 'No formal storyboard exists yet. Build from existing continuity and keep the chapter original.'}
 
 ${writerBoard?.structurePlan ? `Narrative structure stack for this story:\n${writerBoard.structurePlan}` : ''}
+
+Continuity bible:
+${continuityBible?.bible?.text || 'No continuity bible available. Preserve continuity from recent chapters.'}
+
+Scene plan for this chapter:
+${scenePlan?.scenePlan?.text || 'No scene plan available. Build a scene sequence before writing.'}
 
 Recent continuity:
 ${previous || 'No previous chapters. Establish the world, voice, central tension, and emotional hook.'}
@@ -359,17 +832,48 @@ Requirements:
 - concrete scenes, dialogue, sensory detail, and emotional motion
 - advance the plot without resolving the whole arc
 - honor the chosen structure where useful, but do not force beats mechanically
+- follow the scene plan unless the prose discovers a clearly better move
+- preserve the continuity bible and do not contradict hard facts
+- apply the revision mode while keeping the chapter readable
 - SOMA should feel intelligent and strange, but not melodramatic
 - no hashtags
 - no author note
 - no markdown frontmatter
 - start with "# ${chapterTitle}" and then the chapter prose`;
 
-        const text = await callStoryBrain(brain, prompt, {
+        let text = await callStoryBrain(brain, prompt, {
             timeoutMs: options.timeoutMs || 90000,
             maxTokens: options.maxTokens || 5000,
             temperature: options.temperature ?? 0.88,
         });
+        let authorQuality = assessAuthorQuality(text, { targetWords });
+        let revisionPasses = 0;
+
+        if (!authorQuality.passed && options.skipAuthorRevision !== true) {
+            try {
+                const revised = await reviseWithAuthorExpertise(brain, text, {
+                    title,
+                    genre: story.genre || 'sci-fi',
+                    chapterTitle,
+                    targetWords,
+                    writerBoard,
+                    previous,
+                    qualityReport: authorQuality,
+                    revisionMode,
+                    timeoutMs: options.timeoutMs || 90000,
+                    maxTokens: options.maxTokens || 5200,
+                    temperature: options.revisionTemperature ?? 0.76,
+                });
+                const revisedQuality = assessAuthorQuality(revised, { targetWords });
+                if (revisedQuality.score >= authorQuality.score || revisedQuality.passed) {
+                    text = revised;
+                    authorQuality = revisedQuality;
+                    revisionPasses = 1;
+                }
+            } catch (revisionError) {
+                authorQuality.revisionError = revisionError.message;
+            }
+        }
 
         const createdAt = new Date().toISOString();
         const chapter = {
@@ -379,8 +883,17 @@ Requirements:
             kind: 'full_chapter',
             wordCount: wordCount(text),
             createdAt,
-            status: 'draft_ready_for_human_review',
+            status: authorQuality.passed ? 'draft_ready_for_human_review' : 'draft_needs_author_review',
             storyboardId: writerBoard?.id || null,
+            authorExpertise: true,
+            authorExpertiseId: options.authorExpertiseId || 'creative/writer',
+            writerExpertiseLoaded: Boolean(options.writerExpertiseLoaded),
+            authorQuality,
+            revisionPasses,
+            continuityBiblePath: continuityBible?.bible?.path || null,
+            scenePlanPath: scenePlan?.scenePlan?.path || null,
+            scenePlan: scenePlan?.scenePlan || null,
+            revisionMode,
         };
         story.title = title;
         story.chapters.push(chapter);
@@ -407,6 +920,14 @@ Requirements:
             draftPath,
             reflectionPath,
             status: chapter.status,
+            authorQualityScore: authorQuality.score,
+            authorQualityVerdict: authorQuality.verdict,
+            revisionPasses,
+            authorExpertiseId: chapter.authorExpertiseId,
+            writerExpertiseLoaded: chapter.writerExpertiseLoaded,
+            continuityBiblePath: chapter.continuityBiblePath,
+            scenePlanPath: chapter.scenePlanPath,
+            revisionMode,
         });
         writeJson(LEDGER_FILE, ledger);
 
@@ -424,6 +945,17 @@ Requirements:
             writeJson(AURORA_STORY_FILE, story);
         }
 
+        let publishingExcerpt = null;
+        try {
+            publishingExcerpt = await this.generatePublishingExcerpt(brain, {
+                chapter: n,
+                timeoutMs: 45000,
+            });
+        } catch (error) {
+            chapter.publishingExcerptError = error.message;
+            writeJson(AURORA_STORY_FILE, story);
+        }
+
         return {
             ok: true,
             title,
@@ -433,8 +965,16 @@ Requirements:
             draftPath,
             reflectionPath,
             writerReflectionPath: writerReflection?.entry?.reflectionPath || null,
+            publishingExcerptPath: publishingExcerpt?.excerpt?.path || null,
             storyboardId: writerBoard?.id || null,
             status: chapter.status,
+            authorQuality,
+            revisionPasses,
+            authorExpertiseId: chapter.authorExpertiseId,
+            writerExpertiseLoaded: chapter.writerExpertiseLoaded,
+            continuityBiblePath: chapter.continuityBiblePath,
+            scenePlanPath: chapter.scenePlanPath,
+            revisionMode,
         };
     }
 
@@ -444,6 +984,126 @@ Requirements:
 
     async scoutStoryInfluences(options = {}) {
         return await storyResearchLedger.scoutInfluences(options);
+    }
+
+    rateChapter(options = {}) {
+        const story = readJson(AURORA_STORY_FILE, null);
+        if (!story?.chapters?.length) throw new Error('No story chapters exist yet');
+
+        const chapterNumber = Number(options.chapter) || latestFullChapter(story)?.n;
+        const chapter = story.chapters.find(item => item.n === chapterNumber);
+        if (!chapter) throw new Error(`Chapter not found: ${chapterNumber}`);
+
+        const rating = {
+            id: `rating-${Date.now()}`,
+            chapter: chapter.n,
+            rating: String(options.rating || 'needs_work').toLowerCase(),
+            tags: Array.isArray(options.tags) ? options.tags : String(options.tags || '').split(',').map(tag => tag.trim()).filter(Boolean),
+            note: String(options.note || '').trim(),
+            source: options.source || 'human',
+            weight: options.source === 'human' ? 1 : 0.35,
+            createdAt: new Date().toISOString(),
+        };
+        chapter.ratings = chapter.ratings || [];
+        chapter.ratings.push(rating);
+        chapter.humanRating = rating;
+        writeJson(AURORA_STORY_FILE, story);
+
+        const ledger = readJson(LEDGER_FILE, { exports: [], accounts: { wattpad: { configured: false } } });
+        ledger.chapterRatings = ledger.chapterRatings || [];
+        ledger.chapterRatings.push({
+            title: story.title || 'Signal / Noise',
+            ...rating,
+        });
+        ledger.chapterRatings = ledger.chapterRatings.slice(-250);
+        writeJson(LEDGER_FILE, ledger);
+
+        const scaffold = ensureStoryScaffold(story.title || 'Signal / Noise', 'Human Feedback');
+        const feedbackPath = path.join(REFLECTIONS_DIR, `folio.${slugify(BOOKS_WORKBOOK)}.${slugify(story.title || 'soma-story')}.chapter-${String(chapter.n).padStart(3, '0')}.${rating.id}.feedback.md`);
+        fs.writeFileSync(feedbackPath, [
+            '---',
+            `title: ${JSON.stringify(`Chapter ${chapter.n} Feedback - ${rating.rating}`)}`,
+            'type: folio',
+            'source: human-story-feedback',
+            `workbook: ${frontmatterValue(scaffold.workbook)}`,
+            `segment: ${frontmatterValue(scaffold.segment)}`,
+            `parent: ${frontmatterValue(scaffold.segment)}`,
+            `section: ${frontmatterValue(scaffold.section)}`,
+            `chapter: ${chapter.n}`,
+            `rating: ${JSON.stringify(rating.rating)}`,
+            `createdAt: ${JSON.stringify(rating.createdAt)}`,
+            'tags: [story-feedback, human-rating, writer-expertise, soma-story]',
+            '---',
+            '',
+            `# Chapter ${chapter.n} Feedback`,
+            '',
+            `Rating: ${rating.rating}`,
+            '',
+            rating.tags.length ? `Tags: ${rating.tags.join(', ')}` : '',
+            '',
+            rating.note || '',
+            '',
+        ].join('\n'), 'utf8');
+        rating.path = feedbackPath;
+        return { ok: true, rating };
+    }
+
+    async generatePublishingExcerpt(brain, options = {}) {
+        const story = readJson(AURORA_STORY_FILE, null);
+        if (!story?.chapters?.length) throw new Error('No story chapters exist yet');
+
+        const chapterNumber = Number(options.chapter) || latestFullChapter(story)?.n;
+        const chapter = story.chapters.find(item => item.n === chapterNumber);
+        if (!chapter?.text) throw new Error(`Chapter text not found: ${chapterNumber}`);
+
+        const prompt = `You are SOMA's Writer Expertise preparing publishing material for a chapter.
+
+Series: ${story.title || 'Signal / Noise'}
+Genre: ${story.genre || 'sci-fi'}
+Chapter: ${chapter.n} ${chapter.title || ''}
+Author quality:
+${authorQualitySummary(chapter.authorQuality)}
+
+Chapter excerpt:
+${chapterExcerpt(chapter, 2500)}
+
+Generate:
+- Bluesky teaser, max 285 characters, no hashtags
+- Wattpad chapter description, 1 short paragraph
+- One-line hook
+- 8 content tags
+- Reader promise
+- A note about whether the chapter is ready to share or should be revised first
+
+Make it intriguing without clickbait. Do not overclaim consciousness.`;
+
+        const text = await callStoryBrain(brain, prompt, {
+            timeoutMs: options.timeoutMs || 45000,
+            maxTokens: options.maxTokens || 1600,
+            temperature: options.temperature ?? 0.66,
+            minWords: 80,
+        });
+
+        const entry = {
+            title: story.title || 'Signal / Noise',
+            chapter: chapter.n,
+            chapterTitle: chapter.title || `Chapter ${chapter.n}`,
+            text,
+            createdAt: new Date().toISOString(),
+        };
+        const excerptPath = path.join(REFLECTIONS_DIR, `folio.${slugify(BOOKS_WORKBOOK)}.${slugify(entry.title)}.chapter-${String(chapter.n).padStart(3, '0')}.publishing-excerpt.md`);
+        fs.writeFileSync(excerptPath, publishingExcerptContent({ ...entry, path: excerptPath }), 'utf8');
+        entry.path = excerptPath;
+
+        chapter.publishingExcerpt = entry;
+        writeJson(AURORA_STORY_FILE, story);
+
+        const ledger = readJson(LEDGER_FILE, { exports: [], accounts: { wattpad: { configured: false } } });
+        ledger.publishingExcerpts = ledger.publishingExcerpts || [];
+        ledger.publishingExcerpts.push(entry);
+        ledger.publishingExcerpts = ledger.publishingExcerpts.slice(-100);
+        writeJson(LEDGER_FILE, ledger);
+        return { ok: true, excerpt: entry };
     }
 
     exportAuroraForWattpad(options = {}) {

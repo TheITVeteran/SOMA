@@ -165,8 +165,25 @@ export const AxisProvider = ({ children }) => {
 
     const createWorkspace = useCallback(async ({ name, icon, color, type, description, roomTemplate, community_id }) => {
         try {
-            const d = await fetch('/api/axis/workspaces', { method: 'POST', headers: hdrs(), body: JSON.stringify({ name, icon, color, type, description, roomTemplate, community_id }) }).then(r => r.json());
-            if (d.ok) await loadWorkspaces();
+            const response = await fetch('/api/axis/workspaces', {
+                method: 'POST',
+                headers: hdrs(),
+                body: JSON.stringify({ name, icon, color, type, description, roomTemplate, community_id }),
+            });
+            const d = await response.json().catch(() => ({}));
+            if (!response.ok || !d.ok) {
+                return { ok: false, error: d.error || `Workspace create failed (${response.status})` };
+            }
+            if (d.workspace) {
+                setWorkspaces(prev => {
+                    const next = prev.some(ws => ws.id === d.workspace.id)
+                        ? prev.map(ws => ws.id === d.workspace.id ? d.workspace : ws)
+                        : [...prev, d.workspace];
+                    return next;
+                });
+            } else {
+                await loadWorkspaces();
+            }
             return d;
         } catch (e) {
             console.error('[Axis] createWorkspace error:', e);
@@ -851,12 +868,31 @@ export const AxisProvider = ({ children }) => {
 
     // ── WebSocket: project / task / community events ──────────────────────────
     useEffect(() => {
-        const onProjCreated = (p) => { if (p.workspace_id === activeWorkspaceId) setProjects(prev => [...prev, p]); };
-        const onProjUpdated = (p) => setProjects(prev => prev.map(x => x.id === p.id ? p : x));
+        const unwrapProject = (payload) => payload?.project || payload;
+        const unwrapTask = (payload) => payload?.task || payload;
+        const onProjCreated = (payload) => {
+            const p = unwrapProject(payload);
+            if (p?.workspace_id === activeWorkspaceId) {
+                setProjects(prev => prev.some(x => x.id === p.id) ? prev : [...prev, p]);
+            }
+        };
+        const onProjUpdated = (payload) => {
+            const p = unwrapProject(payload);
+            if (p?.id) setProjects(prev => prev.map(x => x.id === p.id ? p : x));
+        };
         const onProjDeleted = ({ id }) => { setProjects(prev => prev.filter(x => x.id !== id)); if (activeProjectId === id) setActiveProjectId(null); };
 
-        const onTaskCreated = (t) => { if (t.projectId === activeProjectId || t.project_id === activeProjectId) setTasks(prev => [...prev, t]); };
-        const onTaskUpdated = (t) => setTasks(prev => prev.map(x => x.id === t.id ? t : x));
+        const onTaskCreated = (payload) => {
+            const t = unwrapTask(payload);
+            const projectId = payload?.projectId || t?.project_id;
+            if (t?.id && projectId === activeProjectId) {
+                setTasks(prev => prev.some(x => x.id === t.id) ? prev : [...prev, t]);
+            }
+        };
+        const onTaskUpdated = (payload) => {
+            const t = unwrapTask(payload);
+            if (t?.id) setTasks(prev => prev.map(x => x.id === t.id ? t : x));
+        };
         const onTaskDeleted = ({ taskId }) => setTasks(prev => prev.filter(x => x.id !== taskId));
 
         const onCommCreated = (c) => setCommunities(prev => [c, ...prev]);

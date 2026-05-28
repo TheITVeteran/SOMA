@@ -1,4 +1,4 @@
-import { app, BrowserWindow } from 'electron';
+import { app, BrowserWindow, session, shell } from 'electron';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
@@ -6,6 +6,23 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 let mainWindow;
+const PORTAL_PARTITION = 'persist:portal';
+
+function isSafeExternalUrl(value = '') {
+  try {
+    return ['http:', 'https:'].includes(new URL(value).protocol);
+  } catch {
+    return false;
+  }
+}
+
+function configurePortalSession() {
+  const portalSession = session.fromPartition(PORTAL_PARTITION);
+  portalSession.setPermissionRequestHandler((_webContents, permission, callback) => {
+    callback(false);
+  });
+  portalSession.setPermissionCheckHandler(() => false);
+}
 
 function createWindow() {
   mainWindow = new BrowserWindow({
@@ -18,7 +35,8 @@ function createWindow() {
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
-      webSecurity: true
+      webSecurity: true,
+      webviewTag: true
     },
     autoHideMenuBar: true,
     frame: true,
@@ -34,6 +52,29 @@ function createWindow() {
 
   console.log('[ELECTRON] Loading from:', loadUrl);
   mainWindow.loadURL(loadUrl);
+
+  mainWindow.webContents.on('will-attach-webview', (event, webPreferences, params) => {
+    if (!isSafeExternalUrl(params.src) && params.src !== 'about:blank') {
+      event.preventDefault();
+      return;
+    }
+    delete webPreferences.preload;
+    webPreferences.nodeIntegration = false;
+    webPreferences.contextIsolation = true;
+    webPreferences.sandbox = true;
+    webPreferences.webSecurity = true;
+    webPreferences.partition = PORTAL_PARTITION;
+  });
+
+  mainWindow.webContents.on('did-attach-webview', (_event, guest) => {
+    guest.setWindowOpenHandler(({ url }) => {
+      if (isSafeExternalUrl(url)) shell.openExternal(url);
+      return { action: 'deny' };
+    });
+    guest.on('will-navigate', (event, url) => {
+      if (!isSafeExternalUrl(url)) event.preventDefault();
+    });
+  });
 
   if (viteUrl) {
     mainWindow.webContents.openDevTools();
@@ -52,7 +93,10 @@ function createWindow() {
   });
 }
 
-app.whenReady().then(createWindow);
+app.whenReady().then(() => {
+  configurePortalSession();
+  createWindow();
+});
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {

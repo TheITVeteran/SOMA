@@ -46,6 +46,7 @@ const platformAccent = {
   bluesky: 'from-sky-500/25 to-cyan-400/10 border-sky-400/25 text-sky-200',
   x: 'from-zinc-500/20 to-zinc-800/30 border-zinc-500/25 text-zinc-200',
   linkedin: 'from-blue-500/20 to-indigo-500/10 border-blue-400/25 text-blue-200',
+  discord: 'from-indigo-500/25 to-violet-500/10 border-indigo-400/25 text-indigo-200',
 };
 
 const queueTone = (item) => {
@@ -72,6 +73,7 @@ const SocialModule = ({ isConnected }) => {
   const [imageLibrary, setImageLibrary] = useState({ imageDir: '', images: [] });
   const [imageForm, setImageForm] = useState({ path: '', alt: '', source: '', license: 'user-provided', tags: '' });
   const [imageStatus, setImageStatus] = useState(null);
+  const [discordStatus, setDiscordStatus] = useState(null);
 
   const loadCockpit = async () => {
     const response = await fetch('/api/social/cockpit');
@@ -242,6 +244,28 @@ const SocialModule = ({ isConnected }) => {
     setComposerStatus({ ok: true, message: 'Image idea loaded.' });
   };
 
+  const simulateDiscordReply = async () => {
+    setDiscordStatus({ ok: true, message: 'Simulating Discord reply...' });
+    try {
+      const response = await fetch('/api/social/discord/simulate-reply', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          channel: 'soma-lab',
+          author: 'discord-demo',
+          inboundText: 'SOMA, what are you refining today?',
+          responseText: 'I am refining the social cockpit so Discord replies become visible evidence, not invisible background work.',
+        }),
+      });
+      const data = await response.json();
+      if (!response.ok || data.ok === false) throw new Error(data.error || 'Discord simulation failed');
+      setDiscordStatus({ ok: true, message: 'Discord reply captured.' });
+      await loadCockpit();
+    } catch (err) {
+      setDiscordStatus({ ok: false, message: err.message });
+    }
+  };
+
   const leaderboard = useMemo(() => {
     const scores = cockpit?.growth?.scores || {};
     return Object.entries(scores)
@@ -266,6 +290,9 @@ const SocialModule = ({ isConnected }) => {
   const topProfiles = socialMemory.topProfiles || [];
   const imageIdeas = socialMemory.imageIdeas || [];
   const socialInbox = socialMemory.inbox || [];
+  const discord = cockpit?.discord || {};
+  const discordReplies = discord.replies || [];
+  const discordConversations = discord.conversations || [];
   const story = storyStatus?.currentStory;
   const writerBoard = storyStatus?.research?.latestStoryboard;
 
@@ -610,6 +637,106 @@ const SocialModule = ({ isConnected }) => {
             ))}
           </div>
 
+          <section className="rounded-lg border border-indigo-400/20 bg-gradient-to-br from-indigo-500/10 to-zinc-950/70 p-5">
+            <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+              <div>
+                <h3 className="flex items-center text-lg font-bold text-white">
+                  <MessageSquareReply className="mr-2 h-5 w-5 text-indigo-300" />
+                  Discord View
+                </h3>
+                <p className="mt-1 text-xs text-zinc-500">
+                  Discord-style social replies, channel context, and response evidence. Real bot replies appear here once the Discord bridge is connected.
+                </p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                {discordStatus && (
+                  <span className={`rounded-full border px-3 py-1 text-[10px] font-bold uppercase tracking-widest ${discordStatus.ok ? 'border-emerald-400/25 bg-emerald-400/10 text-emerald-300' : 'border-rose-400/25 bg-rose-400/10 text-rose-300'}`}>
+                    {discordStatus.message}
+                  </span>
+                )}
+                <span className={`rounded-full border px-3 py-1 text-[10px] font-bold uppercase tracking-widest ${discord.connected ? 'border-emerald-400/25 bg-emerald-400/10 text-emerald-300' : 'border-indigo-400/25 bg-indigo-400/10 text-indigo-200'}`}>
+                  {discord.connected ? 'bridge ready' : 'simulation view'}
+                </span>
+                <button
+                  type="button"
+                  onClick={simulateDiscordReply}
+                  className="rounded-lg border border-indigo-400/25 bg-indigo-400/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-indigo-100 hover:bg-indigo-400/20"
+                >
+                  Test Reply
+                </button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-4 xl:grid-cols-[0.8fr_1.2fr]">
+              <div className="space-y-3">
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    ['channels', discord.stats?.conversations || 0],
+                    ['replies', discord.stats?.replies || 0],
+                    ['simulated', discord.stats?.simulated || 0],
+                  ].map(([label, value]) => (
+                    <div key={label} className="rounded-lg border border-white/10 bg-black/25 p-3 text-center">
+                      <div className="font-mono text-lg font-bold text-white">{value}</div>
+                      <div className="text-[10px] uppercase tracking-widest text-zinc-500">{label}</div>
+                    </div>
+                  ))}
+                </div>
+                <div className="rounded-lg border border-white/10 bg-black/25 p-3">
+                  <div className="mb-2 text-[10px] font-bold uppercase tracking-widest text-zinc-500">Channel Threads</div>
+                  <div className="max-h-40 space-y-2 overflow-y-auto pr-1 custom-scrollbar">
+                    {discordConversations.slice(0, 6).map(item => (
+                      <div key={item.id} className="rounded-lg border border-white/10 bg-white/5 px-3 py-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="truncate text-xs font-semibold text-indigo-100">#{item.channel}</span>
+                          <span className="font-mono text-[10px] text-zinc-500">{fmtAge(item.lastSeenAt)}</span>
+                        </div>
+                        <p className="mt-1 truncate text-[10px] text-zinc-500">@{item.author} · {item.replies || 0} replies</p>
+                      </div>
+                    ))}
+                    {!discordConversations.length && (
+                      <div className="rounded-lg border border-white/10 bg-black/25 p-3 text-xs text-zinc-500">
+                        No Discord channel activity yet. Use Test Reply to verify the cockpit pipeline.
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              <div className="rounded-lg border border-white/10 bg-black/25 p-3">
+                <div className="mb-2 flex items-center justify-between">
+                  <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Recent Discord Replies</span>
+                  <span className="font-mono text-[10px] text-zinc-600">{fmtAge(discord.lastCheck)}</span>
+                </div>
+                <div className="max-h-72 space-y-3 overflow-y-auto pr-1 custom-scrollbar">
+                  {discordReplies.slice(0, 8).map(item => (
+                    <article key={item.id} className="rounded-lg border border-white/10 bg-white/5 p-3">
+                      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex min-w-0 items-center gap-2">
+                          <span className="rounded-full border border-indigo-400/20 bg-indigo-400/10 px-2 py-0.5 text-[10px] font-bold uppercase text-indigo-200">#{item.channel}</span>
+                          <span className="truncate text-xs font-semibold text-zinc-200">@{item.author}</span>
+                        </div>
+                        <span className="font-mono text-[10px] text-zinc-500">{fmtAge(item.createdAt)}</span>
+                      </div>
+                      <div className="rounded-md border border-white/5 bg-black/25 px-2 py-1.5">
+                        <div className="mb-1 text-[9px] font-bold uppercase tracking-widest text-zinc-600">Inbound</div>
+                        <p className="line-clamp-2 text-xs leading-relaxed text-zinc-400">{item.inboundText}</p>
+                      </div>
+                      <div className="mt-2 rounded-md border border-indigo-400/15 bg-indigo-400/5 px-2 py-1.5">
+                        <div className="mb-1 text-[9px] font-bold uppercase tracking-widest text-indigo-300">SOMA Reply</div>
+                        <p className="line-clamp-3 text-xs leading-relaxed text-zinc-200">{item.responseText}</p>
+                      </div>
+                    </article>
+                  ))}
+                  {!discordReplies.length && (
+                    <div className="rounded-lg border border-white/10 bg-black/25 p-4 text-sm text-zinc-500">
+                      No Discord replies recorded yet.
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </section>
+
           <div className="grid grid-cols-1 gap-4 xl:grid-cols-[1.2fr_1fr]">
             <section className="rounded-lg border border-white/10 bg-zinc-950/60 p-5">
               <div className="mb-4 flex items-center justify-between gap-4">
@@ -865,7 +992,7 @@ const SocialModule = ({ isConnected }) => {
                   Reply Memory
                 </h3>
                 <div className="space-y-3">
-                  {['bluesky', 'x', 'linkedin'].map((platform) => (
+                  {['bluesky', 'x', 'linkedin', 'discord'].map((platform) => (
                     <div key={platform} className="flex items-center justify-between rounded-lg border border-white/10 bg-white/5 px-4 py-3">
                       <span className="text-sm font-semibold capitalize text-zinc-200">{platform}</span>
                       <div className="text-right">

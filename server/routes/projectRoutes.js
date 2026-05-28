@@ -60,9 +60,9 @@ export default function createProjectRoutes(system) {
 
     router.post('/:id/members', (req, res) => {
         try {
-            const { userId, userName, userAvatar, role } = req.body || {};
+            const { userId, userName, userAvatar, userColor, role } = req.body || {};
             if (!userId || !userName) return res.status(400).json({ ok: false, error: 'userId and userName required' });
-            axisStore.addProjectMember(req.params.id, { userId, userName, userAvatar, role });
+            axisStore.addProjectMember(req.params.id, { userId, userName, userAvatar, userColor, role });
             bcast('axis.project_member_added', { projectId: req.params.id, userId, userName, role });
             res.json({ ok: true, members: axisStore.getProjectMembers(req.params.id) });
         } catch (e) { res.status(500).json({ ok: false, error: e.message }); }

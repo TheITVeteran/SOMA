@@ -18,6 +18,234 @@ const router = express.Router();
 const VISION_TEMP_DIR = path.join(process.cwd(), '.soma', 'vision_temp');
 const SCENE_LIMIT = 50;
 const sceneMemory = [];
+const REFLECTIONS_DIR = path.join(process.cwd(), 'data', 'vault', 'reflections');
+const RETENTION_MANIFEST = path.join(process.cwd(), '.soma', 'vision_retention.json');
+const RAW_RETENTION_DAYS = Number(process.env.SOMA_VISION_RAW_RETENTION_DAYS || 7);
+const RAW_CACHE_LIMIT_MB = Number(process.env.SOMA_VISION_CACHE_LIMIT_MB || 2048);
+let lastRetentionSweep = 0;
+
+const REDACTION_PATTERNS = [
+    { type: 'api_key', re: /\b(sk-[A-Za-z0-9_-]{12,}|[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,})\b/g },
+    { type: 'secret_assignment', re: /\b(api[_-]?key|token|secret|password|passwd|pwd)\s*[:=]\s*["']?[^"'\s]{6,}/gi },
+    { type: 'email', re: /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi },
+    { type: 'phone', re: /\b(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b/g },
+    { type: 'card_like', re: /\b(?:\d[ -]*?){13,19}\b/g },
+];
+
+function slugValue(value = 'scene') {
+    return String(value || 'scene').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 64) || 'scene';
+}
+
+function redactSensitiveText(text = '') {
+    let redacted = String(text || '');
+    const hits = {};
+    for (const pattern of REDACTION_PATTERNS) {
+        redacted = redacted.replace(pattern.re, (match) => {
+            hits[pattern.type] = (hits[pattern.type] || 0) + 1;
+            return `[REDACTED:${pattern.type}]`;
+        });
+    }
+    return {
+        text: redacted,
+        redactionCount: Object.values(hits).reduce((sum, value) => sum + value, 0),
+        redactionTypes: Object.keys(hits),
+    };
+}
+
+function sceneLooksImportant(scene) {
+    const text = `${scene?.summary || ''}\n${scene?.ocrText || ''}`.toLowerCase();
+    if (scene?.diff?.summary === 'Initial scene captured.' && scene?.source !== 'deep-describe') {
+        return (scene?.privacy?.redactionCount || 0) > 0 || /\b(error|exception|failed|warning|crash|blocked)\b/i.test(text);
+    }
+    return (
+        (scene?.changeScore || 0) >= 0.55 ||
+        /\b(error|exception|failed|warning|crash|blocked|permission|security|password|token|api key|stack trace|traceback)\b/i.test(text) ||
+        (scene?.privacy?.redactionCount || 0) > 0 ||
+        scene?.source === 'deep-describe'
+    );
+}
+
+function saveImportantSceneReflection(scene, reason = 'important-scene') {
+    try {
+        if (!scene || scene.reflectionSaved || !sceneLooksImportant(scene)) return null;
+        fs.mkdirSync(REFLECTIONS_DIR, { recursive: true });
+        const filename = `folio.presence.scene.${slugValue(reason)}.${Date.now()}.md`;
+        const filePath = path.join(REFLECTIONS_DIR, filename);
+        const content = [
+            '---',
+            `title: "Presence Scene: ${reason}"`,
+            'type: folio',
+            'workbook: "SOMA"',
+            'segment: "Presence"',
+            'section: "Scene Memory"',
+            `source: "${scene.source || 'vision'}"`,
+            `channel: "${scene.channel || 'unknown'}"`,
+            `change_score: ${Number(scene.changeScore || 0).toFixed(3)}`,
+            `privacy_redactions: ${scene.privacy?.redactionCount || 0}`,
+            'tags: [reflections, folio, presence, vision, scene-memory]',
+            '---',
+            '',
+            `# Presence Scene: ${reason}`,
+            '',
+            `Captured: ${new Date(scene.timestamp || Date.now()).toISOString()}`,
+            '',
+            '## Summary',
+            '',
+            scene.summary || 'Scene captured.',
+            '',
+            '## Last Change',
+            '',
+            scene.diff?.summary || 'No change summary available.',
+            '',
+            scene.ocrText ? `## Visible Text\n\n${scene.ocrText}` : '',
+            '',
+            scene.objects?.length ? `## Visual Signals\n\n${scene.objects.map(obj => `- ${obj.label}${obj.score != null ? ` (${Math.round(obj.score * 100)}%)` : ''}`).join('\n')}` : '',
+            '',
+            scene.privacy?.redactionCount ? `## Privacy\n\nRedacted ${scene.privacy.redactionCount} sensitive value(s): ${scene.privacy.redactionTypes.join(', ')}` : '',
+            '',
+            '---',
+            '*Captured by SOMA Presence scene memory.*',
+            ''
+        ].filter(Boolean).join('\n');
+        fs.writeFileSync(filePath, content, 'utf8');
+        scene.reflectionSaved = filename;
+        return { filename, path: filePath };
+    } catch (err) {
+        console.warn('[Perception] Scene reflection save failed:', err.message);
+        return null;
+    }
+}
+
+function readRetentionManifest() {
+    try {
+        if (!fs.existsSync(RETENTION_MANIFEST)) return { pinned: {} };
+        const parsed = JSON.parse(fs.readFileSync(RETENTION_MANIFEST, 'utf8'));
+        return { pinned: parsed.pinned || {} };
+    } catch {
+        return { pinned: {} };
+    }
+}
+
+function writeRetentionManifest(manifest) {
+    fs.mkdirSync(path.dirname(RETENTION_MANIFEST), { recursive: true });
+    fs.writeFileSync(RETENTION_MANIFEST, JSON.stringify({ pinned: manifest.pinned || {} }, null, 2), 'utf8');
+}
+
+function isPathInsideVisionTemp(filePath) {
+    const resolved = path.resolve(filePath);
+    return resolved.startsWith(path.resolve(VISION_TEMP_DIR));
+}
+
+function listVisionFiles() {
+    if (!fs.existsSync(VISION_TEMP_DIR)) return [];
+    const files = [];
+    for (const name of fs.readdirSync(VISION_TEMP_DIR)) {
+        const filePath = path.join(VISION_TEMP_DIR, name);
+        try {
+            const stat = fs.statSync(filePath);
+            if (stat.isFile()) {
+                files.push({
+                    name,
+                    path: filePath,
+                    size: stat.size,
+                    mtimeMs: stat.mtimeMs,
+                    ageMs: Date.now() - stat.mtimeMs,
+                });
+            }
+        } catch {}
+    }
+    return files;
+}
+
+function getRetentionStatus() {
+    const manifest = readRetentionManifest();
+    const files = listVisionFiles();
+    const totalBytes = files.reduce((sum, file) => sum + file.size, 0);
+    const pinnedPaths = new Set(Object.keys(manifest.pinned).map(p => path.resolve(p)));
+    const pinnedBytes = files.filter(file => pinnedPaths.has(path.resolve(file.path))).reduce((sum, file) => sum + file.size, 0);
+    return {
+        rawRetentionDays: RAW_RETENTION_DAYS,
+        cacheLimitMb: RAW_CACHE_LIMIT_MB,
+        fileCount: files.length,
+        totalBytes,
+        totalMb: +(totalBytes / 1024 / 1024).toFixed(2),
+        pinnedCount: Object.keys(manifest.pinned).length,
+        pinnedBytes,
+        pinnedMb: +(pinnedBytes / 1024 / 1024).toFixed(2),
+        oldestAgeDays: files.length ? +((Math.max(...files.map(file => file.ageMs)) / 86400000).toFixed(2)) : 0,
+        nextSweepInMs: Math.max(0, 3600000 - (Date.now() - lastRetentionSweep)),
+    };
+}
+
+function cleanupVisionCache({ dryRun = false, force = false } = {}) {
+    const now = Date.now();
+    if (!force && !dryRun && now - lastRetentionSweep < 3600000) {
+        return { skipped: true, reason: 'recent_sweep', status: getRetentionStatus(), deleted: [] };
+    }
+
+    const manifest = readRetentionManifest();
+    const pinnedPaths = new Set(Object.keys(manifest.pinned).map(p => path.resolve(p)));
+    const files = listVisionFiles();
+    const maxAgeMs = RAW_RETENTION_DAYS * 86400000;
+    const cacheLimitBytes = RAW_CACHE_LIMIT_MB * 1024 * 1024;
+    let totalBytes = files.reduce((sum, file) => sum + file.size, 0);
+    const candidates = files
+        .filter(file => !pinnedPaths.has(path.resolve(file.path)))
+        .sort((a, b) => b.ageMs - a.ageMs);
+
+    const toDelete = [];
+    for (const file of candidates) {
+        if (file.ageMs > maxAgeMs) {
+            toDelete.push({ ...file, reason: 'age' });
+            totalBytes -= file.size;
+        }
+    }
+
+    if (totalBytes > cacheLimitBytes) {
+        for (const file of candidates) {
+            if (toDelete.some(item => item.path === file.path)) continue;
+            if (totalBytes <= cacheLimitBytes) break;
+            toDelete.push({ ...file, reason: 'size' });
+            totalBytes -= file.size;
+        }
+    }
+
+    const deleted = [];
+    for (const file of toDelete) {
+        if (!isPathInsideVisionTemp(file.path)) continue;
+        deleted.push({ name: file.name, path: file.path, size: file.size, reason: file.reason });
+        if (!dryRun) {
+            try { fs.unlinkSync(file.path); } catch {}
+        }
+    }
+
+    if (!dryRun) lastRetentionSweep = now;
+    return {
+        skipped: false,
+        dryRun,
+        deleted,
+        deletedCount: deleted.length,
+        deletedMb: +(deleted.reduce((sum, file) => sum + file.size, 0) / 1024 / 1024).toFixed(2),
+        status: getRetentionStatus(),
+    };
+}
+
+function pinVisionFrame(filePath, reason = 'manual') {
+    if (!filePath || !isPathInsideVisionTemp(filePath) || !fs.existsSync(filePath)) {
+        throw new Error('Frame not found or outside vision temp');
+    }
+    const manifest = readRetentionManifest();
+    manifest.pinned[path.resolve(filePath)] = { reason, pinnedAt: Date.now() };
+    writeRetentionManifest(manifest);
+    return getRetentionStatus();
+}
+
+function unpinVisionFrame(filePath) {
+    const manifest = readRetentionManifest();
+    delete manifest.pinned[path.resolve(filePath)];
+    writeRetentionManifest(manifest);
+    return getRetentionStatus();
+}
 
 function normalizeObjects(objects = []) {
     return (Array.isArray(objects) ? objects : [])
@@ -83,7 +311,13 @@ function diffScenes(previous, current) {
     };
 }
 
-function addSceneMemory({ imagePath, channel = 'desktop', objects = [], ocrText = null, summary = null, source = 'vision', timestamp = Date.now(), engine = null }) {
+function addSceneMemory({ imagePath, channel = 'desktop', objects = [], ocrText = null, summary = null, source = 'vision', timestamp = Date.now(), engine = null, privacy = null }) {
+    const redactedOcr = redactSensitiveText(ocrText || '');
+    const redactedSummary = redactSensitiveText(summary || 'Visual frame captured.');
+    const privacyInfo = {
+        redactionCount: (privacy?.redactionCount || 0) + redactedOcr.redactionCount + redactedSummary.redactionCount,
+        redactionTypes: [...new Set([...(privacy?.redactionTypes || []), ...redactedOcr.redactionTypes, ...redactedSummary.redactionTypes])],
+    };
     const normalized = {
         id: `scene-${timestamp}-${crypto.randomUUID()}`,
         timestamp,
@@ -91,10 +325,11 @@ function addSceneMemory({ imagePath, channel = 'desktop', objects = [], ocrText 
         imagePath,
         frameUrl: imagePath ? `/api/perception/vision/frame?path=${encodeURIComponent(imagePath)}` : null,
         objects: normalizeObjects(objects),
-        ocrText: ocrText || '',
-        summary: summary || 'Visual frame captured.',
+        ocrText: redactedOcr.text,
+        summary: redactedSummary.text,
         source,
         engine,
+        privacy: privacyInfo,
     };
     const previous = sceneMemory[0] || null;
     normalized.diff = diffScenes(previous, normalized);
@@ -114,7 +349,10 @@ function addSceneMemory({ imagePath, channel = 'desktop', objects = [], ocrText 
         lastChange: normalized.diff.summary,
         changeScore: normalized.changeScore,
         timestamp: normalized.timestamp,
+        privacy: normalized.privacy,
     };
+
+    saveImportantSceneReflection(normalized, normalized.diff?.summary || normalized.source);
 
     return normalized;
 }
@@ -148,6 +386,7 @@ function saveImagePayload(body = {}) {
     fs.mkdirSync(VISION_TEMP_DIR, { recursive: true });
     const imagePath = path.join(VISION_TEMP_DIR, `perception-${Date.now()}-${crypto.randomUUID()}${ext}`);
     fs.writeFileSync(imagePath, Buffer.from(base64, 'base64'));
+    cleanupVisionCache({ force: false });
     return { imagePath, base64, mimeType };
 }
 
@@ -212,6 +451,48 @@ async function analyzeWithAvailableVision({ imagePath, base64, mimeType, prompt,
     }
 
     throw new Error('No vision engine available. Set SOMA_LOAD_VISION=true or configure a multimodal provider.');
+}
+
+async function deepDescribeScene(scene, { prompt = null, saveReflection = true } = {}) {
+    if (!scene?.imagePath) throw new Error('No scene image available for deep description');
+    const ask = prompt || [
+        'Analyze this current SOMA Presence scene.',
+        'Return a concise but useful description of what is visible, any readable text, warnings, UI state, and what changed if apparent.',
+        'If text appears sensitive, summarize the kind of text without reproducing secrets.',
+        'Do not use em dashes.'
+    ].join(' ');
+    const sys = global.__SOMA_SYSTEM || {};
+    const brain = sys.quadBrain || sys.brain;
+    let analysis = null;
+    if (brain?.reason) {
+        const response = await brain.reason(ask, { images: [scene.imagePath], vision: true, mode: 'fast' });
+        const text = response?.text || response?.response || String(response || '');
+        analysis = { engine: 'quad-brain', result: text, objects: [], ocrText: null, raw: response };
+    } else {
+        analysis = await analyzeWithAvailableVision({
+            imagePath: scene.imagePath,
+            base64: null,
+            mimeType: 'image/png',
+            prompt: ask,
+            type: 'deep-describe'
+        });
+    }
+    const redactedOcr = redactSensitiveText(analysis.ocrText || '');
+    const redactedSummary = redactSensitiveText(analysis.result || scene.summary || '');
+    scene.summary = redactedSummary.text || scene.summary;
+    scene.ocrText = redactedOcr.text || scene.ocrText || '';
+    scene.objects = normalizeObjects([...(analysis.objects || []), ...(scene.objects || [])]);
+    scene.engine = analysis.engine;
+    scene.source = 'deep-describe';
+    scene.deepDescribedAt = Date.now();
+    scene.privacy = {
+        redactionCount: (scene.privacy?.redactionCount || 0) + redactedOcr.redactionCount + redactedSummary.redactionCount,
+        redactionTypes: [...new Set([...(scene.privacy?.redactionTypes || []), ...redactedOcr.redactionTypes, ...redactedSummary.redactionTypes])],
+    };
+    scene.diff = diffScenes(sceneMemory[1] || null, scene);
+    scene.changeScore = scene.diff.score;
+    if (saveReflection) saveImportantSceneReflection(scene, 'deep-describe');
+    return { scene, analysis };
 }
 
 /**
@@ -333,9 +614,6 @@ const HEALTH_TTL = 10000;
  */
 router.get('/health', (req, res) => {
     try {
-        // --- FORCE CACHE CLEAR FOR DIAGNOSTICS ---
-        _healthCache = null;
-
         const now = Date.now();
         if (_healthCache && (now - _healthCacheTs) < HEALTH_TTL) {
             return res.json(_healthCache);
@@ -429,7 +707,14 @@ router.get('/health', (req, res) => {
                 channel:       vision?.channel || 'desktop',
                 lastPerception: vision?.lastPerception || null,
                 metrics:       vision?.metrics || {},
-                sceneMemory:   sceneSnapshot()
+                sceneMemory:   sceneSnapshot(),
+                retention:     getRetentionStatus(),
+                v2: {
+                    privacyRedaction: true,
+                    deepDescribe: true,
+                    reflectionCapture: true,
+                    autoDeepTrigger: 'manual-or-upload'
+                }
             },
             timestamp: now
         };
@@ -576,6 +861,45 @@ router.get('/vision/scenes', (req, res) => {
 });
 
 /**
+ * GET /api/perception/vision/retention
+ * Reports raw frame cache size, age policy, and pin status.
+ */
+router.get('/vision/retention', (req, res) => {
+    res.json({ success: true, retention: getRetentionStatus() });
+});
+
+/**
+ * POST /api/perception/vision/retention/cleanup
+ * Runs visual cache cleanup. Body: { dryRun?: boolean, force?: boolean }
+ */
+router.post('/vision/retention/cleanup', (req, res) => {
+    try {
+        const result = cleanupVisionCache({
+            dryRun: !!req.body?.dryRun,
+            force: req.body?.force !== false,
+        });
+        res.json({ success: true, ...result });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+/**
+ * POST /api/perception/vision/pin
+ * Pins or unpins a raw frame so retention will not delete it.
+ */
+router.post('/vision/pin', (req, res) => {
+    try {
+        const { imagePath, pinned = true, reason = 'manual' } = req.body || {};
+        if (!imagePath) return res.status(400).json({ success: false, error: 'imagePath is required' });
+        const retention = pinned ? pinVisionFrame(imagePath, reason) : unpinVisionFrame(imagePath);
+        res.json({ success: true, pinned: !!pinned, retention });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+/**
  * GET /api/perception/vision/what-changed
  * Concise summary of the latest scene transition.
  */
@@ -606,6 +930,31 @@ router.get('/vision/what-changed', (req, res) => {
         latest,
         sceneMemory: snapshot,
     });
+});
+
+/**
+ * POST /api/perception/vision/deep-describe
+ * Runs a selective multimodal interpretation pass over the latest scene.
+ */
+router.post('/vision/deep-describe', async (req, res) => {
+    try {
+        const { sceneId, prompt, saveReflection = true } = req.body || {};
+        const scene = sceneId
+            ? sceneMemory.find(item => item.id === sceneId)
+            : sceneMemory[0];
+        if (!scene) return res.status(404).json({ success: false, error: 'No scene memory available' });
+
+        const result = await deepDescribeScene(scene, { prompt, saveReflection });
+        res.json({
+            success: true,
+            scene: result.scene,
+            analysis: result.analysis.result,
+            engine: result.analysis.engine,
+            sceneMemory: sceneSnapshot(),
+        });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
 });
 
 /**
@@ -644,6 +993,230 @@ router.post('/garden/audit', async (req, res) => {
         }
         await engine.checkLibraryNutrients();
         res.json({ success: true, message: 'Nutrient audit initiated' });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// Active proposals memory store
+let activeProposals = [];
+
+/**
+ * GET /api/perception/vision/proposals
+ * Returns the currently active proposals for the latest screenshot
+ */
+router.get('/vision/proposals', (req, res) => {
+    res.json({ success: true, proposals: activeProposals });
+});
+
+/**
+ * POST /api/perception/vision/capture
+ * Captures a fresh desktop screenshot and resets proposals
+ */
+router.post('/vision/capture', async (req, res) => {
+    try {
+        const sys = global.__SOMA_SYSTEM || {};
+        const control = sys.computerControl || sys.arbiters?.get?.('ComputerControlArbiter')?.instance;
+        if (!control) {
+            return res.status(503).json({ success: false, error: 'ComputerControlArbiter not available' });
+        }
+
+        const cap = await control.captureScreen();
+        if (!cap.success) {
+            return res.status(500).json({ success: false, error: cap.error || 'Failed to capture screen' });
+        }
+
+        // Reset proposals
+        activeProposals = [];
+
+        // Save scene memory
+        const scene = addSceneMemory({
+            imagePath: cap.imagePath,
+            channel: 'desktop',
+            objects: [{ label: 'desktop', score: 1.0, bbox: null }],
+            ocrText: '',
+            summary: 'Manual desktop snapshot captured.',
+            source: 'desktop-snapshot',
+            timestamp: Date.now()
+        });
+
+        // Try to trigger a fast OCR scan in background using available vision
+        try {
+            const vision = sys.visionProcessing || sys.visionArbiter;
+            if (vision?.detectObjects) {
+                vision.detectObjects(cap.imagePath, 0.4).then(detected => {
+                    if (detected?.success) {
+                        scene.ocrText = detected.ocrText || '';
+                        scene.objects = normalizeObjects(detected.objects || []);
+                    }
+                }).catch(() => {});
+            }
+        } catch {}
+
+        res.json({
+            success: true,
+            scene,
+            sceneMemory: sceneSnapshot()
+        });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+/**
+ * POST /api/perception/vision/propose-actions
+ * Asks SOMA's brain to analyze the latest screenshot and return structured UI action proposals
+ */
+router.post('/vision/propose-actions', async (req, res) => {
+    try {
+        const sys = global.__SOMA_SYSTEM || {};
+        const latestScene = sceneMemory[0];
+        if (!latestScene || !latestScene.imagePath) {
+            return res.status(400).json({ success: false, error: 'No desktop screenshot available. Capture one first.' });
+        }
+
+        const brain = sys.quadBrain || sys.brain;
+        if (!brain?.reason) {
+            return res.status(503).json({ success: false, error: 'Reasoning brain not available' });
+        }
+
+        const prompt = `Analyze this user's desktop screenshot. Identify the active application window, text, visible buttons, input fields, and likely next actions.
+Propose 2-4 logical user actions that SOMA could take to assist the user.
+Return ONLY a valid JSON array of action proposals, with NO markdown block, NO formatting wrapper, and NO explanation, following this schema:
+[
+  {
+    "id": "prop-1",
+    "type": "click" | "type" | "navigate",
+    "label": "Click the 'Terminal' window",
+    "params": { "x": 450, "y": 620, "text": "", "url": "" }
+  }
+]
+Estimate absolute pixel coordinates x and y for clicks based on a standard 1920x1080 monitor.
+`;
+
+        const response = await brain.reason(prompt, { images: [latestScene.imagePath], vision: true, mode: 'fast' });
+        const responseText = response?.text || response?.response || String(response || '');
+
+        let proposals = [];
+        try {
+            const cleanJson = responseText.replace(/```json/g, '').replace(/```/g, '').trim();
+            proposals = JSON.parse(cleanJson);
+            if (!Array.isArray(proposals)) proposals = [];
+        } catch (jsonErr) {
+            console.warn('[Perception] Brain did not return valid JSON proposals, using fallback parsing:', jsonErr.message);
+            // Simple regex fallback
+            const labels = responseText.match(/"label":\s*"([^"]+)"/g) || [];
+            proposals = labels.map((l, idx) => {
+                const label = l.replace(/"label":\s*"/, '').replace(/"/, '');
+                return {
+                    id: `prop-${idx + 1}`,
+                    type: 'click',
+                    label,
+                    params: { x: 500 + idx * 50, y: 500 }
+                };
+            });
+        }
+
+        if (proposals.length === 0) {
+            // Default fallbacks if both failed
+            proposals = [
+                { id: 'prop-1', type: 'click', label: 'Click Center of Screen', params: { x: 960, y: 540 } },
+                { id: 'prop-2', type: 'click', label: 'Click Start Button', params: { x: 20, y: 1060 } }
+            ];
+        }
+
+        activeProposals = proposals;
+        res.json({ success: true, proposals });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+/**
+ * POST /api/perception/vision/execute-action
+ * Executes an action (either from proposals or ad-hoc), waits, and triggers a fresh verification screenshot
+ */
+router.post('/api/perception/vision/execute-action', async (req, res) => {
+    try {
+        const { type, params } = req.body || {};
+        if (!type) return res.status(400).json({ success: false, error: 'action type required' });
+
+        const sys = global.__SOMA_SYSTEM || {};
+        const control = sys.computerControl || sys.arbiters?.get?.('ComputerControlArbiter')?.instance;
+        if (!control) {
+            return res.status(503).json({ success: false, error: 'ComputerControlArbiter not available' });
+        }
+
+        // Set ghost cursor on backend to indicate execution position
+        if (type === 'click' && params?.x && params?.y) {
+            const vision = global.SOMA_COS?.visionDaemon;
+            if (vision) {
+                vision.ghostCursor = {
+                    x: Math.round((params.x / 1920) * 100),
+                    y: Math.round((params.y / 1080) * 100),
+                    action: 'click'
+                };
+            }
+        }
+
+        // Execute action
+        let result;
+        if (type === 'browser') {
+            result = await control.handleBrowserAction(params);
+        } else {
+            result = await control.executeAction({ type, ...params });
+        }
+
+        if (!result.success) {
+            return res.status(500).json({ success: false, error: result.error || 'Execution failed' });
+        }
+
+        // Wait 1.5s for screen changes to complete
+        await new Promise(r => setTimeout(r, 1500));
+
+        // Take verification capture
+        const cap = await control.captureScreen();
+        let verificationScene = null;
+        if (cap.success) {
+            verificationScene = addSceneMemory({
+                imagePath: cap.imagePath,
+                channel: 'desktop',
+                objects: [{ label: 'desktop', score: 1.0, bbox: null }],
+                ocrText: '',
+                summary: `Verification scan after ${type} action.`,
+                source: 'verification',
+                timestamp: Date.now()
+            });
+
+            // Clear ghost cursor after successful execution
+            const vision = global.SOMA_COS?.visionDaemon;
+            if (vision) vision.ghostCursor = null;
+
+            // Clear proposals list as the screen has changed
+            activeProposals = [];
+        }
+
+        // Record to timeline/history via communicationHub if available
+        try {
+            const hub = sys.communicationHub;
+            if (hub) {
+                hub.addTimeline({
+                    type: 'action',
+                    title: `Executed ${type}`,
+                    detail: `Action parameters: ${JSON.stringify(params)}`,
+                    route: 'orb',
+                    agent: 'SOMA',
+                    priority: 'normal'
+                });
+            }
+        } catch {}
+
+        res.json({
+            success: true,
+            result,
+            verificationScene,
+            sceneMemory: sceneSnapshot()
+        });
     } catch (err) {
         res.status(500).json({ success: false, error: err.message });
     }

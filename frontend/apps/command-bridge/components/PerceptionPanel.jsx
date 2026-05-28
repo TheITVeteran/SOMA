@@ -76,9 +76,13 @@ export default function PerceptionPanel({ isConnected }) {
     const fetchHealth = useCallback(async () => {
         if (!isConnected) return;
         try {
-            const res = await somaBackend.fetch('/api/perception/health');
-            if (res.ok) setHealth(await res.json());
-            else setError(`HTTP ${res.status}`);
+            const data = await somaBackend.fetch('/api/perception/health');
+            if (data?.success) {
+                setHealth(data);
+                setError(null);
+            } else {
+                setError(data?.error || 'Perception status unavailable');
+            }
         } catch (e) {
             setError(e.message);
         }

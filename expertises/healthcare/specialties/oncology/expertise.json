@@ -14,9 +14,13 @@
     "guideline_evidence_review",
     "treatment_option_summary",
     "clinical_trial_context",
-    "safety_red_flag_detection"
+    "safety_red_flag_detection",
+    "oncology_manuscript_evidence_table",
+    "preclinical_claim_boundary_audit",
+    "tumor_biology_hypothesis_framing",
+    "negative_result_reporting"
   ],
-  "standards": ["NCCN", "ASCO", "ICD-10", "FHIR"],
+  "standards": ["NCCN", "ASCO", "ICMJE", "EQUATOR", "STROBE", "CONSORT", "ARRIVE", "ICD-10", "FHIR"],
   "loadPolicy": {
     "mode": "lazy",
     "defaultLevel": "warm"

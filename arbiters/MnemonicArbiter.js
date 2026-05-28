@@ -17,7 +17,7 @@ import BaseArbiter, {
   ArbiterRole, 
   ArbiterCapability, 
   ArbiterResult 
-} from './BaseArbiter.js';
+} from '../core/BaseArbiter.js';
 import { createClient } from 'redis';
 import Database from 'better-sqlite3';
 import fs from 'fs/promises';
@@ -185,12 +185,32 @@ export class MnemonicArbiter extends BaseArbiter {
   async _initRedis() {
     if (!this.config.redisUrl) return;
     try {
-      this.redis = createClient({ url: this.config.redisUrl });
-      this.redis.on('error', (err) => this.log('warn', 'Redis error', { error: err.message }));
+      this.redis = createClient({ 
+        url: this.config.redisUrl,
+        socket: {
+          reconnectStrategy: (retries) => {
+            if (retries > 2) {
+              this.log('warn', 'Redis unreachable after 3 attempts. Disabling hot tier.');
+              return false; // Stop retrying
+            }
+            return 500; // Retry after 500ms
+          },
+          connectTimeout: 2000
+        }
+      });
+
+      this.redis.on('error', (err) => {
+          // Only log the first few errors to avoid spam
+          if (!this._redisSuppressed) {
+              this.log('warn', 'Redis unavailable (Hot Tier inactive)');
+              this._redisSuppressed = true;
+          }
+      });
+
       await this.redis.connect();
       this.log('info', '🔥 Hot tier (Redis) ready');
     } catch (e) {
-      this.log('warn', 'Redis unavailable - hot tier disabled');
+      this.log('warn', 'Redis connection failed - hot tier disabled');
       this.redis = null;
     }
   }
@@ -390,6 +410,34 @@ export class MnemonicArbiter extends BaseArbiter {
     else data = await this.recall(query, context.topK || 5);
     
     return new ArbiterResult({ success: true, data, arbiter: this.name });
+  }
+
+  getMemoryStats() {
+    const memoryCount = this.db ? this.db.prepare('SELECT COUNT(*) as count FROM memories').get().count : 0;
+    return {
+      storage: {
+        memories: memoryCount,
+        vectors: this.vectorStore.size,
+        compressed: 0, // Placeholder for future compression metrics
+        hot: this.redis ? 'active' : 'inactive'
+      },
+      hot: { size: 0, hits: this.tierMetrics.hot.hits, status: this.redis ? 'connected' : 'offline' },
+      warm: { size: this.vectorStore.size, hits: this.tierMetrics.warm.hits },
+      cold: { size: memoryCount, hits: this.tierMetrics.cold.hits },
+      total: this.tierMetrics.total,
+      memoryPressure: (process.memoryUsage().heapUsed / process.memoryUsage().heapTotal) * 100
+    };
+  }
+
+  getAvailableCommands() {
+    return [
+      ...super.getAvailableCommands(),
+      'remember',
+      'recall',
+      'forget',
+      'stats',
+      'recall_recent'
+    ];
   }
 }
 

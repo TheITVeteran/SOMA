@@ -20,9 +20,17 @@ export const useVision = (somaBackend, isConnected) => {
         health: null,
         events: [],
         sceneMemory: null,
-        whatChanged: null
+        whatChanged: null,
+        deepDescribe: null,
+        deepDescribeBusy: false,
+        retention: null
     });
     const pollIntervalRef = useRef(null);
+    const visionStateRef = useRef(visionState);
+
+    useEffect(() => {
+        visionStateRef.current = visionState;
+    }, [visionState]);
 
     const pushEvent = useCallback((event) => {
         setVisionState(prev => ({
@@ -83,7 +91,8 @@ export const useVision = (somaBackend, isConnected) => {
                     active: !!data.vision?.active || prev.active,
                     channel: data.vision?.channel || prev.channel,
                     metrics: data.vision?.metrics || prev.metrics,
-                    sceneMemory: data.vision?.sceneMemory || prev.sceneMemory
+                    sceneMemory: data.vision?.sceneMemory || prev.sceneMemory,
+                    retention: data.vision?.retention || prev.retention
                 }));
             }
         } catch (e) {
@@ -138,6 +147,80 @@ export const useVision = (somaBackend, isConnected) => {
         }
     }, [somaBackend, pushEvent]);
 
+    const fetchRetention = useCallback(async () => {
+        if (!isConnected) return;
+        try {
+            const res = await somaBackend.fetch('/api/perception/vision/retention');
+            if (res.ok) {
+                const data = await res.json();
+                if (data.success) setVisionState(prev => ({ ...prev, retention: data.retention || prev.retention }));
+            }
+        } catch (e) {
+            pushEvent({ type: 'retention', title: 'Retention status failed', detail: e.message, status: 'warn' });
+        }
+    }, [somaBackend, isConnected, pushEvent]);
+
+    const cleanupRetention = useCallback(async () => {
+        try {
+            const res = await somaBackend.fetch('/api/perception/vision/retention/cleanup', {
+                method: 'POST',
+                body: JSON.stringify({ force: true })
+            });
+            if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+            const data = await res.json();
+            setVisionState(prev => ({ ...prev, retention: data.status || prev.retention }));
+            pushEvent({
+                type: 'retention',
+                title: data.deletedCount ? `Cleaned ${data.deletedCount} raw frame${data.deletedCount === 1 ? '' : 's'}` : 'Vision cache already clean',
+                detail: data.deletedMb ? `${data.deletedMb} MB removed` : 'No files removed',
+                status: 'ok'
+            });
+            return data;
+        } catch (e) {
+            pushEvent({ type: 'retention', title: 'Vision cleanup failed', detail: e.message, status: 'warn' });
+            throw e;
+        }
+    }, [somaBackend, pushEvent]);
+
+    const pinLatestFrame = useCallback(async (pinned = true) => {
+        const current = visionStateRef.current || {};
+        const imagePath = current.sceneMemory?.latest?.imagePath || current.lastPerception?.imagePath;
+        if (!imagePath) return null;
+        const res = await somaBackend.fetch('/api/perception/vision/pin', {
+            method: 'POST',
+            body: JSON.stringify({ imagePath, pinned, reason: 'presence-ui' })
+        });
+        if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+        const data = await res.json();
+        setVisionState(prev => ({ ...prev, retention: data.retention || prev.retention }));
+        pushEvent({ type: 'retention', title: pinned ? 'Latest frame pinned' : 'Latest frame unpinned', status: 'ok' });
+        return data;
+    }, [somaBackend, pushEvent]);
+
+    const deepDescribeLatest = useCallback(async () => {
+        setVisionState(prev => ({ ...prev, deepDescribeBusy: true }));
+        try {
+            const res = await somaBackend.fetch('/api/perception/vision/deep-describe', {
+                method: 'POST',
+                body: JSON.stringify({ saveReflection: true })
+            });
+            if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+            const data = await res.json();
+            setVisionState(prev => ({
+                ...prev,
+                deepDescribe: data,
+                sceneMemory: data.sceneMemory || prev.sceneMemory,
+                deepDescribeBusy: false
+            }));
+            pushEvent({ type: 'scene', title: 'Deep scene description complete', detail: data.analysis, status: 'ok' });
+            return data;
+        } catch (e) {
+            setVisionState(prev => ({ ...prev, deepDescribeBusy: false }));
+            pushEvent({ type: 'scene', title: 'Deep scene description failed', detail: e.message, status: 'warn' });
+            throw e;
+        }
+    }, [somaBackend, pushEvent]);
+
     // WebSocket event listener — real-time updates from vision.perceived signals
     useEffect(() => {
         if (!isConnected || !somaBackend?.on) return;
@@ -159,13 +242,16 @@ export const useVision = (somaBackend, isConnected) => {
             fetchVision();
             fetchHealth();
             fetchSceneMemory();
+            fetchRetention();
             pollIntervalRef.current = setInterval(fetchVision, 10000);
             const healthInterval = setInterval(fetchHealth, 15000);
             const sceneInterval = setInterval(fetchSceneMemory, 12000);
+            const retentionInterval = setInterval(fetchRetention, 30000);
             return () => {
                 if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
                 clearInterval(healthInterval);
                 clearInterval(sceneInterval);
+                clearInterval(retentionInterval);
             };
         } else {
             if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
@@ -173,7 +259,7 @@ export const useVision = (somaBackend, isConnected) => {
         return () => {
             if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
         };
-    }, [isConnected, fetchVision, fetchHealth, fetchSceneMemory]);
+    }, [isConnected, fetchVision, fetchHealth, fetchSceneMemory, fetchRetention]);
 
     const setChannel = useCallback(async (channel) => {
         try {
@@ -189,13 +275,70 @@ export const useVision = (somaBackend, isConnected) => {
         }
     }, [somaBackend, pushEvent]);
 
+    const captureDesktop = useCallback(async () => {
+        try {
+            const res = await somaBackend.fetch('/api/perception/vision/capture', { method: 'POST' });
+            if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+            const data = await res.json();
+            if (data.success) {
+                applyVisionData(data);
+                pushEvent({ type: 'capture', title: 'Desktop snapshot captured', status: 'ok' });
+            }
+            return data;
+        } catch (e) {
+            pushEvent({ type: 'capture', title: 'Desktop capture failed', detail: e.message, status: 'warn' });
+            throw e;
+        }
+    }, [somaBackend, applyVisionData, pushEvent]);
+
+    const proposeActions = useCallback(async () => {
+        try {
+            const res = await somaBackend.fetch('/api/perception/vision/propose-actions', { method: 'POST' });
+            if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+            const data = await res.json();
+            pushEvent({ type: 'proposals', title: `Generated ${data.proposals?.length || 0} action proposals`, status: 'ok' });
+            return data.proposals || [];
+        } catch (e) {
+            pushEvent({ type: 'proposals', title: 'Proposal generation failed', detail: e.message, status: 'warn' });
+            throw e;
+        }
+    }, [somaBackend, pushEvent]);
+
+    const executeAction = useCallback(async (type, params) => {
+        try {
+            const res = await somaBackend.fetch('/api/perception/vision/execute-action', {
+                method: 'POST',
+                body: JSON.stringify({ type, params })
+            });
+            if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
+            const data = await res.json();
+            if (data.success) {
+                if (data.verificationScene) {
+                    applyVisionData(data.verificationScene);
+                }
+                pushEvent({ type: 'execute', title: `Action ${type} executed successfully`, status: 'ok' });
+            }
+            return data;
+        } catch (e) {
+            pushEvent({ type: 'execute', title: `Action ${type} execution failed`, detail: e.message, status: 'warn' });
+            throw e;
+        }
+    }, [somaBackend, applyVisionData, pushEvent]);
+
     return {
         ...visionState,
         setChannel,
+        captureDesktop,
+        proposeActions,
+        executeAction,
         refresh: fetchVision,
         refreshHealth: fetchHealth,
         refreshSceneMemory: fetchSceneMemory,
+        refreshRetention: fetchRetention,
+        cleanupRetention,
+        pinLatestFrame,
         askWhatChanged,
+        deepDescribeLatest,
         pushEvent
     };
 };

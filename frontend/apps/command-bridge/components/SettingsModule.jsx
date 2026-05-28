@@ -12,6 +12,201 @@ import UnifiedAgentSettings from './UnifiedAgentSettings';
 import AutopilotToggle from './AutopilotToggle';
 import CharacterCard from './CharacterCard';
 
+const DiscordDomain = () => {
+    const [status, setStatus] = useState(null);
+    const [token, setToken] = useState('');
+    const [masterId, setMasterId] = useState('');
+    const [channelId, setChannelId] = useState('');
+    const [saving, setSaving] = useState(false);
+    const [msg, setMsg] = useState('');
+
+    const fetchStatus = useCallback(async () => {
+        try {
+            const res = await fetch('/api/social/discord/bot/status');
+            const data = await res.json();
+            setStatus(data);
+        } catch {
+            setStatus({ ok: false, online: false, reason: 'Unreachable' });
+        }
+    }, []);
+
+    useEffect(() => {
+        fetchStatus();
+        const t = setInterval(fetchStatus, 10000);
+        return () => clearInterval(t);
+    }, [fetchStatus]);
+
+    const save = async () => {
+        if (!token && !masterId) return;
+        setSaving(true);
+        setMsg('');
+        try {
+            const res = await fetch('/api/social/discord/bot/setup', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ token: token || undefined, masterId: masterId || undefined })
+            });
+            const data = await res.json();
+            if (data.ok) {
+                setMsg(`Connected as ${data.bot || 'bot'}`);
+                setToken('');
+                setMasterId('');
+                fetchStatus();
+            } else {
+                setMsg(`Error: ${data.error}`);
+            }
+        } catch (e) {
+            setMsg(`Error: ${e.message}`);
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    const addChannel = async () => {
+        if (!channelId.trim()) return;
+        try {
+            const res = await fetch('/api/social/discord/bot/monitor', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ channelId: channelId.trim(), enable: true })
+            });
+            const data = await res.json();
+            if (data.ok) { setChannelId(''); fetchStatus(); }
+            else setMsg(`Error: ${data.error}`);
+        } catch (e) { setMsg(`Error: ${e.message}`); }
+    };
+
+    const removeChannel = async (id) => {
+        try {
+            const res = await fetch('/api/social/discord/bot/monitor', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ channelId: id, enable: false })
+            });
+            const data = await res.json();
+            if (data.ok) fetchStatus();
+        } catch {}
+    };
+
+    const toggleVoice = async () => {
+        if (!status) return;
+        const res = await fetch('/api/social/discord/bot/voice', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ enabled: !status.voiceEnabled })
+        });
+        const data = await res.json();
+        if (data.ok) fetchStatus();
+    };
+
+    const online = status?.online;
+    const channels = status?.monitoredChannels || [];
+
+    return (
+        <div className="space-y-6">
+            {/* Status */}
+            <div className="p-4 bg-black/30 border border-white/5 rounded-xl flex items-center justify-between">
+                <div>
+                    <div className="text-sm font-semibold text-white mb-1">Bot Status</div>
+                    <div className={`text-xs font-mono ${online ? 'text-green-400' : 'text-zinc-500'}`}>
+                        {online ? `🟢 ${status.bot}` : status ? `⚫ ${status.reason || 'Offline'}` : '…'}
+                    </div>
+                    {status?.hasMasterId && <div className="text-xs text-zinc-600 mt-1">Master ID configured</div>}
+                </div>
+                <button onClick={fetchStatus} className="text-xs text-zinc-500 hover:text-zinc-300 px-3 py-1 border border-white/5 rounded-lg">
+                    Refresh
+                </button>
+            </div>
+
+            {/* Configure */}
+            <div className="p-4 bg-black/30 border border-white/5 rounded-xl space-y-3">
+                <div className="text-sm font-semibold text-white mb-2">Configure</div>
+                <div>
+                    <label className="text-xs text-zinc-400 block mb-1">Bot Token (leave blank to keep current)</label>
+                    <input
+                        type="password"
+                        value={token}
+                        onChange={e => setToken(e.target.value)}
+                        placeholder="MTxxxxxxx.xxxxxx.xxxxx"
+                        className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-xs text-zinc-200 font-mono focus:outline-none focus:border-indigo-500/50"
+                    />
+                </div>
+                <div>
+                    <label className="text-xs text-zinc-400 block mb-1">Your Discord User ID (Master — for !run commands)</label>
+                    <input
+                        type="text"
+                        value={masterId}
+                        onChange={e => setMasterId(e.target.value)}
+                        placeholder="18-digit Discord user ID"
+                        className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-xs text-zinc-200 font-mono focus:outline-none focus:border-indigo-500/50"
+                    />
+                </div>
+                <button
+                    onClick={save}
+                    disabled={saving || (!token && !masterId)}
+                    className="px-4 py-2 text-xs font-semibold bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 rounded-lg text-white transition-colors"
+                >
+                    {saving ? 'Saving…' : 'Save & Connect'}
+                </button>
+                {msg && <div className={`text-xs mt-1 ${msg.startsWith('Error') ? 'text-red-400' : 'text-green-400'}`}>{msg}</div>}
+            </div>
+
+            {/* Monitored Channels */}
+            <div className="p-4 bg-black/30 border border-white/5 rounded-xl space-y-3">
+                <div className="text-sm font-semibold text-white mb-2">Monitored Channels</div>
+                <p className="text-xs text-zinc-500">SOMA reads every message in these channels (not just @mentions). Paste Discord channel IDs.</p>
+                <div className="flex gap-2">
+                    <input
+                        type="text"
+                        value={channelId}
+                        onChange={e => setChannelId(e.target.value)}
+                        onKeyDown={e => e.key === 'Enter' && addChannel()}
+                        placeholder="Channel ID (right-click channel → Copy ID)"
+                        className="flex-1 bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-xs text-zinc-200 font-mono focus:outline-none focus:border-indigo-500/50"
+                    />
+                    <button onClick={addChannel} className="px-3 py-2 text-xs bg-indigo-700 hover:bg-indigo-600 rounded-lg text-white">Add</button>
+                </div>
+                {channels.length === 0
+                    ? <p className="text-xs text-zinc-600 italic">No channels monitored — SOMA responds to @mentions and DMs only.</p>
+                    : <ul className="space-y-1">
+                        {channels.map(id => (
+                            <li key={id} className="flex items-center justify-between bg-black/20 rounded-lg px-3 py-1.5">
+                                <span className="text-xs font-mono text-zinc-300">{id}</span>
+                                <button onClick={() => removeChannel(id)} className="text-xs text-red-400 hover:text-red-300">Remove</button>
+                            </li>
+                        ))}
+                    </ul>
+                }
+            </div>
+
+            {/* Voice Notes */}
+            <div className="p-4 bg-black/30 border border-white/5 rounded-xl flex items-center justify-between">
+                <div>
+                    <div className="text-sm font-semibold text-white">Paula Voice Notes</div>
+                    <p className="text-xs text-zinc-500 mt-0.5">Attach audio replies via siren-bridge TTS (responses under 500 chars)</p>
+                </div>
+                <button
+                    onClick={toggleVoice}
+                    className={`px-4 py-1.5 text-xs font-semibold rounded-lg transition-colors ${status?.voiceEnabled ? 'bg-indigo-600 text-white' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700'}`}
+                >
+                    {status?.voiceEnabled ? 'ON' : 'OFF'}
+                </button>
+            </div>
+
+            {/* Command reference */}
+            <div className="p-4 bg-black/30 border border-white/5 rounded-xl">
+                <div className="text-sm font-semibold text-white mb-2">Discord Commands</div>
+                <ul className="space-y-1 text-xs text-zinc-400 font-mono">
+                    <li><span className="text-indigo-400">@SOMA &lt;message&gt;</span> — chat with SOMA</li>
+                    <li><span className="text-indigo-400">!voice on / off</span> — toggle Paula voice replies</li>
+                    <li><span className="text-indigo-400">!run &lt;shell command&gt;</span> — sovereign remote shell (master only)</li>
+                    <li><span className="text-indigo-400">!cmd &lt;shell command&gt;</span> — alias for !run</li>
+                </ul>
+            </div>
+        </div>
+    );
+};
+
 const DEFAULT_BRIDGE_SETTINGS = {
     authority: {
         autonomousSelfReplication: false,
@@ -219,6 +414,13 @@ const SettingsModule = ({
             icon: GitBranch,
             color: 'fuchsia',
             description: 'Self-upgrade permissions, experimental flags, and rollbacks.'
+        },
+        {
+            id: 'discord',
+            label: 'Discord Integration',
+            icon: MessageSquare,
+            color: 'indigo',
+            description: 'Live Discord bot — mentions, DMs, monitored channels, and Paula voice notes.'
         }
     ];
 
@@ -246,6 +448,8 @@ const SettingsModule = ({
                 return <NetworkDomain somaBackend={somaBackend} settings={bridgeSettings.network} updateSetting={updateBridgeSetting} isLocked={isSettingsLocked} />;
             case 'evolution':
                 return <EvolutionDomain isLocked={isSettingsLocked} setIsLocked={setIsSettingsLockedPersist} settings={bridgeSettings.evolution} updateSetting={updateBridgeSetting} />;
+            case 'discord':
+                return <DiscordDomain />;
             default:
                 return <div className="p-8 text-center text-zinc-500">Select a domain to configure</div>;
         }

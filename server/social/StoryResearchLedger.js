@@ -375,10 +375,26 @@ function chapterReflectionContent(entry) {
         `section: ${frontmatterValue(scaffold.section)}`,
         `createdAt: ${JSON.stringify(entry.createdAt)}`,
         `storyboardId: ${JSON.stringify(entry.storyboardId || '')}`,
+        `authorQualityScore: ${entry.authorQuality?.score ?? 'null'}`,
+        `revisionPasses: ${entry.revisionPasses || 0}`,
         'tags: [story-reflection, writer-expertise, muse, aurora, creative-learning]',
         '---',
         '',
         `# Chapter Reflection - ${entry.title || 'SOMA Story'}`,
+        '',
+        '## Author Quality Gate',
+        '',
+        entry.authorQuality ? [
+            `Score: ${entry.authorQuality.score}`,
+            `Verdict: ${entry.authorQuality.verdict}`,
+            `Revision passes: ${entry.revisionPasses || 0}`,
+            '',
+            'Failed checks:',
+            ...(entry.authorQuality.failed?.length ? entry.authorQuality.failed.map(item => `- ${item}`) : ['- none']),
+            '',
+        ].join('\n') : 'No author quality gate report available.',
+        '',
+        '## Writer Reflection',
         '',
         entry.reflection || '',
         '',
@@ -599,11 +615,14 @@ ${board?.structurePlan || 'No structure plan available.'}
 
 Chapter title: ${chapter.title || `Chapter ${chapter.n || ''}`}
 Word count: ${chapter.wordCount || wordCount(chapter.text)}
+Author quality gate:
+${chapter.authorQuality ? JSON.stringify(chapter.authorQuality, null, 2).slice(0, 2500) : 'No author quality gate report available.'}
 
 Chapter excerpt:
 ${String(chapter.text).replace(/\s+/g, ' ').slice(0, 3000)}
 
 Reflect on the chapter:
+- Whether the author quality gate was accurate
 - What worked
 - What felt derivative or generic
 - Emotional beat quality
@@ -630,6 +649,8 @@ Do not flatter. Be useful.`;
             chapter: chapter.n || null,
             wordCount: chapter.wordCount || wordCount(chapter.text),
             storyboardId: board?.id || null,
+            authorQuality: chapter.authorQuality || null,
+            revisionPasses: chapter.revisionPasses || 0,
             reflection,
             createdAt: new Date().toISOString(),
         };

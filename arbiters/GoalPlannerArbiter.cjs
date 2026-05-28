@@ -10,6 +10,7 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const { buildQualityReport, verifyGoal } = require('../core/GoalQualityGate.cjs');
+const { defaultLearningSpine } = require('../core/LearningSpine.cjs');
 const { ownerName } = require('../core/SomaOwner.cjs');
 
 // NEMESIS Phase 2.2: Reality checks for autonomous goal generation
@@ -356,6 +357,8 @@ Rules:
 
   async createGoal(goalData, source = 'user') {
     try {
+      goalData = defaultLearningSpine.applyGoalContract(goalData || {});
+
       // Validate goal data
       if (!goalData.title || !goalData.category) {
         throw new Error('Goal must have title and category');
@@ -578,6 +581,15 @@ Rules:
     if (!verification.passed && !result.force) {
       goal.status = 'verification_failed';
       goal.metrics.progress = Math.min(goal.metrics.progress || 0, 95);
+      try {
+        goal.metadata.learningLesson = defaultLearningSpine.recordGoalOutcome(goal, {
+          ...result,
+          success: false,
+          reason: result.reason || result.stopReason || 'Goal completion blocked by verification'
+        }, verification);
+      } catch (err) {
+        this.logger.warn(`[${this.name}] Learning spine negative distillation failed: ${err.message}`);
+      }
       this.activeGoals.add(goalId);
       this._dirty = true;
       this._saveToDisk();
@@ -589,6 +601,11 @@ Rules:
     goal.completedAt = Date.now();
     goal.metrics.progress = 100;
     goal.metadata.completionResult = result;
+    try {
+      goal.metadata.learningLesson = defaultLearningSpine.recordGoalOutcome(goal, result, verification);
+    } catch (err) {
+      this.logger.warn(`[${this.name}] Learning spine distillation failed: ${err.message}`);
+    }
     
     // Move to completed archive
     this.activeGoals.delete(goalId);
@@ -1989,6 +2006,30 @@ Rules:
       // Restore goals map
       if (snapshot.goals) {
         this.goals = new Map(Object.entries(snapshot.goals));
+      }
+
+      // Backfill verifiable contracts for older goals created before the
+      // LearningSpine existed. This prevents legacy vague goals from getting
+      // permanently trapped at 95% with no evidence contract.
+      let contractBackfills = 0;
+      for (const [id, goal] of this.goals) {
+        if (!goal?.metadata?.goalContract) {
+          const patched = defaultLearningSpine.applyGoalContract(goal);
+          this.goals.set(id, {
+            ...goal,
+            successCriteria: patched.successCriteria,
+            verification: patched.verification,
+            metadata: {
+              ...(goal.metadata || {}),
+              ...(patched.metadata || {})
+            }
+          });
+          contractBackfills++;
+        }
+      }
+      if (contractBackfills > 0) {
+        this.logger.info(`[${this.name}] 🧠 Backfilled learning contracts for ${contractBackfills} legacy goal(s)`);
+        this._dirty = true;
       }
 
       // Restore active goals set

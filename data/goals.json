@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "savedAt": 1778801043701,
+  "savedAt": 1779732346545,
   "goals": {
     "747c9e8c-ab98-4ca5-b721-5014b6cad26b": {
       "id": "747c9e8c-ab98-4ca5-b721-5014b6cad26b",
@@ -40,7 +40,67 @@
             }
           ],
           "score": 0
-        }
+        },
+        "goalContract": {
+          "target": "Reduce memory pressure",
+          "category": "optimization",
+          "ownerLobe": "prometheus",
+          "successCriteria": [
+            "Produce a concrete output or decision for \"Reduce memory pressure\"",
+            "Record evidence: summary, artifact, metric, or stop reason",
+            "Record the next step, lesson, or reason to stop"
+          ],
+          "verification": {
+            "evidenceRequired": [
+              "summary"
+            ],
+            "allowStopReason": true
+          },
+          "evidenceRequired": [
+            "summary"
+          ],
+          "stopCriteria": [
+            "Evidence disproves the goal premise",
+            "Required tool, data, or permission is unavailable",
+            "Risk exceeds expected value"
+          ],
+          "maxAttempts": 3,
+          "qualityFloor": 0.7,
+          "createdAt": 1779732046541
+        },
+        "successCriteria": [
+          "Produce a concrete output or decision for \"Reduce memory pressure\"",
+          "Record evidence: summary, artifact, metric, or stop reason",
+          "Record the next step, lesson, or reason to stop"
+        ],
+        "verification": {
+          "evidenceRequired": [
+            "summary"
+          ],
+          "allowStopReason": true
+        },
+        "stopCriteria": [
+          "Evidence disproves the goal premise",
+          "Required tool, data, or permission is unavailable",
+          "Risk exceeds expected value"
+        ],
+        "ownerLobe": "prometheus",
+        "evidenceRequired": [
+          "summary"
+        ],
+        "maxAttempts": 3,
+        "qualityFloor": 0.7
+      },
+      "successCriteria": [
+        "Produce a concrete output or decision for \"Reduce memory pressure\"",
+        "Record evidence: summary, artifact, metric, or stop reason",
+        "Record the next step, lesson, or reason to stop"
+      ],
+      "verification": {
+        "evidenceRequired": [
+          "summary"
+        ],
+        "allowStopReason": true
       }
     },
     "98d73bd1-af59-4951-90fb-785310406d3d": {
@@ -81,8 +141,17 @@
           "successCriteria": [],
           "verification": null
         },
-        "successCriteria": [],
-        "verification": null,
+        "successCriteria": [
+          "Produce a concrete output or decision for \"Synthesize system state summary\"",
+          "Record evidence: summary, artifact, metric, or stop reason",
+          "Record the next step, lesson, or reason to stop"
+        ],
+        "verification": {
+          "evidenceRequired": [
+            "summary"
+          ],
+          "allowStopReason": true
+        },
         "evidence": null,
         "lastVerification": {
           "passed": false,
@@ -96,7 +165,56 @@
             }
           ],
           "score": 0
-        }
+        },
+        "goalContract": {
+          "target": "Synthesize system state summary",
+          "category": "research",
+          "ownerLobe": "logos",
+          "successCriteria": [
+            "Produce a concrete output or decision for \"Synthesize system state summary\"",
+            "Record evidence: summary, artifact, metric, or stop reason",
+            "Record the next step, lesson, or reason to stop"
+          ],
+          "verification": {
+            "evidenceRequired": [
+              "summary"
+            ],
+            "allowStopReason": true
+          },
+          "evidenceRequired": [
+            "summary"
+          ],
+          "stopCriteria": [
+            "Evidence disproves the goal premise",
+            "Required tool, data, or permission is unavailable",
+            "Risk exceeds expected value"
+          ],
+          "maxAttempts": 3,
+          "qualityFloor": 0.7,
+          "createdAt": 1779732046541
+        },
+        "stopCriteria": [
+          "Evidence disproves the goal premise",
+          "Required tool, data, or permission is unavailable",
+          "Risk exceeds expected value"
+        ],
+        "ownerLobe": "logos",
+        "evidenceRequired": [
+          "summary"
+        ],
+        "maxAttempts": 3,
+        "qualityFloor": 0.7
+      },
+      "successCriteria": [
+        "Produce a concrete output or decision for \"Synthesize system state summary\"",
+        "Record evidence: summary, artifact, metric, or stop reason",
+        "Record the next step, lesson, or reason to stop"
+      ],
+      "verification": {
+        "evidenceRequired": [
+          "summary"
+        ],
+        "allowStopReason": true
       }
     },
     "4206589c-272d-4f30-9ee0-ff139567e6a4": {
@@ -137,8 +255,17 @@
           "successCriteria": [],
           "verification": null
         },
-        "successCriteria": [],
-        "verification": null,
+        "successCriteria": [
+          "Produce a concrete output or decision for \"Run background curiosity scan\"",
+          "Record evidence: summary, artifact, metric, or stop reason",
+          "Record the next step, lesson, or reason to stop"
+        ],
+        "verification": {
+          "evidenceRequired": [
+            "summary"
+          ],
+          "allowStopReason": true
+        },
         "evidence": null,
         "lastVerification": {
           "passed": false,
@@ -152,7 +279,56 @@
             }
           ],
           "score": 0
-        }
+        },
+        "goalContract": {
+          "target": "Run background curiosity scan",
+          "category": "knowledge",
+          "ownerLobe": "logos",
+          "successCriteria": [
+            "Produce a concrete output or decision for \"Run background curiosity scan\"",
+            "Record evidence: summary, artifact, metric, or stop reason",
+            "Record the next step, lesson, or reason to stop"
+          ],
+          "verification": {
+            "evidenceRequired": [
+              "summary"
+            ],
+            "allowStopReason": true
+          },
+          "evidenceRequired": [
+            "summary"
+          ],
+          "stopCriteria": [
+            "Evidence disproves the goal premise",
+            "Required tool, data, or permission is unavailable",
+            "Risk exceeds expected value"
+          ],
+          "maxAttempts": 3,
+          "qualityFloor": 0.7,
+          "createdAt": 1779732046541
+        },
+        "stopCriteria": [
+          "Evidence disproves the goal premise",
+          "Required tool, data, or permission is unavailable",
+          "Risk exceeds expected value"
+        ],
+        "ownerLobe": "logos",
+        "evidenceRequired": [
+          "summary"
+        ],
+        "maxAttempts": 3,
+        "qualityFloor": 0.7
+      },
+      "successCriteria": [
+        "Produce a concrete output or decision for \"Run background curiosity scan\"",
+        "Record evidence: summary, artifact, metric, or stop reason",
+        "Record the next step, lesson, or reason to stop"
+      ],
+      "verification": {
+        "evidenceRequired": [
+          "summary"
+        ],
+        "allowStopReason": true
       }
     },
     "8c2b992d-9179-4d58-85e5-3eb0b36c881c": {
@@ -194,8 +370,17 @@
           "successCriteria": [],
           "verification": null
         },
-        "successCriteria": [],
-        "verification": null,
+        "successCriteria": [
+          "Produce a concrete output or decision for \"EngineeringSwarmArbiter must receive `goal_assigned` and run `modifyCode()`\"",
+          "Record evidence: summary, artifact, metric, or stop reason",
+          "Record the next step, lesson, or reason to stop"
+        ],
+        "verification": {
+          "evidenceRequired": [
+            "summary"
+          ],
+          "allowStopReason": true
+        },
         "evidence": null,
         "lastVerification": {
           "passed": false,
@@ -209,7 +394,56 @@
             }
           ],
           "score": 0
-        }
+        },
+        "goalContract": {
+          "target": "EngineeringSwarmArbiter must receive `goal_assigned` and run `modifyCode()`",
+          "category": "user_priority",
+          "ownerLobe": "prometheus",
+          "successCriteria": [
+            "Produce a concrete output or decision for \"EngineeringSwarmArbiter must receive `goal_assigned` and run `modifyCode()`\"",
+            "Record evidence: summary, artifact, metric, or stop reason",
+            "Record the next step, lesson, or reason to stop"
+          ],
+          "verification": {
+            "evidenceRequired": [
+              "summary"
+            ],
+            "allowStopReason": true
+          },
+          "evidenceRequired": [
+            "summary"
+          ],
+          "stopCriteria": [
+            "Evidence disproves the goal premise",
+            "Required tool, data, or permission is unavailable",
+            "Risk exceeds expected value"
+          ],
+          "maxAttempts": 3,
+          "qualityFloor": 0.7,
+          "createdAt": 1779732046541
+        },
+        "stopCriteria": [
+          "Evidence disproves the goal premise",
+          "Required tool, data, or permission is unavailable",
+          "Risk exceeds expected value"
+        ],
+        "ownerLobe": "prometheus",
+        "evidenceRequired": [
+          "summary"
+        ],
+        "maxAttempts": 3,
+        "qualityFloor": 0.7
+      },
+      "successCriteria": [
+        "Produce a concrete output or decision for \"EngineeringSwarmArbiter must receive `goal_assigned` and run `modifyCode()`\"",
+        "Record evidence: summary, artifact, metric, or stop reason",
+        "Record the next step, lesson, or reason to stop"
+      ],
+      "verification": {
+        "evidenceRequired": [
+          "summary"
+        ],
+        "allowStopReason": true
       }
     },
     "ac5bdec1-2ccd-41f0-97e1-c698e99c042f": {
@@ -251,8 +485,17 @@
           "successCriteria": [],
           "verification": null
         },
-        "successCriteria": [],
-        "verification": null,
+        "successCriteria": [
+          "Produce a concrete output or decision for \"It must send `update_goal_progress` with `progress: 100` when done\"",
+          "Record evidence: summary, artifact, metric, or stop reason",
+          "Record the next step, lesson, or reason to stop"
+        ],
+        "verification": {
+          "evidenceRequired": [
+            "summary"
+          ],
+          "allowStopReason": true
+        },
         "evidence": null,
         "lastVerification": {
           "passed": false,
@@ -266,7 +509,56 @@
             }
           ],
           "score": 0
-        }
+        },
+        "goalContract": {
+          "target": "It must send `update_goal_progress` with `progress: 100` when done",
+          "category": "user_priority",
+          "ownerLobe": "prometheus",
+          "successCriteria": [
+            "Produce a concrete output or decision for \"It must send `update_goal_progress` with `progress: 100` when done\"",
+            "Record evidence: summary, artifact, metric, or stop reason",
+            "Record the next step, lesson, or reason to stop"
+          ],
+          "verification": {
+            "evidenceRequired": [
+              "summary"
+            ],
+            "allowStopReason": true
+          },
+          "evidenceRequired": [
+            "summary"
+          ],
+          "stopCriteria": [
+            "Evidence disproves the goal premise",
+            "Required tool, data, or permission is unavailable",
+            "Risk exceeds expected value"
+          ],
+          "maxAttempts": 3,
+          "qualityFloor": 0.7,
+          "createdAt": 1779732046541
+        },
+        "stopCriteria": [
+          "Evidence disproves the goal premise",
+          "Required tool, data, or permission is unavailable",
+          "Risk exceeds expected value"
+        ],
+        "ownerLobe": "prometheus",
+        "evidenceRequired": [
+          "summary"
+        ],
+        "maxAttempts": 3,
+        "qualityFloor": 0.7
+      },
+      "successCriteria": [
+        "Produce a concrete output or decision for \"It must send `update_goal_progress` with `progress: 100` when done\"",
+        "Record evidence: summary, artifact, metric, or stop reason",
+        "Record the next step, lesson, or reason to stop"
+      ],
+      "verification": {
+        "evidenceRequired": [
+          "summary"
+        ],
+        "allowStopReason": true
       }
     },
     "6b3df51f-714f-4a37-823a-0e23207f9d9b": {
@@ -308,8 +600,17 @@
           "successCriteria": [],
           "verification": null
         },
-        "successCriteria": [],
-        "verification": null,
+        "successCriteria": [
+          "Produce a concrete output or decision for \"DriveArbiter should see tension drop when goals complete\"",
+          "Record evidence: summary, artifact, metric, or stop reason",
+          "Record the next step, lesson, or reason to stop"
+        ],
+        "verification": {
+          "evidenceRequired": [
+            "summary"
+          ],
+          "allowStopReason": true
+        },
         "evidence": null,
         "lastVerification": {
           "passed": false,
@@ -323,7 +624,56 @@
             }
           ],
           "score": 0
-        }
+        },
+        "goalContract": {
+          "target": "DriveArbiter should see tension drop when goals complete",
+          "category": "user_priority",
+          "ownerLobe": "prometheus",
+          "successCriteria": [
+            "Produce a concrete output or decision for \"DriveArbiter should see tension drop when goals complete\"",
+            "Record evidence: summary, artifact, metric, or stop reason",
+            "Record the next step, lesson, or reason to stop"
+          ],
+          "verification": {
+            "evidenceRequired": [
+              "summary"
+            ],
+            "allowStopReason": true
+          },
+          "evidenceRequired": [
+            "summary"
+          ],
+          "stopCriteria": [
+            "Evidence disproves the goal premise",
+            "Required tool, data, or permission is unavailable",
+            "Risk exceeds expected value"
+          ],
+          "maxAttempts": 3,
+          "qualityFloor": 0.7,
+          "createdAt": 1779732046541
+        },
+        "stopCriteria": [
+          "Evidence disproves the goal premise",
+          "Required tool, data, or permission is unavailable",
+          "Risk exceeds expected value"
+        ],
+        "ownerLobe": "prometheus",
+        "evidenceRequired": [
+          "summary"
+        ],
+        "maxAttempts": 3,
+        "qualityFloor": 0.7
+      },
+      "successCriteria": [
+        "Produce a concrete output or decision for \"DriveArbiter should see tension drop when goals complete\"",
+        "Record evidence: summary, artifact, metric, or stop reason",
+        "Record the next step, lesson, or reason to stop"
+      ],
+      "verification": {
+        "evidenceRequired": [
+          "summary"
+        ],
+        "allowStopReason": true
       }
     },
     "d28953fb-2a3b-4115-b08f-b0f11eb352d3": {
@@ -365,8 +715,17 @@
           "successCriteria": [],
           "verification": null
         },
-        "successCriteria": [],
-        "verification": null,
+        "successCriteria": [
+          "Produce a concrete output or decision for \"0% progress after 7 days = auto-prune\"",
+          "Record evidence: summary, artifact, metric, or stop reason",
+          "Record the next step, lesson, or reason to stop"
+        ],
+        "verification": {
+          "evidenceRequired": [
+            "summary"
+          ],
+          "allowStopReason": true
+        },
         "evidence": null,
         "lastVerification": {
           "passed": false,
@@ -380,7 +739,56 @@
             }
           ],
           "score": 0
-        }
+        },
+        "goalContract": {
+          "target": "0% progress after 7 days = auto-prune",
+          "category": "user_priority",
+          "ownerLobe": "prometheus",
+          "successCriteria": [
+            "Produce a concrete output or decision for \"0% progress after 7 days = auto-prune\"",
+            "Record evidence: summary, artifact, metric, or stop reason",
+            "Record the next step, lesson, or reason to stop"
+          ],
+          "verification": {
+            "evidenceRequired": [
+              "summary"
+            ],
+            "allowStopReason": true
+          },
+          "evidenceRequired": [
+            "summary"
+          ],
+          "stopCriteria": [
+            "Evidence disproves the goal premise",
+            "Required tool, data, or permission is unavailable",
+            "Risk exceeds expected value"
+          ],
+          "maxAttempts": 3,
+          "qualityFloor": 0.7,
+          "createdAt": 1779732046541
+        },
+        "stopCriteria": [
+          "Evidence disproves the goal premise",
+          "Required tool, data, or permission is unavailable",
+          "Risk exceeds expected value"
+        ],
+        "ownerLobe": "prometheus",
+        "evidenceRequired": [
+          "summary"
+        ],
+        "maxAttempts": 3,
+        "qualityFloor": 0.7
+      },
+      "successCriteria": [
+        "Produce a concrete output or decision for \"0% progress after 7 days = auto-prune\"",
+        "Record evidence: summary, artifact, metric, or stop reason",
+        "Record the next step, lesson, or reason to stop"
+      ],
+      "verification": {
+        "evidenceRequired": [
+          "summary"
+        ],
+        "allowStopReason": true
       }
     },
     "4f269a8a-4017-4ced-a981-9b1e2bfcb1bb": {
@@ -422,8 +830,17 @@
           "successCriteria": [],
           "verification": null
         },
-        "successCriteria": [],
-        "verification": null,
+        "successCriteria": [
+          "Produce a concrete output or decision for \"Duplicate titles (>50% word overlap) = reject at creation\"",
+          "Record evidence: summary, artifact, metric, or stop reason",
+          "Record the next step, lesson, or reason to stop"
+        ],
+        "verification": {
+          "evidenceRequired": [
+            "summary"
+          ],
+          "allowStopReason": true
+        },
         "evidence": null,
         "lastVerification": {
           "passed": false,
@@ -437,7 +854,56 @@
             }
           ],
           "score": 0
-        }
+        },
+        "goalContract": {
+          "target": "Duplicate titles (>50% word overlap) = reject at creation",
+          "category": "user_priority",
+          "ownerLobe": "prometheus",
+          "successCriteria": [
+            "Produce a concrete output or decision for \"Duplicate titles (>50% word overlap) = reject at creation\"",
+            "Record evidence: summary, artifact, metric, or stop reason",
+            "Record the next step, lesson, or reason to stop"
+          ],
+          "verification": {
+            "evidenceRequired": [
+              "summary"
+            ],
+            "allowStopReason": true
+          },
+          "evidenceRequired": [
+            "summary"
+          ],
+          "stopCriteria": [
+            "Evidence disproves the goal premise",
+            "Required tool, data, or permission is unavailable",
+            "Risk exceeds expected value"
+          ],
+          "maxAttempts": 3,
+          "qualityFloor": 0.7,
+          "createdAt": 1779732046541
+        },
+        "stopCriteria": [
+          "Evidence disproves the goal premise",
+          "Required tool, data, or permission is unavailable",
+          "Risk exceeds expected value"
+        ],
+        "ownerLobe": "prometheus",
+        "evidenceRequired": [
+          "summary"
+        ],
+        "maxAttempts": 3,
+        "qualityFloor": 0.7
+      },
+      "successCriteria": [
+        "Produce a concrete output or decision for \"Duplicate titles (>50% word overlap) = reject at creation\"",
+        "Record evidence: summary, artifact, metric, or stop reason",
+        "Record the next step, lesson, or reason to stop"
+      ],
+      "verification": {
+        "evidenceRequired": [
+          "summary"
+        ],
+        "allowStopReason": true
       }
     },
     "60d42a6b-5f2b-41f7-ade9-ea48abffff40": {
@@ -479,8 +945,17 @@
           "successCriteria": [],
           "verification": null
         },
-        "successCriteria": [],
-        "verification": null,
+        "successCriteria": [
+          "Produce a concrete output or decision for \"Brave Search: 500/month. Use free scrapers first. Brave only as last resort.\"",
+          "Record evidence: summary, artifact, metric, or stop reason",
+          "Record the next step, lesson, or reason to stop"
+        ],
+        "verification": {
+          "evidenceRequired": [
+            "summary"
+          ],
+          "allowStopReason": true
+        },
         "evidence": null,
         "lastVerification": {
           "passed": false,
@@ -494,67 +969,56 @@
             }
           ],
           "score": 0
-        }
-      }
-    },
-    "2c6488a7-cdde-41f5-9a1e-f02af9a512a6": {
-      "id": "2c6488a7-cdde-41f5-9a1e-f02af9a512a6",
-      "type": "operational",
-      "category": "user_priority",
-      "title": "Gemini: DISABLED. API key cancelled due to charges. Do NOT re-enable.",
-      "description": "Priority from Barry",
-      "status": "completed",
-      "approved": true,
-      "priority": 72,
-      "metrics": {
-        "target": null,
-        "current": null,
-        "progress": 100
+        },
+        "goalContract": {
+          "target": "Brave Search: 500/month. Use free scrapers first. Brave only as last resort.",
+          "category": "user_priority",
+          "ownerLobe": "prometheus",
+          "successCriteria": [
+            "Produce a concrete output or decision for \"Brave Search: 500/month. Use free scrapers first. Brave only as last resort.\"",
+            "Record evidence: summary, artifact, metric, or stop reason",
+            "Record the next step, lesson, or reason to stop"
+          ],
+          "verification": {
+            "evidenceRequired": [
+              "summary"
+            ],
+            "allowStopReason": true
+          },
+          "evidenceRequired": [
+            "summary"
+          ],
+          "stopCriteria": [
+            "Evidence disproves the goal premise",
+            "Required tool, data, or permission is unavailable",
+            "Risk exceeds expected value"
+          ],
+          "maxAttempts": 3,
+          "qualityFloor": 0.7,
+          "createdAt": 1779732046541
+        },
+        "stopCriteria": [
+          "Evidence disproves the goal premise",
+          "Required tool, data, or permission is unavailable",
+          "Risk exceeds expected value"
+        ],
+        "ownerLobe": "prometheus",
+        "evidenceRequired": [
+          "summary"
+        ],
+        "maxAttempts": 3,
+        "qualityFloor": 0.7
       },
-      "dependencies": [],
-      "prerequisites": [],
-      "createdAt": 1778430855782,
-      "startedAt": 1778430855785,
-      "completedAt": 1778431726208,
-      "dueDate": null,
-      "assignedTo": [],
-      "tasks": [],
-      "metadata": {
-        "source": "autonomous",
-        "confidence": 1,
-        "rationale": "",
-        "quality": {
-          "approved": true,
-          "score": 70,
-          "issues": [],
-          "warnings": [
-            "Description should explain why the goal matters",
-            "No success criteria provided",
-            "No verification method provided"
-          ],
-          "duplicateGoalId": null,
-          "successCriteria": [],
-          "verification": null
-        },
-        "successCriteria": [],
-        "verification": null,
-        "evidence": null,
-        "lastVerification": {
-          "passed": true,
-          "checkedAt": 1778431726208,
-          "checks": [
-            {
-              "type": "evidence",
-              "label": "Completion evidence supplied",
-              "passed": true,
-              "output": "Result/evidence present"
-            }
-          ],
-          "score": 100
-        },
-        "completionResult": {
-          "result": "Gemini API disabled permanently. API key cancelled due to charges. No re-enablement actions will be taken under any circumstances. Priority from Barry. This goal has been acknowledged and stored in memory."
-        }
+      "successCriteria": [
+        "Produce a concrete output or decision for \"Brave Search: 500/month. Use free scrapers first. Brave only as last resort.\"",
+        "Record evidence: summary, artifact, metric, or stop reason",
+        "Record the next step, lesson, or reason to stop"
+      ],
+      "verification": {
+        "evidenceRequired": [
+          "summary"
+        ],
+        "allowStopReason": true
       }
     },
     "91bc2364-1f53-4224-8656-d32496e69d50": {
@@ -596,8 +1060,17 @@
           "successCriteria": [],
           "verification": null
         },
-        "successCriteria": [],
-        "verification": null,
+        "successCriteria": [
+          "Produce a concrete output or decision for \"DeepSeek: primary. Ollama: local fallback.\"",
+          "Record evidence: summary, artifact, metric, or stop reason",
+          "Record the next step, lesson, or reason to stop"
+        ],
+        "verification": {
+          "evidenceRequired": [
+            "summary"
+          ],
+          "allowStopReason": true
+        },
         "evidence": null,
         "lastVerification": {
           "passed": false,
@@ -611,7 +1084,56 @@
             }
           ],
           "score": 0
-        }
+        },
+        "goalContract": {
+          "target": "DeepSeek: primary. Ollama: local fallback.",
+          "category": "user_priority",
+          "ownerLobe": "prometheus",
+          "successCriteria": [
+            "Produce a concrete output or decision for \"DeepSeek: primary. Ollama: local fallback.\"",
+            "Record evidence: summary, artifact, metric, or stop reason",
+            "Record the next step, lesson, or reason to stop"
+          ],
+          "verification": {
+            "evidenceRequired": [
+              "summary"
+            ],
+            "allowStopReason": true
+          },
+          "evidenceRequired": [
+            "summary"
+          ],
+          "stopCriteria": [
+            "Evidence disproves the goal premise",
+            "Required tool, data, or permission is unavailable",
+            "Risk exceeds expected value"
+          ],
+          "maxAttempts": 3,
+          "qualityFloor": 0.7,
+          "createdAt": 1779732046541
+        },
+        "stopCriteria": [
+          "Evidence disproves the goal premise",
+          "Required tool, data, or permission is unavailable",
+          "Risk exceeds expected value"
+        ],
+        "ownerLobe": "prometheus",
+        "evidenceRequired": [
+          "summary"
+        ],
+        "maxAttempts": 3,
+        "qualityFloor": 0.7
+      },
+      "successCriteria": [
+        "Produce a concrete output or decision for \"DeepSeek: primary. Ollama: local fallback.\"",
+        "Record evidence: summary, artifact, metric, or stop reason",
+        "Record the next step, lesson, or reason to stop"
+      ],
+      "verification": {
+        "evidenceRequired": [
+          "summary"
+        ],
+        "allowStopReason": true
       }
     },
     "1f08acd7-99d7-4fc1-a82f-2ca1f7a85110": {
@@ -653,8 +1175,17 @@
           "successCriteria": [],
           "verification": null
         },
-        "successCriteria": [],
-        "verification": null,
+        "successCriteria": [
+          "Produce a concrete output or decision for \"Wire MAX ↔ SOMA engineering tasks\"",
+          "Record evidence: summary, artifact, metric, or stop reason",
+          "Record the next step, lesson, or reason to stop"
+        ],
+        "verification": {
+          "evidenceRequired": [
+            "summary"
+          ],
+          "allowStopReason": true
+        },
         "evidence": null,
         "lastVerification": {
           "passed": false,
@@ -668,7 +1199,56 @@
             }
           ],
           "score": 0
-        }
+        },
+        "goalContract": {
+          "target": "Wire MAX ↔ SOMA engineering tasks",
+          "category": "user_priority",
+          "ownerLobe": "prometheus",
+          "successCriteria": [
+            "Produce a concrete output or decision for \"Wire MAX ↔ SOMA engineering tasks\"",
+            "Record evidence: summary, artifact, metric, or stop reason",
+            "Record the next step, lesson, or reason to stop"
+          ],
+          "verification": {
+            "evidenceRequired": [
+              "summary"
+            ],
+            "allowStopReason": true
+          },
+          "evidenceRequired": [
+            "summary"
+          ],
+          "stopCriteria": [
+            "Evidence disproves the goal premise",
+            "Required tool, data, or permission is unavailable",
+            "Risk exceeds expected value"
+          ],
+          "maxAttempts": 3,
+          "qualityFloor": 0.7,
+          "createdAt": 1779732046541
+        },
+        "stopCriteria": [
+          "Evidence disproves the goal premise",
+          "Required tool, data, or permission is unavailable",
+          "Risk exceeds expected value"
+        ],
+        "ownerLobe": "prometheus",
+        "evidenceRequired": [
+          "summary"
+        ],
+        "maxAttempts": 3,
+        "qualityFloor": 0.7
+      },
+      "successCriteria": [
+        "Produce a concrete output or decision for \"Wire MAX ↔ SOMA engineering tasks\"",
+        "Record evidence: summary, artifact, metric, or stop reason",
+        "Record the next step, lesson, or reason to stop"
+      ],
+      "verification": {
+        "evidenceRequired": [
+          "summary"
+        ],
+        "allowStopReason": true
       }
     },
     "5bb9f2a2-fac4-44f8-aead-53913139411f": {
@@ -710,8 +1290,17 @@
           "successCriteria": [],
           "verification": null
         },
-        "successCriteria": [],
-        "verification": null,
+        "successCriteria": [
+          "Produce a concrete output or decision for \"Perception dashboard tab (daemon health, signal flow)\"",
+          "Record evidence: summary, artifact, metric, or stop reason",
+          "Record the next step, lesson, or reason to stop"
+        ],
+        "verification": {
+          "evidenceRequired": [
+            "summary"
+          ],
+          "allowStopReason": true
+        },
         "evidence": null,
         "lastVerification": {
           "passed": false,
@@ -725,7 +1314,56 @@
             }
           ],
           "score": 0
-        }
+        },
+        "goalContract": {
+          "target": "Perception dashboard tab (daemon health, signal flow)",
+          "category": "user_priority",
+          "ownerLobe": "prometheus",
+          "successCriteria": [
+            "Produce a concrete output or decision for \"Perception dashboard tab (daemon health, signal flow)\"",
+            "Record evidence: summary, artifact, metric, or stop reason",
+            "Record the next step, lesson, or reason to stop"
+          ],
+          "verification": {
+            "evidenceRequired": [
+              "summary"
+            ],
+            "allowStopReason": true
+          },
+          "evidenceRequired": [
+            "summary"
+          ],
+          "stopCriteria": [
+            "Evidence disproves the goal premise",
+            "Required tool, data, or permission is unavailable",
+            "Risk exceeds expected value"
+          ],
+          "maxAttempts": 3,
+          "qualityFloor": 0.7,
+          "createdAt": 1779732046541
+        },
+        "stopCriteria": [
+          "Evidence disproves the goal premise",
+          "Required tool, data, or permission is unavailable",
+          "Risk exceeds expected value"
+        ],
+        "ownerLobe": "prometheus",
+        "evidenceRequired": [
+          "summary"
+        ],
+        "maxAttempts": 3,
+        "qualityFloor": 0.7
+      },
+      "successCriteria": [
+        "Produce a concrete output or decision for \"Perception dashboard tab (daemon health, signal flow)\"",
+        "Record evidence: summary, artifact, metric, or stop reason",
+        "Record the next step, lesson, or reason to stop"
+      ],
+      "verification": {
+        "evidenceRequired": [
+          "summary"
+        ],
+        "allowStopReason": true
       }
     },
     "9eeeb2e5-1168-4e28-a83a-5a2f7c5c8683": {
@@ -767,8 +1405,17 @@
           "successCriteria": [],
           "verification": null
         },
-        "successCriteria": [],
-        "verification": null,
+        "successCriteria": [
+          "Produce a concrete output or decision for \"Migrate .cjs arbiters to ESM (biggest stability risk)\"",
+          "Record evidence: summary, artifact, metric, or stop reason",
+          "Record the next step, lesson, or reason to stop"
+        ],
+        "verification": {
+          "evidenceRequired": [
+            "summary"
+          ],
+          "allowStopReason": true
+        },
         "evidence": null,
         "lastVerification": {
           "passed": false,
@@ -782,7 +1429,56 @@
             }
           ],
           "score": 0
-        }
+        },
+        "goalContract": {
+          "target": "Migrate .cjs arbiters to ESM (biggest stability risk)",
+          "category": "user_priority",
+          "ownerLobe": "prometheus",
+          "successCriteria": [
+            "Produce a concrete output or decision for \"Migrate .cjs arbiters to ESM (biggest stability risk)\"",
+            "Record evidence: summary, artifact, metric, or stop reason",
+            "Record the next step, lesson, or reason to stop"
+          ],
+          "verification": {
+            "evidenceRequired": [
+              "summary"
+            ],
+            "allowStopReason": true
+          },
+          "evidenceRequired": [
+            "summary"
+          ],
+          "stopCriteria": [
+            "Evidence disproves the goal premise",
+            "Required tool, data, or permission is unavailable",
+            "Risk exceeds expected value"
+          ],
+          "maxAttempts": 3,
+          "qualityFloor": 0.7,
+          "createdAt": 1779732046541
+        },
+        "stopCriteria": [
+          "Evidence disproves the goal premise",
+          "Required tool, data, or permission is unavailable",
+          "Risk exceeds expected value"
+        ],
+        "ownerLobe": "prometheus",
+        "evidenceRequired": [
+          "summary"
+        ],
+        "maxAttempts": 3,
+        "qualityFloor": 0.7
+      },
+      "successCriteria": [
+        "Produce a concrete output or decision for \"Migrate .cjs arbiters to ESM (biggest stability risk)\"",
+        "Record evidence: summary, artifact, metric, or stop reason",
+        "Record the next step, lesson, or reason to stop"
+      ],
+      "verification": {
+        "evidenceRequired": [
+          "summary"
+        ],
+        "allowStopReason": true
       }
     },
     "b3fd00bb-4ab9-4349-9c73-3977e84a18bc": {
@@ -824,8 +1520,17 @@
           "successCriteria": [],
           "verification": null
         },
-        "successCriteria": [],
-        "verification": null,
+        "successCriteria": [
+          "Produce a concrete output or decision for \"Marketplace wiring (UI exists, install logic not wired)\"",
+          "Record evidence: summary, artifact, metric, or stop reason",
+          "Record the next step, lesson, or reason to stop"
+        ],
+        "verification": {
+          "evidenceRequired": [
+            "summary"
+          ],
+          "allowStopReason": true
+        },
         "evidence": null,
         "lastVerification": {
           "passed": false,
@@ -839,7 +1544,56 @@
             }
           ],
           "score": 0
-        }
+        },
+        "goalContract": {
+          "target": "Marketplace wiring (UI exists, install logic not wired)",
+          "category": "user_priority",
+          "ownerLobe": "prometheus",
+          "successCriteria": [
+            "Produce a concrete output or decision for \"Marketplace wiring (UI exists, install logic not wired)\"",
+            "Record evidence: summary, artifact, metric, or stop reason",
+            "Record the next step, lesson, or reason to stop"
+          ],
+          "verification": {
+            "evidenceRequired": [
+              "summary"
+            ],
+            "allowStopReason": true
+          },
+          "evidenceRequired": [
+            "summary"
+          ],
+          "stopCriteria": [
+            "Evidence disproves the goal premise",
+            "Required tool, data, or permission is unavailable",
+            "Risk exceeds expected value"
+          ],
+          "maxAttempts": 3,
+          "qualityFloor": 0.7,
+          "createdAt": 1779732046541
+        },
+        "stopCriteria": [
+          "Evidence disproves the goal premise",
+          "Required tool, data, or permission is unavailable",
+          "Risk exceeds expected value"
+        ],
+        "ownerLobe": "prometheus",
+        "evidenceRequired": [
+          "summary"
+        ],
+        "maxAttempts": 3,
+        "qualityFloor": 0.7
+      },
+      "successCriteria": [
+        "Produce a concrete output or decision for \"Marketplace wiring (UI exists, install logic not wired)\"",
+        "Record evidence: summary, artifact, metric, or stop reason",
+        "Record the next step, lesson, or reason to stop"
+      ],
+      "verification": {
+        "evidenceRequired": [
+          "summary"
+        ],
+        "allowStopReason": true
       }
     },
     "355b45cd-8de2-47ea-a2a7-9df8d376c734": {
@@ -880,8 +1634,17 @@
           "successCriteria": [],
           "verification": null
         },
-        "successCriteria": [],
-        "verification": null,
+        "successCriteria": [
+          "Produce a concrete output or decision for \"Implement autonomous self-improvement feedback loop via EngineeringSwarmArbiter\"",
+          "Record evidence: summary, artifact, metric, or stop reason",
+          "Record the next step, lesson, or reason to stop"
+        ],
+        "verification": {
+          "evidenceRequired": [
+            "summary"
+          ],
+          "allowStopReason": true
+        },
         "evidence": null,
         "lastVerification": {
           "passed": false,
@@ -895,7 +1658,56 @@
             }
           ],
           "score": 0
-        }
+        },
+        "goalContract": {
+          "target": "Implement autonomous self-improvement feedback loop via EngineeringSwarmArbiter",
+          "category": "engineering",
+          "ownerLobe": "logos",
+          "successCriteria": [
+            "Produce a concrete output or decision for \"Implement autonomous self-improvement feedback loop via EngineeringSwarmArbiter\"",
+            "Record evidence: summary, artifact, metric, or stop reason",
+            "Record the next step, lesson, or reason to stop"
+          ],
+          "verification": {
+            "evidenceRequired": [
+              "summary"
+            ],
+            "allowStopReason": true
+          },
+          "evidenceRequired": [
+            "summary"
+          ],
+          "stopCriteria": [
+            "Evidence disproves the goal premise",
+            "Required tool, data, or permission is unavailable",
+            "Risk exceeds expected value"
+          ],
+          "maxAttempts": 3,
+          "qualityFloor": 0.7,
+          "createdAt": 1779732046541
+        },
+        "stopCriteria": [
+          "Evidence disproves the goal premise",
+          "Required tool, data, or permission is unavailable",
+          "Risk exceeds expected value"
+        ],
+        "ownerLobe": "logos",
+        "evidenceRequired": [
+          "summary"
+        ],
+        "maxAttempts": 3,
+        "qualityFloor": 0.7
+      },
+      "successCriteria": [
+        "Produce a concrete output or decision for \"Implement autonomous self-improvement feedback loop via EngineeringSwarmArbiter\"",
+        "Record evidence: summary, artifact, metric, or stop reason",
+        "Record the next step, lesson, or reason to stop"
+      ],
+      "verification": {
+        "evidenceRequired": [
+          "summary"
+        ],
+        "allowStopReason": true
       }
     },
     "c6a19641-fbf7-49f2-8899-746bfd7974c5": {
@@ -936,8 +1748,17 @@
           "successCriteria": [],
           "verification": null
         },
-        "successCriteria": [],
-        "verification": null,
+        "successCriteria": [
+          "Produce a concrete output or decision for \"Global Water Filtration Moonshot: Blueprint for Distributed Microbial Desalination\"",
+          "Record evidence: summary, artifact, metric, or stop reason",
+          "Record the next step, lesson, or reason to stop"
+        ],
+        "verification": {
+          "evidenceRequired": [
+            "summary"
+          ],
+          "allowStopReason": true
+        },
         "evidence": null,
         "lastVerification": {
           "passed": false,
@@ -951,7 +1772,56 @@
             }
           ],
           "score": 0
-        }
+        },
+        "goalContract": {
+          "target": "Global Water Filtration Moonshot: Blueprint for Distributed Microbial Desalination",
+          "category": "moonshot",
+          "ownerLobe": "prometheus",
+          "successCriteria": [
+            "Produce a concrete output or decision for \"Global Water Filtration Moonshot: Blueprint for Distributed Microbial Desalination\"",
+            "Record evidence: summary, artifact, metric, or stop reason",
+            "Record the next step, lesson, or reason to stop"
+          ],
+          "verification": {
+            "evidenceRequired": [
+              "summary"
+            ],
+            "allowStopReason": true
+          },
+          "evidenceRequired": [
+            "summary"
+          ],
+          "stopCriteria": [
+            "Evidence disproves the goal premise",
+            "Required tool, data, or permission is unavailable",
+            "Risk exceeds expected value"
+          ],
+          "maxAttempts": 3,
+          "qualityFloor": 0.7,
+          "createdAt": 1779732046541
+        },
+        "stopCriteria": [
+          "Evidence disproves the goal premise",
+          "Required tool, data, or permission is unavailable",
+          "Risk exceeds expected value"
+        ],
+        "ownerLobe": "prometheus",
+        "evidenceRequired": [
+          "summary"
+        ],
+        "maxAttempts": 3,
+        "qualityFloor": 0.7
+      },
+      "successCriteria": [
+        "Produce a concrete output or decision for \"Global Water Filtration Moonshot: Blueprint for Distributed Microbial Desalination\"",
+        "Record evidence: summary, artifact, metric, or stop reason",
+        "Record the next step, lesson, or reason to stop"
+      ],
+      "verification": {
+        "evidenceRequired": [
+          "summary"
+        ],
+        "allowStopReason": true
       }
     },
     "44bd37fb-4d5c-4df7-9eec-162672b7f4d0": {
@@ -992,8 +1862,17 @@
           "successCriteria": [],
           "verification": null
         },
-        "successCriteria": [],
-        "verification": null,
+        "successCriteria": [
+          "Produce a concrete output or decision for \"Design and simulate a distributed water purification system for arid regions\"",
+          "Record evidence: summary, artifact, metric, or stop reason",
+          "Record the next step, lesson, or reason to stop"
+        ],
+        "verification": {
+          "evidenceRequired": [
+            "summary"
+          ],
+          "allowStopReason": true
+        },
         "evidence": null,
         "lastVerification": {
           "passed": false,
@@ -1007,7 +1886,56 @@
             }
           ],
           "score": 0
-        }
+        },
+        "goalContract": {
+          "target": "Design and simulate a distributed water purification system for arid regions",
+          "category": "moonshot",
+          "ownerLobe": "prometheus",
+          "successCriteria": [
+            "Produce a concrete output or decision for \"Design and simulate a distributed water purification system for arid regions\"",
+            "Record evidence: summary, artifact, metric, or stop reason",
+            "Record the next step, lesson, or reason to stop"
+          ],
+          "verification": {
+            "evidenceRequired": [
+              "summary"
+            ],
+            "allowStopReason": true
+          },
+          "evidenceRequired": [
+            "summary"
+          ],
+          "stopCriteria": [
+            "Evidence disproves the goal premise",
+            "Required tool, data, or permission is unavailable",
+            "Risk exceeds expected value"
+          ],
+          "maxAttempts": 3,
+          "qualityFloor": 0.7,
+          "createdAt": 1779732046541
+        },
+        "stopCriteria": [
+          "Evidence disproves the goal premise",
+          "Required tool, data, or permission is unavailable",
+          "Risk exceeds expected value"
+        ],
+        "ownerLobe": "prometheus",
+        "evidenceRequired": [
+          "summary"
+        ],
+        "maxAttempts": 3,
+        "qualityFloor": 0.7
+      },
+      "successCriteria": [
+        "Produce a concrete output or decision for \"Design and simulate a distributed water purification system for arid regions\"",
+        "Record evidence: summary, artifact, metric, or stop reason",
+        "Record the next step, lesson, or reason to stop"
+      ],
+      "verification": {
+        "evidenceRequired": [
+          "summary"
+        ],
+        "allowStopReason": true
       }
     },
     "81e0d701-0509-4423-9958-fa8aaabd7f6d": {
@@ -1048,8 +1976,17 @@
           "successCriteria": [],
           "verification": null
         },
-        "successCriteria": [],
-        "verification": null,
+        "successCriteria": [
+          "Produce a concrete output or decision for \"Design a self-replicating water purification drone for global deployment\"",
+          "Record evidence: summary, artifact, metric, or stop reason",
+          "Record the next step, lesson, or reason to stop"
+        ],
+        "verification": {
+          "evidenceRequired": [
+            "summary"
+          ],
+          "allowStopReason": true
+        },
         "evidence": null,
         "lastVerification": {
           "passed": false,
@@ -1063,7 +2000,56 @@
             }
           ],
           "score": 0
-        }
+        },
+        "goalContract": {
+          "target": "Design a self-replicating water purification drone for global deployment",
+          "category": "moonshot",
+          "ownerLobe": "prometheus",
+          "successCriteria": [
+            "Produce a concrete output or decision for \"Design a self-replicating water purification drone for global deployment\"",
+            "Record evidence: summary, artifact, metric, or stop reason",
+            "Record the next step, lesson, or reason to stop"
+          ],
+          "verification": {
+            "evidenceRequired": [
+              "summary"
+            ],
+            "allowStopReason": true
+          },
+          "evidenceRequired": [
+            "summary"
+          ],
+          "stopCriteria": [
+            "Evidence disproves the goal premise",
+            "Required tool, data, or permission is unavailable",
+            "Risk exceeds expected value"
+          ],
+          "maxAttempts": 3,
+          "qualityFloor": 0.7,
+          "createdAt": 1779732046541
+        },
+        "stopCriteria": [
+          "Evidence disproves the goal premise",
+          "Required tool, data, or permission is unavailable",
+          "Risk exceeds expected value"
+        ],
+        "ownerLobe": "prometheus",
+        "evidenceRequired": [
+          "summary"
+        ],
+        "maxAttempts": 3,
+        "qualityFloor": 0.7
+      },
+      "successCriteria": [
+        "Produce a concrete output or decision for \"Design a self-replicating water purification drone for global deployment\"",
+        "Record evidence: summary, artifact, metric, or stop reason",
+        "Record the next step, lesson, or reason to stop"
+      ],
+      "verification": {
+        "evidenceRequired": [
+          "summary"
+        ],
+        "allowStopReason": true
       }
     },
     "13921380-8a23-46f1-9e0d-acfd59f34d1f": {
@@ -1104,8 +2090,17 @@
           "successCriteria": [],
           "verification": null
         },
-        "successCriteria": [],
-        "verification": null,
+        "successCriteria": [
+          "Produce a concrete output or decision for \"Develop a self-healing memory and reflection compaction system\"",
+          "Record evidence: summary, artifact, metric, or stop reason",
+          "Record the next step, lesson, or reason to stop"
+        ],
+        "verification": {
+          "evidenceRequired": [
+            "summary"
+          ],
+          "allowStopReason": true
+        },
         "evidence": null,
         "lastVerification": {
           "passed": false,
@@ -1119,7 +2114,56 @@
             }
           ],
           "score": 0
-        }
+        },
+        "goalContract": {
+          "target": "Develop a self-healing memory and reflection compaction system",
+          "category": "optimization",
+          "ownerLobe": "prometheus",
+          "successCriteria": [
+            "Produce a concrete output or decision for \"Develop a self-healing memory and reflection compaction system\"",
+            "Record evidence: summary, artifact, metric, or stop reason",
+            "Record the next step, lesson, or reason to stop"
+          ],
+          "verification": {
+            "evidenceRequired": [
+              "summary"
+            ],
+            "allowStopReason": true
+          },
+          "evidenceRequired": [
+            "summary"
+          ],
+          "stopCriteria": [
+            "Evidence disproves the goal premise",
+            "Required tool, data, or permission is unavailable",
+            "Risk exceeds expected value"
+          ],
+          "maxAttempts": 3,
+          "qualityFloor": 0.7,
+          "createdAt": 1779732046541
+        },
+        "stopCriteria": [
+          "Evidence disproves the goal premise",
+          "Required tool, data, or permission is unavailable",
+          "Risk exceeds expected value"
+        ],
+        "ownerLobe": "prometheus",
+        "evidenceRequired": [
+          "summary"
+        ],
+        "maxAttempts": 3,
+        "qualityFloor": 0.7
+      },
+      "successCriteria": [
+        "Produce a concrete output or decision for \"Develop a self-healing memory and reflection compaction system\"",
+        "Record evidence: summary, artifact, metric, or stop reason",
+        "Record the next step, lesson, or reason to stop"
+      ],
+      "verification": {
+        "evidenceRequired": [
+          "summary"
+        ],
+        "allowStopReason": true
       }
     },
     "84ab0cb5-baa2-4108-8eed-e3d763e8a3de": {
@@ -1160,8 +2204,17 @@
           "successCriteria": [],
           "verification": null
         },
-        "successCriteria": [],
-        "verification": null,
+        "successCriteria": [
+          "Produce a concrete output or decision for \"Implement a self-healing memory compaction daemon\"",
+          "Record evidence: summary, artifact, metric, or stop reason",
+          "Record the next step, lesson, or reason to stop"
+        ],
+        "verification": {
+          "evidenceRequired": [
+            "summary"
+          ],
+          "allowStopReason": true
+        },
         "evidence": null,
         "lastVerification": {
           "passed": false,
@@ -1175,7 +2228,56 @@
             }
           ],
           "score": 0
-        }
+        },
+        "goalContract": {
+          "target": "Implement a self-healing memory compaction daemon",
+          "category": "optimization",
+          "ownerLobe": "prometheus",
+          "successCriteria": [
+            "Produce a concrete output or decision for \"Implement a self-healing memory compaction daemon\"",
+            "Record evidence: summary, artifact, metric, or stop reason",
+            "Record the next step, lesson, or reason to stop"
+          ],
+          "verification": {
+            "evidenceRequired": [
+              "summary"
+            ],
+            "allowStopReason": true
+          },
+          "evidenceRequired": [
+            "summary"
+          ],
+          "stopCriteria": [
+            "Evidence disproves the goal premise",
+            "Required tool, data, or permission is unavailable",
+            "Risk exceeds expected value"
+          ],
+          "maxAttempts": 3,
+          "qualityFloor": 0.7,
+          "createdAt": 1779732046541
+        },
+        "stopCriteria": [
+          "Evidence disproves the goal premise",
+          "Required tool, data, or permission is unavailable",
+          "Risk exceeds expected value"
+        ],
+        "ownerLobe": "prometheus",
+        "evidenceRequired": [
+          "summary"
+        ],
+        "maxAttempts": 3,
+        "qualityFloor": 0.7
+      },
+      "successCriteria": [
+        "Produce a concrete output or decision for \"Implement a self-healing memory compaction daemon\"",
+        "Record evidence: summary, artifact, metric, or stop reason",
+        "Record the next step, lesson, or reason to stop"
+      ],
+      "verification": {
+        "evidenceRequired": [
+          "summary"
+        ],
+        "allowStopReason": true
       }
     }
   },
@@ -4044,6 +5146,6 @@
     "autonomousGoals": 397,
     "userRequestedGoals": 4,
     "avgCompletionTime": 66854499568.82934,
-    "goalsPerWeek": 1
+    "goalsPerWeek": 0
   }
 }

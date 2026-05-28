@@ -43,6 +43,7 @@ import createMaintenanceRoutes from '../../server/routes/maintenanceRoutes.js';
 import createWorkspaceRoutes from '../../server/routes/workspaceRoutes.js';
 import createStudioRoutes from '../../server/routes/studioRoutes.js';
 import createThirdPlaceRoutes from '../../server/routes/thirdPlaceRoutes.js';
+import createApertureRoutes from '../../server/routes/apertureRoutes.js';
 import { toggleAutopilot, getAutopilotStatus } from './extended.js';
 import { buildSystemSnapshot } from '../utils/systemState.js';
 import { executeCommand } from '../utils/commandRouter.js';
@@ -1300,10 +1301,28 @@ export async function loadRoutes(app, system) {
         if (goalPlanner) {
             for (const id of goalPlanner.activeGoals || []) {
                 const g = goalPlanner.goals?.get(id);
-                if (g) feed.push({ id: g.id, type: 'goal_active', agent: 'GoalPlanner', action: g.title, detail: `${g.metrics?.progress || 0}% â€” ${g.category}`, timestamp: g.startedAt || g.createdAt, status: g.status });
+                if (g) feed.push({
+                    id: g.id,
+                    type: g.status === 'verification_failed' ? 'goal_verification_failed' : 'goal_active',
+                    agent: 'GoalPlanner',
+                    action: g.title,
+                    detail: `${g.metrics?.progress || 0}% - ${g.category}`,
+                    timestamp: g.startedAt || g.createdAt,
+                    status: g.status,
+                    evidenceStatus: g.status === 'verification_failed' ? 'failed' : 'planned'
+                });
             }
             for (const g of (goalPlanner.completedGoals || []).slice(0, 10)) {
-                feed.push({ id: g.id, type: 'goal_completed', agent: 'GoalPlanner', action: g.title, detail: g.category, timestamp: g.completedAt, status: 'completed' });
+                feed.push({
+                    id: g.id,
+                    type: 'goal_completed',
+                    agent: 'GoalPlanner',
+                    action: g.title,
+                    detail: g.category,
+                    timestamp: g.completedAt,
+                    status: 'completed',
+                    evidenceStatus: 'verified'
+                });
             }
         }
 
@@ -1312,7 +1331,7 @@ export async function loadRoutes(app, system) {
         if (tk?.temporalLedger) {
             for (const ev of tk.temporalLedger.slice(-20)) {
                 if (ev.event === 'execute_rhythm') {
-                    feed.push({ id: `tk-${ev.timestamp}`, type: 'rhythm_executed', agent: 'Timekeeper', action: `Rhythm: ${ev.data?.key || 'unknown'}`, detail: ev.data?.success ? 'Success' : `Failed: ${ev.data?.error || ''}`, timestamp: ev.timestamp, status: ev.data?.success ? 'completed' : 'failed' });
+                    feed.push({ id: `tk-${ev.timestamp}`, type: 'rhythm_executed', agent: 'Timekeeper', action: `Rhythm: ${ev.data?.key || 'unknown'}`, detail: ev.data?.success ? 'Success' : `Failed: ${ev.data?.error || ''}`, timestamp: ev.timestamp, status: ev.data?.success ? 'completed' : 'failed', evidenceStatus: ev.data?.success ? 'executed' : 'failed' });
                 }
             }
         }
@@ -1322,27 +1341,27 @@ export async function loadRoutes(app, system) {
         if (curiosity?.stats) {
             const cs = curiosity.stats;
             if (cs.explorationsStarted > 0) {
-                feed.push({ id: `cur-summary`, type: 'curiosity_explored', agent: 'CuriosityEngine', action: `${cs.explorationsStarted} explorations started`, detail: `${curiosity.knowledgeGaps?.size || 0} knowledge gaps`, timestamp: now, status: 'active' });
+                feed.push({ id: `cur-summary`, type: 'curiosity_explored', agent: 'CuriosityEngine', action: `${cs.explorationsStarted} explorations started`, detail: `${curiosity.knowledgeGaps?.size || 0} knowledge gaps`, timestamp: now, status: 'active', evidenceStatus: 'observed' });
             }
         }
 
         // Nighttime learning sessions
         const nlo = system.nighttimeLearning;
         if (nlo?.metrics?.totalSessions > 0) {
-            feed.push({ id: `nlo-summary`, type: 'learning_session', agent: 'NighttimeLearning', action: `${nlo.metrics.totalSessions} learning sessions`, detail: `${nlo.activeSessions?.size || 0} active`, timestamp: now, status: nlo.activeSessions?.size > 0 ? 'active' : 'idle' });
+            feed.push({ id: `nlo-summary`, type: 'learning_session', agent: 'NighttimeLearning', action: `${nlo.metrics.totalSessions} learning sessions`, detail: `${nlo.activeSessions?.size || 0} active`, timestamp: now, status: nlo.activeSessions?.size > 0 ? 'active' : 'idle', evidenceStatus: 'observed' });
         }
 
         // Code observation
         const codeObs = system.codeObserver;
         if (codeObs?.codebase?.metrics?.lastScan) {
-            feed.push({ id: `code-scan`, type: 'code_scanned', agent: 'CodeObserver', action: `Scanned ${codeObs.codebase.metrics.totalFiles || 0} files`, detail: `${codeObs.health?.issues?.length || 0} issues, ${codeObs.health?.opportunities?.length || 0} opportunities`, timestamp: codeObs.codebase.metrics.lastScan, status: 'completed' });
+            feed.push({ id: `code-scan`, type: 'code_scanned', agent: 'CodeObserver', action: `Scanned ${codeObs.codebase.metrics.totalFiles || 0} files`, detail: `${codeObs.health?.issues?.length || 0} issues, ${codeObs.health?.opportunities?.length || 0} opportunities`, timestamp: codeObs.codebase.metrics.lastScan, status: 'completed', evidenceStatus: 'observed' });
         }
 
         // Approval history (recent)
         const approval = system.approvalSystem;
         if (approval?.approvalHistory) {
             for (const a of approval.approvalHistory.slice(-10)) {
-                feed.push({ id: `appr-${a.timestamp}`, type: 'approval_requested', agent: 'ApprovalSystem', action: a.action || 'Tool execution', detail: `${a.approved ? 'Approved' : 'Denied'} (${a.reason})`, timestamp: a.timestamp, status: a.approved ? 'approved' : 'denied' });
+                feed.push({ id: `appr-${a.timestamp}`, type: 'approval_requested', agent: 'ApprovalSystem', action: a.action || 'Tool execution', detail: `${a.approved ? 'Approved' : 'Denied'} (${a.reason})`, timestamp: a.timestamp, status: a.approved ? 'approved' : 'denied', evidenceStatus: a.approved ? 'executed' : 'failed' });
             }
         }
 
@@ -4944,13 +4963,16 @@ Return ONLY valid JSON (no markdown, no explanation):
         }
     });
 
-    safeMount('/api/axis',            createAxisRoutes(system));
+    // Mount the richer project router first; /api/axis also contains legacy
+    // project paths that otherwise intercept members/channels/task responses.
     safeMount('/api/axis/projects',   createProjectRoutes(system));
+    safeMount('/api/axis',            createAxisRoutes(system));
     safeMount('/api/axis/communities', createCommunityRoutes(system));
     safeMount('/api/social', createSocialRoutes(system));
     safeMount('/api/maintenance', createMaintenanceRoutes(system));
     safeMount('/api/workspace',  createWorkspaceRoutes(system));
     safeMount('/api/thirdplace', createThirdPlaceRoutes(system));
+    safeMount('/api/aperture', createApertureRoutes(system));
 
     const kevin = system.kevinArbiter || system.kevinManager;
     if (kevin) app.locals.kevinArbiter = kevin;

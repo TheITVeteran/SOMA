@@ -118,8 +118,10 @@ export class HippocampusArbiter extends BaseArbiterV4 {
 
     getStatus() {
         return {
-            mnemonic: this.mnemonic.getMemoryStats(),
-            thoughtNetwork: this.thoughtNetwork.getStats(),
+            mnemonic: (this.mnemonic && typeof this.mnemonic.getMemoryStats === 'function') 
+                ? this.mnemonic.getMemoryStats() 
+                : { status: 'initializing' },
+            thoughtNetwork: this.thoughtNetwork ? this.thoughtNetwork.getStats() : {},
             status: 'online'
         };
     }

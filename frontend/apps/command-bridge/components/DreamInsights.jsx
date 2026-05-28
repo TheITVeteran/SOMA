@@ -21,7 +21,7 @@ const DreamInsights = ({ isConnected }) => {
           const data = await dreamRes.json();
           const normalizedInsights = Array.isArray(data.insights)
             ? { recentInsights: data.insights }
-            : data.insights;
+            : data.insights || { recentInsights: data.recentInsights || [] };
           setInsights(normalizedInsights);
           if (data.narrative) setNarrative(data.narrative);
           if (normalizedInsights?.recentInsights) setRecentInsights(normalizedInsights.recentInsights);

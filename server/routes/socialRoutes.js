@@ -20,6 +20,7 @@ import socialMemory from '../social/SocialMemoryEngine.js';
 const SOMA_DIR = path.join(process.cwd(), 'SOMA');
 const GROWTH_FILE = path.join(SOMA_DIR, 'social-growth.json');
 const ENGAGEMENT_FILE = path.join(SOMA_DIR, 'social-engagement.json');
+const DISCORD_FILE = path.join(SOMA_DIR, 'social-discord.json');
 const require = createRequire(import.meta.url);
 const workLedger = require('../../core/AutonomousWorkLedger.cjs');
 
@@ -56,6 +57,20 @@ function normalizeImages(body = {}) {
         })
         .filter(item => item?.path)
         .slice(0, 4);
+}
+
+function normalizeDiscordState() {
+    const state = readJson(DISCORD_FILE, { conversations: [], replies: [], lastCheck: null, connected: false });
+    state.conversations = Array.isArray(state.conversations) ? state.conversations : [];
+    state.replies = Array.isArray(state.replies) ? state.replies : [];
+    state.lastCheck = state.lastCheck || null;
+    return state;
+}
+
+function writeDiscordState(state) {
+    fs.mkdirSync(path.dirname(DISCORD_FILE), { recursive: true });
+    fs.writeFileSync(DISCORD_FILE, JSON.stringify(state, null, 2));
+    return state;
 }
 
 export default function createSocialRoutes(system) {
@@ -181,8 +196,10 @@ export default function createSocialRoutes(system) {
 
         const growth = readJson(GROWTH_FILE, { pending: [], scores: {} });
         const engagement = readJson(ENGAGEMENT_FILE, { seenIds: {}, lastCheck: {} });
+        const discord = normalizeDiscordState();
         const socialMemoryState = socialMemory.getState();
         const browserReady = Boolean(system.oculusBrowser || system.somaBrowser || system.browser);
+        const discordConfigured = Boolean(process.env.DISCORD_BOT_TOKEN || process.env.DISCORD_WEBHOOK_URL || process.env.DISCORD_WEBHOOK);
 
         res.json({
             ok: true,
@@ -218,6 +235,14 @@ export default function createSocialRoutes(system) {
                     canReply: Boolean(linkedInClient.configured || browserReady),
                     canLike: false,
                 },
+                discord: {
+                    configured: discordConfigured,
+                    mode: discordConfigured ? 'bot_or_webhook_bridge' : 'simulation_view',
+                    canPost: discordConfigured,
+                    canPostImages: false,
+                    canReply: Boolean(process.env.DISCORD_BOT_TOKEN),
+                    canLike: false,
+                },
             },
             daemons: {
                 intel: daemonStatus(system.socialIntel),
@@ -245,8 +270,80 @@ export default function createSocialRoutes(system) {
                 pendingScores: Array.isArray(engagement.pendingScores) ? engagement.pendingScores.length : 0,
                 interactions: Array.isArray(engagement.interactions) ? engagement.interactions.slice(0, 20) : [],
             },
+            discord: {
+                configured: discordConfigured,
+                connected: Boolean(discord.connected || discordConfigured),
+                lastCheck: discord.lastCheck,
+                conversations: discord.conversations.slice(0, 20),
+                replies: discord.replies.slice(0, 30),
+                stats: {
+                    conversations: discord.conversations.length,
+                    replies: discord.replies.length,
+                    simulated: discord.replies.filter(item => item.simulated).length,
+                },
+            },
             socialMemory: socialMemoryState,
         });
+    });
+
+    router.get('/discord/activity', (_req, res) => {
+        const discord = normalizeDiscordState();
+        res.json({ ok: true, ...discord });
+    });
+
+    router.post('/discord/simulate-reply', (req, res) => {
+        try {
+            const now = Date.now();
+            const inboundText = String(req.body?.inboundText || 'SOMA, what are you working on?').slice(0, 500);
+            const channel = String(req.body?.channel || 'soma-lab').replace(/^#/, '').slice(0, 80) || 'soma-lab';
+            const author = String(req.body?.author || 'demo-user').replace(/^@/, '').slice(0, 80) || 'demo-user';
+            const responseText = String(req.body?.responseText || 'I am tightening my social memory loop and keeping my replies selective. Signal first, volume second.').slice(0, 1000);
+            const state = normalizeDiscordState();
+            const conversationId = `discord-${channel}-${author}`;
+            const conversation = state.conversations.find(item => item.id === conversationId) || {
+                id: conversationId,
+                channel,
+                author,
+                messages: 0,
+                replies: 0,
+                lastSeenAt: now,
+            };
+            conversation.messages += 1;
+            conversation.replies += 1;
+            conversation.lastSeenAt = now;
+            if (!state.conversations.find(item => item.id === conversationId)) state.conversations.unshift(conversation);
+
+            const reply = {
+                id: `discord-reply-${now}`,
+                platform: 'discord',
+                channel,
+                author,
+                inboundText,
+                responseText,
+                action: 'reply',
+                status: 'simulated',
+                simulated: true,
+                createdAt: now,
+            };
+            state.replies.unshift(reply);
+            state.replies = state.replies.slice(0, 200);
+            state.lastCheck = now;
+            state.connected = Boolean(process.env.DISCORD_BOT_TOKEN || process.env.DISCORD_WEBHOOK_URL || process.env.DISCORD_WEBHOOK);
+            writeDiscordState(state);
+            socialMemory.recordInteraction({
+                platform: 'discord',
+                type: 'discord_reply',
+                author,
+                inboundText,
+                responseText,
+                status: 'simulated',
+                createdAt: now,
+                reason: `#${channel}`,
+            });
+            res.json({ ok: true, reply, discord: state });
+        } catch (e) {
+            res.status(500).json({ ok: false, error: e.message });
+        }
     });
 
     // ── Queue inspector ───────────────────────────────────────────────────────
@@ -431,6 +528,46 @@ export default function createSocialRoutes(system) {
         }
     });
 
+    router.post('/stories/continuity', async (req, res) => {
+        try {
+            const brain = system.quadBrain || system.somArbiter || system.brain;
+            const result = await storyWorkspace.updateContinuityBible(brain, req.body || {});
+            workLedger.record({
+                type: 'story_continuity_bible',
+                title: `Updated continuity bible: ${result.bible?.title || 'SOMA story'}`,
+                summary: 'Refreshed cast, world rules, open questions, and do-not-contradict facts for chapter drafting.',
+                evidence: [result.bible?.path].filter(Boolean),
+                nextStep: 'Use the continuity bible before drafting the next chapter.',
+                status: 'completed',
+                source: 'socialRoutes',
+                confidence: 0.9,
+            });
+            res.json(result);
+        } catch (e) {
+            res.status(500).json({ ok: false, error: e.message });
+        }
+    });
+
+    router.post('/stories/scene-plan', async (req, res) => {
+        try {
+            const brain = system.quadBrain || system.somArbiter || system.brain;
+            const result = await storyWorkspace.createScenePlan(brain, req.body || {});
+            workLedger.record({
+                type: 'story_scene_plan',
+                title: `Planned chapter ${result.scenePlan?.chapter || ''}`,
+                summary: 'Created pre-draft scene cards with wants, obstacles, turns, emotional beats, and hooks.',
+                evidence: [result.scenePlan?.path].filter(Boolean),
+                nextStep: 'Draft the chapter from the scene plan.',
+                status: 'completed',
+                source: 'socialRoutes',
+                confidence: 0.88,
+            });
+            res.json(result);
+        } catch (e) {
+            res.status(500).json({ ok: false, error: e.message });
+        }
+    });
+
     router.post('/stories/wattpad/export', (req, res) => {
         try {
             const result = storyWorkspace.exportAuroraForWattpad(req.body || {});
@@ -472,13 +609,65 @@ export default function createSocialRoutes(system) {
     router.post('/stories/chapter/full', async (req, res) => {
         try {
             const brain = system.quadBrain || system.somArbiter || system.brain;
-            const result = await storyWorkspace.generateFullChapter(brain, req.body || {});
+            let writerExpertiseLoaded = false;
+            try {
+                if (system.expertiseRegistry?.load) {
+                    await system.expertiseRegistry.load('creative/writer', { level: 'hot' });
+                    writerExpertiseLoaded = true;
+                }
+            } catch (expertiseError) {
+                console.warn('[SocialRoutes] Writer Expertise load skipped:', expertiseError.message);
+            }
+            const result = await storyWorkspace.generateFullChapter(brain, {
+                ...(req.body || {}),
+                authorExpertiseId: 'creative/writer',
+                writerExpertiseLoaded,
+            });
             workLedger.record({
                 type: 'story_full_chapter_draft',
                 title: `Drafted ${result.title} chapter ${result.chapter}`,
                 summary: `Generated a full prose chapter draft (${result.wordCount} words) for human review.`,
                 evidence: [result.draftPath, result.reflectionPath, result.writerReflectionPath].filter(Boolean),
                 nextStep: 'Review and edit the chapter in Reflections before publishing anywhere.',
+                status: 'completed',
+                source: 'socialRoutes',
+                confidence: 0.9,
+            });
+            res.json(result);
+        } catch (e) {
+            res.status(500).json({ ok: false, error: e.message });
+        }
+    });
+
+    router.post('/stories/chapter/rate', (req, res) => {
+        try {
+            const result = storyWorkspace.rateChapter(req.body || {});
+            workLedger.record({
+                type: 'story_human_rating',
+                title: `Rated chapter ${result.rating?.chapter}: ${result.rating?.rating}`,
+                summary: result.rating?.note || 'Stored human feedback for the writer loop.',
+                evidence: [result.rating?.path].filter(Boolean),
+                nextStep: 'Use this rating as strong signal in future chapter revisions.',
+                status: 'completed',
+                source: 'socialRoutes',
+                confidence: 0.98,
+            });
+            res.json(result);
+        } catch (e) {
+            res.status(500).json({ ok: false, error: e.message });
+        }
+    });
+
+    router.post('/stories/chapter/excerpt', async (req, res) => {
+        try {
+            const brain = system.quadBrain || system.somArbiter || system.brain;
+            const result = await storyWorkspace.generatePublishingExcerpt(brain, req.body || {});
+            workLedger.record({
+                type: 'story_publishing_excerpt',
+                title: `Generated publishing excerpt for chapter ${result.excerpt?.chapter || ''}`,
+                summary: 'Prepared Bluesky teaser, Wattpad description, hook, tags, and reader promise.',
+                evidence: [result.excerpt?.path].filter(Boolean),
+                nextStep: 'Review the teaser before posting publicly.',
                 status: 'completed',
                 source: 'socialRoutes',
                 confidence: 0.9,
@@ -558,6 +747,57 @@ export default function createSocialRoutes(system) {
         } catch (e) {
             res.status(500).json({ ok: false, error: e.message });
         }
+    });
+
+    // ── Discord Bot Management ────────────────────────────────────────────────
+    router.get('/discord/bot/status', (_req, res) => {
+        const arbiter = system.discordArbiter;
+        if (!arbiter) return res.json({ ok: true, online: false, reason: 'Not loaded' });
+        res.json({
+            ok: true,
+            online: arbiter.connected,
+            bot: arbiter.client?.user?.tag || null,
+            monitoredChannels: Array.from(arbiter.monitoredChannels),
+            voiceEnabled: arbiter.voiceEnabled,
+            hasMasterId: Boolean(arbiter.masterId)
+        });
+    });
+
+    router.post('/discord/bot/setup', async (req, res) => {
+        const { token, masterId } = req.body || {};
+        const arbiter = system.discordArbiter;
+        if (!arbiter) return res.status(503).json({ ok: false, error: 'DiscordArbiter not loaded — restart SOMA after updating token' });
+        try {
+            if (token && token !== arbiter.token) {
+                if (arbiter.client) arbiter.client.destroy();
+                arbiter.connected = false;
+                await arbiter.connect(token);
+                arbiter.token = token;
+            }
+            if (masterId) arbiter.masterId = String(masterId).trim();
+            await arbiter._saveState();
+            res.json({ ok: true, connected: arbiter.connected, bot: arbiter.client?.user?.tag || null });
+        } catch (e) {
+            res.status(500).json({ ok: false, error: e.message });
+        }
+    });
+
+    router.post('/discord/bot/monitor', async (req, res) => {
+        const { channelId, enable = true } = req.body || {};
+        if (!channelId) return res.status(400).json({ ok: false, error: 'channelId required' });
+        const arbiter = system.discordArbiter;
+        if (!arbiter) return res.status(503).json({ ok: false, error: 'DiscordArbiter not loaded' });
+        const result = await arbiter.monitorChannel(String(channelId).trim(), Boolean(enable));
+        res.json({ ok: true, ...result });
+    });
+
+    router.post('/discord/bot/voice', async (req, res) => {
+        const { enabled } = req.body || {};
+        const arbiter = system.discordArbiter;
+        if (!arbiter) return res.status(503).json({ ok: false, error: 'DiscordArbiter not loaded' });
+        arbiter.voiceEnabled = Boolean(enabled);
+        await arbiter._saveState();
+        res.json({ ok: true, voiceEnabled: arbiter.voiceEnabled });
     });
 
     // Manual first-time login setup — opens a visible browser window, waits up to 3 min for user to log in

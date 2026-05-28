@@ -6,8 +6,8 @@ export const BrainDetail = ({ brainId, onClose, onOpenFeature, realStats, activi
     if (!brainId) return null;
     const brain = BRAINS[brainId];
     
-    // Use real stats if available, otherwise fallback to static constants
-    const stats = realStats || brain.stats;
+    const stats = realStats || null;
+    const operations = stats?.roles || brain.buttons;
 
     return (
         <div className="absolute top-20 right-0 bottom-0 w-96 z-50 overflow-hidden pointer-events-none">
@@ -25,7 +25,7 @@ export const BrainDetail = ({ brainId, onClose, onOpenFeature, realStats, activi
                     </button>
                 </div>
 
-                <div className="mb-8">
+                {stats ? <div className="mb-8">
                     <div className="flex justify-between text-sm text-slate-400 mb-2">
                         <span>Neural Integrity</span>
                         <span>{stats.load}%</span>
@@ -40,11 +40,15 @@ export const BrainDetail = ({ brainId, onClose, onOpenFeature, realStats, activi
                         <span className="text-[10px] text-slate-500 font-mono">Confidence: {(stats.confidence * 100).toFixed(0)}%</span>
                         <span className="text-[10px] text-slate-500 font-mono">Uptime: 100%</span>
                     </div>
-                </div>
+                </div> : (
+                    <div className="mb-8 rounded border border-amber-500/20 bg-amber-500/5 p-3 text-[11px] text-amber-300">
+                        No runtime metrics reported for this brain. Operations remain available, but load and confidence are not inferred.
+                    </div>
+                )}
 
                 <div className="space-y-2 mb-8">
                     <div className="text-[10px] text-slate-500 uppercase tracking-widest font-bold mb-2">Cognitive Core Operations</div>
-                    {(stats.roles || brain.buttons).map((btn, i) => (
+                    {operations.map((btn, i) => (
                         <button
                             key={i}
                             onClick={() => onOpenFeature(btn)}
@@ -91,14 +95,14 @@ export const BrainDetail = ({ brainId, onClose, onOpenFeature, realStats, activi
                         <h4 className="text-[10px] text-slate-500 uppercase font-bold mb-2 flex items-center">
                             <Activity size={10} className="mr-2" /> Total Processed
                         </h4>
-                        <div className="text-xl font-mono text-white tracking-tighter">{stats.processes?.toLocaleString() || '0'}</div>
+                        <div className="text-xl font-mono text-white tracking-tighter">{stats?.processes?.toLocaleString() || '--'}</div>
                     </div>
 
                     <div className="bg-black/40 rounded-lg p-4 border border-slate-800/50">
                         <h4 className="text-[10px] text-slate-500 uppercase font-bold mb-2 flex items-center">
                             <BookOpen size={10} className="mr-2" /> Current Mandate
                         </h4>
-                        <div className="text-sm font-mono text-slate-300 italic">"{stats.focus || 'Awaiting task allocation...'}"</div>
+                        <div className="text-sm font-mono text-slate-300 italic">"{stats?.focus || 'No reported runtime mandate.'}"</div>
                     </div>
                 </div>
             </div>

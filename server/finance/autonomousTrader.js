@@ -20,6 +20,11 @@ import { altDataService } from './AltDataService.js';
 import missionControlRuntime from './MissionControlRuntime.js';
 import paperExecutionSimulator from './PaperExecutionSimulator.js';
 import marketEvidenceStore from './MarketEvidenceStore.js';
+import abTestFramework from './ABTestFramework.js';
+import calendarGuard from './CalendarGuard.js';
+import multiTimeframeFilter from './MultiTimeframeFilter.js';
+import correlationGuard from './CorrelationGuard.js';
+import optionsIVSignal from './OptionsIVSignal.js';
 // Flush hook wired by routes.js after both modules load (avoids circular import)
 // autonomousTrader → performanceRoutes → scalpingEngine was a potential cycle
 let flushPerformanceSummaryCache = () => {};
@@ -61,6 +66,8 @@ class AutonomousTrader {
         this._lastStreamPrice = 0;       // Real-time price from WebSocket
         this._analysisTimeoutMs = 15_000; // 15s timeout for AI analysis
         this._signalScoresAtEntry = new Map(); // symbol → signal scores at open (for adaptive learning)
+        this._abTestArmAtEntry = new Map();   // symbol → { arm } for A/B outcome tracking
+        this._lastKnownRegime = null;          // persists regime across cycles for UCB1 feedback
 
         // Paper trading mode (active when Alpaca not connected)
         this.paperMode = false;
@@ -123,11 +130,16 @@ class AutonomousTrader {
             console.log(`[AutonomousTrader] 🎛️ Preset "${preset}" applied:`, PRESET_CONFIGS[preset]);
         }
 
+        // UCB1: let mission control select the best strategy profile to try this session
+        const ucbPreset = preset || missionControlRuntime.selectTradingStrategy();
         this._runtimeProfile = missionControlRuntime.getActiveExecutionProfile({
             symbol,
-            preset,
+            preset: ucbPreset,
             baseConfig: this.config
         });
+        if (!preset && ucbPreset) {
+            console.log(`[AutonomousTrader] UCB1 selected strategy: ${ucbPreset}`);
+        }
         this.config = { ...this.config, ...this._runtimeProfile.config };
         global.SOMA_TRADING?.guardrails?.applyTierProfile?.(this.config);
 
@@ -311,6 +323,7 @@ class AutonomousTrader {
 
             // Handle Regime (optional, safe default)
             const currentRegime = regimeResult.status === 'fulfilled' ? regimeResult.value : null;
+            if (currentRegime) this._lastKnownRegime = currentRegime;
 
             const quality = marketDataService.validateDataQuality(bars);
 
@@ -463,10 +476,43 @@ class AutonomousTrader {
                 }
             }
 
+            // 14a. Calendar Guard — block entries within 24h of FOMC/earnings
+            try {
+                const calCheck = await calendarGuard.isEventRisk(this.symbol);
+                if (calCheck.blocked) {
+                    this._logDecision('CALENDAR', 'BLOCKED', calCheck.reason, { event: calCheck.event, hoursUntil: calCheck.hoursUntil });
+                    return;
+                }
+            } catch { /* non-fatal */ }
+
+            // 14b. Multi-timeframe confirmation — 1h + 15m must agree with signal direction
+            try {
+                const mtfCheck = await multiTimeframeFilter.confirmSignal(this.symbol, signal.action);
+                if (!mtfCheck.confirmed) {
+                    this._logDecision('MTF', 'SKIP', `Multi-TF disagreement: ${mtfCheck.reason}`, { votes: mtfCheck.votes });
+                    return;
+                }
+            } catch { /* non-fatal */ }
+
+            // 14c. Correlation Guard — block if new position is too correlated with existing ones
+            const openSymbols = this._openPositions.map(p => p.symbol).filter(s => s !== this.symbol);
+            if (openSymbols.length > 0) {
+                try {
+                    const corrCheck = await correlationGuard.check(this.symbol, openSymbols);
+                    if (!corrCheck.allowed) {
+                        this._logDecision('CORRELATION', 'BLOCKED', corrCheck.reason, {
+                            maxCorrelation: corrCheck.maxCorrelation,
+                            correlatedWith: corrCheck.correlatedWith
+                        });
+                        return;
+                    }
+                } catch { /* non-fatal */ }
+            }
+
             // Yield before the heavy execute path so HTTP handlers can respond
             await new Promise(resolve => setImmediate(resolve));
 
-            // 14. EXECUTE THE TRADE
+            // 15. EXECUTE THE TRADE
             await this._executeTrade(signal, sizing, currentPrice, analysis);
 
         } catch (error) {
@@ -490,27 +536,46 @@ class AutonomousTrader {
             // 1. Run all 8 technical signals in parallel (pure computation, instant)
             const techResult = signalLibrary.analyze(bars, currentPrice);
 
-            // 2. Fetch alt data in parallel (cached, usually instant after first call)
-            const altResult = await Promise.race([
-                altDataService.getScore(symbol),
-                new Promise(r => setTimeout(() => r(null), 4000)) // 4s timeout
+            // 2. Fetch alt data + options IV in parallel (both cached after first call)
+            const [altResult, ivResult] = await Promise.all([
+                Promise.race([
+                    altDataService.getScore(symbol),
+                    new Promise(r => setTimeout(() => r(null), 4000)) // 4s timeout
+                ]),
+                optionsIVSignal.getSignal(symbol).catch(() => null)
             ]);
 
-            // 3. Blend: 75% technical signals, 25% alt data (when available)
+            // 3. Blend: technical + alt data + options IV
             let composite    = techResult.composite;
             let confidence   = techResult.confidence;
             let sentimentScore = 0.5;
 
             if (altResult && typeof altResult.score === 'number' && altResult.confidence > 0) {
-                const altWeight  = Math.min(0.25, altResult.confidence * 0.35);
-                const techWeight = 1 - altWeight;
-                composite        = techResult.composite * techWeight + altResult.score * altWeight;
+                const altWeight  = Math.min(0.20, altResult.confidence * 0.30);
+                const ivWeight   = (ivResult && typeof ivResult.score === 'number') ? 0.10 : 0;
+                const techWeight = 1 - altWeight - ivWeight;
+                composite        = techResult.composite * techWeight
+                                 + altResult.score * altWeight
+                                 + (ivResult?.score || 0) * ivWeight;
                 confidence       = Math.min(0.97, techResult.confidence * 0.8 + altResult.confidence * 0.2);
-                sentimentScore   = (altResult.score + 1) / 2; // -1..+1 → 0..1
+                sentimentScore   = (altResult.score + 1) / 2;
 
-                console.log(`[AutonomousTrader] ⚡ Signal: tech=${techResult.composite.toFixed(3)} alt=${altResult.score.toFixed(3)} blend=${composite.toFixed(3)} | ${techResult.inAgreement}/8 signals agree`);
+                const ivStr = ivWeight > 0 ? ` iv=${ivResult.score.toFixed(2)}` : '';
+                console.log(`[AutonomousTrader] ⚡ Signal: tech=${techResult.composite.toFixed(3)} alt=${altResult.score.toFixed(3)}${ivStr} blend=${composite.toFixed(3)} | ${techResult.inAgreement}/8 signals agree`);
             } else {
-                console.log(`[AutonomousTrader] ⚡ Signal: tech=${techResult.composite.toFixed(3)} (no alt data) | ${techResult.inAgreement}/8 signals agree`);
+                // alt data unavailable — blend in IV if available
+                if (ivResult && typeof ivResult.score === 'number') {
+                    composite  = techResult.composite * 0.88 + ivResult.score * 0.12;
+                    confidence = Math.min(0.97, techResult.confidence);
+                    console.log(`[AutonomousTrader] ⚡ Signal: tech=${techResult.composite.toFixed(3)} iv=${ivResult.score.toFixed(2)} blend=${composite.toFixed(3)} | ${techResult.inAgreement}/8 signals agree`);
+                } else {
+                    console.log(`[AutonomousTrader] ⚡ Signal: tech=${techResult.composite.toFixed(3)} (no alt/iv data) | ${techResult.inAgreement}/8 signals agree`);
+                }
+            }
+
+            // Feed IV score into adaptive weight system so it learns alongside other signals
+            if (ivResult && typeof ivResult.score === 'number') {
+                signalLibrary._lastIVScore = ivResult.score; // stored for recordOutcome enrichment
             }
 
             const recommendation = composite >= 0.18 ? 'BUY' : composite <= -0.18 ? 'SELL' : 'HOLD';
@@ -870,6 +935,8 @@ class AutonomousTrader {
 
             // Log to SQLite (initial entry — fill price updated async below)
             try {
+                const abArm = abTestFramework.assignArm();
+                this._abTestArmAtEntry.set(this.symbol, abArm);
                 const tradeId = tradeLogger.logTradeEntry({
                     orderId: order.id,
                     symbol: this.symbol,
@@ -880,7 +947,8 @@ class AutonomousTrader {
                     expectedPrice: currentPrice,
                     slippagePct: null,
                     strategy: this.preset || 'autonomous',
-                    regime: this._lastSignal?.regime || null
+                    regime: this._lastSignal?.regime || null,
+                    signalScores: this._signalScoresAtEntry.get(this.symbol) || null
                 });
                 this._recordRuntimeLifecycle('trade_journaled', 'open', { tradeId, orderId: order.id, side, qty: sizing.qty });
             } catch (logErr) {
@@ -974,6 +1042,8 @@ class AutonomousTrader {
                 this._paperPortfolio.balance -= cost;
                 let tradeId = null;
                 try {
+                    const abArm = abTestFramework.assignArm();
+                    this._abTestArmAtEntry.set(this.symbol, abArm);
                     tradeId = tradeLogger.logTradeEntry({
                         orderId: mockOrder.id,
                         symbol: this.symbol,
@@ -984,7 +1054,8 @@ class AutonomousTrader {
                         expectedPrice: currentPrice,
                         slippagePct: fill.slippagePct,
                         strategy: this.preset || this._runtimeProfile?.activeStrategy?.strategyName || 'SOMA_LEARNED',
-                        regime: this._lastSignal?.regime || null
+                        regime: this._lastSignal?.regime || null,
+                        signalScores: this._signalScoresAtEntry.get(this.symbol) || null
                     });
                 } catch (logErr) {
                     console.warn('[AutonomousTrader] Paper SQLite entry failed:', logErr.message);
@@ -1012,6 +1083,14 @@ class AutonomousTrader {
                 this._paperPortfolio.balance += fillPrice * pos.qty - fill.fee;
                 this._stats.sessionPnL += pnl;
                 delete this._paperPortfolio.positions[this.symbol];
+
+                // A/B test outcome for paper_signal_close
+                const abEntryClose = this._abTestArmAtEntry.get(this.symbol);
+                if (abEntryClose) {
+                    abTestFramework.recordOutcome(abEntryClose.arm, pos.tradeId || this.symbol, pnlPct * 100);
+                    this._abTestArmAtEntry.delete(this.symbol);
+                }
+
                 try {
                     tradeLogger.logTradeExit(pos.tradeId || this.symbol, {
                         exitPrice: fillPrice,
@@ -1038,6 +1117,8 @@ class AutonomousTrader {
                 this._paperPortfolio.balance += fillPrice * filledQty - fill.fee;
                 let tradeId = null;
                 try {
+                    const abArm = abTestFramework.assignArm();
+                    this._abTestArmAtEntry.set(this.symbol, abArm);
                     tradeId = tradeLogger.logTradeEntry({
                         orderId: mockOrder.id,
                         symbol: this.symbol,
@@ -1048,7 +1129,8 @@ class AutonomousTrader {
                         expectedPrice: currentPrice,
                         slippagePct: fill.slippagePct,
                         strategy: this.preset || this._runtimeProfile?.activeStrategy?.strategyName || 'SOMA_LEARNED',
-                        regime: this._lastSignal?.regime || null
+                        regime: this._lastSignal?.regime || null,
+                        signalScores: this._signalScoresAtEntry.get(this.symbol) || null
                     });
                 } catch (logErr) {
                     console.warn('[AutonomousTrader] Paper SQLite entry failed:', logErr.message);
@@ -1204,6 +1286,17 @@ class AutonomousTrader {
                     this._signalScoresAtEntry.delete(position.symbol);
                 }
 
+                // UCB1 strategy outcome — teach mission control which profile performs best
+                const activeStrategyId = this._runtimeProfile?.activeStrategy?.strategyId || this.preset || 'standard_portfolio';
+                missionControlRuntime.recordStrategyOutcome(activeStrategyId, pnlPct, this._lastKnownRegime);
+
+                // A/B test outcome
+                const abEntry = this._abTestArmAtEntry.get(position.symbol);
+                if (abEntry) {
+                    abTestFramework.recordOutcome(abEntry.arm, pos.tradeId || position.symbol, pnlPct * 100);
+                    this._abTestArmAtEntry.delete(position.symbol);
+                }
+
                 this._paperPortfolio.balance += fillPrice * pos.qty;
                 this._stats.sessionPnL += pnl;
                 delete this._paperPortfolio.positions[position.symbol];
@@ -1256,6 +1349,17 @@ class AutonomousTrader {
             if (signalScores && position.unrealizedPnlPct != null) {
                 signalLibrary.recordOutcome(signalScores, position.unrealizedPnlPct / 100);
                 this._signalScoresAtEntry.delete(position.symbol);
+            }
+
+            // UCB1 strategy outcome
+            const activeStrategyId = this._runtimeProfile?.activeStrategy?.strategyId || this.preset || 'standard_portfolio';
+            missionControlRuntime.recordStrategyOutcome(activeStrategyId, (position.unrealizedPnlPct || 0) / 100, this._lastKnownRegime);
+
+            // A/B test outcome
+            const abEntry = this._abTestArmAtEntry.get(position.symbol);
+            if (abEntry) {
+                abTestFramework.recordOutcome(abEntry.arm, position.symbol, position.unrealizedPnlPct || 0);
+                this._abTestArmAtEntry.delete(position.symbol);
             }
 
             this._stats.sessionPnL += position.unrealizedPnl;
@@ -1493,6 +1597,7 @@ class AutonomousTrader {
     }
 }
 
-// Singleton
+// Singleton (kept for backward compat — autonomousRoutes uses the registry instead)
 const autonomousTrader = new AutonomousTrader();
+export { AutonomousTrader };
 export default autonomousTrader;

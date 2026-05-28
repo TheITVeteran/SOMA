@@ -4,6 +4,7 @@ import { Activity, Target, CheckCircle, Clock, Brain, Code, Shield, Sparkles, XC
 const typeConfig = {
   goal_active:        { icon: Target,      color: 'text-rose-400',    border: 'border-rose-500/20',  bg: 'bg-rose-500/5' },
   goal_completed:     { icon: CheckCircle,  color: 'text-emerald-400', border: 'border-emerald-500/20', bg: 'bg-emerald-500/5' },
+  goal_verification_failed: { icon: XCircle, color: 'text-red-400', border: 'border-red-500/20', bg: 'bg-red-500/5' },
   rhythm_executed:    { icon: Clock,        color: 'text-cyan-400',    border: 'border-cyan-500/20',  bg: 'bg-cyan-500/5' },
   curiosity_explored: { icon: Sparkles,     color: 'text-amber-400',   border: 'border-amber-500/20', bg: 'bg-amber-500/5' },
   learning_session:   { icon: Brain,        color: 'text-violet-400',  border: 'border-violet-500/20', bg: 'bg-violet-500/5' },
@@ -11,6 +12,13 @@ const typeConfig = {
   approval_requested: { icon: Shield,       color: 'text-orange-400',  border: 'border-orange-500/20', bg: 'bg-orange-500/5' },
 };
 const defaultConfig = { icon: Activity, color: 'text-zinc-400', border: 'border-white/5', bg: 'bg-white/[0.02]' };
+const evidenceTone = {
+  verified: 'border-emerald-500/20 text-emerald-300',
+  executed: 'border-cyan-500/20 text-cyan-300',
+  planned: 'border-zinc-700 text-zinc-500',
+  observed: 'border-violet-500/20 text-violet-300',
+  failed: 'border-red-500/20 text-red-300'
+};
 
 function timeAgo(ts) {
   if (!ts) return '';
@@ -77,6 +85,11 @@ const AutonomousActivityFeed = ({ isConnected }) => {
                     <div className="flex items-center gap-2 mt-0.5">
                       <span className={`text-[9px] ${cfg.color} uppercase tracking-widest`}>{ev.agent}</span>
                       {ev.status === 'failed' && <XCircle className="w-2.5 h-2.5 text-red-500" />}
+                      {ev.evidenceStatus && (
+                        <span className={`rounded border px-1 py-0.5 text-[8px] uppercase tracking-widest ${evidenceTone[ev.evidenceStatus] || evidenceTone.planned}`}>
+                          {ev.evidenceStatus}
+                        </span>
+                      )}
                     </div>
                     {isExpanded && ev.detail && (
                       <div className="mt-1.5 text-[10px] text-zinc-400 leading-relaxed border-t border-white/5 pt-1.5">

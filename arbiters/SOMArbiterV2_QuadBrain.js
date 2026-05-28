@@ -84,14 +84,17 @@ export class SOMArbiterV2_QuadBrain extends BaseArbiterV4 {
     this.ollamaEndpoint = process.env.OLLAMA_ENDPOINT || 'http://localhost:11434';
     this.ollamaModel = process.env.OLLAMA_MODEL || 'llama3.2:1b'; // Default: ultra-fast heartbeat
 
-    // Per-lobe specialist models: Each brain has a small LLM attached.
-    // Small models (1b-8b) handle internal reasoning, safety, and proactive thoughts.
+    // Per-lobe specialist models: trained soma-{lobe} models take priority.
+    // Falls back to generic Ollama models if the trained specialist isn't registered yet.
     this.lobeModels = {
-      LOGOS:      process.env.OLLAMA_MODEL_LOGOS      || 'gemma2:9b',    // Logic/Code specialist
-      AURORA:     process.env.OLLAMA_MODEL_AURORA     || 'phi3.5:latest', // Creative/Synthesis
-      PROMETHEUS: process.env.OLLAMA_MODEL_PROMETHEUS || 'llama3.2:3b',  // Strategy/Planning
-      THALAMUS:   process.env.OLLAMA_MODEL_THALAMUS   || 'llama3.2:1b',  // Security/Sensory gate
+      LOGOS:      process.env.OLLAMA_MODEL_LOGOS      || 'soma-logos-q4',
+      AURORA:     process.env.OLLAMA_MODEL_AURORA     || 'soma-aurora',
+      PROMETHEUS: process.env.OLLAMA_MODEL_PROMETHEUS || 'soma-prometheus',
+      THALAMUS:   process.env.OLLAMA_MODEL_THALAMUS   || 'soma-thalamus-q4',
     };
+
+    // Cache of available Ollama models — refreshes every 30s to avoid hammering /api/tags
+    this._ollamaModelCache = { models: null, ts: 0 };
 
     // Provider health & performance tracking
     this.providerStats = {
@@ -276,15 +279,75 @@ export class SOMArbiterV2_QuadBrain extends BaseArbiterV4 {
     return active.slice(0, 3);
   }
 
+  /** Fetch and cache the list of model names registered in Ollama */
+  async _getAvailableOllamaModels() {
+    const now = Date.now();
+    if (this._ollamaModelCache.models && (now - this._ollamaModelCache.ts) < 30000) {
+      return this._ollamaModelCache.models;
+    }
+    try {
+      const res = await fetch(`${this.ollamaEndpoint}/api/tags`, { signal: AbortSignal.timeout(2000) });
+      if (!res.ok) return this._ollamaModelCache.models || [];
+      const data = await res.json();
+      const models = (data.models || []).map(m => m.name);
+      this._ollamaModelCache = { models, ts: now };
+      return models;
+    } catch {
+      return this._ollamaModelCache.models || [];
+    }
+  }
+
+  /**
+   * Query a trained specialist lobe model locally via Ollama.
+   * Returns the specialist's domain perspective, or null if the model isn't available.
+   * Silent fallback — if the model isn't trained yet, the query continues normally.
+   */
+  async _queryLobeSpecialist(lobeName, query) {
+    const lobeModel = this.lobeModels[lobeName];
+    if (!lobeModel) return null;
+
+    // Only proceed if the trained model is actually registered in Ollama
+    const available = await this._getAvailableOllamaModels();
+    if (!available.some(m => m === lobeModel || m.startsWith(lobeModel + ':'))) return null;
+
+    try {
+      const result = await Promise.race([
+        this._callOllama(query, lobeModel, 0.3, 400, null, []),
+        new Promise((_, rej) => setTimeout(() => rej(new Error('specialist timeout')), 7000))
+      ]);
+      const text = result.text?.trim();
+      if (text) {
+        this.auditLogger.info(`[${this.name}] Specialist ${lobeModel} enriched query (${text.length} chars)`);
+      }
+      return text || null;
+    } catch (e) {
+      this.auditLogger.warn(`[${this.name}] Specialist ${lobeModel} skipped: ${e.message}`);
+      return null;
+    }
+  }
+
   /** Run a single lobe against the query — returns its perspective */
   async _runLobe(lobeName, query, context) {
     const lobe = SOMArbiterV2_QuadBrain.LOBE_DOMAINS[lobeName];
     if (!lobe) return { lobe: lobeName, name: lobeName, output: '', failed: true };
 
-    const lobePrompt = query;
+    // Query the trained specialist lobe locally first (non-blocking, silent if unavailable)
+    const specialistText = await this._queryLobeSpecialist(lobeName, query);
+
+    // Inject specialist context into the prompt so DeepSeek reasons over it
+    const enrichedQuery = specialistText
+      ? `[${lobeName} SPECIALIST CONTEXT — use for domain accuracy]\n${specialistText}\n\n[USER QUERY]\n${query}`
+      : query;
+
     try {
-      const result = await this._callProviderCascade(lobePrompt, { ...context, activeLobe: lobeName, systemPrompt: lobe.persona });
-      return { lobe: lobeName, name: lobe.name, output: result.text || '', provider: result.provider };
+      const result = await this._callProviderCascade(enrichedQuery, { ...context, activeLobe: lobeName, systemPrompt: lobe.persona });
+      return {
+        lobe: lobeName,
+        name: lobe.name,
+        output: result.text || '',
+        provider: result.provider,
+        specialistUsed: !!specialistText
+      };
     } catch (e) {
       this.auditLogger.warn(`[${this.name}] Lobe ${lobeName} failed: ${e.message}`);
       return { lobe: lobeName, name: lobe.name, output: '', provider: 'none', failed: true };

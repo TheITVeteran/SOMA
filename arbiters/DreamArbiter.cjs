@@ -73,6 +73,7 @@ class DreamArbiter extends BaseArbiter {
 
     // Memory bridge — pass system.mnemonicArbiter here
     this.transmitter = opts.transmitter || null;
+    this.knowledgeGraph = opts.knowledgeGraph || null;
 
     this.config = {
       ...this.config,
@@ -245,7 +246,20 @@ class DreamArbiter extends BaseArbiter {
       .map(f => f.meta.replay_summary || f.text.slice(0, 200))
       .join('\n- ');
 
-    const prompt = `Extract 3-5 key insights from these recent interactions:\n- ${summaries}\n\nFocus on: knowledge gaps, recurring user needs, patterns in what worked or failed. One insight per line.`;
+    // Directed Dreaming: Inject Graph Contradictions
+    let contradictionsPrompt = "";
+    if (this.knowledgeGraph && typeof this.knowledgeGraph.detectContradictions === 'function') {
+        try {
+            await this.knowledgeGraph.detectContradictions();
+            const contradictions = this.knowledgeGraph.contradictions;
+            if (contradictions && contradictions.size > 0) {
+                const sample = Array.from(contradictions.entries()).slice(0, 3);
+                contradictionsPrompt = `\n\nCRITICAL CONTRADICTIONS DETECTED:\n${sample.map(([c, list]) => `- Concept "${c}" has conflicting relationships.`).join('\n')}\n\nResolve these conflicts in your insights.`;
+            }
+        } catch (e) {}
+    }
+
+    const prompt = `Extract 3-5 key insights from these recent interactions:\n- ${summaries}${contradictionsPrompt}\n\nFocus on: knowledge gaps, recurring user needs, patterns in what worked or failed. One insight per line.`;
     try {
       const distilled = await this._callBrain(prompt);
       if (distilled && fragments[0]) {

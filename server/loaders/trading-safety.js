@@ -16,6 +16,10 @@ import alpacaService from '../../server/finance/AlpacaService.js';
 import tradeLogger from '../../server/finance/TradeLogger.js';
 import simulationLearningEngine from '../../server/finance/SimulationLearningEngine.js';
 import missionControlRuntime from '../../server/finance/MissionControlRuntime.js';
+import retrainingPipeline from '../../server/finance/RetrainingPipeline.js';
+import driftDetector from '../../server/finance/DriftDetector.js';
+import abTestFramework from '../../server/finance/ABTestFramework.js';
+import marketRegimeDetector from '../../server/finance/MarketRegimeDetector.js';
 
 export async function loadTradingSafety(system) {
     console.log('\n[Loader] Trading Safety Systems...');
@@ -87,6 +91,18 @@ export async function loadTradingSafety(system) {
         // Start the simulation learning engine (learns from paper trades)
         simulationLearningEngine.start();
 
+        // Start the retraining pipeline (triggers full learning stack every 100 closed trades)
+        retrainingPipeline.start();
+
+        // Start the drift detector (15min Sharpe watchdog — cuts positions if strategy degrades)
+        driftDetector.start();
+
+        // Start the market regime detector (tracks 5 regimes per symbol for regime-conditioned UCB1)
+        const REGIME_WATCHLIST = ['SPY', 'QQQ', 'AAPL', 'BTC/USD', 'ETH/USD'];
+        marketRegimeDetector.start(REGIME_WATCHLIST);
+
+        // A/B framework initializes on import (no separate start needed)
+
         // Expose on global for financeRoutes to use the shared instances
         global.SOMA_TRADING = {
             riskManager,
@@ -95,7 +111,11 @@ export async function loadTradingSafety(system) {
             tradeLogger,
             alpacaService,
             simulationLearningEngine,
-            missionControlRuntime
+            missionControlRuntime,
+            retrainingPipeline,
+            driftDetector,
+            abTestFramework,
+            regimeDetector: marketRegimeDetector,
         };
 
         console.log('      Risk Manager initialized (Kelly Criterion, 8 risk checks)');
@@ -104,6 +124,10 @@ export async function loadTradingSafety(system) {
         console.log('      Mission Control Runtime active (market lab learning, paper/live gates, audit journal)');
         console.log('      Position Guardian running (5s polling, stop/TP enforcement)');
         console.log('      Simulation Learning Engine active (5min cycle, adaptive parameters)');
+        console.log('      Retraining Pipeline active (every 100 trades: learn → evaluate promotion)');
+        console.log('      Drift Detector active (15min Sharpe watchdog, defensive mode on 20% drop)');
+        console.log('      A/B Test Framework active (parallel parameter testing, z-test promotion)');
+        console.log('      Market Regime Detector active (TRENDING/RANGING/VOLATILE/CRASH — 5 regimes per symbol)');
 
         return {
             riskManager,

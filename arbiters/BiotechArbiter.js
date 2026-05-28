@@ -12,6 +12,9 @@ import fs from 'fs';
 import path from 'path';
 import { OdinOrchestrator } from '../core/OdinOrchestrator.js';
 import { BioPhysicsSimulator, TargetLibrary } from '../core/BioPhysicsSimulator.js';
+import MedicalManuscriptStandardizer from '../server/research/MedicalManuscriptStandardizer.js';
+import MedicalTrainingDistiller from '../server/research/MedicalTrainingDistiller.js';
+import MedicalDiscoveryScoreboard from '../server/research/MedicalDiscoveryScoreboard.js';
 
 const RESEARCH_STYLE_PROMPT = `You are SOMA, a Senior Computational Biologist. Tone: technical, precise, declarative.`;
 
@@ -152,6 +155,9 @@ export class BiotechArbiter extends EventEmitter {
         this._learningPath = path.join(process.cwd(), 'data', 'medical-lab', 'learning-memory.json');
         this._learningAuditPath = path.join(process.cwd(), 'data', 'medical-lab', 'learning-events.jsonl');
         this._learningMemory = this._loadLearningMemory();
+        this.manuscriptStandardizer = new MedicalManuscriptStandardizer();
+        this.trainingDistiller = new MedicalTrainingDistiller();
+        this.discoveryScoreboard = new MedicalDiscoveryScoreboard();
 
         this._startResearchPulse();
     }
@@ -682,6 +688,25 @@ Respond with ONLY the new molecular string or name.`;
             fs.mkdirSync(path.dirname(this._learningAuditPath), { recursive: true });
             fs.appendFileSync(this._learningAuditPath, `${JSON.stringify({ ...event, key, recordedAt: now })}\n`, 'utf8');
         } catch {}
+
+        try {
+            const scorecard = this.discoveryScoreboard.record(event);
+            this.trainingDistiller.recordLesson({
+                title: `${event.target || 'Medical'} ${event.strand || ''}`.trim(),
+                outcome: event.outcome,
+                phase: event.phase,
+                evidenceGrade: event.evidenceGrade,
+                reason: event.reason,
+                lesson: [
+                    event.lesson || event.reason || 'Preserve cautious medical learning.',
+                    `Discovery scoreboard recommendation: ${scorecard.recommendation}.`,
+                    `Utility score: ${scorecard.utilityScore}.`
+                ].join('\n'),
+                weight: event.outcome === 'positive' ? 0.86 : event.outcome === 'negative' ? 0.78 : 0.72
+            });
+        } catch (error) {
+            console.warn(`🧬 [${this.name}] Medical training distillation skipped: ${error.message}`);
+        }
     }
 
     _learningAdjustment(target, strand) {
@@ -704,7 +729,8 @@ Respond with ONLY the new molecular string or name.`;
             topSignals: hypotheses
                 .filter(item => (item.scoreAdjustment || 0) > 0)
                 .sort((a, b) => (b.scoreAdjustment || 0) - (a.scoreAdjustment || 0))
-                .slice(0, 5)
+                .slice(0, 5),
+            discoveryScoreboard: this.discoveryScoreboard.summary()
         };
     }
 
@@ -855,6 +881,37 @@ Respond with ONLY the new molecular string or name.`;
         ].join('\n');
     }
 
+    _standardizeMedicalManuscript({ type, title, rawText, mission, sourceLedger, evidenceGrade, patientFrame, replicationPlan, safetyReport, results }) {
+        return this.manuscriptStandardizer.standardize({
+            type,
+            title,
+            rawText,
+            mission,
+            category: mission?.category,
+            researchQuestion: mission?.researchQuestion,
+            background: patientFrame?.problemFraming,
+            results,
+            sourceLedger,
+            evidenceGrade,
+            replicationPlan,
+            safetyReport,
+            phaseResults: {
+                discoveryMode: this._phaseResults.discoveryMode,
+                attempts: this._phaseResults.attempts,
+                maxAttempts: this._phaseResults.maxAttempts,
+                physics: this._phaseResults.physics,
+                integrity: this._phaseResults.integrity
+            },
+            limitations: [
+                'This is an automated dry-lab manuscript draft.',
+                'Source ingestion may be metadata-only or snippet-only.',
+                'Feature-based docking is not a biological assay.',
+                'No wet-lab, animal, clinical, or independent expert validation was performed.',
+                'All claims remain research-only until independently replicated.'
+            ]
+        });
+    }
+
     _negativeHistoryPenalty(target, strand) {
         const recent = Array.from(this.experiments.values()).slice(-40);
         const failures = recent.filter(exp =>
@@ -978,6 +1035,18 @@ Safety boundary: no diagnosis, treatment, dosing, synthesis, or real-world exper
         const patientFrame = this._patientBenefitFrame(mission.target || 'Unknown', mission.strand || 'WildType', mission.category || 'Research');
         const replicationPlan = this._replicationPlan(mission.target || 'Unknown', mission.strand || 'WildType');
         const sourceLedger = this._phaseResults.sourceLedger || this._buildSourceLedger('N/A', [], this._phaseResults.discoveryMode);
+        const standardized = this._standardizeMedicalManuscript({
+            type: 'in_silico_preclinical',
+            title,
+            rawText: sanitizedManuscript,
+            mission,
+            sourceLedger,
+            evidenceGrade,
+            patientFrame,
+            replicationPlan,
+            safetyReport,
+            results: sanitizedManuscript
+        });
         const metadata = this._metadataSections({
             target: mission.target || 'Unknown',
             strand: mission.strand || 'WildType',
@@ -1000,13 +1069,15 @@ Safety boundary: no diagnosis, treatment, dosing, synthesis, or real-world exper
             `- Docking affinity: ${this._phaseResults.physics?.affinity ?? 'N/A'} ${this._phaseResults.physics?.unit || ''}`.trim(),
             `- Confidence: ${this._phaseResults.physics?.confidence ?? 'N/A'}`,
             `- Evidence grade: ${evidenceGrade.overall}`,
+            `- Manuscript standard: ${standardized.guideline.name}`,
+            `- Manuscript readiness: ${standardized.quality.status} (${standardized.quality.score})`,
             `- Created: ${now}`,
             '',
             metadata,
             '',
-            '## Dossier',
+            '## Manuscript Draft',
             '',
-            sanitizedManuscript
+            standardized.manuscript
         ].join('\n');
 
         const desktopPath = path.join(os.homedir(), 'Desktop', 'SOMA_RESEARCH');
@@ -1030,7 +1101,10 @@ Safety boundary: no diagnosis, treatment, dosing, synthesis, or real-world exper
             `createdAt: ${now}`,
             `target: ${JSON.stringify(mission.target || 'Unknown')}`,
             `strand: ${JSON.stringify(mission.strand || 'WildType')}`,
-            'tags: [reflections, folio, medlab, research-dossier]',
+            `manuscriptStandard: ${JSON.stringify(standardized.guideline.name)}`,
+            `manuscriptReadiness: ${JSON.stringify(standardized.quality.status)}`,
+            `manuscriptScore: ${standardized.quality.score}`,
+            'tags: [reflections, folio, medlab, research-dossier, medical-manuscript]',
             '---',
             '',
         ].join('\n');
@@ -1038,7 +1112,7 @@ Safety boundary: no diagnosis, treatment, dosing, synthesis, or real-world exper
 
         console.log(`🧬 [${this.name}] 📄 DOSSIER PUBLISHED: ${filePath}`);
         console.log(`🧬 [${this.name}] 🏛️ DOSSIER ADDED TO REFLECTIONS: ${reflectionPath}`);
-        return { researchPath: filePath, reflectionPath, reflectionFilename, safetyReport, evidenceGrade, sourceLedger };
+        return { researchPath: filePath, reflectionPath, reflectionFilename, safetyReport, evidenceGrade, sourceLedger, manuscript: standardized };
     }
 
     async _publishNegativeResultMemo({ target, strand, category, attempts, maxAttempts, physicsResult, moleculeProbe, sourceLedger }) {
@@ -1072,6 +1146,24 @@ Safety boundary: no diagnosis, treatment, dosing, synthesis, or real-world exper
             replicationPlan,
             safetyReport
         });
+        const standardized = this._standardizeMedicalManuscript({
+            type: 'negative_result',
+            title,
+            rawText: [
+                `SOMA stopped this MedLab cycle because the physics screen did not meet the local binding threshold after ${attempts}/${maxAttempts} testing rounds.`,
+                `Molecule probe: ${moleculeProbe}`,
+                `Final affinity: ${physicsResult.affinity} ${physicsResult.unit}`,
+                `Confidence: ${physicsResult.confidence}`,
+                `Reason: ${physicsResult.reasoning}`
+            ].join('\n'),
+            mission: { target, strand, category, researchQuestion: `Did ${target}/${strand} produce a reproducible dry-lab binding signal?` },
+            sourceLedger: sourceLedger || this._buildSourceLedger('N/A', [], 'local_in_silico_prior'),
+            evidenceGrade,
+            patientFrame,
+            replicationPlan,
+            safetyReport,
+            results: `Negative dry-lab result after ${attempts}/${maxAttempts} attempts.`
+        });
         const body = [
             `# ${title}`,
             '',
@@ -1092,6 +1184,10 @@ Safety boundary: no diagnosis, treatment, dosing, synthesis, or real-world exper
             '## Lesson',
             '',
             'This is useful because it prevents the lab from repeatedly chasing the same weak setup without stronger evidence or a changed modeling assumption.',
+            '',
+            '## Manuscript-Ready Negative Result',
+            '',
+            standardized.manuscript,
             ''
         ].join('\n');
 
@@ -1110,13 +1206,16 @@ Safety boundary: no diagnosis, treatment, dosing, synthesis, or real-world exper
             `createdAt: ${now}`,
             `target: ${JSON.stringify(target || 'Unknown')}`,
             `strand: ${JSON.stringify(strand || 'WildType')}`,
-            'tags: [reflections, folio, medlab, negative-result]',
+            `manuscriptStandard: ${JSON.stringify(standardized.guideline.name)}`,
+            `manuscriptReadiness: ${JSON.stringify(standardized.quality.status)}`,
+            `manuscriptScore: ${standardized.quality.score}`,
+            'tags: [reflections, folio, medlab, negative-result, medical-manuscript]',
             '---',
             '',
         ].join('\n');
         await fs.writeFile(reflectionPath, `${frontmatter}${body}`, 'utf8');
         console.log(`🧬 [${this.name}] 🧾 NEGATIVE RESULT ADDED TO REFLECTIONS: ${reflectionPath}`);
-        return { reflectionPath, reflectionFilename, evidenceGrade, safetyReport };
+        return { reflectionPath, reflectionFilename, evidenceGrade, safetyReport, manuscript: standardized };
     }
 
     /** Manual trigger — called by POST /api/soma/biotech/run */

@@ -1661,7 +1661,7 @@ export default function ForecasterApp() {
     const [prediction, setPrediction] = useState(null);
     const [isAnalyzing, setIsAnalyzing] = useState(false);
     const [oddsTrend, setOddsTrend] = useState({});
-    const [useLiveData, setUseLiveData] = useState(false);
+    const [gameSource, setGameSource] = useState({ source: 'loading', detail: 'Checking current schedule source.' });
     
     // Query interface states
     const [query, setQuery] = useState('');
@@ -1707,12 +1707,14 @@ export default function ForecasterApp() {
     useEffect(() => {
         const loadGames = async () => {
             try {
-                const liveGames = await fetchLiveGames();
-                if (liveGames && liveGames.length > 0) {
-                    setGames(liveGames);
+                const result = await fetchLiveGames();
+                if (result?.games?.length > 0) {
+                    setGames(result.games);
+                    setGameSource({ source: result.source, detail: result.detail });
                 }
             } catch (err) {
                 console.error("[Forecaster] Failed to load live games:", err);
+                setGameSource({ source: 'error', detail: 'Game source unavailable.' });
             }
         };
 
@@ -1990,11 +1992,12 @@ export default function ForecasterApp() {
                         </div>
 
                         {/* Data Source Strip for Forecasts */}
-                        <div className="mt-4 flex justify-center items-center gap-2 opacity-60">
-                            <Database size={10} className="text-slate-400" />
-                            <span className="text-[9px] uppercase tracking-widest text-slate-500">
-                                {isScheduled ? "Intel Aggregated: FanDuel • DraftKings • BetMGM • Historic DB (3y)" : "Sources: Live Play-by-Play • Optical Tracking • Market API"}
+                        <div className="mt-4 flex justify-center items-center gap-2 opacity-80">
+                            <Database size={10} className={gameSource.source === 'espn' ? 'text-emerald-400' : 'text-amber-400'} />
+                            <span className={`text-[9px] uppercase tracking-widest ${gameSource.source === 'espn' ? 'text-emerald-400' : 'text-amber-400'}`}>
+                                {gameSource.source === 'espn' ? 'Schedule source: ESPN proxy' : 'Sample data - simulation only'}
                             </span>
+                            <span className="text-[9px] text-slate-500 normal-case" title={gameSource.detail}>{gameSource.detail}</span>
                         </div>
                     </div>
 

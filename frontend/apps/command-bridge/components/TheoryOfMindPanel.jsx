@@ -3,6 +3,7 @@ import { User, MessageSquare } from 'lucide-react';
 
 const TheoryOfMindPanel = ({ isConnected }) => {
   const [mindData, setMindData] = useState(null);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
     if (!isConnected) return;
@@ -13,14 +14,21 @@ const TheoryOfMindPanel = ({ isConnected }) => {
         if (res.ok) {
           const data = await res.json();
           setMindData(data.insights);
+          setError(null);
+        } else {
+          setError(`HTTP ${res.status}`);
         }
-      } catch (e) {}
+      } catch (e) {
+        setError(e.message);
+      }
     };
 
     fetchToM();
     const interval = setInterval(fetchToM, 10000);
     return () => clearInterval(interval);
   }, [isConnected]);
+
+  const intentConfidence = Number(mindData?.intent?.confidence);
 
   return (
     <div className="bg-[#151518]/60 backdrop-blur-md border border-white/5 rounded-xl p-5 shadow-lg h-[300px]">
@@ -29,10 +37,11 @@ const TheoryOfMindPanel = ({ isConnected }) => {
       </h3>
 
       <div className="space-y-4">
+        {error && <div className="rounded border border-red-500/20 bg-red-500/5 px-3 py-2 text-xs text-red-400">User model unavailable: {error}</div>}
         <div>
             <div className="flex justify-between text-xs text-zinc-400 mb-1">
                 <span>Predicted Intent</span>
-                <span className="text-sky-400 font-mono">{(mindData?.intent?.confidence * 100)?.toFixed(0)}%</span>
+                <span className="text-sky-400 font-mono">{Number.isFinite(intentConfidence) ? `${(intentConfidence * 100).toFixed(0)}%` : '--'}</span>
             </div>
             <div className="p-2 bg-[#09090b]/40 rounded border border-white/5 text-sm text-zinc-200">
                 {mindData?.intent?.current || "Awaiting interaction..."}

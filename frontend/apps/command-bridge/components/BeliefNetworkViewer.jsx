@@ -61,7 +61,7 @@ const BeliefNetworkViewer = ({ isConnected }) => {
         {beliefs.map(b => (
           <div key={b.id} className="bg-[#09090b]/40 border border-white/5 p-2 rounded text-xs text-zinc-400 flex justify-between group hover:border-cyan-500/20 transition-colors">
             <span className="truncate max-w-[200px]">{b.statement}</span>
-            <span className="text-cyan-500 font-mono">{(b.confidence * 100).toFixed(0)}%</span>
+            <span className="text-cyan-500 font-mono">{Number.isFinite(b.confidence) ? `${(b.confidence * 100).toFixed(0)}%` : '--'}</span>
           </div>
         ))}
       </div>

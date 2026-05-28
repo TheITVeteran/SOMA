@@ -39,7 +39,7 @@ export class ComputerControlArbiter extends BaseArbiter {
 
     // Safety Configuration
     this.safetyEnabled = config.safetyEnabled !== false;
-    this.safetyThreshold = 50;
+    this.safetyThreshold = config.safetyThreshold || 30; // Closer threshold for precise co-presence
 
     // Automation State
     this.browser = null;
@@ -47,6 +47,12 @@ export class ComputerControlArbiter extends BaseArbiter {
     this.dryRun = config.dryRun || false;
 
     this.screenSize = { width: 1920, height: 1080 };
+
+    // Real-Time Co-Presence State
+    this.lastSomaMousePosition = null;
+    this.currentPhysicalMousePosition = null;
+    this.mouseListenerProcess = null;
+    this.lastActionTime = 0;
   }
 
   async initialize() {
@@ -59,6 +65,9 @@ export class ComputerControlArbiter extends BaseArbiter {
 
       console.log(`[${this.name}] ✅ Computer Control Ready (PowerShell Mode)`);
 
+      // Start persistent background mouse listener process
+      this.startMouseListener();
+
       // Try to get screen size via PowerShell
       try {
         // This command gets PrimaryScreen resolution
@@ -68,6 +77,45 @@ export class ComputerControlArbiter extends BaseArbiter {
 
     } catch (err) {
       console.error(`[${this.name}] Failed to initialize: ${err.message}`);
+    }
+  }
+
+  startMouseListener() {
+    if (this.dryRun) return;
+    try {
+      const psCommand = 'Add-Type -AssemblyName System.Windows.Forms; $lastX = 0; $lastY = 0; while ($true) { $pos = [System.Windows.Forms.Cursor]::Position; if ($pos.X -ne $lastX -or $pos.Y -ne $lastY) { $lastX = $pos.X; $lastY = $pos.Y; Write-Output "$lastX,$lastY" }; Start-Sleep -Milliseconds 50 }';
+      
+      const { spawn } = require('child_process');
+      this.mouseListenerProcess = spawn('powershell', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-Command', psCommand], {
+        stdio: 'pipe',
+        windowsHide: true
+      });
+
+      this.mouseListenerProcess.stdout.on('data', (data) => {
+        const lines = data.toString().trim().split('\n');
+        const lastLine = lines[lines.length - 1]?.trim();
+        if (!lastLine) return;
+        
+        const parts = lastLine.split(',');
+        if (parts.length === 2) {
+          const x = parseInt(parts[0]);
+          const y = parseInt(parts[1]);
+          if (!isNaN(x) && !isNaN(y)) {
+            this.currentPhysicalMousePosition = { x, y };
+            if (!this.lastSomaMousePosition) {
+              this.lastSomaMousePosition = { x, y };
+            }
+          }
+        }
+      });
+
+      this.mouseListenerProcess.on('error', (e) => {
+        console.error(`[${this.name}] Mouse listener process error:`, e.message);
+      });
+
+      console.log(`[${this.name}] 🖱️  Persistent mouse listener thread started.`);
+    } catch (err) {
+      console.error(`[${this.name}] Failed to start mouse listener: ${err.message}`);
     }
   }
 
@@ -87,10 +135,6 @@ export class ComputerControlArbiter extends BaseArbiter {
   async handleMessage(message = {}) {
     try {
       const { type, payload } = message;
-
-      if (this.safetyEnabled && await this.checkUserInterference()) {
-        return { success: false, error: 'User interference detected (Safety Stop triggered)' };
-      }
 
       switch (type) {
         case 'computer_action':
@@ -151,6 +195,10 @@ export class ComputerControlArbiter extends BaseArbiter {
   // ========================================================
 
   async executeAction(action) {
+    if (this.safetyEnabled && await this.checkUserInterference()) {
+      return { success: false, error: 'User interference detected (Safety Stop triggered)' };
+    }
+
     if (this.dryRun) {
       console.log(`[DRY RUN] Would execute: ${JSON.stringify(action)}`);
       return { success: true, dryRun: true };
@@ -165,7 +213,10 @@ export class ComputerControlArbiter extends BaseArbiter {
         case 'mouse_move':
           // Move cursor using System.Windows.Forms
           if (action.x !== undefined && action.y !== undefined) {
-            psScript = `Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.Cursor]::Position = New-Object System.Drawing.Point(${parseInt(action.x)}, ${parseInt(action.y)})`;
+            const x = parseInt(action.x);
+            const y = parseInt(action.y);
+            this.lastSomaMousePosition = { x, y };
+            psScript = `Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.Cursor]::Position = New-Object System.Drawing.Point(${x}, ${y})`;
           }
           break;
 
@@ -173,6 +224,7 @@ export class ComputerControlArbiter extends BaseArbiter {
           // Left click using user32.dll mouse_event
           const x = action.x !== undefined ? parseInt(action.x) : 0;
           const y = action.y !== undefined ? parseInt(action.y) : 0;
+          this.lastSomaMousePosition = { x, y };
           psScript = `Add-Type -AssemblyName System.Windows.Forms; $sig = '[DllImport(\"user32.dll\")] public static extern void mouse_event(uint dwFlags, uint dx, uint dy, uint dwData, int dwExtraInfo);'; $mouse = Add-Type -MemberDefinition $sig -Name Win32Mouse -Namespace Win32Utils -PassThru; [System.Windows.Forms.Cursor]::Position = New-Object System.Drawing.Point(${x}, ${y}); $mouse::mouse_event(0x02, 0, 0, 0, 0); $mouse::mouse_event(0x04, 0, 0, 0, 0);`;
           break;
 
@@ -211,6 +263,10 @@ export class ComputerControlArbiter extends BaseArbiter {
   // ========================================================
 
   async handleBrowserAction(payload) {
+    if (this.safetyEnabled && await this.checkUserInterference()) {
+      return { success: false, error: 'User interference detected (Safety Stop triggered)' };
+    }
+
     const { action, url, selector, text, timeoutMs, screenshotPath, allowUnsafe } = payload;
 
     if (!this.browser && action !== 'launch') {
@@ -313,9 +369,42 @@ export class ComputerControlArbiter extends BaseArbiter {
   }
 
   async checkUserInterference() {
-    // PowerShell fallback for mouse position check is too slow for real-time safety loop 
-    // disabled for now in generic mode
+    if (!this.safetyEnabled) return false;
+    
+    // Reset target reference if idle for >5s to allow fresh user actions
+    const timeSinceLastAction = Date.now() - (this.lastActionTime || 0);
+    if (timeSinceLastAction > 5000) {
+      this.lastSomaMousePosition = this.currentPhysicalMousePosition || this.lastSomaMousePosition;
+    }
+    this.lastActionTime = Date.now();
+
+    if (!this.currentPhysicalMousePosition || !this.lastSomaMousePosition) {
+      return false;
+    }
+
+    const dx = Math.abs(this.currentPhysicalMousePosition.x - this.lastSomaMousePosition.x);
+    const dy = Math.abs(this.currentPhysicalMousePosition.y - this.lastSomaMousePosition.y);
+
+    const threshold = this.safetyThreshold || 30;
+    if (dx > threshold || dy > threshold) {
+      console.warn(`[${this.name}] ⚠️ User interference detected. Mouse moved by (${dx}px, ${dy}px) from SOMA target.`);
+      return true;
+    }
+
     return false;
+  }
+
+  async onShutdown() {
+    if (this.mouseListenerProcess) {
+      try {
+        console.log(`[${this.name}] 🛑 Killing persistent mouse listener process...`);
+        this.mouseListenerProcess.kill('SIGTERM');
+        // Taskkill on Windows to ensure process tree cleanup
+        const { exec } = require('child_process');
+        exec(`taskkill /F /T /PID ${this.mouseListenerProcess.pid}`, () => {});
+      } catch (e) {}
+    }
+    await super.onShutdown();
   }
 }
 

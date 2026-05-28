@@ -290,6 +290,9 @@ class SomaBackend {
       case 'ui_navigate':
         this.emit('ui_navigate', payload);
         break;
+      case 'aperture_action':
+        this.emit('aperture_action', payload);
+        break;
       // ── AXIS real-time chat events ─────────────────────────────────────────
       case 'axis.message':
       case 'axis.message_edited':

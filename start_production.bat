@@ -3,6 +3,15 @@ echo ===========================================================================
 echo   SOMA ULTRA - PRODUCTION STARTUP
 echo ===============================================================================
 echo.
+echo   [0] Igniting Hot Tier Infrastructure (WSL2 Redis)...
+wsl -u root service redis-server start >nul 2>&1
+if %errorlevel% equ 0 (
+    echo       ✓ Redis Engine active.
+) else (
+    echo       ⚠ Redis failed to start via WSL. (Hot Tier may be disabled)
+)
+echo.
+
 echo   [1] Setting Environment to PRODUCTION...
 set NODE_ENV=production
 set SOMA_MODE=standalone

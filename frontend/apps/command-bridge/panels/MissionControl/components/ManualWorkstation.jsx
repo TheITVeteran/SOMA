@@ -128,20 +128,6 @@ export const ManualWorkstation = ({
         }
     }, [tickerData?.price]);
 
-    // Depth of Market — centered on current price with realistic spread
-    const basePrice = tickerData?.price || 0;
-    const spread = basePrice > 1000 ? 0.50 : basePrice > 100 ? 0.10 : 0.01;
-    const depthOfMarket = Array.from({ length: 14 }, (_, i) => {
-        const offset = i - 7;
-        const lvlPrice = basePrice + offset * spread;
-        return {
-            price: lvlPrice,
-            size: Math.floor(200 + Math.abs(offset) * 300 + Math.random() * 500),
-            total: Math.floor(1000 + Math.abs(offset) * 2000 + Math.random() * 3000),
-            side: i < 7 ? 'ASK' : 'BID'
-        };
-    }).sort((a, b) => b.price - a.price);
-
     // --- HANDLERS ---
     const handleHover = (isHovering, actionSide) => {
         if (isHovering) {
@@ -195,7 +181,7 @@ export const ManualWorkstation = ({
             <div className="w-[300px] flex flex-col border-r border-zinc-800 bg-[#0e0e10]">
                 <div className="p-2 border-b border-zinc-800 bg-[#151518] font-bold text-zinc-400 uppercase tracking-wider flex justify-between items-center">
                     <span className="flex items-center gap-2"><Activity className="w-3 h-3 text-emerald-500 animate-pulse" /> Live Intel</span>
-                    <span className="text-[9px] bg-zinc-800 px-1 rounded text-zinc-500">REALTIME</span>
+                    <span className="text-[9px] bg-zinc-800 px-1 rounded text-zinc-500">{dataSource === 'SIMULATION' ? 'SIMULATION' : 'PROVIDER'}</span>
                 </div>
                 <div className="flex-1 overflow-y-auto custom-scrollbar">
                     {intelItems.map((item, idx) => (
@@ -214,12 +200,12 @@ export const ManualWorkstation = ({
                     <div className="text-[10px] font-bold text-zinc-500 mb-2">SYSTEM STATUS</div>
                     <div className="grid grid-cols-2 gap-2">
                         <div className="bg-zinc-900 p-2 border border-zinc-800">
-                            <div className="text-zinc-500">LATENCY</div>
-                            <div className="text-emerald-500">12ms</div>
+                            <div className="text-zinc-500">DATA</div>
+                            <div className={dataSource === 'SIMULATION' ? 'text-amber-400' : 'text-emerald-500'}>{dataSource || 'UNKNOWN'}</div>
                         </div>
                         <div className="bg-zinc-900 p-2 border border-zinc-800">
-                            <div className="text-zinc-500">API</div>
-                            <div className="text-emerald-500">CONNECTED</div>
+                            <div className="text-zinc-500">DEPTH API</div>
+                            <div className="text-amber-400">NOT WIRED</div>
                         </div>
                         <div className="bg-zinc-900 p-2 border border-zinc-800 col-span-2">
                             <div className="text-zinc-500">ACCOUNT EQUITY</div>
@@ -277,49 +263,13 @@ export const ManualWorkstation = ({
                     <div className="flex-1 border-r border-zinc-800 flex flex-col">
                         <div className="p-1 px-2 border-b border-zinc-800 text-[10px] font-bold text-zinc-500 flex justify-between">
                             <span>DEPTH OF MARKET</span>
-                            <span>AGGREGATED</span>
+                            <span>UNAVAILABLE</span>
                         </div>
-                        <div className="flex-1 overflow-y-auto custom-scrollbar">
-                            <table className="w-full text-right text-xs">
-                                <thead className="text-zinc-600 bg-[#151518]">
-                                    <tr>
-                                        <th className="font-normal p-1">Total</th>
-                                        <th className="font-normal p-1">Size</th>
-                                        <th className="font-normal p-1 text-center">Price</th>
-                                        <th className="font-normal p-1">Size</th>
-                                        <th className="font-normal p-1">Total</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {depthOfMarket.map((row, i) => (
-                                        <tr key={i} className="hover:bg-zinc-800/50">
-                                            {row.side === 'BID' ? (
-                                                <>
-                                                    <td className="p-1 text-zinc-500 relative">
-                                                        <div className="absolute right-0 top-0 bottom-0 bg-emerald-900/20" style={{ width: `${Math.random() * 100}%` }}></div>
-                                                        <span className="relative z-10">{row.total}</span>
-                                                    </td>
-                                                    <td className="p-1 text-emerald-400 relative z-10">{row.size}</td>
-                                                    <td className="p-1 text-center font-bold text-emerald-500 bg-emerald-900/10 border-x border-emerald-900/30">{row.price.toFixed(2)}</td>
-                                                    <td className="p-1"></td>
-                                                    <td className="p-1"></td>
-                                                </>
-                                            ) : (
-                                                <>
-                                                    <td className="p-1"></td>
-                                                    <td className="p-1"></td>
-                                                    <td className="p-1 text-center font-bold text-red-500 bg-red-900/10 border-x border-red-900/30">{row.price.toFixed(2)}</td>
-                                                    <td className="p-1 text-red-400 relative z-10">{row.size}</td>
-                                                    <td className="p-1 text-zinc-500 relative">
-                                                        <div className="absolute left-0 top-0 bottom-0 bg-red-900/20" style={{ width: `${Math.random() * 100}%` }}></div>
-                                                        <span className="relative z-10">{row.total}</span>
-                                                    </td>
-                                                </>
-                                            )}
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
+                        <div className="flex-1 flex items-center justify-center px-8 text-center">
+                            <div>
+                                <div className="text-amber-400 text-[10px] font-bold uppercase tracking-wider">No order-book source connected</div>
+                                <div className="mt-2 text-zinc-600 text-[10px] leading-relaxed">Depth is hidden until a broker or exchange level-2 feed is connected. Orders still use the configured execution route.</div>
+                            </div>
                         </div>
                     </div>
                     {/* Positions & Orders Table */}

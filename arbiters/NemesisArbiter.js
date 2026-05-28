@@ -31,6 +31,7 @@ const BRAIN_TIMEOUT = 30000; // ms per brain call
 const MAX_HISTORY_TURNS = 8;
 
 const NEMESIS_PATTERNS_PATH = path.join(ROOT, '.soma', 'nemesis_patterns.json');
+const DPO_DIR = path.join(ROOT, 'SOMA', 'training-data', 'dpo');
 
 // Built-in bad-pattern seed — augmented at runtime via recordBadPattern()
 const SEED_PATTERNS = [
@@ -103,6 +104,35 @@ export class NemesisArbiter {
             await fs.mkdir(path.dirname(NEMESIS_PATTERNS_PATH), { recursive: true });
             await fs.writeFile(NEMESIS_PATTERNS_PATH, JSON.stringify(learned, null, 2));
         } catch { /* non-critical */ }
+    }
+
+    /**
+     * Save a bad→good revision pair as a DPO training example.
+     * Called automatically by somaRoutes whenever NEMESIS triggers a revision.
+     * Pairs accumulate in SOMA/training-data/dpo/ and feed the next lobe retrain.
+     *
+     * Format: { prompt, chosen, rejected, critique, score, ts }
+     * The build-lobe-datasets script classifies each pair to the right lobe.
+     */
+    async persistRevisionPair(prompt, rejected, critique, chosen, score) {
+        try {
+            await fs.mkdir(DPO_DIR, { recursive: true });
+
+            // One rolling file per day — keeps files manageable, easy to inspect
+            const date = new Date().toISOString().slice(0, 10);
+            const filePath = path.join(DPO_DIR, `revision-pairs-${date}.jsonl`);
+
+            const pair = JSON.stringify({
+                prompt:   prompt.substring(0, 1000),
+                chosen:   chosen.substring(0, 2000),
+                rejected: rejected.substring(0, 2000),
+                critique,
+                score,
+                ts: Date.now(),
+            });
+
+            await fs.appendFile(filePath, pair + '\n', 'utf8');
+        } catch { /* non-critical — never block a response for DPO logging */ }
     }
 
     // Fast pattern scan — runs in <1ms, returns worst hit or null

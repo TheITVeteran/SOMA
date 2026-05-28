@@ -30,6 +30,72 @@ The backend serves `frontend/dist`. If you edit any `.jsx` file and don't rebuil
 
 ---
 
+## Lobe Specialist System (The Sandwich Pattern)
+
+SOMA routes queries through trained local lobe models BEFORE sending to DeepSeek. This gives DeepSeek specialist-grounded context without replacing it. DeepSeek stays as the reasoning/synthesis engine; lobes are its expert advisors.
+
+### How it works
+```
+User query
+  → _selectLobes() picks best lobe(s) by keyword score
+  → _queryLobeSpecialist(lobeName, query)
+      → checks Ollama model cache (refreshes every 30s via /api/tags)
+      → if soma-{lobe} is registered: calls it locally, 7s timeout
+      → if not registered or timeout: returns null, silent fallback
+  → enrichedQuery = "[THALAMUS SPECIALIST CONTEXT]\n{specialist answer}\n\n[USER QUERY]\n{original}"
+  → _callProviderCascade sends enrichedQuery to DeepSeek
+  → DeepSeek synthesizes final response with specialist grounding
+```
+
+### Key files
+| File | What changed |
+|------|-------------|
+| `arbiters/SOMArbiterV2_QuadBrain.js` | Added `_getAvailableOllamaModels()`, `_queryLobeSpecialist()`, updated `_runLobe()`, updated `lobeModels` defaults to `soma-{lobe}` |
+
+### lobeModels defaults (env var overrides available)
+```
+OLLAMA_MODEL_LOGOS      → soma-logos
+OLLAMA_MODEL_AURORA     → soma-aurora
+OLLAMA_MODEL_PROMETHEUS → soma-prometheus
+OLLAMA_MODEL_THALAMUS   → soma-thalamus   ← trained and registered
+```
+
+### Registering a trained lobe in Ollama
+```bash
+# After running export_lobe_gguf.py:
+ollama create soma-thalamus -f SOMA/models/Modelfile.thalamus
+ollama list   # verify it shows up
+```
+
+### Full training pipeline for a lobe (reference)
+```bash
+# 1. Generate synthetic examples (optional, fills thin lobes)
+node scripts/generate-lobe-synthetic.mjs --lobe logos
+
+# 2. Hunt open datasets from HuggingFace
+node scripts/hunt-datasets.mjs --lobe logos
+
+# 3. Build domain-starved FINAL dataset
+node scripts/build-lobe-datasets.mjs --lobe logos
+
+# 4. Fine-tune with QLoRA (RTX 5070, ~26 min for 1000 examples)
+python scripts/finetune_gemma3.py --lobe logos --model nvidia/nemotron-mini-4b-instruct --epochs 3
+
+# 5. Merge LoRA + export to GGUF for Ollama
+python scripts/export_lobe_gguf.py --lobe logos
+
+# 6. Register in Ollama
+ollama create soma-logos -f SOMA/models/Modelfile.logos
+```
+
+### PyTorch / CUDA notes (RTX 5070 — Blackwell sm_120)
+- Requires PyTorch cu130: `pip install torch --index-url https://download.pytorch.org/whl/cu130 --force-reinstall`
+- Also needs: `pip install peft trl`
+- transformers 5.x: `Trainer` uses `processing_class=tokenizer` not `tokenizer=tokenizer`
+- GGUF export: llama.cpp's `convert_hf_to_gguf.py` needs `tokenizer.model` in merged dir — copy from HF cache at `~/.cache/huggingface/hub/models--nvidia--nemotron-mini-4b-instruct/snapshots/{hash}/tokenizer.model`
+
+---
+
 ## Architecture Overview
 
 ### Entry Point
@@ -325,6 +391,39 @@ Key design held: decays fast (48h TTL), never quoted back explicitly, influences
 
 ### Next Session
 - [ ] **Full MessageBroker CJS→ESM migration** — rename `MessageBroker.cjs` → replace with proper ESM, update every `.cjs` importer. Do in one atomic commit. High risk — dedicate a full session. The `MessageBroker.js` shim already covers new ESM files.
+
+### Lobe Specialist System (trained models → production)
+
+**Phase 1 — Train all lobes** (THALAMUS done, 3 remaining)
+- [ ] Train LOGOS on: GitHub Code, Stack Overflow, arXiv CS, LeetCode w/ explanations — target 10K+ examples
+- [ ] Train AURORA on: creative writing corpora, emotional dialogue, poetry analysis, music theory
+- [ ] Train PROMETHEUS on: business case studies, game theory, strategic planning, military strategy texts
+- [ ] Scale THALAMUS dataset to 10K+ (currently 997) — more CVEs, medical anomaly, incident post-mortems
+- Scripts: `node scripts/hunt-datasets.mjs --lobe {lobe}` → `build-lobe-datasets.mjs` → `finetune_gemma3.py` → `export_lobe_gguf.py`
+
+**Phase 2 — DPO self-improvement loop**
+- [ ] Wire NEMESIS revision pairs as DPO training data — every caught bad response + correction = a training pair
+- [ ] Add DPO training mode to `finetune_gemma3.py` (replace `Trainer` with `DPOTrainer` from trl)
+- [ ] Save NEMESIS pairs to `SOMA/training-data/dpo/lobe-{lobe}-dpo-{timestamp}.jsonl`
+- [ ] SOMA improves from production mistakes automatically, no human labelers needed
+
+**Phase 3 — Wire lobes into QuadBrain (the Sandwich Pattern)**
+- [ ] The architecture: user query → local lobe gets domain question → specialist answer injected as context → DeepSeek synthesizes final response
+- [ ] DeepSeek stays as primary reasoning/synthesis engine (good, cheap, keeps Barry happy)
+- [ ] Lobes run locally via Ollama (private, specialist, free)
+- [ ] Nothing private leaves the machine — only the synthesized non-sensitive context hits DeepSeek
+- [ ] Implementation: add `_querySpecialistLobe(domain, prompt)` to `SOMArbiterV2_QuadBrain.js` — calls `ollama run soma-{lobe}`, injects response as `[SPECIALIST CONTEXT]` block before DeepSeek call
+- [ ] Domain classifier maps query keywords → lobe (reuse keyword taxonomy from `build-lobe-datasets.mjs`)
+
+**Phase 4 — Continual learning pipeline**
+- [ ] Wire `CuriosityEngine` to trigger `hunt-datasets.mjs` when it finds a knowledge gap
+- [ ] Scheduled retrain: new data → rebuild FINAL → retrain lobe → `ollama create soma-{lobe}` hot-swap
+- [ ] SOMA decides what she needs to learn next without manual intervention
+
+**Phase 5 — Upgrade base models as they drop**
+- [ ] Pipeline is base-model agnostic — swap `--model` flag, retrain in ~30 min
+- [ ] Watch for: Qwen3 small series, Phi-4-mini, Mistral small updates
+- [ ] Quantize deployed GGUFs to Q4_K_M (~2.5GB vs 7.9GB) for faster Ollama inference
 
 ### Medium-term
 - [ ] **Arbiter hierarchy tiers** — Strategic arbiters decide priorities, Cognitive arbiters analyze, Operational arbiters produce tasks. Prevents all arbiters firing simultaneously on the same signal. Implement as `tier: 'strategic' | 'cognitive' | 'operational'` metadata on `registerArbiter()` and route signals by tier order.

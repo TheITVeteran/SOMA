@@ -1,23 +1,131 @@
 {
+  "nodes": [
+    {
+      "id": "concept_1779481329826_xhylo0vx4",
+      "name": "SomaBrain",
+      "domain": "SOMA_ARCHITECTURE",
+      "type": "class",
+      "source": "unknown",
+      "confidence": 1,
+      "usageCount": 9,
+      "createdAt": 1779481329826,
+      "lastSeen": 1779979900572,
+      "metadata": {
+        "domain": "SOMA_ARCHITECTURE",
+        "type": "class",
+        "role": "Cognitive Core",
+        "confidence": 1
+      }
+    },
+    {
+      "id": "concept_1779481329826_wtjuzxl68",
+      "name": "TriBrain",
+      "domain": "SOMA_ARCHITECTURE",
+      "type": "system",
+      "source": "unknown",
+      "confidence": 1,
+      "usageCount": 9,
+      "createdAt": 1779481329826,
+      "lastSeen": 1779979900572,
+      "metadata": {
+        "domain": "SOMA_ARCHITECTURE",
+        "type": "system",
+        "role": "Multimodal Reasoning",
+        "confidence": 1
+      }
+    },
+    {
+      "id": "concept_1779481329826_ztft7duh1",
+      "name": "MnemonicArbiter",
+      "domain": "SOMA_ARCHITECTURE",
+      "type": "class",
+      "source": "unknown",
+      "confidence": 1,
+      "usageCount": 9,
+      "createdAt": 1779481329826,
+      "lastSeen": 1779979900572,
+      "metadata": {
+        "domain": "SOMA_ARCHITECTURE",
+        "type": "class",
+        "role": "Memory System",
+        "confidence": 1
+      }
+    },
+    {
+      "id": "concept_1779481329826_wl8jji7hh",
+      "name": "MessageBroker",
+      "domain": "SOMA_ARCHITECTURE",
+      "type": "class",
+      "source": "unknown",
+      "confidence": 1,
+      "usageCount": 9,
+      "createdAt": 1779481329826,
+      "lastSeen": 1779979900572,
+      "metadata": {
+        "domain": "SOMA_ARCHITECTURE",
+        "type": "class",
+        "role": "Communication Substrate",
+        "confidence": 1
+      }
+    },
+    {
+      "id": "concept_1779481329826_q6zxxntbg",
+      "name": "FragmentRegistry",
+      "domain": "SOMA_ARCHITECTURE",
+      "type": "class",
+      "source": "unknown",
+      "confidence": 1,
+      "usageCount": 9,
+      "createdAt": 1779481329826,
+      "lastSeen": 1779979900572,
+      "metadata": {
+        "domain": "SOMA_ARCHITECTURE",
+        "type": "class",
+        "role": "Expert Domain Manager",
+        "confidence": 1
+      }
+    },
+    {
+      "id": "concept_1779481329826_hfqxfdlki",
+      "name": "GraphifyArbiter",
+      "domain": "SOMA_ARCHITECTURE",
+      "type": "class",
+      "source": "unknown",
+      "confidence": 1,
+      "usageCount": 9,
+      "createdAt": 1779481329826,
+      "lastSeen": 1779979900572,
+      "metadata": {
+        "domain": "SOMA_ARCHITECTURE",
+        "type": "class",
+        "role": "Repograph Bridge",
+        "confidence": 1
+      }
+    }
+  ],
+  "edges": [],
   "metrics": {
+    "totalNodes": 6,
+    "totalEdges": 0,
+    "crossDomainEdges": 0,
+    "avgDegree": 0,
+    "density": 0,
+    "largestCluster": 6,
+    "inferredFacts": 0,
+    "contradictionsFound": 0,
     "autonomyLevel": 35.4,
     "concepts": 0,
     "patterns": 0,
     "knowledgeNodes": 0,
     "totalInteractions": 27
   },
-  "knowledgeMesh": {
-    "nodes": [],
-    "edges": []
+  "stats": {
+    "knowledgeFusions": 0,
+    "crossDomainConnections": 0,
+    "inferencesGenerated": 0,
+    "contradictionsResolved": 0,
+    "transferLearnings": 0,
+    "graphUpdates": 0
   },
-  "patterns": [],
-  "concepts": [],
-  "isAgentConnected": true,
-  "todos": [],
-  "knowledge": {
-    "nodes": [],
-    "edges": []
-  },
-  "savedAt": 1767050223038,
-  "version": "1.0"
+  "savedAt": 1779980260596
 }

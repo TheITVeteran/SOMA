@@ -17,6 +17,7 @@
 import tradeLogger from './TradeLogger.js';
 import scalpingEngine from './scalpingEngine.js';
 import performanceCalculator from './PerformanceCalculator.js';
+import { signalLibrary } from './SignalLibrary.js';
 import fs from 'fs';
 import path from 'path';
 
@@ -35,7 +36,8 @@ class SimulationLearningEngine {
             tradesAnalyzedTotal: 0,
             adjustments: [],
             currentConfig: null, // Snapshot of current scalping config
-            performanceTrend: [] // Rolling window of per-cycle metrics
+            performanceTrend: [], // Rolling window of per-cycle metrics
+            lastProcessedTradeId: 0 // For incremental signal weight updates
         };
 
         this._loadState();
@@ -221,6 +223,19 @@ class SimulationLearningEngine {
             }
         }
 
+        // ─── Analysis 5: Bulk Signal Weight Update ───
+        // Process any closed trades with signal scores that haven't been fed back yet.
+        // This catches trades that closed after a restart (signal scores survived in DB).
+        const signalWeightUpdates = this._updateSignalWeightsFromDB();
+        if (signalWeightUpdates > 0) {
+            adjustments.push(this._logAdjustment(
+                'signalWeights', 0, signalWeightUpdates,
+                `Bulk signal weight update: ${signalWeightUpdates} new trade outcomes fed back`,
+                'signal_ensemble'
+            ));
+            signalLibrary.saveWeights();
+        }
+
         // ─── Record Cycle ───
         this.state.totalCycles++;
         this.state.lastCycleAt = new Date().toISOString();
@@ -257,6 +272,30 @@ class SimulationLearningEngine {
             adjustments,
             currentConfig: { ...config }
         };
+    }
+
+    /**
+     * Feed closed trades with stored signal scores back into SignalLibrary.
+     * Processes only trades with id > lastProcessedTradeId (incremental).
+     * Returns count of trades processed.
+     */
+    _updateSignalWeightsFromDB() {
+        try {
+            const newTrades = tradeLogger.getClosedTradesWithSignalScores(this.state.lastProcessedTradeId);
+            if (!newTrades.length) return 0;
+
+            for (const trade of newTrades) {
+                const pnlPct = (trade.pnl_pct || 0) / 100; // DB stores as %, convert to fraction
+                signalLibrary.recordOutcome(trade.signalScores, pnlPct);
+                this.state.lastProcessedTradeId = Math.max(this.state.lastProcessedTradeId, trade.id);
+            }
+
+            console.log(`[SimLearning] Signal weights updated from ${newTrades.length} DB trade(s) (lastId: ${this.state.lastProcessedTradeId})`);
+            return newTrades.length;
+        } catch (err) {
+            console.warn('[SimLearning] Signal weight DB update failed:', err.message);
+            return 0;
+        }
     }
 
     /**
@@ -335,6 +374,106 @@ class SimulationLearningEngine {
      */
     async forceCycle() {
         return await this.runLearningCycle();
+    }
+
+    /**
+     * Learn from a Market Lab simulation result.
+     *
+     * Applies the same parameter adaptation logic as runLearningCycle() but
+     * sourced from backtest aggregate stats rather than live TradeLogger data.
+     * Adjustments are scaled to SIM_WEIGHT (40%) so they don't overwrite
+     * live experience — simulations are advisory, not authoritative.
+     *
+     * @param {object} entry - Market Lab entry (from runMarketBacktest)
+     *   entry.strategy.id      — strategy id (for log tagging)
+     *   entry.metrics.winRate  — 0–1
+     *   entry.metrics.maxDrawdown — 0–1
+     *   entry.metrics.sharpe
+     *   entry.metrics.profitFactor
+     *   entry.metrics.trades   — total trade count
+     *   entry.metrics.averageTrialPnl — avg pct return per trial
+     */
+    learnFromSimulation(entry) {
+        const SIM_WEIGHT = 0.40; // Sim adjustments are 40% as strong as live
+        const MIN_SIM_TRADES = 30;
+
+        const metrics = entry?.metrics;
+        const strategyId = entry?.strategy?.id || 'sim_unknown';
+        if (!metrics || metrics.trades < MIN_SIM_TRADES) return { skipped: true, reason: 'too few sim trades' };
+
+        const winRate = metrics.winRate * 100; // normalise to 0–100 range for comparison
+        const adjustments = [];
+        const config = scalpingEngine.config;
+
+        // ─── Win rate adaptation ───
+        if (winRate > 60 && metrics.trades >= 50) {
+            // Sim shows strong win rate → allow slightly more aggressive entries
+            const oldRsi = config.rsiOversold;
+            const delta = Math.round(2 * SIM_WEIGHT); // ~1 point nudge
+            const newRsi = Math.max(25, oldRsi - delta);
+            if (newRsi !== oldRsi) {
+                config.rsiOversold = newRsi;
+                adjustments.push(this._logAdjustment(
+                    'rsiOversold', oldRsi, newRsi,
+                    `[SIM:${strategyId}] Win rate ${winRate.toFixed(1)}% — sim nudging RSI threshold`,
+                    `sim_${strategyId}`
+                ));
+            }
+        }
+
+        if (winRate < 40 && metrics.trades >= 30) {
+            // Sim shows poor win rate → tighten entries
+            const oldRsi = config.rsiOversold;
+            const delta = Math.round(2 * SIM_WEIGHT);
+            const newRsi = Math.min(40, oldRsi + delta);
+            if (newRsi !== oldRsi) {
+                config.rsiOversold = newRsi;
+                adjustments.push(this._logAdjustment(
+                    'rsiOversold', oldRsi, newRsi,
+                    `[SIM:${strategyId}] Win rate ${winRate.toFixed(1)}% — sim tightening RSI threshold`,
+                    `sim_${strategyId}`
+                ));
+            }
+        }
+
+        // ─── Drawdown adaptation ───
+        if (metrics.maxDrawdown > 0.15) {
+            // Sim drawdown is high → widen stop to reduce premature exits
+            const oldVal = config.stopLossATRMultiplier;
+            const bump = parseFloat((this.maxAdjustmentPct * 0.5 * SIM_WEIGHT).toFixed(3));
+            const newVal = parseFloat(Math.min(3.0, oldVal * (1 + bump)).toFixed(2));
+            if (newVal !== oldVal) {
+                config.stopLossATRMultiplier = newVal;
+                adjustments.push(this._logAdjustment(
+                    'stopLossATRMultiplier', oldVal, newVal,
+                    `[SIM:${strategyId}] ${(metrics.maxDrawdown * 100).toFixed(1)}% drawdown in sim — widening stop`,
+                    `sim_${strategyId}`
+                ));
+            }
+        }
+
+        // ─── Profit factor adaptation ───
+        if (metrics.profitFactor > 0 && metrics.profitFactor < 1.0 && metrics.trades >= 40) {
+            const oldMin = config.minProfitTarget;
+            const bump = parseFloat((oldMin * 0.05 * SIM_WEIGHT).toFixed(4));
+            const newMin = parseFloat(Math.min(0.15, oldMin + bump).toFixed(3));
+            if (newMin !== oldMin) {
+                config.minProfitTarget = newMin;
+                adjustments.push(this._logAdjustment(
+                    'minProfitTarget', oldMin, newMin,
+                    `[SIM:${strategyId}] Profit factor ${metrics.profitFactor.toFixed(2)} < 1.0 — raising sim-advised profit target`,
+                    `sim_${strategyId}`
+                ));
+            }
+        }
+
+        if (adjustments.length > 0) {
+            console.log(`[SimLearning] Sim-learning from ${strategyId}: ${adjustments.length} advisory adjustment(s)`);
+            this.state.currentConfig = { ...config };
+            this._saveState();
+        }
+
+        return { skipped: false, strategyId, simTrades: metrics.trades, adjustments };
     }
 
     // ─── Persistence ───

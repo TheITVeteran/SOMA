@@ -26,19 +26,20 @@ const calculateStormIndex = (volRatio, correlation, liqPressure) => {
 
 export const useMarketEngine = (riskMetrics, isDemoMode, tickers, selectedSymbol) => {
     const [engineData, setEngineData] = useState({
-        flowZ: 0.5,
-        leverage: 0.02,
-        volRatio: 1.2,
-        correlation: 0.6,
-        liqPressure: 0.05,
-        bidDepth: 2500000,
-        askDepth: 2400000,
-        buyVolume: 1500,
-        sellVolume: 1200,
-        prevBidDepth: 2500000,
-        prevAskDepth: 2400000,
-        fundingRate: 0.01
+        flowZ: 0,
+        leverage: 0,
+        volRatio: 0,
+        correlation: 0,
+        liqPressure: 0,
+        bidDepth: 0,
+        askDepth: 0,
+        buyVolume: 0,
+        sellVolume: 0,
+        prevBidDepth: 0,
+        prevAskDepth: 0,
+        fundingRate: 0
     });
+    const [orderbookStatus, setOrderbookStatus] = useState('checking');
 
     // Real P&L from backend
     const [realPnL, setRealPnL] = useState({ totalPnL: 0, winRate: 0 });
@@ -112,6 +113,7 @@ export const useMarketEngine = (riskMetrics, isDemoMode, tickers, selectedSymbol
                         // Store top-5 levels for depth bar rendering (no more Math.random)
                         if (bids?.length && asks?.length) {
                             setObLevels({ bids: bids.slice(0, 5), asks: asks.slice(0, 5) });
+                            setOrderbookStatus('live');
                         }
                         setEngineData(prev => ({
                             ...prev,
@@ -128,22 +130,8 @@ export const useMarketEngine = (riskMetrics, isDemoMode, tickers, selectedSymbol
                 }
             } catch {
                 anyFailed = true;
-                // Simulation fallback when backend is unreachable
                 if (!cancelled) {
-                    setEngineData(prev => ({
-                        ...prev,
-                        flowZ: Math.max(-5, Math.min(5, prev.flowZ + (Math.random() - 0.5) * 0.3)),
-                        leverage: Math.max(-0.5, Math.min(0.5, prev.leverage + (Math.random() - 0.5) * 0.03)),
-                        volRatio: Math.max(0.5, Math.min(3.0, prev.volRatio + (Math.random() - 0.5) * 0.08)),
-                        correlation: Math.max(0, Math.min(1, prev.correlation + (Math.random() - 0.5) * 0.03)),
-                        liqPressure: prev.liqPressure * 0.95 + (Math.random() > 0.97 ? Math.random() * 0.3 : 0),
-                        bidDepth: Math.max(100000, prev.bidDepth + (Math.random() - 0.5) * 300000),
-                        askDepth: Math.max(100000, prev.askDepth + (Math.random() - 0.5) * 300000),
-                        buyVolume: Math.max(100, prev.buyVolume + (Math.random() - 0.5) * 300),
-                        sellVolume: Math.max(100, prev.sellVolume + (Math.random() - 0.5) * 300),
-                        prevBidDepth: prev.bidDepth,
-                        prevAskDepth: prev.askDepth
-                    }));
+                    setOrderbookStatus('unavailable');
                 }
             }
 
@@ -200,7 +188,7 @@ export const useMarketEngine = (riskMetrics, isDemoMode, tickers, selectedSymbol
     const pnlPercent = riskMetrics ? (pnl / riskMetrics.initialBalance) * 100 : 0;
     const isProfit = pnl >= 0;
 
-    return { engineData, obMetrics, stormMetrics, pnl, pnlPercent, isProfit, realPnL, telemetry, obLevels };
+    return { engineData, obMetrics, stormMetrics, pnl, pnlPercent, isProfit, realPnL, telemetry, obLevels, orderbookStatus };
 };
 
 
@@ -210,7 +198,7 @@ export const useMarketEngine = (riskMetrics, isDemoMode, tickers, selectedSymbol
 
 // LEFT SIDEBAR COMPONENT: P&L + Storm Index
 export const MarketMonitor = ({ engine }) => {
-    const { engineData, stormMetrics, pnl, pnlPercent, isProfit } = engine;
+    const { engineData, stormMetrics, pnl, pnlPercent, isProfit, orderbookStatus } = engine;
 
     const stormColor = stormMetrics.state === 'STORM' ? 'text-soma-danger' : stormMetrics.state === 'UNSTABLE' ? 'text-soma-warning' : 'text-soma-success';
     const stormBg = stormMetrics.state === 'STORM' ? 'bg-soma-danger' : stormMetrics.state === 'UNSTABLE' ? 'bg-soma-warning' : 'bg-soma-success';
@@ -246,6 +234,11 @@ export const MarketMonitor = ({ engine }) => {
                         {stormMetrics.state}
                     </span>
                 </div>
+                {orderbookStatus !== 'live' && (
+                    <div className="mb-2 rounded border border-amber-500/20 bg-amber-500/10 px-2 py-1 text-[8px] font-bold uppercase tracking-wider text-amber-300">
+                        Orderbook unavailable - no synthetic depth
+                    </div>
+                )}
 
                 <div className="w-full h-1.5 bg-black/50 rounded-full overflow-hidden border border-white/5 mb-3 relative">
                     <div className={`h-full ${stormBg} transition-all duration-500`} style={{ width: `${stormMetrics.stormIndex}%` }}></div>

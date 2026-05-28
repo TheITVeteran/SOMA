@@ -11,13 +11,17 @@ import { calibrator }  from '../../core/ConfidenceCalibrator.js';
 import { scrapeMarketData, getCachedMarketData } from '../scrapers/MarketDataScraper.js';
 import citationGuard from '../finance/FinancialCitationGuard.js';
 import missionControlRuntime from '../finance/MissionControlRuntime.js';
+import simulationLearningEngine from '../finance/SimulationLearningEngine.js';
+import retrainingPipeline from '../finance/RetrainingPipeline.js';
 import profModeEngine from '../../core/ProfessionalModeEngine.js';
 import ResearchIngestionService from '../research/ResearchIngestionService.js';
 import KnowledgeIngestionSpine from '../knowledge/KnowledgeIngestionSpine.js';
 import CommunicationHub from '../communication/CommunicationHub.js';
 import LatencySpine from '../../core/LatencySpine.js';
 import historicalDataCache from '../finance/HistoricalDataCache.js';
+import walkForwardEngine from '../finance/WalkForwardEngine.js';
 const require = createRequire(import.meta.url);
+const { defaultLearningSpine } = require('../../core/LearningSpine.cjs');
 
 // ── Excel analysis cache: keyed by filePath+mtime, TTL 10 min ──────────────
 // Prevents re-analyzing the same unmodified file on every financial chat message.
@@ -408,7 +412,7 @@ Write a closing thought â€" 1-2 sentences. Something genuine that shows you a
                     quadBrain: !!system.quadBrain,
                     memory: !!system.mnemonicArbiter,
                     steve: !!system.steveArbiter,
-                    selfMod: !!system.selfModificationArbiter,
+                    selfMod: !!(system.selfModificationArbiter || system.selfModification || system.selfMod),
                     webScraper: !!system.webScraperDendrite,
                     ollamaTrainer: !!trainer
                 },
@@ -438,6 +442,137 @@ Write a closing thought â€" 1-2 sentences. Something genuine that shows you a
             progress: heartbeat.agenda.getProgress(),
             drive:    heartbeat.getDriveStatus?.() ?? null
         });
+    });
+
+    router.get('/learning-spine/status', (req, res) => {
+        try {
+            const gp = system.goalPlanner || system.goalPlannerArbiter;
+            const goals = Array.from(gp?.goals?.values?.() || []);
+            const active = goals.filter(g => gp?.activeGoals?.has?.(g.id));
+            const missingContract = goals.filter(g => !g.metadata?.goalContract).length;
+            res.json({
+                success: true,
+                goals: {
+                    total: goals.length,
+                    active: active.length,
+                    missingContract,
+                    verificationFailed: goals.filter(g => g.status === 'verification_failed').length
+                },
+                learning: defaultLearningSpine.getStatus(25)
+            });
+        } catch (error) {
+            res.status(500).json({ success: false, error: error.message });
+        }
+    });
+
+    router.get('/core-systems/snapshot', async (req, res) => {
+        try {
+            const gp = system.goalPlanner || system.goalPlannerArbiter;
+            const goals = Array.from(gp?.goals?.values?.() || []);
+            const learning = defaultLearningSpine.getStatus(12);
+            const trainingAudit = defaultLearningSpine.auditTrainingExports(250);
+            const selfMod = system.selfModificationArbiter || system.selfModification || system.selfMod;
+            const selfModStatus = selfMod?.getStatus
+                ? { online: true, ...(await selfMod.getStatus()) }
+                : { online: false, recentEntries: [], contestedCount: 0, implemented: 0 };
+            const nemesis = system.nemesis;
+            const runtime = missionControlRuntime.getStatus?.() || null;
+            const vision = global.SOMA_COS?.visionDaemon || system.visionDaemon || null;
+            const memory = system.mnemonicArbiter || system.mnemonic;
+
+            const components = [
+                { id: 'brain', label: 'Reasoning', ready: !!system.quadBrain, detail: system.quadBrain ? 'QuadBrain initialized' : 'QuadBrain unavailable' },
+                { id: 'memory', label: 'Memory', ready: !!memory, detail: memory ? 'Mnemonic store initialized' : 'Memory store unavailable' },
+                { id: 'goals', label: 'Goal Quality', ready: !!gp, detail: gp ? `${goals.length} tracked goals` : 'Goal planner unavailable' },
+                { id: 'learning', label: 'Learning Spine', ready: true, detail: `${learning.recent.length} recent verified outcome records` },
+                { id: 'selfmod', label: 'Code Safety', ready: !!selfModStatus.online, detail: selfModStatus.online ? 'Modification ledger connected' : 'Self-modifier not initialized' },
+                { id: 'vision', label: 'Vision', ready: !!vision, detail: vision ? (vision.active ? 'Capture active' : 'Available, inactive') : 'Vision daemon unavailable' },
+                { id: 'market', label: 'Mission Capital', ready: !!runtime, detail: runtime ? `${runtime.mode || 'paper'} mode / ${runtime.activeTier || 'paper'} tier` : 'Runtime unavailable' },
+                { id: 'nemesis', label: 'Quality Gate', ready: !!nemesis, detail: nemesis ? `${nemesis.totalEvals ?? 0} evaluations` : 'NEMESIS unavailable' }
+            ].map(component => ({ ...component, state: component.ready ? 'ready' : 'offline' }));
+
+            const issues = [];
+            for (const component of components.filter(item => !item.ready)) {
+                issues.push({ severity: 'warning', source: component.label, detail: component.detail });
+            }
+            if (trainingAudit.suspectRows > 0) {
+                issues.unshift({ severity: 'critical', source: 'Training exports', detail: `${trainingAudit.suspectRows} rows may contain secrets` });
+            }
+            if (trainingAudit.invalidRows > 0 || trainingAudit.weakEvidenceRows > 0) {
+                issues.push({
+                    severity: 'warning',
+                    source: 'Training exports',
+                    detail: `${trainingAudit.invalidRows} invalid rows, ${trainingAudit.weakEvidenceRows} weak evidence rows`
+                });
+            }
+
+            res.json({
+                success: true,
+                generatedAt: Date.now(),
+                readiness: {
+                    state: issues.some(issue => issue.severity === 'critical') ? 'blocked' : issues.length ? 'degraded' : 'ready',
+                    components,
+                    issues
+                },
+                goals: {
+                    total: goals.length,
+                    active: Array.from(gp?.activeGoals || []).length,
+                    verified: goals.filter(goal => goal.status === 'completed').length,
+                    verificationFailed: goals.filter(goal => goal.status === 'verification_failed').length,
+                    missingContract: goals.filter(goal => !goal.metadata?.goalContract).length
+                },
+                learning,
+                trainingAudit,
+                safety: {
+                    selfMod: selfModStatus,
+                    nemesis: {
+                        online: !!nemesis,
+                        totalEvals: nemesis?.totalEvals ?? 0,
+                        avgScore: nemesis?.avgScore ?? null,
+                        lastEval: nemesis?.lastEvalAt ?? null
+                    }
+                },
+                missionCapital: runtime
+            });
+        } catch (error) {
+            res.status(500).json({ success: false, error: error.message });
+        }
+    });
+
+    router.get('/learning-spine/audit-training', (req, res) => {
+        try {
+            const limit = Number(req.query.limit || 500);
+            res.json({ success: true, audit: defaultLearningSpine.auditTrainingExports(limit) });
+        } catch (error) {
+            res.status(500).json({ success: false, error: error.message });
+        }
+    });
+
+    router.post('/learning-spine/contract', (req, res) => {
+        try {
+            res.json({
+                success: true,
+                goal: defaultLearningSpine.applyGoalContract(req.body || {})
+            });
+        } catch (error) {
+            res.status(500).json({ success: false, error: error.message });
+        }
+    });
+
+    router.post('/learning-spine/retest/:goalId', async (req, res) => {
+        const gp = system.goalPlanner || system.goalPlannerArbiter;
+        if (!gp?.goals || !gp?.createGoal) {
+            return res.status(503).json({ success: false, error: 'GoalPlanner offline' });
+        }
+        try {
+            const goal = gp.goals.get(req.params.goalId);
+            if (!goal) return res.status(404).json({ success: false, error: 'Goal not found' });
+            const payload = defaultLearningSpine.createRetestGoalPayload(goal, req.body || {});
+            const result = await gp.createGoal(payload, 'autonomous');
+            res.status(result.success ? 200 : 422).json({ success: result.success, retest: result, payload });
+        } catch (error) {
+            res.status(500).json({ success: false, error: error.message });
+        }
     });
 
     router.post('/execute-tool', async (req, res) => {
@@ -2603,8 +2738,13 @@ ${personaContext}${characterContext}`.trim()
         const gp = system.goalPlanner || system.goalPlannerArbiter;
         if (!gp) return res.status(503).json({ error: 'GoalPlanner offline' });
         try {
-            await gp.completeGoal(req.params.id, { result: req.body?.result || 'Marked complete via API' });
-            res.json({ success: true, id: req.params.id });
+            const result = await gp.completeGoal(req.params.id, {
+                summary: req.body?.summary || req.body?.result || 'Marked complete via API',
+                result: req.body?.result || req.body?.summary || 'Marked complete via API',
+                evidence: req.body?.evidence,
+                nextStep: req.body?.nextStep
+            });
+            res.status(result?.success ? 200 : 422).json({ id: req.params.id, ...(result || { success: false }) });
         } catch (e) { res.status(500).json({ error: e.message }); }
     });
 
@@ -2957,16 +3097,34 @@ ${personaContext}${characterContext}`.trim()
 
     // ── SelfMod Feed ─────────────────────────────────────────────────────────
     // GET /api/soma/selfmod/status — used by SelfModFeed component
-    router.get('/selfmod/status', (req, res) => {
-        const swarm = system.engineeringSwarm;
-        const optimizer = system.swarmOptimizer;
-        res.json({
-            online: !!(swarm || optimizer),
-            recentEvents: swarm?.recentEvents || swarm?.history?.slice(-10) || [],
-            successRate: optimizer?.getSuccessRate?.() ?? optimizer?.successRate ?? null,
-            totalRuns: optimizer?.totalRuns ?? null,
-            lastRun: optimizer?.lastRunAt ?? null
-        });
+    router.get('/selfmod/status', async (req, res) => {
+        try {
+            const selfMod = system.selfModificationArbiter || system.selfModification || system.selfMod;
+            if (selfMod?.getStatus) {
+                const status = await selfMod.getStatus();
+                return res.json({ online: true, ...status });
+            }
+            const swarm = system.engineeringSwarm;
+            const optimizer = system.swarmOptimizer;
+            res.json({
+                online: !!(swarm || optimizer),
+                recentEntries: (swarm?.recentEvents || swarm?.history?.slice(-10) || []).map((event, index) => ({
+                    id: event.id || `swarm-event-${index}`,
+                    filepath: event.filepath || event.file || 'Engineering swarm event',
+                    nemesisScore: event.nemesisScore ?? null,
+                    rounds: event.rounds || 1,
+                    poseidon: event.success === false ? '\\' : '|'
+                })),
+                contested: [],
+                contestedCount: 0,
+                implemented: optimizer?.totalRuns ?? 0,
+                scoreHistory: [],
+                trend: [],
+                successRate: optimizer?.getSuccessRate?.() ?? optimizer?.successRate ?? null
+            });
+        } catch (e) {
+            res.status(500).json({ online: false, error: e.message });
+        }
     });
 
     // ── Engineering Swarm live status — feeds CodeSandboxView ────────────────
@@ -4358,6 +4516,15 @@ ${personaContext}${characterContext}`.trim()
             + sampleScore * 0.08
         );
         const thalamusRisk = clamp01(maxDrawdown * 2.3 + (1 - drawdownScore) * 0.4 + (exposure / Math.max(1, trialCount * barCount)) * 0.25);
+        // Walk-Forward Validation — detects overfitting by comparing in-sample vs out-of-sample Sharpe
+        let walkForward = null;
+        if (realSeries && realSeries.length >= 240) {
+            try {
+                const strategyFn = (s, i) => strategySignal(strategy.id, s, i, asset);
+                walkForward = walkForwardEngine.run(realSeries, strategyFn);
+            } catch { /* non-fatal — trial loop data still used */ }
+        }
+
         const promotionCriteria = {
             threshold: targetThreshold,
             winRatePass: winRate >= targetThreshold,
@@ -4365,6 +4532,7 @@ ${personaContext}${characterContext}`.trim()
             profitPass: meanPnl > 0,
             drawdownPass: maxDrawdown <= 0.18,
             profitFactorPass: profitFactor >= 1.25,
+            walkForwardPass: !walkForward || walkForward.grade !== 'OVERFITTED',
             paperOnly: true,
         };
         const promoted = Object.entries(promotionCriteria)
@@ -4427,6 +4595,7 @@ ${personaContext}${characterContext}`.trim()
             dollarEquitySample: dollarEquityCurve.slice(-30),
             dataSource,
             realDataBars: realSeries ? realSeries.length : 0,
+            walkForward,
             lesson: promoted
                 ? `${strategy.name} on ${asset.symbol} cleared the paper promotion gate at ${(winRate * 100).toFixed(1)}% win rate with ${(maxDrawdown * 100).toFixed(1)}% max drawdown and ${averageDollarPnl >= 0 ? '+' : ''}$${averageDollarPnl.toFixed(2)} average P&L on $${paperCapital.toFixed(0)}.`
                 : `${strategy.name} on ${asset.symbol} remains ${status}; ${(winRate * 100).toFixed(1)}% win rate, ${(prometheusScore * 100).toFixed(1)} Prometheus score, ${averageDollarPnl >= 0 ? '+' : ''}$${averageDollarPnl.toFixed(2)} average P&L on $${paperCapital.toFixed(0)}.`,
@@ -4462,6 +4631,34 @@ ${personaContext}${characterContext}`.trim()
                 });
             }
         } catch {}
+
+        // ── Feed simulation results into the live learning stack ──────────────
+        try {
+            // 1. UCB1: teach mission control which strategy+asset combos win in simulation
+            //    avgReturn is the average per-trial pnl as a fraction (e.g. 0.03 = +3%)
+            const avgReturn = entry.metrics?.averageTrialPnl || 0;
+            missionControlRuntime.recordStrategyOutcome(entry.strategy.id, avgReturn);
+
+            // 2. Param tuning: sim-advisory parameter adjustments (40% weight vs live)
+            simulationLearningEngine.learnFromSimulation(entry);
+
+            // 3. Log a learning event so the dashboard shows sim activity
+            const tradeLogger = global.SOMA_TRADING?.tradeLogger;
+            if (tradeLogger) {
+                tradeLogger.logLearningEvent({
+                    eventType: 'SIMULATION_RESULT',
+                    description: `Market Lab sim: ${entry.strategy.id} on ${entry.asset.symbol} — WR ${((entry.metrics?.winRate || 0) * 100).toFixed(1)}%, Sharpe ${(entry.metrics?.sharpe || 0).toFixed(2)}, status: ${entry.status}`,
+                    strategy: entry.strategy.id,
+                    metricName: 'prometheusScore',
+                    oldValue: 0,
+                    newValue: entry.prometheusScore || 0,
+                    triggerReason: `sim_${entry.id || Date.now()}`
+                });
+            }
+        } catch (err) {
+            console.warn('[MarketLab] Learning bridge error:', err.message);
+        }
+
         return entry;
     };
 
@@ -5818,6 +6015,11 @@ ${personaContext}${characterContext}`.trim()
                 },
                 discovery,
                 paperCorpus: researchIngestion.summarizeCorpus(),
+                manuscriptStandards: {
+                    available: true,
+                    standards: ['ICMJE', 'EQUATOR', 'PRISMA-inspired', 'STROBE-inspired', 'CONSORT-aware', 'ARRIVE-inspired', 'CARE-aware'],
+                    route: '/api/soma/medical-lab/manuscript/standardize'
+                },
                 ledger: entries.slice(0, 20),
                 summary: summarizeMedicalLabLedger(entries)
             });
@@ -5858,6 +6060,50 @@ ${personaContext}${characterContext}`.trim()
     router.get('/medical-lab/papers/corpus', (req, res) => {
         try {
             res.json({ success: true, corpus: researchIngestion.summarizeCorpus() });
+        } catch (e) {
+            res.status(500).json({ success: false, error: e.message });
+        }
+    });
+
+    router.get('/medical-lab/scoreboard', (req, res) => {
+        try {
+            const biotechBoard = system.biotechArbiter?.discoveryScoreboard?.summary?.(20) || null;
+            const ingestionBoard = researchIngestion.discoveryScoreboard.summary(20);
+            res.json({
+                success: true,
+                biotech: biotechBoard,
+                ingestion: ingestionBoard,
+                path: ingestionBoard.path
+            });
+        } catch (e) {
+            res.status(500).json({ success: false, error: e.message });
+        }
+    });
+
+    router.get('/medical-lab/training/distilled', async (req, res) => {
+        try {
+            const medicalPath = path.join(process.cwd(), 'data', 'training', 'medical_lora_distilled.jsonl');
+            const generalPath = path.join(process.cwd(), 'data', 'training', 'soma_knowledge.jsonl');
+            const countLines = (filePath) => {
+                if (!fs.existsSync(filePath)) return 0;
+                return fs.readFileSync(filePath, 'utf8').split(/\r?\n/).filter(Boolean).length;
+            };
+            res.json({
+                success: true,
+                medicalPath,
+                generalPath,
+                medicalExamples: countLines(medicalPath),
+                generalExamples: countLines(generalPath)
+            });
+        } catch (e) {
+            res.status(500).json({ success: false, error: e.message });
+        }
+    });
+
+    router.post('/medical-lab/training/backfill-lobes', async (req, res) => {
+        try {
+            const result = researchIngestion.manuscriptStandardizer.trainingDistiller.backfillExistingMedicalRows();
+            res.json({ success: true, ...result });
         } catch (e) {
             res.status(500).json({ success: false, error: e.message });
         }
@@ -5945,6 +6191,37 @@ ${personaContext}${characterContext}`.trim()
                 ].join('\n')
             }).catch(error => console.warn('[KnowledgeSpine] MedLab paper ingestion mirror failed:', error.message));
             res.json(result);
+        } catch (e) {
+            res.status(500).json({ success: false, error: e.message });
+        }
+    });
+
+    router.post('/medical-lab/manuscript/standardize', async (req, res) => {
+        try {
+            const {
+                title = 'SOMA MedLab Manuscript Draft',
+                text,
+                manuscript,
+                type,
+                sourceLedger,
+                evidenceGrade,
+                replicationPlan,
+                objective,
+                researchQuestion
+            } = req.body || {};
+            const rawText = String(text || manuscript || '').trim();
+            if (!rawText) return res.status(400).json({ success: false, error: 'text or manuscript is required' });
+            const standardized = researchIngestion.manuscriptStandardizer.standardize({
+                type,
+                title,
+                rawText,
+                sourceLedger,
+                evidenceGrade,
+                replicationPlan,
+                objective,
+                researchQuestion
+            });
+            res.json({ success: true, ...standardized });
         } catch (e) {
             res.status(500).json({ success: false, error: e.message });
         }
@@ -6227,6 +6504,8 @@ ${personaContext}${characterContext}`.trim()
                 }).catch(error => console.warn('[KnowledgeSpine] Market Lab autopilot mirror failed:', error.message));
             }
             try { missionControlRuntime.hydrateFromMarketLab(); } catch {}
+            // After a full autopilot batch, trigger the retraining pipeline to re-evaluate promotion
+            try { retrainingPipeline.forceRun().catch(() => {}); } catch {}
             system.auditLedger?.append({ actor: 'MarketLab', action: 'backtest_run', metadata: { symbol: ranked[0]?.asset?.symbol || 'unknown', strategy: ranked[0]?.strategy?.id || 'unknown', status: ranked[0]?.status, prometheusScore: ranked[0]?.prometheusScore } });
             res.json({
                 success: true,
@@ -6250,6 +6529,7 @@ ${personaContext}${characterContext}`.trim()
             if (!result.success && result.running) return res.json(result);
             if (!result.success) return res.status(500).json(result);
             try { missionControlRuntime.hydrateFromMarketLab(); } catch {}
+            try { retrainingPipeline.forceRun().catch(() => {}); } catch {}
             system.auditLedger?.append({ actor: 'MarketLab', action: 'backtest_run', metadata: { symbol: result.best?.asset?.symbol || 'unknown', strategy: result.best?.strategy?.id || 'unknown', status: result.best?.status, prometheusScore: result.best?.prometheusScore } });
             res.json({
                 ...result,

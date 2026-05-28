@@ -41,12 +41,12 @@ async function runHealthCheck() {
 
         // 2. Memory & RAM Optimization Check
         console.log('\n2️⃣  Verifying Memory Systems (MnemonicArbiter)...');
-        if (system.mnemonic && system.mnemonic.initialized) {
+        if (system.mnemonic && typeof system.mnemonic.getMemoryStats === 'function') {
             const stats = system.mnemonic.getMemoryStats();
             results.memory = '✅ ACTIVE';
             console.log(`   ✓ MnemonicArbiter Active (RAM Optimized)`);
-            console.log(`   ✓ Hot Tier: ${stats.storage.hot}`);
-            console.log(`   ✓ Warm Tier: ${stats.storage.warm}`);
+            console.log(`   ✓ Hot Tier: ${stats.storage?.hot || 'N/A'}`);
+            console.log(`   ✓ Warm Tier: ${stats.warm?.size || 0} vectors`);
         } else {
             results.memory = '⚠️  INITIALIZING';
             console.log('   ⚠️  MnemonicArbiter still in async init');

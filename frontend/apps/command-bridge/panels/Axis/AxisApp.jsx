@@ -4,13 +4,15 @@ import {
     Users, UserPlus, Copy, Check, X, Trash2,
     LogOut, Smile, RefreshCw, Shield, Pencil, BookOpen, Home,
     MessageSquare, Globe2, Circle, Briefcase, ChevronRight, CheckSquare,
-    AtSign, MessageCircle, Heart, Sparkles,
+    AtSign, MessageCircle, Heart, Sparkles, Code2, BarChart3,
+    ClipboardList, FlaskConical, PenTool,
 } from 'lucide-react';
 import { AxisProvider, useAxis, AXIS_COLORS } from './AxisContext';
 import { TaskWindowModal } from './TaskWindow';
 import somaBackend from '../../somaBackend';
 import './AxisVoid.css';
 import AxisHomePanel from './AxisHomePanel';
+import AxisWorkspaceView from './AxisWorkspaceView';
 
 /* ── Void emoji data ─────────────────────────────────────────────────────── */
 const VOID_EMOJI = {
@@ -60,6 +62,34 @@ const WorkspaceGlyph = ({ active = false, size = 18 }) => (
         strokeWidth={active ? 2.2 : 1.7}
     />
 );
+
+const WORKSPACE_ICON_COMPONENTS = {
+    engineering: Code2,
+    finance: BarChart3,
+    operations: ClipboardList,
+    science: FlaskConical,
+    creative: PenTool,
+    workspace: Briefcase,
+    message: MessageSquare,
+};
+
+function WorkspaceTypeIcon({ icon, active = false, size = 16, className = '' }) {
+    const key = String(icon || '').toLowerCase();
+    const Icon = WORKSPACE_ICON_COMPONENTS[key];
+    if (Icon) {
+        return (
+            <Icon
+                className={className}
+                style={{ width: size, height: size, color: active ? '#c4b5fd' : '#71717a' }}
+                strokeWidth={active ? 2.2 : 1.7}
+            />
+        );
+    }
+    if (icon && icon.length <= 3) {
+        return <span className={className} style={{ fontSize: size, lineHeight: 1 }}>{icon}</span>;
+    }
+    return <WorkspaceGlyph active={active} size={size} />;
+}
 
 
 // ── Soma Dot ──────────────────────────────────────────────────────────────────
@@ -1115,6 +1145,14 @@ function IdentityModal({ onDone }) {
 }
 
 // ── Create Workspace Modal ────────────────────────────────────────────────────
+const WORKSPACE_TYPES = [
+    { id: 'engineering', label: 'Engineering', icon: 'engineering', desc: 'Code, systems, incidents, PRs, and sprints.', color: 'blue' },
+    { id: 'finance', label: 'Finance', icon: 'finance', desc: 'Budgets, reconciliations, forecasts, close.', color: 'emerald' },
+    { id: 'operations', label: 'Operations', icon: 'operations', desc: 'Roadmaps, projects, cross-team coordination.', color: 'violet' },
+    { id: 'science', label: 'Science', icon: 'science', desc: 'Research, experiments, data, and synthesis.', color: 'cyan' },
+    { id: 'creative', label: 'Creative', icon: 'creative', desc: 'Design, content, campaigns, and publishing.', color: 'fuchsia' },
+];
+
 const ROOM_TEMPLATES = [
     {
         id: 'community',
@@ -1160,37 +1198,49 @@ const ROOM_TEMPLATES = [
 
 function CreateWorkspaceModal({ onClose, kind = 'workspace' }) {
     const { createWorkspace, loadChannels, setActiveWorkspaceId, setActiveChannelId } = useAxis();
-    const [name, setName]   = useState('');
-    const [color, setColor] = useState(kind === 'room' ? 'violet' : 'blue');
-    const [desc, setDesc]   = useState('');
-    const [roomTemplate, setRoomTemplate] = useState('community');
-    const [busy, setBusy]   = useState(false);
+    const [name, setName]           = useState('');
+    const [color, setColor]         = useState(kind === 'room' ? 'violet' : 'blue');
+    const [desc, setDesc]           = useState('');
+    const [roomTemplate, setRoomTemplate]     = useState('community');
+    const [workspaceType, setWorkspaceType]   = useState('operations');
+    const [busy, setBusy]           = useState(false);
+    const [error, setError]         = useState('');
     const isRoom = kind === 'room';
     const selectedTemplate = ROOM_TEMPLATES.find(t => t.id === roomTemplate) || ROOM_TEMPLATES[0];
+    const selectedWsType = WORKSPACE_TYPES.find(t => t.id === workspaceType) || WORKSPACE_TYPES[0];
 
     const submit = async () => {
         if (!name.trim() || busy) return;
         setBusy(true);
+        setError('');
         try {
             const d = await createWorkspace({
                 name: name.trim(),
-                icon: isRoom ? '💬' : 'message',
-                color,
+                icon: isRoom ? '💬' : selectedWsType.icon,
+                color: isRoom ? color : selectedWsType.color,
                 type: isRoom ? 'room' : 'workspace',
                 description: desc.trim(),
                 roomTemplate: isRoom ? roomTemplate : undefined,
             });
-            if (d?.ok) {
-                const workspaceId = d.workspace.id;
-                setActiveWorkspaceId(workspaceId);
-                const channels = await loadChannels(workspaceId);
-                const startName = isRoom ? selectedTemplate.startChannel : 'general';
-                const defaultChannel = channels.find(ch => ch.name === startName) || channels.find(ch => ch.name === 'general') || channels[0];
-                setActiveChannelId(defaultChannel?.id || null);
-                onClose();
+            if (!d?.ok || !d?.workspace?.id) {
+                throw new Error(d?.error || `Could not create ${isRoom ? 'room' : 'workspace'}.`);
             }
-        } catch (e) { console.error('[Axis] createWorkspace failed:', e); }
-        setBusy(false);
+            const workspaceId = d.workspace.id;
+            if (!isRoom) {
+                localStorage.setItem(`axis_wstype_${workspaceId}`, workspaceType);
+            }
+            setActiveWorkspaceId(workspaceId);
+            const channels = await loadChannels(workspaceId);
+            const startName = isRoom ? selectedTemplate.startChannel : 'general';
+            const defaultChannel = channels.find(ch => ch.name === startName) || channels.find(ch => ch.name === 'general') || channels[0];
+            setActiveChannelId(defaultChannel?.id || null);
+            onClose();
+        } catch (e) {
+            console.error('[Axis] createWorkspace failed:', e);
+            setError(e?.message || `Could not create ${isRoom ? 'room' : 'workspace'}.`);
+        } finally {
+            setBusy(false);
+        }
     };
 
     return (
@@ -1199,10 +1249,34 @@ function CreateWorkspaceModal({ onClose, kind = 'workspace' }) {
                 <div>
                     <h2 className="text-sm font-bold text-zinc-100 tracking-wide">New {isRoom ? 'Room' : 'Workspace'}</h2>
                     <p className="text-xs text-zinc-500 mt-0.5">
-                        {isRoom ? 'A room is a Discord-like space with channels and threads.' : 'A workspace is for projects, tasks, and collaboration.'}
+                        {isRoom ? 'A room is a Discord-like space with channels and threads.' : 'A workspace is a full collaboration area with projects and tasks.'}
                     </p>
                 </div>
                 <div className="space-y-3">
+                    {!isRoom && (
+                        <div>
+                            <label className="text-[10px] text-zinc-500 uppercase tracking-widest mb-1.5 block">What kind of work?</label>
+                            <div className="grid grid-cols-1 gap-2">
+                                {WORKSPACE_TYPES.map(wt => {
+                                    const active = workspaceType === wt.id;
+                                    return (
+                                        <button
+                                            key={wt.id}
+                                            type="button"
+                                            onClick={() => { setWorkspaceType(wt.id); setColor(wt.color); }}
+                                            className={`rounded-xl border p-3 text-left transition-all ${active ? 'border-violet-300/35 bg-violet-400/10' : 'border-white/8 bg-white/[0.03] hover:border-white/15 hover:bg-white/[0.05]'}`}
+                                        >
+                                            <div className="flex items-center gap-2">
+                                                <WorkspaceTypeIcon icon={wt.icon} active={active} size={15} />
+                                                <span className={`text-xs font-bold ${active ? 'text-zinc-100' : 'text-zinc-400'}`}>{wt.label}</span>
+                                            </div>
+                                            <p className="mt-1 text-[10px] leading-relaxed text-zinc-600">{wt.desc}</p>
+                                        </button>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    )}
                     <div>
                         <label className="text-[10px] text-zinc-500 uppercase tracking-widest mb-1 block">Name</label>
                         <input value={name} onChange={e => setName(e.target.value)} onKeyDown={e => e.key === 'Enter' && submit()} placeholder={isRoom ? 'e.g. SOMA Builders' : 'e.g. Product Team'} className="w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg text-sm text-zinc-100 placeholder:text-zinc-600 focus:outline-none focus:border-white/25" />
@@ -1236,20 +1310,12 @@ function CreateWorkspaceModal({ onClose, kind = 'workspace' }) {
                             </div>
                         </div>
                     )}
-                    <div>
-                        <label className="text-[10px] text-zinc-500 uppercase tracking-widest mb-1.5 block">Icon</label>
-                        <div className="flex items-center gap-2 rounded-lg border border-white/8 bg-white/5 px-3 py-2">
-                            {isRoom ? <MessageCircle className="w-4 h-4 text-violet-300" /> : <WorkspaceGlyph active={true} size={16} />}
-                            <span className="text-xs text-zinc-500">{isRoom ? 'Room icon' : 'Plain workspace icon'}</span>
-                        </div>
-                    </div>
-                    <div>
-                        <label className="text-[10px] text-zinc-500 uppercase tracking-widest mb-1.5 block">Color</label>
-                        <div className="flex gap-2">
-                            {AXIS_COLORS.map(col => <button key={col} onClick={() => setColor(col)} className={`w-6 h-6 rounded-md ${c(col, 'dot')} transition-all ${color === col ? 'ring-2 ring-white ring-offset-1 ring-offset-[#111113]' : 'opacity-50 hover:opacity-80'}`} />)}
-                        </div>
-                    </div>
                 </div>
+                {error && (
+                    <div className="rounded-lg border border-rose-400/20 bg-rose-500/10 px-3 py-2 text-xs text-rose-200">
+                        {error}
+                    </div>
+                )}
                 <div className="flex gap-2 justify-end">
                     <button onClick={onClose} className="px-4 py-1.5 text-xs text-zinc-400 hover:text-zinc-200 transition-colors">Cancel</button>
                     <button onClick={submit} disabled={!name.trim() || busy} className="px-4 py-1.5 text-xs font-bold bg-white text-black rounded-lg hover:bg-zinc-100 disabled:opacity-30 transition-all">{busy ? '…' : `Create ${isRoom ? 'Room' : 'Workspace'}`}</button>
@@ -1995,9 +2061,16 @@ function CommunityBrowserModal({ onClose }) {
 // ── Room / Workspace Rail ─────────────────────────────────────────────────────
 function WorkspaceRail({ onAddRoom, onAddWorkspace, onCustomize, onCommunities }) {
     const { workspaces, activeWorkspaceId, setActiveWorkspaceId, setActiveChannelId, loadChannels, workspaceUnreadCounts } = useAxis();
-    const [hoveredId, setHoveredId] = useState(null);
-    const rooms = workspaces.filter(ws => ws.name !== 'Directs' && (ws.type === 'room' || ws.type === 'community'));
+    const [expanded, setExpanded] = useState(() => localStorage.getItem('axis_rail_expanded') === 'true');
+
+    const rooms         = workspaces.filter(ws => ws.name !== 'Directs' && (ws.type === 'room' || ws.type === 'community'));
     const collaboration = workspaces.filter(ws => ws.name !== 'Directs' && ws.type !== 'room' && ws.type !== 'community');
+
+    const toggleExpanded = () => {
+        const next = !expanded;
+        setExpanded(next);
+        localStorage.setItem('axis_rail_expanded', String(next));
+    };
 
     const openSpace = async (ws) => {
         setActiveWorkspaceId(ws.id);
@@ -2014,101 +2087,223 @@ function WorkspaceRail({ onAddRoom, onAddWorkspace, onCustomize, onCommunities }
         setActiveWorkspaceId(null);
     };
 
-    const renderSpaceButton = (ws) => {
+    const W = expanded ? 220 : 60;
+
+    const SpaceRow = ({ ws }) => {
         const active = ws.id === activeWorkspaceId;
         const unread = workspaceUnreadCounts?.[ws.id] || 0;
         const isRoom = ws.type === 'room' || ws.type === 'community';
+        const icon = ws.avatar_url
+            ? <img src={ws.avatar_url} alt={ws.name} style={{ width: 24, height: 24, borderRadius: 6, objectFit: 'cover' }} />
+            : isRoom
+                ? <MessageCircle style={{ width: 15, height: 15, color: active ? '#c4b5fd' : '#71717a' }} />
+                : <WorkspaceTypeIcon icon={ws.icon || 'workspace'} active={active} size={15} />;
+
         return (
-            <div key={ws.id} style={{ position: 'relative' }}
-                onMouseEnter={() => setHoveredId(ws.id)}
-                onMouseLeave={() => setHoveredId(null)}
+            <button
+                key={ws.id}
+                onClick={() => openSpace(ws)}
+                title={expanded ? undefined : ws.name}
+                style={{
+                    width: '100%', display: 'flex', alignItems: 'center',
+                    gap: expanded ? 10 : 0, padding: expanded ? '6px 10px' : '6px 8px',
+                    justifyContent: expanded ? 'flex-start' : 'center',
+                    borderRadius: 10, border: 'none', cursor: 'pointer',
+                    background: active
+                        ? 'linear-gradient(135deg, rgba(167,139,250,0.18), rgba(99,102,241,0.08))'
+                        : 'transparent',
+                    boxShadow: active ? '0 0 0 1px rgba(196,181,253,0.22)' : 'none',
+                    transition: 'all 0.15s',
+                    position: 'relative',
+                }}
+                onMouseEnter={e => { if (!active) e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; }}
+                onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'transparent'; }}
             >
-                <button
-                    onClick={() => openSpace(ws)}
-                    title={`${isRoom ? 'Room' : 'Workspace'}: ${ws.name}`}
-                    style={{
-                        position: 'relative', width: 44, height: 44, borderRadius: active ? 12 : 16,
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        fontSize: 19, cursor: 'pointer', flexShrink: 0, border: 'none',
-                        background: active
-                            ? 'linear-gradient(135deg, rgba(167,139,250,0.2), rgba(99,102,241,0.1))'
-                            : 'rgba(255,255,255,0.04)',
-                        boxShadow: active
-                            ? '0 0 0 1px rgba(196,181,253,0.34), 0 0 22px rgba(167,139,250,0.18), inset 0 1px 0 rgba(255,255,255,0.08)'
-                            : 'none',
-                        transition: 'all 0.18s cubic-bezier(0.4,0,0.2,1)',
-                    }}
-                    onMouseEnter={e => { if (!active) e.currentTarget.style.borderRadius = '12px'; }}
-                    onMouseLeave={e => { if (!active) e.currentTarget.style.borderRadius = '16px'; }}
-                >
-                    {ws.avatar_url
-                        ? <img src={ws.avatar_url} alt={ws.name} style={{ width: 32, height: 32, borderRadius: 8, objectFit: 'cover' }} />
-                        : isRoom
-                            ? <MessageCircle className="w-4 h-4" style={{ color: active ? '#c4b5fd' : '#71717a' }} />
-                            : (ws.icon && ws.icon !== 'message')
-                                ? <span style={{ fontSize: 18, lineHeight: 1 }}>{ws.icon}</span>
-                                : <WorkspaceGlyph active={active} />
-                    }
+                {/* Icon wrapper */}
+                <div style={{
+                    width: 32, height: 32, borderRadius: 9, flexShrink: 0,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    background: active ? 'rgba(167,139,250,0.14)' : 'rgba(255,255,255,0.05)',
+                    position: 'relative',
+                }}>
+                    {icon}
                     {!active && unread > 0 && (
-                        <div title={`${unread} unread`} style={{
-                            position: 'absolute', right: -2, top: -2, minWidth: 14, height: 14,
-                            padding: unread > 9 ? '0 4px' : 0, borderRadius: 99,
+                        <div style={{
+                            position: 'absolute', right: -3, top: -3, minWidth: 14, height: 14,
+                            padding: unread > 9 ? '0 3px' : 0, borderRadius: 99,
                             background: '#818cf8', color: '#09090b', border: '2px solid #08090b',
-                            fontSize: 8, fontWeight: 800, lineHeight: '10px', display: 'flex',
+                            fontSize: 7, fontWeight: 800, lineHeight: '10px', display: 'flex',
                             alignItems: 'center', justifyContent: 'center', fontFamily: "'Geist Mono', monospace",
                         }}>
                             {unread > 9 ? '9+' : unread}
                         </div>
                     )}
-                </button>
-            </div>
+                </div>
+                {/* Name (only when expanded) */}
+                {expanded && (
+                    <div style={{ flex: 1, minWidth: 0, textAlign: 'left' }}>
+                        <div style={{
+                            fontSize: 12.5, fontWeight: active ? 600 : 500,
+                            color: active ? '#e8edf5' : '#71717a',
+                            whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                            transition: 'color 0.15s',
+                        }}>{ws.name}</div>
+                        {isRoom && (
+                            <div style={{ fontSize: 9, color: '#3f3f46', fontFamily: "'Geist Mono', monospace", letterSpacing: '0.06em', marginTop: 1 }}>
+                                {ws.type === 'community' ? 'COMMUNITY' : 'ROOM'}
+                            </div>
+                        )}
+                    </div>
+                )}
+                {/* Unread badge on right when expanded */}
+                {expanded && !active && unread > 0 && (
+                    <div style={{
+                        minWidth: 16, height: 16, padding: '0 4px', borderRadius: 99,
+                        background: 'rgba(129,140,248,0.2)', color: '#818cf8',
+                        fontSize: 9, fontWeight: 700, display: 'flex',
+                        alignItems: 'center', justifyContent: 'center', fontFamily: "'Geist Mono', monospace",
+                    }}>
+                        {unread > 9 ? '9+' : unread}
+                    </div>
+                )}
+            </button>
         );
     };
 
-    const RailLabel = ({ children }) => (
-        <div style={{ width: 44, marginTop: 4, textAlign: 'center', fontSize: 8, color: '#3f3f46', fontFamily: "'Geist Mono', monospace", letterSpacing: '0.08em' }}>
-            {children}
-        </div>
+    const SectionHead = ({ label }) => expanded ? (
+        <div style={{
+            padding: '10px 12px 4px',
+            fontSize: 9, fontWeight: 700, letterSpacing: '0.14em', textTransform: 'uppercase',
+            color: '#2d3548', fontFamily: "'Geist Mono', monospace",
+        }}>{label}</div>
+    ) : (
+        <div style={{ height: 1, background: 'rgba(255,255,255,0.05)', margin: '6px 10px' }} />
     );
 
     return (
-        <div style={{ width: 60, flexShrink: 0, background: '#08090b', borderRight: '1px solid rgba(255,255,255,0.05)', display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '12px 0', gap: 6, overflowY: 'auto' }}>
-            <button onClick={openAxisHome} title="Axis Home"
+        <div style={{
+            width: W, flexShrink: 0, background: '#07080b',
+            borderRight: '1px solid rgba(255,255,255,0.05)',
+            display: 'flex', flexDirection: 'column',
+            padding: expanded ? '10px 8px' : '10px 8px',
+            gap: 2, overflowY: 'auto', overflowX: 'hidden',
+            transition: 'width 0.22s cubic-bezier(0.4,0,0.2,1)',
+        }}>
+            {/* Home button */}
+            <button onClick={openAxisHome} title={expanded ? undefined : 'Axis Home'}
                 style={{
-                    width: 44, height: 44, borderRadius: activeWorkspaceId ? 16 : 12,
-                    background: activeWorkspaceId ? 'rgba(255,255,255,0.04)' : 'rgba(167,139,250,0.16)',
-                    border: activeWorkspaceId ? '1px solid rgba(255,255,255,0.06)' : '1px solid rgba(167,139,250,0.35)',
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    cursor: 'pointer', flexShrink: 0, transition: 'all 0.15s',
-                    boxShadow: activeWorkspaceId ? 'none' : '0 0 22px rgba(167,139,250,0.14)',
+                    width: '100%', display: 'flex', alignItems: 'center',
+                    gap: expanded ? 10 : 0, padding: expanded ? '6px 10px' : '6px 8px',
+                    justifyContent: expanded ? 'flex-start' : 'center',
+                    borderRadius: 10, border: 'none', cursor: 'pointer',
+                    background: !activeWorkspaceId ? 'rgba(167,139,250,0.14)' : 'transparent',
+                    boxShadow: !activeWorkspaceId ? '0 0 0 1px rgba(196,181,253,0.2)' : 'none',
+                    transition: 'all 0.15s', marginBottom: 2,
                 }}
-                onMouseEnter={e => { e.currentTarget.style.borderRadius = '12px'; e.currentTarget.style.background = activeWorkspaceId ? 'rgba(255,255,255,0.07)' : 'rgba(167,139,250,0.2)'; }}
-                onMouseLeave={e => { e.currentTarget.style.borderRadius = activeWorkspaceId ? '16px' : '12px'; e.currentTarget.style.background = activeWorkspaceId ? 'rgba(255,255,255,0.04)' : 'rgba(167,139,250,0.16)'; }}>
-                <Home className="w-4 h-4" style={{ color: activeWorkspaceId ? '#71717a' : '#c4b5fd' }} />
+                onMouseEnter={e => { if (activeWorkspaceId) e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; }}
+                onMouseLeave={e => { if (activeWorkspaceId) e.currentTarget.style.background = 'transparent'; }}
+            >
+                <div style={{
+                    width: 32, height: 32, borderRadius: 9, flexShrink: 0,
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    background: !activeWorkspaceId ? 'rgba(167,139,250,0.2)' : 'rgba(255,255,255,0.05)',
+                }}>
+                    <Home style={{ width: 15, height: 15, color: !activeWorkspaceId ? '#c4b5fd' : '#71717a' }} />
+                </div>
+                {expanded && (
+                    <span style={{
+                        fontSize: 12.5, fontWeight: !activeWorkspaceId ? 600 : 500,
+                        color: !activeWorkspaceId ? '#e8edf5' : '#71717a',
+                        whiteSpace: 'nowrap',
+                    }}>Home</span>
+                )}
             </button>
-            <div style={{ width: 32, height: 1, background: 'rgba(255,255,255,0.06)', margin: '3px 0' }} />
-            <RailLabel>ROOMS</RailLabel>
-            {rooms.map(renderSpaceButton)}
-            <button onClick={onAddRoom} title="New Room"
-                style={{ width: 44, height: 32, borderRadius: 12, background: 'rgba(167,139,250,0.06)', border: '1px dashed rgba(167,139,250,0.22)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6d5fa8', cursor: 'pointer', flexShrink: 0, transition: 'all 0.15s' }}
-                onMouseEnter={e => { e.currentTarget.style.color = '#c4b5fd'; e.currentTarget.style.borderColor = 'rgba(167,139,250,0.4)'; }}
-                onMouseLeave={e => { e.currentTarget.style.color = '#6d5fa8'; e.currentTarget.style.borderColor = 'rgba(167,139,250,0.22)'; }}>
-                <Plus className="w-4 h-4" />
+
+            {/* Rooms section */}
+            <SectionHead label="Rooms" />
+            {rooms.map(ws => <SpaceRow key={ws.id} ws={ws} />)}
+
+            {/* Add room */}
+            <button onClick={onAddRoom} title={expanded ? undefined : 'New Room'}
+                style={{
+                    width: '100%', display: 'flex', alignItems: 'center',
+                    gap: expanded ? 10 : 0, padding: expanded ? '5px 10px' : '5px 8px',
+                    justifyContent: expanded ? 'flex-start' : 'center',
+                    borderRadius: 10, border: '1px dashed rgba(167,139,250,0.18)',
+                    cursor: 'pointer', background: 'transparent', transition: 'all 0.15s', marginTop: 2,
+                }}
+                onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(167,139,250,0.4)'; e.currentTarget.style.background = 'rgba(167,139,250,0.05)'; }}
+                onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(167,139,250,0.18)'; e.currentTarget.style.background = 'transparent'; }}
+            >
+                <div style={{ width: 32, height: 28, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <Plus style={{ width: 13, height: 13, color: '#6d5fa8' }} />
+                </div>
+                {expanded && <span style={{ fontSize: 11.5, color: '#6d5fa8', fontFamily: "'Geist Mono', monospace", letterSpacing: '0.04em' }}>Room</span>}
             </button>
-            {collaboration.length > 0 && <RailLabel>WORK</RailLabel>}
-            {collaboration.map(renderSpaceButton)}
+
+            {/* Workspaces section */}
+            {collaboration.length > 0 && <SectionHead label="Workspaces" />}
+            {collaboration.map(ws => <SpaceRow key={ws.id} ws={ws} />)}
+
+            {/* Add workspace */}
+            <button onClick={onAddWorkspace} title={expanded ? undefined : 'New Workspace'}
+                style={{
+                    width: '100%', display: 'flex', alignItems: 'center',
+                    gap: expanded ? 10 : 0, padding: expanded ? '5px 10px' : '5px 8px',
+                    justifyContent: expanded ? 'flex-start' : 'center',
+                    borderRadius: 10, border: '1px dashed rgba(167,139,250,0.18)',
+                    cursor: 'pointer', background: 'transparent', transition: 'all 0.15s', marginTop: 2,
+                }}
+                onMouseEnter={e => { e.currentTarget.style.borderColor = 'rgba(167,139,250,0.4)'; e.currentTarget.style.background = 'rgba(167,139,250,0.05)'; }}
+                onMouseLeave={e => { e.currentTarget.style.borderColor = 'rgba(167,139,250,0.18)'; e.currentTarget.style.background = 'transparent'; }}
+            >
+                <div style={{ width: 32, height: 28, borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <Plus style={{ width: 13, height: 13, color: '#6d5fa8' }} />
+                </div>
+                {expanded && <span style={{ fontSize: 11.5, color: '#6d5fa8', fontFamily: "'Geist Mono', monospace", letterSpacing: '0.04em' }}>Workspace</span>}
+            </button>
+
             <div style={{ flex: 1 }} />
-            <button onClick={onCommunities} title="Browse Communities"
-                style={{ width: 44, height: 44, borderRadius: 16, background: 'rgba(99,102,241,0.06)', border: '1px solid rgba(99,102,241,0.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, cursor: 'pointer', flexShrink: 0, transition: 'all 0.15s' }}
-                onMouseEnter={e => { e.currentTarget.style.background = 'rgba(99,102,241,0.14)'; e.currentTarget.style.borderRadius = '12px'; }}
-                onMouseLeave={e => { e.currentTarget.style.background = 'rgba(99,102,241,0.06)'; e.currentTarget.style.borderRadius = '16px'; }}>
-                <Globe2 className="w-4 h-4 text-violet-300" />
+
+            {/* Communities */}
+            <button onClick={onCommunities} title={expanded ? undefined : 'Browse Communities'}
+                style={{
+                    width: '100%', display: 'flex', alignItems: 'center',
+                    gap: expanded ? 10 : 0, padding: expanded ? '6px 10px' : '6px 8px',
+                    justifyContent: expanded ? 'flex-start' : 'center',
+                    borderRadius: 10, border: 'none', cursor: 'pointer',
+                    background: 'rgba(99,102,241,0.06)', transition: 'all 0.15s',
+                }}
+                onMouseEnter={e => { e.currentTarget.style.background = 'rgba(99,102,241,0.13)'; }}
+                onMouseLeave={e => { e.currentTarget.style.background = 'rgba(99,102,241,0.06)'; }}
+            >
+                <div style={{ width: 32, height: 32, borderRadius: 9, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <Globe2 style={{ width: 15, height: 15, color: '#c4b5fd' }} />
+                </div>
+                {expanded && <span style={{ fontSize: 12.5, color: '#a78bfa', fontWeight: 500 }}>Communities</span>}
             </button>
-            <button onClick={onAddWorkspace} title="New Workspace"
-                style={{ width: 44, height: 44, borderRadius: 16, background: 'rgba(255,255,255,0.03)', border: '1px dashed rgba(255,255,255,0.1)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#2d3142', cursor: 'pointer', flexShrink: 0, transition: 'all 0.15s' }}
-                onMouseEnter={e => { e.currentTarget.style.color = '#6b7280'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.2)'; e.currentTarget.style.borderRadius = '12px'; }}
-                onMouseLeave={e => { e.currentTarget.style.color = '#2d3142'; e.currentTarget.style.borderColor = 'rgba(255,255,255,0.1)'; e.currentTarget.style.borderRadius = '16px'; }}>
-                <Briefcase className="w-4 h-4" />
+
+            {/* Collapse / expand toggle */}
+            <button onClick={toggleExpanded}
+                title={expanded ? 'Collapse sidebar' : 'Expand sidebar'}
+                style={{
+                    width: '100%', display: 'flex', alignItems: 'center',
+                    gap: expanded ? 10 : 0, padding: expanded ? '6px 10px' : '6px 8px',
+                    justifyContent: expanded ? 'flex-start' : 'center',
+                    borderRadius: 10, border: 'none', cursor: 'pointer',
+                    background: 'transparent', transition: 'all 0.15s', marginTop: 2,
+                }}
+                onMouseEnter={e => { e.currentTarget.style.background = 'rgba(255,255,255,0.04)'; }}
+                onMouseLeave={e => { e.currentTarget.style.background = 'transparent'; }}
+            >
+                <div style={{ width: 32, height: 32, borderRadius: 9, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                    <ChevronRight style={{
+                        width: 14, height: 14, color: '#3f4a5c',
+                        transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)',
+                        transition: 'transform 0.22s cubic-bezier(0.4,0,0.2,1)',
+                    }} />
+                </div>
+                {expanded && <span style={{ fontSize: 11, color: '#3f4a5c', fontFamily: "'Geist Mono', monospace", letterSpacing: '0.06em' }}>COLLAPSE</span>}
             </button>
         </div>
     );
@@ -2190,7 +2385,7 @@ function ChannelSidebar({ onCreateCh, onCreateThread, onJoin, onGoHome, onNewPro
         <div className="w-[220px] shrink-0 bg-[#0e0e10] border-r border-white/5 flex flex-col">
             <div className="px-4 py-3.5 border-b border-white/5 flex items-center justify-between shrink-0">
                 <div className="min-w-0 flex items-center gap-1.5">
-                    {isRoom ? <MessageCircle className="w-3.5 h-3.5 text-violet-300" /> : <WorkspaceGlyph active={true} size={14} />}
+                    {isRoom ? <MessageCircle className="w-3.5 h-3.5 text-violet-300" /> : <WorkspaceTypeIcon icon={activeWorkspace?.icon || 'workspace'} active={true} size={14} />}
                     <h3 className="text-[13px] font-bold text-zinc-100 truncate">{activeWorkspace?.name || 'Loading…'}</h3>
                 </div>
                 <div className="flex items-center gap-0.5 ml-1">
@@ -3336,6 +3531,14 @@ function AxisContent() {
         sendMessage('@soma Please summarize the recent conversation in this channel and identify any key decisions.', { mode: 'archive' });
     }, [sendMessage]);
 
+    const isRegularWorkspace = activeWorkspaceId && activeWorkspace &&
+        activeWorkspace.type !== 'room' && activeWorkspace.type !== 'community' && activeWorkspace.name !== 'Directs';
+    const storedWsType = activeWorkspaceId ? localStorage.getItem(`axis_wstype_${activeWorkspaceId}`) : null;
+    const iconWsType = WORKSPACE_TYPES.some(t => t.id === activeWorkspace?.icon) ? activeWorkspace.icon : null;
+    const wsType = isRegularWorkspace
+        ? (storedWsType || iconWsType || 'operations')
+        : null;
+
     if (loading && !user) return (
         <div className="flex h-full w-full items-center justify-center" style={{ background: '#08090b' }}>
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, color: '#2d3142' }}>
@@ -3354,7 +3557,7 @@ function AxisContent() {
                 onCommunities={() => setShowCommunities(true)}
             />
 
-            {activeWorkspaceId && (
+            {activeWorkspaceId && !wsType && (
                 <div className="flex flex-col border-r border-white/5 shrink-0" style={{ width: 220 }}>
                     <ChannelSidebar
                         onCreateCh={() => setShowCreateCh(true)}
@@ -3372,26 +3575,28 @@ function AxisContent() {
                 </div>
             )}
 
-            {activeChannelId && activeChannel
-                ? <ChatArea
-                    onInvite={() => setShowInvite(true)}
-                    showMembers={showMembers}
-                    onToggleMembers={() => setShowMembers(v => !v)}
-                    onSearch={() => setShowSearch(true)}
-                    showContext={showContext}
-                    onToggleContext={() => setShowContext(v => !v)}
-                    onOpenProfile={(memberId) => setProfileTarget({ memberId, isSelf: false })}
-                />
-                : activeWorkspace?.type === 'community'
-                    ? <CommunityHome workspace={activeWorkspace} hdrs={hdrs} />
-                    : activeWorkspaceId
-                        ? <SpaceOpeningFallback workspace={activeWorkspace} />
-                    : <AxisHome
-                        onCommunities={() => setShowCommunities(true)}
-                        onCreateRoom={() => setShowCreateRoom(true)}
-                        onCreateWorkspace={() => setShowCreateWs(true)}
-                        onStartDirect={() => setShowStartDirect(true)}
+            {wsType
+                ? <AxisWorkspaceView workspaceType={wsType} workspace={activeWorkspace} />
+                : activeChannelId && activeChannel
+                    ? <ChatArea
+                        onInvite={() => setShowInvite(true)}
+                        showMembers={showMembers}
+                        onToggleMembers={() => setShowMembers(v => !v)}
+                        onSearch={() => setShowSearch(true)}
+                        showContext={showContext}
+                        onToggleContext={() => setShowContext(v => !v)}
+                        onOpenProfile={(memberId) => setProfileTarget({ memberId, isSelf: false })}
                     />
+                    : activeWorkspace?.type === 'community'
+                        ? <CommunityHome workspace={activeWorkspace} hdrs={hdrs} />
+                        : activeWorkspaceId
+                            ? <SpaceOpeningFallback workspace={activeWorkspace} />
+                        : <AxisHome
+                            onCommunities={() => setShowCommunities(true)}
+                            onCreateRoom={() => setShowCreateRoom(true)}
+                            onCreateWorkspace={() => setShowCreateWs(true)}
+                            onStartDirect={() => setShowStartDirect(true)}
+                        />
             }
 
             {showMembers && activeChannelId && activeChannel && (
@@ -3399,7 +3604,7 @@ function AxisContent() {
             )}
 
             <ContextPane
-                open={showContext && !!activeChannelId && !!activeChannel}
+                open={!wsType && showContext && !!activeChannelId && !!activeChannel}
                 channel={activeChannel}
                 onSomaAsk={handleSomaAsk}
             />

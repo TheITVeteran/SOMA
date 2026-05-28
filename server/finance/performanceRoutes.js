@@ -8,6 +8,8 @@ import tradeLogger from './TradeLogger.js';
 import performanceCalculator from './PerformanceCalculator.js';
 import scalpingEngine from './scalpingEngine.js';
 import simulationLearningEngine from './SimulationLearningEngine.js';
+import { signalLibrary } from './SignalLibrary.js';
+import pnlAttributor from './PnLAttributor.js';
 
 const router = express.Router();
 
@@ -439,6 +441,27 @@ function generateLearningEvents(limit) {
 }
 
 /**
+ * GET /api/learning/signals
+ * Get current SignalLibrary weights and recent outcome history
+ */
+router.get('/signals', (req, res) => {
+    try {
+        const weights = signalLibrary.getWeights();
+        const history = signalLibrary.getOutcomeHistory?.() || [];
+        res.json({
+            success: true,
+            signals: {
+                weights,
+                recentOutcomes: history.slice(-50),
+                totalOutcomes: history.length
+            }
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+/**
  * GET /api/learning/state
  * Get the current learning engine state (config, trend, adjustments)
  */
@@ -591,5 +614,19 @@ function formatStrategyName(strategy) {
         .replace(/_/g, ' ')
         .replace(/\b\w/g, c => c.toUpperCase());
 }
+
+/**
+ * GET /api/performance/attribution?days=30
+ * P&L decomposition: alpha vs beta, execution score, factor tilt, per-strategy breakdown
+ */
+router.get('/attribution', async (req, res) => {
+    try {
+        const days = Math.max(7, Math.min(365, parseInt(req.query.days || 30)));
+        const report = await pnlAttributor.attribute(days);
+        res.json({ success: true, report });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
 
 export default router;

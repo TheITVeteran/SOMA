@@ -4,6 +4,7 @@ import { Database, Zap, HardDrive, Archive, Activity, TrendingUp } from 'lucide-
 const MemoryTierMonitor = ({ isConnected }) => {
   const [memoryStats, setMemoryStats] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
     if (!isConnected) return;
@@ -13,9 +14,12 @@ const MemoryTierMonitor = ({ isConnected }) => {
         const response = await fetch('/api/memory/status');
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
         const data = await response.json();
+        if (data.success === false) throw new Error(data.error || 'Memory status unavailable');
         setMemoryStats(data);
+        setError(null);
         setIsLoading(false);
       } catch (err) {
+        setError(err.message);
         setIsLoading(false);
       }
     };
@@ -30,6 +34,17 @@ const MemoryTierMonitor = ({ isConnected }) => {
     return (
       <div className="bg-[#151518]/60 backdrop-blur-md border border-white/5 rounded-xl p-5 shadow-lg flex items-center justify-center">
         <Activity className="w-5 h-5 text-zinc-600 animate-pulse" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="bg-[#151518]/60 backdrop-blur-md border border-white/5 rounded-xl p-5 shadow-lg">
+        <h3 className="text-zinc-100 font-semibold text-sm flex items-center mb-3">
+          <Database className="w-4 h-4 mr-2 text-blue-400" /> Memory Tiers
+        </h3>
+        <p className="text-red-400 text-xs">{error}</p>
       </div>
     );
   }
@@ -53,8 +68,8 @@ const MemoryTierMonitor = ({ isConnected }) => {
           <div className="flex items-center space-x-3">
             <Zap className="w-4 h-4 text-red-400" />
             <div>
-              <div className="text-zinc-200 text-xs font-semibold">Hot (Redis)</div>
-              <div className="text-zinc-500 text-[9px]">&lt;1ms Latency</div>
+              <div className="text-zinc-200 text-xs font-semibold">Hot Cache</div>
+              <div className="text-zinc-500 text-[9px]">Immediate Retrieval</div>
             </div>
           </div>
           <div className="text-right">
@@ -67,8 +82,8 @@ const MemoryTierMonitor = ({ isConnected }) => {
           <div className="flex items-center space-x-3">
             <HardDrive className="w-4 h-4 text-amber-400" />
             <div>
-              <div className="text-zinc-200 text-xs font-semibold">Warm (Vector)</div>
-              <div className="text-zinc-500 text-[9px]">~10ms Latency</div>
+              <div className="text-zinc-200 text-xs font-semibold">Warm Vector</div>
+              <div className="text-zinc-500 text-[9px]">Semantic Retrieval</div>
             </div>
           </div>
           <div className="text-right">
@@ -81,8 +96,8 @@ const MemoryTierMonitor = ({ isConnected }) => {
           <div className="flex items-center space-x-3">
             <Archive className="w-4 h-4 text-blue-400" />
             <div>
-              <div className="text-zinc-200 text-xs font-semibold">Cold (SQLite)</div>
-              <div className="text-zinc-500 text-[9px]">~50ms Latency</div>
+              <div className="text-zinc-200 text-xs font-semibold">Cold Archive</div>
+              <div className="text-zinc-500 text-[9px]">Durable Records</div>
             </div>
           </div>
           <div className="text-right">

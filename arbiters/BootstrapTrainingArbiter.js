@@ -151,6 +151,16 @@ export class BootstrapTrainingArbiter extends EventEmitter {
       console.log(`[${this.name}]    ℹ️  No existing learning found (starting fresh)`);
     }
 
+    const medicalDistillationPath = path.join(process.cwd(), 'data', 'training', 'medical_lora_distilled.jsonl');
+    try {
+      await fs.access(medicalDistillationPath);
+      datasetPaths.medical = medicalDistillationPath;
+      const medicalData = await this.readDataset(medicalDistillationPath);
+      console.log(`[${this.name}]    ✅ Found ${medicalData.length} medical manuscript distillation examples`);
+    } catch {
+      console.log(`[${this.name}]    ℹ️  No medical manuscript distillation data found yet`);
+    }
+
     // 1. Export base dataset from MetaLearningArbiter
     if (this.metaLearning) {
       console.log(`[${this.name}] 📚 Exporting meta-learning dataset...`);

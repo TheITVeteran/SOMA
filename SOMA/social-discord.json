@@ -1,0 +1,28 @@
+{
+  "conversations": [
+    {
+      "id": "discord-smoke-tester",
+      "channel": "smoke",
+      "author": "tester",
+      "messages": 1,
+      "replies": 1,
+      "lastSeenAt": 1779484637149
+    }
+  ],
+  "replies": [
+    {
+      "id": "discord-reply-1779484637149",
+      "platform": "discord",
+      "channel": "smoke",
+      "author": "tester",
+      "inboundText": "hello soma",
+      "responseText": "hello from soma",
+      "action": "reply",
+      "status": "simulated",
+      "simulated": true,
+      "createdAt": 1779484637149
+    }
+  ],
+  "lastCheck": 1779484637149,
+  "connected": false
+}

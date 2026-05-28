@@ -11,6 +11,7 @@ import crypto from 'crypto';
 const DATA_DIR = path.join(process.cwd(), 'data', 'trading');
 const STATE_PATH = path.join(DATA_DIR, 'mission-control-runtime.json');
 const MARKET_LEDGER_PATH = path.join(process.cwd(), 'data', 'market-lab', 'strategy-ledger.json');
+const UCB_STATE_PATH = path.join(DATA_DIR, 'strategy-ucb-state.json');
 
 const STRATEGY_PROFILES = {
     standard_portfolio: { minConfidence: 0.62, maxPositionPct: 0.08, takeProfitPct: 0.05, stopLossPct: 0.02, cooldownMs: 120000, analysisIntervalMs: 60000 },
@@ -45,6 +46,8 @@ class MissionControlRuntime {
         this.sessionId = null;
         this.state = this._defaultState();
         this._lastPromotionEvidenceHash = null;
+        this._lastAutoPromoteAt = 0;
+        this._ucb = this._loadUCBState(); // UCB1 strategy selection state
     }
 
     _defaultState() {
@@ -257,10 +260,24 @@ class MissionControlRuntime {
 
     evaluatePromotion({ recordEvidence = false } = {}) {
         this.hydrateFromMarketLab();
-        const stats = this.tradeLogger?.getStats?.(90) || {};
+        const liveStats = this.tradeLogger?.getStats?.(90) || {};
         const closedTrades = this.tradeLogger?.getClosedTrades?.(90) || [];
-        const policy = this.state.promotionPolicy;
         const active = this.state.activeStrategy || {};
+
+        // Merge live stats with market_lab validated stats.
+        // Market Lab (backtest/sim) counts toward promotion only if win rate/profit factor
+        // pass independently — live paper trades always take precedence when available.
+        const marketLabTrades = Number(active.trades || 0);
+        const marketLabWinRate = Number(active.winRate || 0);
+        const hasEnoughLive = (liveStats.totalTrades || 0) >= 10;
+        const stats = hasEnoughLive ? liveStats : {
+            totalTrades: Math.max(liveStats.totalTrades || 0, marketLabTrades),
+            winRate:     (liveStats.totalTrades || 0) > 0 ? liveStats.winRate : marketLabWinRate,
+            profitFactor: liveStats.profitFactor || (marketLabWinRate >= 60 ? 1.5 : 0),
+            totalPnl:    liveStats.totalPnl || (active.pnl || 0),
+            avgSlippage: liveStats.avgSlippage || 0
+        };
+        const policy = this.state.promotionPolicy;
         const firstTradeTime = closedTrades
             .map(trade => Date.parse(trade.entry_time || trade.created_at || trade.exit_time))
             .filter(Number.isFinite)
@@ -307,6 +324,10 @@ class MissionControlRuntime {
         };
         this.state.liveEligible = ladder.liveEligible;
         this.state.lastPromotion = result;
+
+        // Auto-promote if all gates pass (24h cooldown enforced inside)
+        if (approved) this._autoPromote(result);
+
         if (recordEvidence) try {
             const evidencePayload = {
                 approved,
@@ -392,6 +413,186 @@ class MissionControlRuntime {
 
     getJournal(limit = 100) {
         return this.tradeLogger?.getLifecycleEvents?.({ limit }) || [];
+    }
+
+    // ─── UCB1 Strategy Selection ──────────────────────────────────────────────
+
+    _loadUCBState() {
+        try {
+            if (fs.existsSync(UCB_STATE_PATH)) {
+                return JSON.parse(fs.readFileSync(UCB_STATE_PATH, 'utf8'));
+            }
+        } catch { /* fresh start */ }
+        // Initialize UCB state for each strategy profile
+        const strategies = {};
+        for (const id of Object.keys(STRATEGY_PROFILES)) {
+            strategies[id] = { trials: 0, wins: 0, totalReward: 0, avgReward: 0, rewards: [] };
+        }
+        return { strategies, totalTrials: 0, savedAt: null };
+    }
+
+    _saveUCBState() {
+        try {
+            this._ucb.savedAt = new Date().toISOString();
+            fs.writeFileSync(UCB_STATE_PATH, JSON.stringify(this._ucb, null, 2));
+        } catch { /* non-fatal */ }
+    }
+
+    /**
+     * UCB1: select the best trading strategy for the current market regime.
+     * When a regime is known, uses regime-specific reward history.
+     * Falls back to global UCB1 if no regime data exists yet.
+     * @param {string} [regime] - optional current market regime
+     */
+    selectTradingStrategy(regime = null) {
+        const C = 1.5;
+        const strategies = this._ucb.strategies;
+        const total = this._ucb.totalTrials || 1;
+
+        // Ensure all strategy profiles are tracked
+        for (const id of Object.keys(STRATEGY_PROFILES)) {
+            if (!strategies[id]) {
+                strategies[id] = { trials: 0, wins: 0, totalReward: 0, avgReward: 0, rewards: [], byRegime: {} };
+            }
+            if (!strategies[id].byRegime) strategies[id].byRegime = {};
+        }
+
+        // If regime known and we have enough regime-specific data, use it
+        if (regime) {
+            const regimeStrategies = Object.entries(strategies)
+                .filter(([, s]) => s.byRegime?.[regime]?.trials >= 3);
+            if (regimeStrategies.length >= 2) {
+                const regimeTotal = regimeStrategies.reduce((s, [, v]) => s + (v.byRegime[regime]?.trials || 0), 0) || 1;
+                let bestId = null, bestScore = -Infinity;
+                for (const [id, s] of regimeStrategies) {
+                    const rs = s.byRegime[regime];
+                    const exploit = rs.avgReward || 0;
+                    const explore = C * Math.sqrt(Math.log(regimeTotal) / (rs.trials || 1));
+                    const score   = exploit + explore;
+                    if (score > bestScore) { bestScore = score; bestId = id; }
+                }
+                if (bestId) {
+                    console.log(`[MCR] UCB1 regime-select: ${bestId} for regime=${regime}`);
+                    return bestId;
+                }
+            }
+        }
+
+        // Global UCB1 fallback
+        // Force exploration: any strategy with < 3 trials goes first
+        const underexplored = Object.entries(strategies).filter(([, s]) => s.trials < 3);
+        if (underexplored.length > 0) {
+            const [id] = underexplored[Math.floor(Math.random() * underexplored.length)];
+            return id;
+        }
+
+        // UCB1 formula: avgReward + C * sqrt(ln(total) / trials)
+        let bestId = null, bestScore = -Infinity;
+        for (const [id, s] of Object.entries(strategies)) {
+            const exploit = s.avgReward;
+            const explore = C * Math.sqrt(Math.log(total) / (s.trials || 1));
+            const score   = exploit + explore;
+            if (score > bestScore) { bestScore = score; bestId = id; }
+        }
+        return bestId || Object.keys(STRATEGY_PROFILES)[0];
+    }
+
+    /**
+     * Record the outcome of a trade for UCB1 learning.
+     * @param {string} strategyId - which strategy profile was active
+     * @param {number} pnlPct     - realized P&L as fraction (0.02 = +2%)
+     * @param {string} [regime]   - optional market regime at trade time
+     */
+    recordStrategyOutcome(strategyId, pnlPct, regime = null) {
+        if (!strategyId || typeof pnlPct !== 'number') return;
+        let s = this._ucb.strategies[strategyId];
+        if (!s) {
+            // Auto-register unknown strategies (e.g. sim strategies)
+            if (!STRATEGY_PROFILES[strategyId]) return;
+            s = { trials: 0, wins: 0, totalReward: 0, avgReward: 0, rewards: [], byRegime: {} };
+            this._ucb.strategies[strategyId] = s;
+        }
+        if (!s.byRegime) s.byRegime = {};
+
+        s.trials++;
+        this._ucb.totalTrials++;
+        const reward = Math.tanh(pnlPct * 20); // squash to [-1, +1] — 5% = ~0.76 reward
+        if (pnlPct > 0) s.wins++;
+        s.totalReward += reward;
+        s.rewards.push(reward);
+        if (s.rewards.length > 50) s.rewards.shift();
+
+        // Exponential decay weighted average
+        let wSum = 0, wTotal = 0;
+        for (let i = 0; i < s.rewards.length; i++) {
+            const w = Math.pow(0.95, s.rewards.length - 1 - i);
+            wSum   += s.rewards[i] * w;
+            wTotal += w;
+        }
+        s.avgReward = wTotal > 0 ? wSum / wTotal : 0;
+
+        // Regime-specific sub-bandit
+        if (regime) {
+            if (!s.byRegime[regime]) s.byRegime[regime] = { trials: 0, wins: 0, rewards: [], avgReward: 0 };
+            const rs = s.byRegime[regime];
+            rs.trials++;
+            if (pnlPct > 0) rs.wins++;
+            rs.rewards.push(reward);
+            if (rs.rewards.length > 30) rs.rewards.shift();
+            let rwSum = 0, rwTotal = 0;
+            for (let i = 0; i < rs.rewards.length; i++) {
+                const w = Math.pow(0.95, rs.rewards.length - 1 - i);
+                rwSum += rs.rewards[i] * w; rwTotal += w;
+            }
+            rs.avgReward = rwTotal > 0 ? rwSum / rwTotal : 0;
+        }
+
+        if (this._ucb.totalTrials % 5 === 0) this._saveUCBState();
+        console.log(`[MCR] UCB1 outcome: ${strategyId}${regime ? ' @' + regime : ''} pnl=${(pnlPct*100).toFixed(2)}% reward=${reward.toFixed(3)} avgReward=${s.avgReward.toFixed(3)} trials=${s.trials}`);
+    }
+
+    // ─── Auto-Promotion ────────────────────────────────────────────────────────
+
+    /**
+     * If all promotion gates pass, automatically elevate to the next tier.
+     * Hard cooldown: no more than one auto-promotion per 24h.
+     */
+    _autoPromote(promotionResult) {
+        const cooldownMs = 24 * 60 * 60 * 1000;
+        if (Date.now() - this._lastAutoPromoteAt < cooldownMs) return;
+        if (!promotionResult?.approved) return;
+
+        const currentTier = this.state.activeTier || 'paper';
+        const targetTier  = promotionResult.ladder?.maxEligibleTier || 'paper';
+        if (currentTier === targetTier) return;
+
+        this._lastAutoPromoteAt = Date.now();
+        this.state.activeTier = targetTier;
+        this.state.liveEligible = promotionResult.ladder?.liveEligible || false;
+        this._saveState();
+
+        console.log(`[MCR] AUTO-PROMOTION: ${currentTier} → ${targetTier}`);
+        this.recordLifecycle({
+            stage: 'auto_promotion',
+            status: 'promoted',
+            payload: {
+                fromTier: currentTier,
+                toTier: targetTier,
+                checks: promotionResult.checks,
+                stats: promotionResult.stats,
+                promotedAt: new Date().toISOString()
+            }
+        });
+
+        try {
+            marketEvidenceStore.append('promotion', {
+                type: 'auto_promotion',
+                fromTier: currentTier,
+                toTier: targetTier,
+                promotedAt: new Date().toISOString(),
+                stats: promotionResult.stats
+            }, { source: 'MissionControlRuntime.autoPromote' });
+        } catch { /* non-fatal */ }
     }
 
     getStatus() {

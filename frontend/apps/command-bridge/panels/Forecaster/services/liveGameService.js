@@ -21,19 +21,13 @@ export const fetchLiveGames = async () => {
         const allGames = results.flat();
 
         if (allGames.length === 0) {
-            console.warn("No live games found from API, checking for mock fallback...");
-            // Only fallback if truly empty? Or maybe mix them?
-            // For now, if API works but returns empty (off-season), that's valid.
-            // But if API fails (returns null/undefined), fallback.
-            // My fetchEndpoint returns [] on error, so we might get [] if all fail.
-            // Let's fallback if empty just to show *something* for the demo.
-             return INITIAL_GAMES;
+            return { games: INITIAL_GAMES, source: 'sample', detail: 'No current ESPN events returned; displaying sample slate for simulator testing.' };
         }
 
-        return allGames;
+        return { games: allGames, source: 'espn', detail: 'Schedule and game state loaded from ESPN through the SOMA proxy.' };
     } catch (error) {
         console.error("Failed to fetch live games:", error);
-        return INITIAL_GAMES; // Graceful degradation
+        return { games: INITIAL_GAMES, source: 'sample', detail: 'Live game request failed; displaying sample slate for simulator testing.' };
     }
 };
 

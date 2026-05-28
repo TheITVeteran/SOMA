@@ -1,6 +1,7 @@
 const { execFileSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
+const { normalizeGoalContract } = require('./LearningSpine.cjs');
 
 const DEFAULT_STOPWORDS = new Set([
   'the', 'and', 'for', 'with', 'that', 'this', 'from', 'into', 'goal',
@@ -27,6 +28,7 @@ function overlapScore(a = '', b = '') {
 function buildQualityReport(goalData = {}, existingGoals = []) {
   const issues = [];
   const warnings = [];
+  const contract = normalizeGoalContract(goalData);
   const title = String(goalData.title || '').trim();
   const description = String(goalData.description || '').trim();
   const category = String(goalData.category || '').trim();
@@ -34,8 +36,8 @@ function buildQualityReport(goalData = {}, existingGoals = []) {
     ? goalData.successCriteria.filter(Boolean)
     : Array.isArray(goalData.metadata?.successCriteria)
       ? goalData.metadata.successCriteria.filter(Boolean)
-      : [];
-  const verification = goalData.verification || goalData.metadata?.verification || null;
+      : contract.successCriteria;
+  const verification = goalData.verification || goalData.metadata?.verification || contract.verification;
 
   if (!title) issues.push('Missing title');
   if (!category) issues.push('Missing category');
@@ -58,7 +60,8 @@ function buildQualityReport(goalData = {}, existingGoals = []) {
     warnings,
     duplicateGoalId: duplicate?.id || null,
     successCriteria,
-    verification
+    verification,
+    contract
   };
 }
 
@@ -91,16 +94,37 @@ function runCommand(command, repoRoot) {
 function verifyGoal(goal = {}, result = {}, options = {}) {
   const repoRoot = options.repoRoot || process.cwd();
   const metadata = goal.metadata || {};
-  const verification = result.verification || metadata.verification || goal.verification || null;
+  const contract = metadata.goalContract || normalizeGoalContract(goal);
+  const verification = result.verification || metadata.verification || goal.verification || contract.verification || null;
   const evidence = result.evidence || metadata.evidence || {};
   const checks = [];
 
-  const criteria = result.successCriteria || metadata.successCriteria || goal.successCriteria || [];
+  const criteria = result.successCriteria || metadata.successCriteria || goal.successCriteria || contract.successCriteria || [];
   for (const criterion of criteria) {
+    const hasExplicitEvidence = Boolean(evidence[String(criterion)]);
+    const hasCompletionText = Boolean(result.summary || result.result || result.output || result.message);
+    const hasStopReason = Boolean(result.stopReason || result.reason);
     checks.push({
       type: 'success_criterion',
       label: String(criterion),
-      passed: Boolean(result.force || evidence[String(criterion)] || result.summary || result.result)
+      passed: Boolean(result.force || hasExplicitEvidence || hasCompletionText || (verification?.allowStopReason && hasStopReason))
+    });
+  }
+
+  const requiredEvidence = verification?.evidenceRequired || metadata.evidenceRequired || contract.evidenceRequired || [];
+  for (const key of requiredEvidence) {
+    const value = result[key] ?? evidence[key] ?? metadata[key];
+    const passed = Boolean(
+      result.force ||
+      value ||
+      (key === 'summary' && (result.summary || result.result || result.output || result.message)) ||
+      (verification?.allowStopReason && (result.stopReason || result.reason))
+    );
+    checks.push({
+      type: 'evidence_required',
+      label: String(key),
+      passed,
+      output: passed ? 'Evidence present' : `Missing required evidence: ${key}`
     });
   }
 

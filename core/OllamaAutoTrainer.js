@@ -468,6 +468,18 @@ Make the questions specific and the answers rich, drawing on your actual knowled
       } catch (e) {}
     }
 
+    // Domain distillation — includes MedLab manuscript/risk/citation lessons
+    const domainDistillationPaths = [
+      path.join(process.cwd(), 'data', 'training', 'medical_lora_distilled.jsonl'),
+      path.join(process.cwd(), 'data', 'training', 'soma_knowledge.jsonl')
+    ];
+    for (const domainPath of domainDistillationPaths) {
+      try {
+        const data = await fs.readFile(domainPath, 'utf8');
+        if (data.trim()) parts.push(data.trim());
+      } catch (e) {}
+    }
+
     // Conversation + revision pair data last
     if (conversationsPath) {
       try {

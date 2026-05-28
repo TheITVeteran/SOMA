@@ -30,8 +30,28 @@ import { EventEmitter } from 'events';
 import { createRequire } from 'module';
 import fs from 'fs';
 import path from 'path';
+import { spawn } from 'child_process';
+import { fileURLToPath } from 'url';
 const _require = createRequire(import.meta.url);
 const _workLedger = _require('../core/AutonomousWorkLedger.cjs');
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const SCRIPTS_DIR = path.join(__dirname, '..', 'scripts');
+
+// Maps curiosity gap domains → which lobe's training data to hunt
+const DOMAIN_LOBE_MAP = {
+  agent_architecture: 'logos', llm_engineering: 'logos', nodejs_backend: 'logos',
+  react_frontend: 'logos', web_scraping: 'logos', real_time_systems: 'logos',
+  reasoning_engines: 'logos', signal_routing: 'logos', prompt_engineering: 'logos',
+  creative_writing: 'aurora', social_media_strategy: 'aurora', content_creation: 'aurora',
+  digital_identity: 'aurora',
+  financial_markets: 'prometheus', trading_algorithms: 'prometheus',
+  self_improvement_loops: 'prometheus',
+  cognitive_architecture: 'thalamus', memory_systems: 'thalamus',
+  knowledge_representation: 'thalamus',
+};
+
+const HUNT_COOLDOWN_MS = 24 * 60 * 60 * 1000; // 24h per lobe
 
 export class CuriosityEngine extends EventEmitter {
   constructor(opts = {}) {
@@ -111,6 +131,10 @@ export class CuriosityEngine extends EventEmitter {
     this._persistPath = path.join(this._dataDir, 'curiosity-state.json');
     this._dirty = false;
     this._autoSaveInterval = null;
+
+    // Dataset hunting state
+    this._lastHuntTime = {}; // lobe → timestamp of last hunt
+    this._runningHunts = new Set(); // lobes currently being hunted
 
     console.log(`[${this.name}] Initialized - SOMA is now curious!`);
   }
@@ -921,121 +945,114 @@ Respond as SOMA thinking to herself: first person, genuine, not a textbook. Keep
   }
 
   /**
+   * Maps a capability/gap name to a lobe for dataset hunting.
+   */
+  _domainToLobe(domain) {
+    if (!domain) return null;
+    const key = String(domain).toLowerCase().replace(/[^a-z0-9_]/g, '_');
+    return DOMAIN_LOBE_MAP[key] || null;
+  }
+
+  /**
+   * Spawns hunt-datasets.mjs for the given lobe, then build-lobe-datasets.mjs.
+   * Rate-limited to once per lobe per 24h. Non-blocking — runs in background.
+   */
+  async _huntDatasets(lobe, reason = 'curiosity') {
+    if (!lobe) return;
+    if (this._runningHunts.has(lobe)) {
+      console.log(`[${this.name}] 🔍 Hunt already running for ${lobe} — skipping`);
+      return;
+    }
+    const lastHunt = this._lastHuntTime[lobe] || 0;
+    if (Date.now() - lastHunt < HUNT_COOLDOWN_MS) {
+      const hoursAgo = ((Date.now() - lastHunt) / 3600000).toFixed(1);
+      console.log(`[${this.name}] 🔍 ${lobe} hunted ${hoursAgo}h ago — cooldown active`);
+      return;
+    }
+
+    this._runningHunts.add(lobe);
+    this._lastHuntTime[lobe] = Date.now();
+    this._dirty = true;
+    this.stats.autonomousTrainings++;
+
+    console.log(`[${this.name}] 🎓 Autonomous dataset hunt: ${lobe.toUpperCase()} lobe (reason: ${reason})`);
+
+    const huntScript = path.join(SCRIPTS_DIR, 'hunt-datasets.mjs');
+    const buildScript = path.join(SCRIPTS_DIR, 'build-lobe-datasets.mjs');
+
+    const runScript = (scriptPath, args = []) => new Promise((resolve) => {
+      const proc = spawn(process.execPath, [scriptPath, ...args], {
+        cwd: path.join(__dirname, '..'),
+        stdio: ['ignore', 'pipe', 'pipe'],
+        env: { ...process.env }
+      });
+      let out = '';
+      proc.stdout.on('data', d => { out += d; });
+      proc.stderr.on('data', d => { out += d; });
+      proc.on('close', code => resolve({ code, out }));
+      proc.on('error', err => resolve({ code: -1, out: err.message }));
+    });
+
+    // Run hunt then build in sequence, both non-blocking from SOMA's perspective
+    (async () => {
+      try {
+        const hunt = await runScript(huntScript, ['--lobe', lobe]);
+        const huntLines = hunt.out.split('\n').filter(l => l.includes('examples') || l.includes('✅') || l.includes('⚠'));
+        console.log(`[${this.name}] 🎓 Hunt ${lobe} complete (exit ${hunt.code}): ${huntLines.slice(-2).join(' | ')}`);
+
+        if (hunt.code === 0) {
+          const build = await runScript(buildScript, ['--lobe', lobe]);
+          console.log(`[${this.name}] 🎓 Build ${lobe} complete (exit ${build.code})`);
+        }
+      } catch (err) {
+        console.warn(`[${this.name}] ⚠️  Dataset hunt error for ${lobe}: ${err.message}`);
+      } finally {
+        this._runningHunts.delete(lobe);
+      }
+    })();
+  }
+
+  /**
    * Trigger capability improvement training
    */
   async _triggerCapabilityTraining(item) {
-    if (!this.messageBroker) return;
-
-    // console.log(`[${this.name}]    → Capability training: ${item.capability} (${(item.currentLevel * 100).toFixed(0)}% → ${(item.targetLevel * 100).toFixed(0)}%)`);
-
-    // Request training data focused on this capability
-    await this.messageBroker.sendMessage({
-      from: this.name,
-      to: 'TrainingDataCollector',
-      type: 'collect_focused_data',
-      payload: {
-        focus: item.capability,
-        targetExamples: 50,
-        prioritize: ['high_quality', 'high_diversity', item.capability],
-        source: 'curiosity_self_improvement'
-      }
-    });
-
-    // Trigger fine-tuning session
-    await this.messageBroker.sendMessage({
-      from: this.name,
-      to: 'LocalModelManager',
-      type: 'request_training',
-      payload: {
-        trigger: 'curiosity_self_improvement',
-        capability: item.capability,
-        currentLevel: item.currentLevel,
-        targetLevel: item.targetLevel,
-        priority: 'medium',
-        autonomous: true
-      }
-    });
-
-    this.stats.autonomousTrainings++;
+    const lobe = this._domainToLobe(item.capability);
+    if (lobe) {
+      await this._huntDatasets(lobe, `capability_gap: ${item.capability}`);
+    }
   }
 
   /**
    * Trigger gap-filling learning
    */
   async _triggerGapFillingLearning(item) {
-    if (!this.messageBroker) return;
-
-    // console.log(`[${this.name}]    → Gap-filling: ${item.gap}`);
-
-    // Request knowledge graph expansion
-    await this.messageBroker.sendMessage({
-      from: this.name,
-      to: 'KnowledgeGraphFusion',
-      type: 'expand_knowledge',
-      payload: {
-        domain: item.gap,
-        depth: 2,
-        source: 'curiosity_gap_filling'
-      }
-    });
-
-    // Request causal relationship discovery
-    await this.messageBroker.sendMessage({
-      from: this.name,
-      to: 'CausalityArbiter',
-      type: 'discover_causal_chains',
-      payload: {
-        domain: item.gap,
-        source: 'curiosity_gap_filling'
-      }
-    });
+    const lobe = this._domainToLobe(item.gap);
+    if (lobe) {
+      await this._huntDatasets(lobe, `knowledge_gap: ${item.gap}`);
+    }
   }
 
   /**
-   * Trigger cross-domain synthesis training
+   * Trigger cross-domain synthesis training — hunt both concept lobes
    */
   async _triggerSynthesisTraining(item) {
-    if (!this.messageBroker) return;
-
-    // console.log(`[${this.name}]    → Synthesis training: ${item.concepts?.join(' + ')}`);
-
-    // Request cross-domain training data
-    await this.messageBroker.sendMessage({
-      from: this.name,
-      to: 'TrainingDataCollector',
-      type: 'collect_synthesis_data',
-      payload: {
-        concepts: item.concepts,
-        targetExamples: 30,
-        requireSynthesis: true,
-        source: 'curiosity_creative_combination'
-      }
-    });
-
-    this.stats.autonomousTrainings++;
+    if (!item.concepts?.length) return;
+    // concepts are ThoughtNetwork node IDs — extract domain from the gap label if possible
+    const domains = item.concepts.map(c => String(c).split(':')[0]).filter(Boolean);
+    const lobes = [...new Set(domains.map(d => this._domainToLobe(d)).filter(Boolean))];
+    for (const lobe of lobes) {
+      await this._huntDatasets(lobe, `synthesis: ${domains.join(' + ')}`);
+    }
   }
 
   /**
    * Trigger fragment-specific training
    */
   async _triggerFragmentTraining(item) {
-    if (!this.messageBroker) return;
-
-    // console.log(`[${this.name}]    → Fragment training: ${item.fragment}`);
-
-    // Request fragment improvement
-    await this.messageBroker.sendMessage({
-      from: this.name,
-      to: 'FragmentRegistry',
-      type: 'improve_fragment',
-      payload: {
-        fragmentId: item.fragment,
-        targetExpertiseLevel: (item.currentLevel || 0) + 0.2,
-        source: 'curiosity_fragment_improvement'
-      }
-    });
-
-    this.stats.autonomousTrainings++;
+    const lobe = this._domainToLobe(item.fragment || item.gap);
+    if (lobe) {
+      await this._huntDatasets(lobe, `fragment_gap: ${item.fragment || item.gap}`);
+    }
   }
 
   /**
@@ -1215,7 +1232,8 @@ Respond as SOMA thinking to herself: first person, genuine, not a textbook. Keep
         curiosityQueue: this.curiosityQueue.slice(0, 50),
         motivation: this.motivation,
         preferences: this.preferences,
-        stats: this.stats
+        stats: this.stats,
+        lastHuntTime: this._lastHuntTime
       };
 
       fs.writeFileSync(this._persistPath, JSON.stringify(snapshot, null, 2), 'utf8');
@@ -1256,6 +1274,9 @@ Respond as SOMA thinking to herself: first person, genuine, not a textbook. Keep
       }
       if (snapshot.stats) {
         this.stats = { ...this.stats, ...snapshot.stats };
+      }
+      if (snapshot.lastHuntTime) {
+        this._lastHuntTime = snapshot.lastHuntTime;
       }
 
       console.log(`[${this.name}] 📂 Restored curiosity state (${this.explorationHistory.size} topics explored, ${this.knowledgeGaps.size} gaps)`);

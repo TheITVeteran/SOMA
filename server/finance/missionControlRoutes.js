@@ -4,6 +4,11 @@ import strategyRegistry from './StrategyRegistry.js';
 import trainingJobRunner from './TrainingJobRunner.js';
 import historicalDataCache from './HistoricalDataCache.js';
 import tradeThesisStore from './TradeThesisStore.js';
+import retrainingPipeline from './RetrainingPipeline.js';
+import driftDetector from './DriftDetector.js';
+import abTestFramework from './ABTestFramework.js';
+import calendarGuard from './CalendarGuard.js';
+import correlationGuard from './CorrelationGuard.js';
 
 const router = express.Router();
 
@@ -194,6 +199,149 @@ router.post('/historical/cache', async (req, res) => {
         const { symbol = 'SPY', timeframe = '5Min', limit = 500, refresh = false } = req.body || {};
         const bars = await historicalDataCache.getBars(symbol, timeframe, limit, { refresh });
         res.json({ success: true, symbol, timeframe, bars: bars.length, historical: historicalDataCache.getStatus() });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// ─── Retraining Pipeline ───────────────────────────────────────────────────
+
+router.get('/pipeline/state', (req, res) => {
+    try {
+        res.json({ success: true, pipeline: retrainingPipeline.getState() });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+router.post('/pipeline/run', async (req, res) => {
+    try {
+        const result = await retrainingPipeline.forceRun();
+        res.json({ success: true, result });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// ─── Drift Detector ────────────────────────────────────────────────────────
+
+router.get('/drift/state', (req, res) => {
+    try {
+        res.json({ success: true, drift: driftDetector.getState() });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+router.post('/drift/check', async (req, res) => {
+    try {
+        const state = await driftDetector.forceCheck();
+        res.json({ success: true, drift: state });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// ─── A/B Test Framework ────────────────────────────────────────────────────
+
+router.get('/abtest/state', (req, res) => {
+    try {
+        res.json({ success: true, abtest: abTestFramework.getState() });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+router.post('/abtest/evaluate', (req, res) => {
+    try {
+        const result = abTestFramework.forceEvaluate();
+        res.json({ success: true, abtest: result });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// ─── UCB1 Strategy State ───────────────────────────────────────────────────
+
+router.get('/ucb/state', (req, res) => {
+    try {
+        res.json({
+            success: true,
+            ucb: missionControlRuntime._ucb || null,
+            selectedStrategy: missionControlRuntime.selectTradingStrategy?.() || null
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// ─── Full Intelligence Summary (all learning systems in one call) ──────────
+
+router.get('/intelligence', (req, res) => {
+    try {
+        res.json({
+            success: true,
+            pipeline: retrainingPipeline.getState(),
+            drift: driftDetector.getState(),
+            abtest: abTestFramework.getState(),
+            promotion: missionControlRuntime.evaluatePromotion(),
+            timestamp: new Date().toISOString()
+        });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// ─── Calendar Guard ────────────────────────────────────────────────────────
+
+router.get('/calendar/upcoming', (req, res) => {
+    try {
+        const days = Math.max(1, Math.min(30, parseInt(req.query.days || 7)));
+        res.json({ success: true, events: calendarGuard.getUpcoming(days) });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+router.get('/calendar/check', async (req, res) => {
+    try {
+        const { symbol = 'SPY', hours = 24 } = req.query;
+        const result = await calendarGuard.isEventRisk(symbol, parseInt(hours));
+        res.json({ success: true, symbol, ...result });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// ─── Correlation Guard ─────────────────────────────────────────────────────
+
+router.post('/correlation/check', async (req, res) => {
+    try {
+        const { symbol, openSymbols = [] } = req.body || {};
+        if (!symbol) return res.status(400).json({ success: false, error: 'symbol is required' });
+        const result = await correlationGuard.check(symbol, openSymbols);
+        res.json({ success: true, ...result });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+// ─── Market Regime ─────────────────────────────────────────────────────────
+
+router.get('/regime/state', async (req, res) => {
+    try {
+        const detector = global.SOMA_TRADING?.regimeDetector;
+        if (!detector) return res.json({ success: true, loaded: false, regime: null });
+        const { symbol } = req.query;
+        const regime = symbol ? await detector.detectRegime(symbol).catch(() => null) : null;
+        const adjustments = detector.getStrategyAdjustments?.(regime?.type || detector.currentRegime) || null;
+        res.json({
+            success: true,
+            loaded: true,
+            regime: regime || { type: detector.currentRegime || 'UNKNOWN', confidence: detector.confidence || 0 },
+            adjustments,
+            timestamp: new Date().toISOString()
+        });
     } catch (error) {
         res.status(500).json({ success: false, error: error.message });
     }

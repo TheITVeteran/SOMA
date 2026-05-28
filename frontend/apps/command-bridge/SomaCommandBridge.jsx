@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { lazy, Suspense, useState, useEffect, useRef, useCallback } from 'react';
 import {
   Cpu, Activity, Brain, Zap, HardDrive, Wifi, CheckCircle,
   Archive, Workflow, Database, Play, Pause, RotateCw, Trash2,
@@ -6,7 +6,7 @@ import {
   Shield, User, Users, Lightbulb, ThermometerSun, ChevronLeft,
   ChevronRight, Sparkles, Terminal, Circle, BarChart3, Search, X, Clock,
   Download, TrendingUp, TrendingDown, Target, Server, Gauge, Mail, Mic,
-  Box, Share2, DollarSign, CircleDollarSign, Pencil, Eye, Code2, Send, Radio
+  Box, Share2, DollarSign, CircleDollarSign, Pencil, Eye, Code2, Send, Radio, LayoutGrid
 } from 'lucide-react';
 import {
   LineChart, Line, RadarChart, Radar, PolarGrid,
@@ -71,6 +71,7 @@ import FileIntelligenceApp from './panels/FileIntelligence/FileIntelligenceApp';
 import ArbiteriumApp from './panels/arbiterium/ArbiteriumApp';
 import ThirdPlace from './panels/ThirdPlace/ThirdPlace';
 import GrayMatterPanel from './panels/GrayMatter/GrayMatterPanel';
+const ApertureOS = lazy(() => import('./panels/aperture/ApertureOS'));
 import ArgusEye from './components/ArgusEye';
 import ReflectionsTab from './components/ReflectionsTab';
 // import FinanceModule from './components/FinanceModule';
@@ -1078,8 +1079,68 @@ const SomaCommandBridge = () => {
     sceneMemory,
     whatChanged,
     setChannel: setVisionChannel,
-    askWhatChanged
+    askWhatChanged,
+    captureDesktop,
+    proposeActions,
+    executeAction
   } = useVision(somaBackend, isConnected);
+
+  const [proposals, setProposals] = useState([]);
+  const [isProposing, setIsProposing] = useState(false);
+  const [isCapturing, setIsCapturing] = useState(false);
+  const [isExecuting, setIsExecuting] = useState(false);
+  const [editingProposalId, setEditingProposalId] = useState(null);
+  const [hoveredProposalId, setHoveredProposalId] = useState(null);
+
+  const activeGhostCursor = React.useMemo(() => {
+    if (visionGhostCursor) {
+      return visionGhostCursor;
+    }
+    if (hoveredProposalId) {
+      const prop = proposals.find(p => p.id === hoveredProposalId);
+      if (prop && prop.params && prop.params.x !== undefined && prop.params.y !== undefined) {
+        return {
+          x: Math.round((prop.params.x / 1920) * 100),
+          y: Math.round((prop.params.y / 1080) * 100),
+          action: prop.type,
+          isProposed: true
+        };
+      }
+    }
+    if (editingProposalId) {
+      const prop = proposals.find(p => p.id === editingProposalId);
+      if (prop && prop.params && prop.params.x !== undefined && prop.params.y !== undefined) {
+        return {
+          x: Math.round((prop.params.x / 1920) * 100),
+          y: Math.round((prop.params.y / 1080) * 100),
+          action: prop.type,
+          isEditing: true
+        };
+      }
+    }
+    return null;
+  }, [visionGhostCursor, hoveredProposalId, editingProposalId, proposals]);
+
+  const handleImageClick = useCallback((e) => {
+    if (!editingProposalId) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const clickX = e.clientX - rect.left;
+    const clickY = e.clientY - rect.top;
+    const pctX = clickX / rect.width;
+    const pctY = clickY / rect.height;
+    const scaledX = Math.round(pctX * 1920);
+    const scaledY = Math.round(pctY * 1080);
+    
+    setProposals(prev => prev.map(p => {
+      if (p.id === editingProposalId) {
+        return {
+          ...p,
+          params: { ...p.params, x: scaledX, y: scaledY }
+        };
+      }
+      return p;
+    }));
+  }, [editingProposalId]);
 
   // Keep a ref of current vision state so the voice hook can inject it into queries
   const visionContextRef = useRef(null);
@@ -2185,6 +2246,7 @@ const SomaCommandBridge = () => {
           {[
             { id: 'studio', label: 'Studio', icon: User, color: 'cyan' },
             { id: 'axis', label: 'Axis', icon: MessageSquare, color: 'violet' },
+            { id: 'aperture', label: 'Aperture OS', icon: LayoutGrid, color: 'teal' },
             { id: 'core', label: 'Core System', icon: Cpu, color: 'blue' },
             { id: 'command', label: 'Command Center', icon: Activity, color: 'fuchsia' },
             { id: 'terminal', label: 'SOMA CT', icon: Terminal, color: 'amber' },
@@ -2234,7 +2296,7 @@ const SomaCommandBridge = () => {
       </div>
 
       {/* Main content */}
-      <div className={`flex-1 flex flex-col ${['terminal', 'orb', 'mission_control', 'knowledge', 'reflections', 'pulse', 'studio', 'axis'].includes(activeModule) ? 'overflow-hidden' : activeModule === 'command' ? 'overflow-hidden p-6' : 'overflow-y-auto p-6'}`}>
+      <div className={`flex-1 flex flex-col ${['terminal', 'orb', 'mission_control', 'knowledge', 'reflections', 'pulse', 'studio', 'axis', 'aperture'].includes(activeModule) ? 'overflow-hidden' : activeModule === 'command' ? 'overflow-hidden p-6' : 'overflow-y-auto p-6'}`}>
 
         {/* CORE SYSTEM MODULE */}
         {activeModule === 'core' && (
@@ -2859,23 +2921,37 @@ const SomaCommandBridge = () => {
                       <span className="text-zinc-500 text-[10px] uppercase tracking-widest animate-pulse">Initialising perception...</span>
                     </div>
                   ) : (
-                    <div className="relative rounded-xl overflow-hidden border border-white/10">
+                    <div 
+                      className={`relative rounded-xl overflow-hidden border border-white/10 ${editingProposalId ? 'cursor-crosshair' : ''}`}
+                      onClick={handleImageClick}
+                    >
                       {/* Frame */}
                       <img
                         src={lastFrameUrl}
                         alt="SOMA Vision"
-                        className="w-full object-cover"
+                        className="w-full object-cover select-none pointer-events-none"
                         style={{ maxHeight: '180px' }}
                       />
                       {/* Scanlines */}
                       <div className="absolute inset-0 bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.2)_50%)] bg-[length:100%_3px] pointer-events-none opacity-40" />
                       {/* Ghost cursor */}
-                      {visionGhostCursor && (
+                      {activeGhostCursor && (
                         <div
                           className="absolute pointer-events-none transition-all duration-300"
-                          style={{ left: `${visionGhostCursor.x}%`, top: `${visionGhostCursor.y}%`, transform: 'translate(-50%,-50%)' }}
+                          style={{ left: `${activeGhostCursor.x}%`, top: `${activeGhostCursor.y}%`, transform: 'translate(-50%,-50%)' }}
                         >
-                          <div className={`w-3 h-3 rounded-full border-2 border-purple-400 bg-white/80 shadow-[0_0_8px_rgba(168,85,247,0.8)] ${visionGhostCursor.action === 'click' ? 'scale-150' : ''} transition-transform`} />
+                          <div 
+                            className={`w-3.5 h-3.5 rounded-full border-2 bg-white/90 transition-transform ${
+                              activeGhostCursor.isProposed 
+                                ? 'border-purple-500/70 border-dashed animate-pulse shadow-[0_0_8px_rgba(168,85,247,0.6)]' 
+                                : activeGhostCursor.isEditing 
+                                ? 'border-cyan-400 border-dashed animate-ping shadow-[0_0_8px_rgba(34,211,238,0.8)]' 
+                                : 'border-fuchsia-500 shadow-[0_0_12px_rgba(217,70,239,0.9)] scale-125'
+                            }`} 
+                          />
+                          <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-black/85 border border-white/10 rounded px-1 py-0.5 text-[6px] font-mono text-zinc-300 whitespace-nowrap">
+                            {activeGhostCursor.isProposed ? 'proposed' : activeGhostCursor.isEditing ? 'targeting' : 'aiming'}: {Math.round(activeGhostCursor.x * 19.2)},{Math.round(activeGhostCursor.y * 10.8)}
+                          </div>
                         </div>
                       )}
                       {/* Corner markers */}
@@ -2886,6 +2962,263 @@ const SomaCommandBridge = () => {
                       <div className="absolute bottom-2 left-1/2 -translate-x-1/2 px-2 py-0.5 bg-black/60 rounded-full text-[8px] font-mono text-zinc-500 uppercase tracking-wider">
                         {visionChannel} / {formatTimeAgo(lastFrameAt)}
                       </div>
+                    </div>
+                  )}
+
+                  {/* Desktop Control Panel */}
+                  {isVisionActive && (
+                    <div className="rounded-xl border border-purple-500/10 bg-purple-500/[0.035] p-3 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[9px] font-bold uppercase tracking-widest text-purple-300 font-mono">Desktop Control</span>
+                        <div className="flex gap-1.5">
+                          <button
+                            onClick={async () => {
+                              try {
+                                setIsCapturing(true);
+                                await captureDesktop();
+                              } catch (e) {
+                                toast.error(`Snapshot failed: ${e.message}`);
+                              } finally {
+                                setIsCapturing(false);
+                              }
+                            }}
+                            disabled={isCapturing}
+                            className="px-2 py-0.5 rounded bg-purple-500/10 border border-purple-500/20 text-[8px] font-mono uppercase tracking-wider text-purple-200 hover:bg-purple-500/20 disabled:opacity-50 transition-all"
+                          >
+                            {isCapturing ? 'Capturing...' : 'Snapshot'}
+                          </button>
+                          <button
+                            onClick={async () => {
+                              try {
+                                setIsProposing(true);
+                                const resProposals = await proposeActions();
+                                setProposals(resProposals);
+                              } catch (e) {
+                                toast.error(`Proposals failed: ${e.message}`);
+                              } finally {
+                                setIsProposing(false);
+                              }
+                            }}
+                            disabled={isProposing || !lastFrameUrl}
+                            className="px-2 py-0.5 rounded bg-fuchsia-500/10 border border-fuchsia-500/20 text-[8px] font-mono uppercase tracking-wider text-fuchsia-200 hover:bg-fuchsia-500/20 disabled:opacity-50 transition-all"
+                          >
+                            {isProposing ? 'Analyzing...' : 'Propose'}
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Proposals List Queue */}
+                      {proposals.length > 0 && (
+                        <div className="space-y-2 border-t border-purple-500/10 pt-2.5">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[8px] uppercase tracking-widest text-zinc-500 font-mono">Action Queue</span>
+                            <button
+                              onClick={() => {
+                                setProposals([]);
+                                setEditingProposalId(null);
+                              }}
+                              className="text-[8px] font-mono text-zinc-500 hover:text-zinc-300"
+                            >
+                              Clear
+                            </button>
+                          </div>
+                          <div className="space-y-2 max-h-48 overflow-y-auto pr-1">
+                            {proposals.map((prop) => {
+                              const isEditing = editingProposalId === prop.id;
+                              return (
+                                <div
+                                  key={prop.id}
+                                  onMouseEnter={() => setHoveredProposalId(prop.id)}
+                                  onMouseLeave={() => setHoveredProposalId(null)}
+                                  className={`rounded-lg border p-2 space-y-2 transition-all ${
+                                    isEditing 
+                                      ? 'border-cyan-500/30 bg-cyan-950/[0.15]' 
+                                      : 'border-white/5 bg-black/20 hover:border-purple-500/20'
+                                  }`}
+                                >
+                                  {isEditing ? (
+                                    <div className="space-y-1.5 text-[9px]">
+                                      <div className="flex gap-1.5">
+                                        <div className="flex-1">
+                                          <label className="text-[7px] text-zinc-500 uppercase font-mono block">Action Type</label>
+                                          <select
+                                            value={prop.type}
+                                            onChange={(e) => {
+                                              const newType = e.target.value;
+                                              setProposals(prev => prev.map(p => p.id === prop.id ? { ...p, type: newType } : p));
+                                            }}
+                                            className="w-full bg-zinc-900 border border-white/10 rounded px-1 py-0.5 text-[9px] text-white"
+                                          >
+                                            <option value="click">click</option>
+                                            <option value="type">type</option>
+                                            <option value="navigate">navigate</option>
+                                          </select>
+                                        </div>
+                                        <div className="flex-1">
+                                          <label className="text-[7px] text-zinc-500 uppercase font-mono block">Label</label>
+                                          <input
+                                            type="text"
+                                            value={prop.label}
+                                            onChange={(e) => {
+                                              const newLabel = e.target.value;
+                                              setProposals(prev => prev.map(p => p.id === prop.id ? { ...p, label: newLabel } : p));
+                                            }}
+                                            className="w-full bg-zinc-900 border border-white/10 rounded px-1.5 py-0.5 text-[9px] text-white"
+                                          />
+                                        </div>
+                                      </div>
+
+                                      {/* Coordinate Inputs (if click or hover) */}
+                                      {prop.type === 'click' && (
+                                        <div className="space-y-1 bg-black/35 p-1.5 rounded border border-white/5">
+                                          <span className="text-[7px] text-cyan-400 block font-mono">Tip: Click on screenshot above to aim</span>
+                                          <div className="flex gap-2">
+                                            <div className="flex-1">
+                                              <label className="text-[7px] text-zinc-500 font-mono block">X Coordinate</label>
+                                              <input
+                                                type="number"
+                                                value={prop.params?.x || 0}
+                                                onChange={(e) => {
+                                                  const newX = parseInt(e.target.value) || 0;
+                                                  setProposals(prev => prev.map(p => p.id === prop.id ? { ...p, params: { ...p.params, x: newX } } : p));
+                                                }}
+                                                className="w-full bg-zinc-900 border border-white/10 rounded px-1.5 py-0.5 text-[9px] text-white font-mono"
+                                              />
+                                            </div>
+                                            <div className="flex-1">
+                                              <label className="text-[7px] text-zinc-500 font-mono block">Y Coordinate</label>
+                                              <input
+                                                type="number"
+                                                value={prop.params?.y || 0}
+                                                onChange={(e) => {
+                                                  const newY = parseInt(e.target.value) || 0;
+                                                  setProposals(prev => prev.map(p => p.id === prop.id ? { ...p, params: { ...p.params, y: newY } } : p));
+                                                }}
+                                                className="w-full bg-zinc-900 border border-white/10 rounded px-1.5 py-0.5 text-[9px] text-white font-mono"
+                                              />
+                                            </div>
+                                          </div>
+                                        </div>
+                                      )}
+
+                                      {/* Text Inputs (if type) */}
+                                      {prop.type === 'type' && (
+                                        <div>
+                                          <label className="text-[7px] text-zinc-500 font-mono block">Text to Type</label>
+                                          <input
+                                            type="text"
+                                            value={prop.params?.text || ''}
+                                            onChange={(e) => {
+                                              const newText = e.target.value;
+                                              setProposals(prev => prev.map(p => p.id === prop.id ? { ...p, params: { ...p.params, text: newText } } : p));
+                                            }}
+                                            className="w-full bg-zinc-900 border border-white/10 rounded px-1.5 py-0.5 text-[9px] text-white"
+                                          />
+                                        </div>
+                                      )}
+
+                                      {/* URL Inputs (if navigate) */}
+                                      {prop.type === 'navigate' && (
+                                        <div>
+                                          <label className="text-[7px] text-zinc-500 font-mono block">URL</label>
+                                          <input
+                                            type="text"
+                                            value={prop.params?.url || ''}
+                                            onChange={(e) => {
+                                              const newUrl = e.target.value;
+                                              setProposals(prev => prev.map(p => p.id === prop.id ? { ...p, params: { ...p.params, url: newUrl } } : p));
+                                            }}
+                                            className="w-full bg-zinc-900 border border-white/10 rounded px-1.5 py-0.5 text-[9px] text-white"
+                                          />
+                                        </div>
+                                      )}
+
+                                      <div className="flex justify-end gap-1.5 pt-1">
+                                        <button
+                                          onClick={() => setEditingProposalId(null)}
+                                          className="px-2 py-0.5 rounded bg-zinc-800 text-[8px] font-mono text-zinc-400"
+                                        >
+                                          Cancel
+                                        </button>
+                                        <button
+                                          onClick={() => setEditingProposalId(null)}
+                                          className="px-2 py-0.5 rounded bg-cyan-500/20 border border-cyan-500/30 text-[8px] font-mono text-cyan-200"
+                                        >
+                                          Save
+                                        </button>
+                                      </div>
+                                    </div>
+                                  ) : (
+                                    <div className="space-y-1.5">
+                                      <div className="flex items-start justify-between gap-1.5">
+                                        <div>
+                                          <div className="text-[10px] text-zinc-100 font-medium leading-snug">{prop.label}</div>
+                                          <div className="text-[8px] font-mono text-zinc-500 uppercase tracking-wider mt-0.5">
+                                            {prop.type} {prop.params?.x !== undefined ? `(${prop.params.x}, ${prop.params.y})` : prop.params?.text || prop.params?.url}
+                                          </div>
+                                        </div>
+                                        <span className="text-[7px] font-mono bg-purple-500/10 text-purple-300 border border-purple-500/25 px-1 py-0.5 rounded">
+                                          {prop.id}
+                                        </span>
+                                      </div>
+                                      
+                                      <div className="flex justify-end gap-1.5 border-t border-white/5 pt-1.5">
+                                        <button
+                                          onClick={() => {
+                                            setProposals(prev => prev.filter(p => p.id !== prop.id));
+                                          }}
+                                          className="px-1.5 py-0.5 rounded border border-rose-500/20 text-rose-300 hover:bg-rose-500/10 text-[8px] font-mono"
+                                        >
+                                          Reject
+                                        </button>
+                                        <button
+                                          onClick={() => setEditingProposalId(prop.id)}
+                                          className="px-1.5 py-0.5 rounded border border-cyan-500/25 text-cyan-300 hover:bg-cyan-500/10 text-[8px] font-mono"
+                                        >
+                                          Edit
+                                        </button>
+                                        <button
+                                          onClick={async () => {
+                                            try {
+                                              setIsExecuting(true);
+                                              toast.info(`Executing SOMA proposal: ${prop.label}`);
+                                              const res = await executeAction(prop.type, prop.params);
+                                              if (res.success) {
+                                                toast.success('Action executed successfully!');
+                                                setProposals(prev => prev.filter(p => p.id !== prop.id));
+                                                setTimeout(async () => {
+                                                  try {
+                                                    const diffData = await askWhatChanged();
+                                                    if (diffData?.summary) {
+                                                      toast.info(`Verification: ${diffData.summary}`, { autoClose: 6000 });
+                                                    }
+                                                  } catch (err) {
+                                                    console.warn('Failed to fetch screen diff:', err);
+                                                  }
+                                                }, 1000);
+                                              } else {
+                                                toast.error(`Execution failed: ${res.error}`);
+                                              }
+                                            } catch (e) {
+                                              toast.error(`Execution failed: ${e.message}`);
+                                            } finally {
+                                              setIsExecuting(false);
+                                            }
+                                          }}
+                                          disabled={isExecuting}
+                                          className="px-2 py-0.5 rounded bg-emerald-500/20 border border-emerald-500/30 text-emerald-200 hover:bg-emerald-500/30 text-[8px] font-mono"
+                                        >
+                                          {isExecuting ? 'Executing...' : 'Approve'}
+                                        </button>
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
 
@@ -3653,8 +3986,14 @@ const SomaCommandBridge = () => {
           </div>
         )}
 
+        {activeModule === 'aperture' && (
+          <Suspense fallback={<div className="flex h-full items-center justify-center text-xs text-zinc-400">Opening Aperture...</div>}>
+            <ApertureOS />
+          </Suspense>
+        )}
+
         {/* DEFAULT FALLBACK */}
-        {!['terminal', 'orb', 'kevin', 'simulation', 'studio', 'core', 'arbiters', 'knowledge', 'reflections', 'storage', 'command', 'spine', 'settings', 'mission_control', 'forecaster', 'marketplace', 'finance', 'arbiterium', 'pulse', 'axis', 'thirdplace', 'graymatter'].includes(activeModule) && (
+        {!['terminal', 'orb', 'kevin', 'simulation', 'studio', 'core', 'arbiters', 'knowledge', 'reflections', 'storage', 'command', 'spine', 'settings', 'mission_control', 'forecaster', 'marketplace', 'finance', 'arbiterium', 'pulse', 'axis', 'thirdplace', 'graymatter', 'aperture'].includes(activeModule) && (
           <div className="flex items-center justify-center h-full text-zinc-600 italic">
             Integration for Module "{activeModule}" is ongoing...
           </div>

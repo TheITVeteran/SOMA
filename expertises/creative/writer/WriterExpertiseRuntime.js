@@ -29,6 +29,7 @@ export class WriterExpertiseRuntime extends ExpertiseBase {
             storyboards: state.boards?.length || 0,
             chapterReflections: state.chapterReflections?.length || 0,
             modes: ['scout', 'storyboard', 'chapter', 'critique', 'full'],
+            revisionModes: ['draft', 'tighten', 'more_emotional', 'more_cinematic', 'less_weird', 'more_soma', 'more_human', 'fix_dialogue'],
             structures: storyResearchLedger.getStructureToolbox().map(item => item.name),
         };
     }
@@ -62,6 +63,7 @@ export class WriterExpertiseRuntime extends ExpertiseBase {
                 chapterTitle: request.chapterTitle,
                 targetWords: request.targetWords || 1600,
                 useWriterBoard: request.useWriterBoard !== false,
+                revisionMode: request.revisionMode || request.modeHint || 'draft',
             });
         } else if (mode === 'critique' || mode === 'reflect') {
             const status = storyWorkspace.getStatus();
@@ -83,6 +85,7 @@ export class WriterExpertiseRuntime extends ExpertiseBase {
                 chapterTitle: request.chapterTitle,
                 targetWords: request.targetWords || 1600,
                 useWriterBoard: true,
+                revisionMode: request.revisionMode || request.modeHint || 'draft',
             });
             result = { ok: true, board: board.board, chapter };
         }

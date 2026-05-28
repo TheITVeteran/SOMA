@@ -20,10 +20,10 @@ function NemesisStatus({ nemesis }) {
             <ShieldCheck className="w-3.5 h-3.5 text-red-400 shrink-0" />
             <div className="min-w-0">
                 <span className="text-red-300 text-[11px] font-bold uppercase tracking-wider">NEMESIS</span>
-                <span className="text-zinc-500 text-[10px] ml-2">agentic · {nemesis.maxSteps} steps · {nemesis.tools?.length} tools</span>
+                {nemesis.totalEvals != null && <span className="text-zinc-500 text-[10px] ml-2">{nemesis.totalEvals} evaluations</span>}
             </div>
-            <div className={`ml-auto text-[10px] font-bold ${nemesis.ready ? 'text-emerald-400' : 'text-zinc-600'}`}>
-                {nemesis.ready ? 'ARMED' : 'OFFLINE'}
+            <div className={`ml-auto text-[10px] font-bold ${nemesis.online ? 'text-emerald-400' : 'text-zinc-600'}`}>
+                {nemesis.online ? (nemesis.avgScore != null ? `${Number(nemesis.avgScore).toFixed(2)} AVG` : 'ACTIVE') : 'OFFLINE'}
             </div>
         </div>
     );
@@ -95,8 +95,12 @@ export default function SelfModFeed({ isConnected }) {
                 somaBackend.fetch('/api/soma/selfmod/status'),
                 somaBackend.fetch('/api/soma/nemesis/status')
             ]);
-            if (smRes.status === 'fulfilled' && smRes.value.ok) setStatus(await smRes.value.json());
-            if (nRes.status === 'fulfilled' && nRes.value.ok)   setNemesis(await nRes.value.json());
+            if (smRes.status === 'fulfilled') {
+                setStatus(smRes.value);
+                setError(null);
+            }
+            if (nRes.status === 'fulfilled') setNemesis(nRes.value);
+            if (smRes.status === 'rejected') setError(smRes.reason?.message || 'Self-modification status unavailable');
         } catch (e) {
             setError(e.message);
         }

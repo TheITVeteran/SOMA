@@ -13,7 +13,7 @@ console.log('══════════════════════�
 async function verifyBoot() {
     try {
         console.log('[Test] Creating SomaBootstrap instance...');
-        const bootstrap = new SomaBootstrap();
+        const bootstrap = new SomaBootstrap(process.cwd(), { mode: 'dev' });
 
         console.log('[Test] Initializing system...');
         const system = await bootstrap.initialize();

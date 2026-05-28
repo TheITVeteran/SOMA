@@ -57,9 +57,15 @@ class TradeLogger {
                 entry_time TEXT,
                 exit_time TEXT,
                 exit_reason TEXT,
+                signal_scores_json TEXT,
                 created_at TEXT DEFAULT (datetime('now'))
             )
         `);
+
+        // Migration: add signal_scores_json to existing DBs
+        try {
+            this.db.exec(`ALTER TABLE trades ADD COLUMN signal_scores_json TEXT`);
+        } catch { /* column already exists */ }
 
         // Create daily snapshots table
         this.db.exec(`
@@ -132,8 +138,12 @@ class TradeLogger {
 
         // Prepare statements for performance
         this._stmts.insertTrade = this.db.prepare(`
-            INSERT INTO trades (order_id, symbol, side, qty, entry_price, filled_price, expected_price, slippage_pct, strategy, regime, status, entry_time)
-            VALUES (@order_id, @symbol, @side, @qty, @entry_price, @filled_price, @expected_price, @slippage_pct, @strategy, @regime, 'open', @entry_time)
+            INSERT INTO trades (order_id, symbol, side, qty, entry_price, filled_price, expected_price, slippage_pct, strategy, regime, status, entry_time, signal_scores_json)
+            VALUES (@order_id, @symbol, @side, @qty, @entry_price, @filled_price, @expected_price, @slippage_pct, @strategy, @regime, 'open', @entry_time, @signal_scores_json)
+        `);
+
+        this._stmts.updateSignalScores = this.db.prepare(`
+            UPDATE trades SET signal_scores_json = @signal_scores_json WHERE id = @id AND signal_scores_json IS NULL
         `);
 
         this._stmts.closeTrade = this.db.prepare(`
@@ -177,7 +187,8 @@ class TradeLogger {
             slippage_pct: trade.slippagePct || null,
             strategy: trade.strategy || 'manual',
             regime: trade.regime || null,
-            entry_time: new Date().toISOString()
+            entry_time: new Date().toISOString(),
+            signal_scores_json: trade.signalScores ? JSON.stringify(trade.signalScores) : null
         });
 
         try {
@@ -383,6 +394,33 @@ class TradeLogger {
             WHERE date >= date('now', ?)
             ORDER BY date ASC
         `).all(`-${days} days`);
+    }
+
+    /**
+     * Update signal scores on an already-logged trade (use when scores not available at entry time)
+     */
+    updateTradeSignalScores(tradeId, signalScores) {
+        if (!this.db || !tradeId || !signalScores) return;
+        this._stmts.updateSignalScores.run({
+            id: tradeId,
+            signal_scores_json: JSON.stringify(signalScores)
+        });
+    }
+
+    /**
+     * Get closed trades that have signal scores, with id > afterId, for bulk weight updates
+     */
+    getClosedTradesWithSignalScores(afterId = 0) {
+        if (!this.db) return [];
+        return this.db.prepare(`
+            SELECT id, pnl_pct, signal_scores_json FROM trades
+            WHERE status = 'closed' AND signal_scores_json IS NOT NULL AND id > ?
+            ORDER BY id ASC
+        `).all(afterId).map(row => ({
+            id: row.id,
+            pnl_pct: row.pnl_pct,
+            signalScores: JSON.parse(row.signal_scores_json)
+        }));
     }
 
     /**
