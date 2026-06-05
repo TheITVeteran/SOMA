@@ -145,6 +145,8 @@ async function main() {
                 if (!e.message.includes('Price deviation guard')) {
                     throw new Error(`Unexpected error: ${e.message}`);
                 }
+            } finally {
+                riskGateway.setHardHalt(false);
             }
         });
 
@@ -301,6 +303,89 @@ async function main() {
             if (result.metrics.finalCapital <= 0) {
                 throw new Error('Backtest resulted in absolute loss of capital');
             }
+        });
+
+        // 10. Auto-Halt on Price Deviation Breach
+        await runTest('Auto-Halt on Price Deviation Breach', async () => {
+            // Re-arm
+            riskGateway.setHardHalt(false);
+            
+            const order = {
+                symbol: 'AMZN',
+                side: 'buy',
+                qty: 5,
+                price: 250.0, // deviates by >0.5% from mid $150
+                type: 'limit'
+            };
+
+            try {
+                await riskGateway.validateOrder(order);
+                throw new Error('Deviation limit breach was not blocked');
+            } catch (e) {
+                console.log('Blocked correctly. Message:', e.message);
+                if (!e.message.includes('Price deviation guard')) {
+                    throw new Error(`Unexpected error: ${e.message}`);
+                }
+            }
+
+            // Verify that it is now hard-halted
+            if (!riskGateway.isHardHalted) {
+                throw new Error('System should be hard-halted after price deviation breach');
+            }
+
+            // Verify a subsequent safe order is blocked because of the halt
+            const safeOrder = {
+                symbol: 'AAPL',
+                side: 'buy',
+                qty: 1,
+                price: 150.0,
+                type: 'limit'
+            };
+            try {
+                await riskGateway.validateOrder(safeOrder);
+                throw new Error('Safe order was not blocked during hard halt');
+            } catch (e) {
+                console.log('Subsequent order blocked correctly due to halt:', e.message);
+                if (!e.message.includes('Emergency stop is active')) {
+                    throw new Error(`Unexpected error: ${e.message}`);
+                }
+            }
+
+            // Reset halt state for subsequent tests
+            riskGateway.setHardHalt(false);
+        });
+
+        // 11. Auto-Halt on Unit Price Threshold Breach
+        await runTest('Auto-Halt on Unit Price Threshold Breach', async () => {
+            // Re-arm
+            riskGateway.setHardHalt(false);
+            
+            // maxPriceThresholdUsd defaults to 5000. Let's send an order with price 6000.
+            const order = {
+                symbol: 'AAPL',
+                side: 'buy',
+                qty: 1,
+                price: 6000.0,
+                type: 'limit'
+            };
+
+            try {
+                await riskGateway.validateOrder(order);
+                throw new Error('Unit price threshold breach was not blocked');
+            } catch (e) {
+                console.log('Blocked correctly. Message:', e.message);
+                if (!e.message.includes('Unit price guard')) {
+                    throw new Error(`Unexpected error: ${e.message}`);
+                }
+            }
+
+            // Verify that it is now hard-halted
+            if (!riskGateway.isHardHalted) {
+                throw new Error('System should be hard-halted after unit price threshold breach');
+            }
+
+            // Reset halt state
+            riskGateway.setHardHalt(false);
         });
 
         console.log('\n=== ALL PRODUCTION-GRADE TESTS PASSED ===');

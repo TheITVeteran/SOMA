@@ -621,11 +621,26 @@ class SelfModificationArbiter extends BaseArbiter {
       return { success: false, failedAt: verification.failedAt, results: verification.results };
     }
 
-    this.logger.info(`[${this.name}] ✅ All 4 passes passed (avg confidence: ${(verification.avgConfidence * 100).toFixed(0)}%) — Steve review next`);
+    this.logger.info(`[${this.name}] ✅ All 4 passes passed (avg confidence: ${(verification.avgConfidence * 100).toFixed(0)}%)`);
+
+    // ── Codebase Simulation Sandbox (6th gate — isolated runtime twin evaluation) ──
+    this.logger.info(`[${this.name}] 🧪 Running codebase simulation sandbox gate for: ${file}`);
+    const sandboxResult = await this.runCodebaseSimulationSandbox(proposal);
+    if (!sandboxResult.passed) {
+      this.logger.warn(`[${this.name}] ❌ Codebase simulation sandbox rejected: ${sandboxResult.notes}`);
+      await messageBroker.sendMessage({
+        from: this.name, to: 'broadcast', type: 'soma_proactive',
+        payload: { message: `❌ Self-modification proposal for \`${file}\` rejected at **codebase_simulation_sandbox** gate.\n\n> ${sandboxResult.notes}` }
+      }).catch(() => {});
+      return { success: false, failedAt: 'codebase_simulation_sandbox', notes: sandboxResult.notes, results: sandboxResult.details };
+    }
+
+    this.logger.info(`[${this.name}] ✅ Codebase simulation twin sandbox passed! Steve review next.`);
 
     proposal.verification = verification.results;
-    proposal.overallScore = verification.avgConfidence;
-    proposal.riskLevel = verification.avgConfidence >= 0.90 ? 'low' : verification.avgConfidence >= 0.80 ? 'medium' : 'high';
+    proposal.verification.sandbox = sandboxResult.details;
+    proposal.overallScore = (verification.avgConfidence + (sandboxResult.details.experimental?.avgNemesisScore || 0.8)) / 2;
+    proposal.riskLevel = proposal.overallScore >= 0.90 ? 'low' : proposal.overallScore >= 0.80 ? 'medium' : 'high';
 
     // ── Steve internal review (5th gate — internal eyes before external dispatch) ──
     const steveOk = await this._steveReview(proposal);
@@ -937,6 +952,127 @@ Respond with ONLY valid JSON: {"pass": true, "confidence": 0.87, "notes": "one s
     this.logger.info(`[SelfMod] Regression gate: ${passCount}/${tests.length} passed (${(passRate * 100).toFixed(0)}%) min=${(minPassRate * 100).toFixed(0)}%`);
 
     return { passed: passRate >= minPassRate, passRate, failures };
+  }
+
+  /**
+   * Run codebase simulation sandbox in twin environments.
+   * Compares experimental (patched) and control (baseline) runs.
+   */
+  async runCodebaseSimulationSandbox(proposal) {
+    const { exec } = require('child_process');
+    const fs = require('fs').promises;
+    const path = require('path');
+
+    const targetFilePath = path.resolve(process.cwd(), proposal.file);
+    const backupPath = `${targetFilePath}.simbak`;
+
+    this.logger.info(`[${this.name}] [Sandbox] Running control baseline...`);
+
+    const runSimulation = (mode) => {
+      return new Promise((resolve) => {
+        const cmd = `node tests/codebase-simulation-sandbox.mjs --mode ${mode} --targetFile "${proposal.file}"`;
+        exec(cmd, { cwd: process.cwd(), timeout: 90000 }, (error, stdout, stderr) => {
+          if (error) {
+            resolve({ success: false, error: error.message, stderr });
+          } else {
+            try {
+              const lines = stdout.trim().split('\n');
+              const lastLine = lines[lines.length - 1];
+              const parsed = JSON.parse(lastLine);
+              resolve({ success: true, ...parsed });
+            } catch (e) {
+              resolve({ success: false, error: 'Failed to parse simulation output JSON: ' + e.message, stdout, stderr });
+            }
+          }
+        });
+      });
+    };
+
+    // 1. Run Control Baseline
+    const controlResult = await runSimulation('control');
+    if (!controlResult.success) {
+      this.logger.warn(`[${this.name}] [Sandbox] Control baseline failed: ${controlResult.error || controlResult.stderr}`);
+    }
+
+    // 2. Backup and Apply Patch
+    let backedUp = false;
+    try {
+      await fs.copyFile(targetFilePath, backupPath);
+      backedUp = true;
+      await fs.writeFile(targetFilePath, proposal.newCode, 'utf8');
+      this.logger.info(`[${this.name}] [Sandbox] Applied patch to target file: ${proposal.file}`);
+    } catch (e) {
+      if (backedUp) {
+        await fs.copyFile(backupPath, targetFilePath).catch(() => {});
+        await fs.unlink(backupPath).catch(() => {});
+      }
+      return { passed: false, notes: `Failed to apply patch for simulation: ${e.message}` };
+    }
+
+    // 3. Run Experimental Simulation
+    this.logger.info(`[${this.name}] [Sandbox] Running experimental simulation...`);
+    const experimentalResult = await runSimulation('experimental');
+
+    // 4. Restore original code
+    try {
+      await fs.copyFile(backupPath, targetFilePath);
+      await fs.unlink(backupPath);
+      this.logger.info(`[${this.name}] [Sandbox] Restored original target file: ${proposal.file}`);
+    } catch (e) {
+      this.logger.error(`[${this.name}] [Sandbox] CRITICAL: Failed to restore backup! Codebase may be in inconsistent state: ${e.message}`);
+    }
+
+    // 5. Compare metrics
+    if (!experimentalResult.success) {
+      return {
+        passed: false,
+        notes: `Experimental twin crashed or failed to boot: ${experimentalResult.error || experimentalResult.stderr}`,
+        details: experimentalResult
+      };
+    }
+
+    const details = { control: controlResult, experimental: experimentalResult };
+
+    // Assertion 1: Quality/Accuracy check
+    if (controlResult.success && experimentalResult.avgNemesisScore < controlResult.avgNemesisScore) {
+      const scoreDrop = controlResult.avgNemesisScore - experimentalResult.avgNemesisScore;
+      if (scoreDrop > 0.05) {
+        return {
+          passed: false,
+          notes: `Quality regression: Nemesis score dropped from ${controlResult.avgNemesisScore.toFixed(2)} to ${experimentalResult.avgNemesisScore.toFixed(2)} (delta: -${scoreDrop.toFixed(2)})`,
+          details
+        };
+      }
+    }
+    if (experimentalResult.avgNemesisScore < 0.70) {
+      return {
+        passed: false,
+        notes: `Quality below threshold: Experimental average Nemesis score is ${experimentalResult.avgNemesisScore.toFixed(2)} (threshold: 0.70)`,
+        details
+      };
+    }
+
+    // Assertion 2: Latency delta check
+    if (controlResult.success && experimentalResult.avgLatencyMs > controlResult.avgLatencyMs * 1.25) {
+      const slowdown = ((experimentalResult.avgLatencyMs / controlResult.avgLatencyMs) - 1) * 100;
+      return {
+        passed: false,
+        notes: `Latency regression: Average query time slowed down by ${slowdown.toFixed(1)}% (from ${controlResult.avgLatencyMs.toFixed(0)}ms to ${experimentalResult.avgLatencyMs.toFixed(0)}ms)`,
+        details
+      };
+    }
+
+    // Assertion 3: Hallucination rate
+    if (experimentalResult.hallucinationsDetected > 0) {
+      return {
+        passed: false,
+        notes: `Hallucination warning: Detected placeholder patterns or ungrounded templates in experimental responses.`,
+        details
+      };
+    }
+
+    this.logger.info(`[${this.name}] [Sandbox] Codebase twin simulation passed! Experimental score: ${experimentalResult.avgNemesisScore.toFixed(2)}`);
+    return { passed: true, details };
   }
 
   // ═══════════════════════════════════════════════════════════

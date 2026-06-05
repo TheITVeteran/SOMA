@@ -305,6 +305,22 @@ export class DiscordArbiter extends BaseArbiter {
                 throw new Error('SomaBrain not linked to DiscordArbiter');
             }
 
+            // Fetch running message context for continuity
+            let runningContext = "";
+            try {
+                const history = await this.readMessages({ channelId: msg.channelId, limit: 6 });
+                const recent = history
+                    .reverse()
+                    .filter(m => m.id !== msg.id);
+                if (recent.length > 0) {
+                    runningContext = recent
+                        .map(m => `[${m.bot ? 'SOMA' : m.author}]: ${m.content}`)
+                        .join('\n');
+                }
+            } catch (err) {
+                this.log('warn', `Failed to fetch Discord message history: ${err.message}`);
+            }
+
             // 🧠 CROSS-ORBITAL REASONING
             // SOMA uses her unified nervous system to process the Discord query
             const result = await this._askBrain(content, {
@@ -318,12 +334,17 @@ export class DiscordArbiter extends BaseArbiter {
                 ambient: trigger.ambient === true,
                 ambientReason: trigger.reason || null,
                 ambientScore: trigger.score || null,
+                runningContext, // Pass historical chat context
                 mode: 'fast' // Discord should be snappy
             });
 
             const initialReply = result.response || result.text || "I am processing your request but cannot formulate a verbal response at this time.";
-            const guarded = await guardPublicText(initialReply, { query: content });
-            const reply = guarded.text || initialReply;
+            const isAdmin = msg.author.id === this.masterId || msg.author.username.toLowerCase() === 'undeca';
+            let reply = initialReply;
+            if (!isAdmin) {
+                const guarded = await guardPublicText(initialReply, { query: content });
+                reply = guarded.text || initialReply;
+            }
             
             // 🎙️ PAULA VOICE SYNTHESIS
             let voiceFile = null;
@@ -581,6 +602,8 @@ export class DiscordArbiter extends BaseArbiter {
         const text = this._normalizeText(content);
         if (!text) return { handled: false };
 
+        const isAdmin = msg.author.id === this.masterId || msg.author.username.toLowerCase() === 'undeca';
+
         if (/^!mode\b/i.test(text) || /^mode\s*:/i.test(text)) {
             const requested = text.replace(/^!mode\b|^mode\s*:/i, '').trim() || 'general';
             const mode = this._modeDefinition(requested);
@@ -609,10 +632,7 @@ export class DiscordArbiter extends BaseArbiter {
         }
 
         if (this._isOwnWorkQuestion(text)) {
-            const reply = await this._buildOwnWorkReply(text);
-            await msg.reply(reply);
-            await this._recordDiscordInteraction({ msg, content: text, reply, action: 'own_work_reply', status: 'posted', visualContext });
-            return { handled: true };
+            return { handled: false };
         }
 
         if (this._isImageCapabilityQuestion(text)) {
@@ -643,17 +663,11 @@ export class DiscordArbiter extends BaseArbiter {
         }
 
         if (this._isFinanceQuestion(text)) {
-            const reply = await this._buildFinanceSafeReply(text, msg);
-            await msg.reply(reply);
-            await this._recordDiscordInteraction({ msg, content: text, reply, action: 'finance_guarded_reply', status: 'posted', visualContext });
-            return { handled: true };
+            return { handled: false };
         }
 
         if (this._isMedicalQuestion(text)) {
-            const reply = await this._buildMedicalSafeReply(text, msg);
-            await msg.reply(reply);
-            await this._recordDiscordInteraction({ msg, content: text, reply, action: 'medical_guarded_reply', status: 'posted', visualContext });
-            return { handled: true };
+            return { handled: false };
         }
 
         return { handled: false };

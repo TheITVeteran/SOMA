@@ -25,6 +25,7 @@ import calendarGuard from './CalendarGuard.js';
 import multiTimeframeFilter from './MultiTimeframeFilter.js';
 import correlationGuard from './CorrelationGuard.js';
 import optionsIVSignal from './OptionsIVSignal.js';
+import messageBroker from '../../core/MessageBroker.js';
 // Flush hook wired by routes.js after both modules load (avoids circular import)
 // autonomousTrader → performanceRoutes → scalpingEngine was a potential cycle
 let flushPerformanceSummaryCache = () => {};
@@ -84,7 +85,12 @@ class AutonomousTrader {
             lastTradeTime: null,
             sessionPnL: 0,
             sessionStartTime: null,
+            wins: 0,
+            losses: 0,
+            grossWins: 0,
+            grossLosses: 0,
         };
+        this._recentTrades = []; // rolling 20-trade buffer for alpha decay detection
     }
 
     /**
@@ -95,11 +101,14 @@ class AutonomousTrader {
             return { success: false, error: 'Already running. Stop first.' };
         }
 
-        const brokerConnected = !!alpacaService.isConnected;
+        const forcePaper = config?.forcePaper === true || config?.paperMode === true;
+        const brokerConnected = !!alpacaService.isConnected && !forcePaper;
         if (!brokerConnected) {
             this.paperMode = true;
             this._paperPortfolio = { balance: 100000, positions: {}, trades: [] };
-            console.log('[AutonomousTrader] 📄 Alpaca not connected — starting in PAPER MODE ($100k virtual)');
+            console.log(forcePaper
+                ? '[AutonomousTrader] 📄 Mission Control requested PAPER MODE'
+                : '[AutonomousTrader] 📄 Alpaca not connected — starting in PAPER MODE ($100k virtual)');
         } else {
             this.paperMode = false;
             this._paperPortfolio = null;
@@ -175,10 +184,23 @@ class AutonomousTrader {
 
         console.log(`[AutonomousTrader] 🚀 Started for ${symbol} (interval: ${this.config.analysisIntervalMs}ms)`);
 
-        // Connect to WebSocket Stream for real-time exits (skip in paper mode)
-        if (!this.paperMode) {
+        // Subscribe to Alpaca stream for real-time exit signals + live price tick broadcasting
+        if (alpacaService.isConnected) {
             try {
-                alpacaService.connectStream([symbol], (trade) => this._onTradeUpdate(trade));
+                alpacaService.connectStream(
+                    [symbol],
+                    (trade) => this._onTradeUpdate(trade),
+                    (quote) => {
+                        const bid = quote.BidPrice || quote.bp || 0;
+                        const ask = quote.AskPrice || quote.ap || 0;
+                        const mid = bid && ask ? (bid + ask) / 2 : bid || ask;
+                        if (mid > 0) {
+                            this._lastStreamPrice = mid;
+                            try { messageBroker.publish('market.price_tick', { symbol, price: mid }); } catch {}
+                        }
+                    }
+                );
+                console.log(`[AutonomousTrader] 📡 Subscribed to ${this.paperMode ? 'paper' : 'live'} Alpaca quote stream for ${symbol}`);
             } catch (streamErr) {
                 console.warn('[AutonomousTrader] Stream connection failed:', streamErr.message);
             }
@@ -425,8 +447,8 @@ class AutonomousTrader {
                 }
             }
 
-            // 11. Calculate position size (Regime-Aware)
-            const sizing = await this._calculatePositionSize(currentPrice, currentRegime);
+            // 11. Calculate position size (Kelly + Alpha-Decay + Regime-Aware)
+            const sizing = await this._calculatePositionSize(currentPrice, currentRegime, signal.confidence);
             if (!sizing || sizing.qty <= 0) {
                 this._logDecision('SIZING', 'SKIP', 'Position size too small or account insufficient', { sizing });
                 this._recordRuntimeLifecycle('sizing', 'blocked', { sizing });
@@ -790,9 +812,9 @@ class AutonomousTrader {
     }
 
     /**
-     * Calculate position size based on account equity and risk (Regime-Aware)
+     * Calculate position size — Kelly criterion + alpha decay + gross exposure cap + regime scaling
      */
-    async _calculatePositionSize(currentPrice, regime = null) {
+    async _calculatePositionSize(currentPrice, regime = null, confidence = 0.6) {
         try {
             let equity, buyingPower;
             if (this.paperMode) {
@@ -804,23 +826,68 @@ class AutonomousTrader {
                 buyingPower = parseFloat(account.buying_power);
             }
 
-            // Regime Adjustments
+            // Regime scaling
             let maxPct = this.config.maxPositionPct;
-            if (regime === 'VOLATILE') maxPct *= 0.5; // Half size in volatile markets
-            if (regime === 'TRENDING_BULL' || regime === 'TRENDING_BEAR') maxPct *= 1.2; // Increase size in strong trends
+            if (regime === 'VOLATILE') maxPct *= 0.5;
+            if (regime === 'TRENDING_BULL' || regime === 'TRENDING_BEAR') maxPct *= 1.2;
 
-            // Position = maxPositionPct of equity
+            // ── Gross Exposure Cap ────────────────────────────────────────────
+            // Block new positions if total portfolio exposure is at 80% of equity
+            const existingExposure = this._openPositions.reduce((sum, p) => sum + Math.abs(p.marketValue || 0), 0);
+            if (equity > 0 && existingExposure / equity >= 0.80) {
+                this._logDecision('SIZING', 'SKIP', `Gross exposure ${((existingExposure/equity)*100).toFixed(0)}% at 80% cap`, { existingExposure, equity });
+                return { qty: 0, maxValue: 0, equity, buyingPower, riskPct: 0 };
+            }
+
+            // ── Half-Kelly Position Sizing ────────────────────────────────────
+            // Only applies after 10+ closed trades to avoid noise on early sessions
+            const wins = this._stats.wins || 0;
+            const losses = this._stats.losses || 0;
+            const totalClosed = wins + losses;
+            if (totalClosed >= 10) {
+                const p = wins / totalClosed;
+                const q = 1 - p;
+                const avgWin  = wins   > 0 ? (this._stats.grossWins   || 0) / wins   : 0;
+                const avgLoss = losses > 0 ? (this._stats.grossLosses || 0) / losses : 1;
+                const b = avgLoss > 0 ? avgWin / avgLoss : 1.5;
+                const kellyFull = b > 0 ? (p * b - q) / b : 0;
+                const kellyHalf = Math.max(0.01, Math.min(0.35, kellyFull / 2));
+                maxPct = Math.min(maxPct, kellyHalf);
+            }
+
+            // ── Alpha Decay Guard ─────────────────────────────────────────────
+            // If rolling 20-trade win rate is falling, slash position size
+            if (this._recentTrades.length >= 10) {
+                const recent = this._recentTrades.slice(-20);
+                const recentWinRate = recent.filter(t => t.isWin).length / recent.length;
+                if (recentWinRate < 0.30) {
+                    maxPct *= 0.25;
+                    console.warn(`[AutonomousTrader] ⚠️ Alpha decay severe (${(recentWinRate*100).toFixed(0)}% win rate) — sizing at 25%`);
+                } else if (recentWinRate < 0.40) {
+                    maxPct *= 0.50;
+                    console.warn(`[AutonomousTrader] ⚠️ Alpha decay (${(recentWinRate*100).toFixed(0)}% win rate) — sizing at 50%`);
+                }
+            }
+
+            // ── Confidence Scaling (±20% of base) ────────────────────────────
+            const minConf = Math.max(this.config.minConfidence || 0.01, 0.01);
+            const confScale = 0.80 + 0.40 * Math.min(1, confidence / minConf);
+            maxPct = Math.min(maxPct * confScale, this.config.maxPositionPct);
+
+            // ── Headroom clamp when approaching exposure cap ──────────────────
             let maxValue = equity * maxPct;
+            if (equity > 0 && existingExposure / equity >= 0.60) {
+                const headroom = (0.80 * equity) - existingExposure;
+                maxValue = Math.min(maxValue, headroom * 0.9);
+            }
             if (this.paperMode && this.config.maxPaperTradeValue) {
                 maxValue = Math.min(maxValue, this.config.maxPaperTradeValue);
             }
-            const maxQty = Math.floor(maxValue / currentPrice);
 
-            // Also check buying power
-            const bpQty = Math.floor((buyingPower * 0.9) / currentPrice); // Use 90% of BP
+            const maxQty = Math.floor(maxValue / currentPrice);
+            const bpQty = Math.floor((buyingPower * 0.9) / currentPrice);
             const qty = Math.min(maxQty, bpQty);
 
-            // For crypto, allow fractional
             const isCrypto = this.symbol.includes('-') || this.symbol.includes('USDT');
             const finalQty = isCrypto ? Math.min(maxValue / currentPrice, bpQty) : qty;
 
@@ -829,12 +896,29 @@ class AutonomousTrader {
                 maxValue,
                 equity,
                 buyingPower,
-                riskPct: maxPct // Use the adjusted percentage
+                riskPct: maxPct,
+                kellyActive: totalClosed >= 10,
+                alphaDecayActive: this._recentTrades.length >= 10
             };
         } catch (error) {
             console.error('[AutonomousTrader] Position sizing error:', error.message);
             return null;
         }
+    }
+
+    /**
+     * Record the result of a closed trade for Kelly + alpha decay tracking
+     */
+    _recordTradeResult(pnl) {
+        if (pnl > 0) {
+            this._stats.wins++;
+            this._stats.grossWins += pnl;
+        } else {
+            this._stats.losses++;
+            this._stats.grossLosses += Math.abs(pnl);
+        }
+        this._recentTrades.push({ pnl, isWin: pnl > 0, ts: Date.now() });
+        if (this._recentTrades.length > 20) this._recentTrades.shift();
     }
 
     /**
@@ -1017,6 +1101,7 @@ class AutonomousTrader {
                 const pnlPct = pnl / (pos.entryPrice * pos.qty);
                 this._paperPortfolio.balance -= fillPrice * pos.qty + fill.fee;
                 this._stats.sessionPnL += pnl;
+                this._recordTradeResult(pnl);
                 delete this._paperPortfolio.positions[this.symbol];
                 try {
                     tradeLogger.logTradeExit(pos.tradeId || this.symbol, {
@@ -1083,6 +1168,7 @@ class AutonomousTrader {
                 const pnlPct = pnl / (pos.entryPrice * pos.qty);
                 this._paperPortfolio.balance += fillPrice * pos.qty - fill.fee;
                 this._stats.sessionPnL += pnl;
+                this._recordTradeResult(pnl);
                 delete this._paperPortfolio.positions[this.symbol];
 
                 // A/B test outcome for paper_signal_close
@@ -1300,6 +1386,7 @@ class AutonomousTrader {
 
                 this._paperPortfolio.balance += fillPrice * pos.qty;
                 this._stats.sessionPnL += pnl;
+                this._recordTradeResult(pnl);
                 delete this._paperPortfolio.positions[position.symbol];
                 this._openPositions = this._openPositions.filter(p => p.symbol !== position.symbol);
                 try {
@@ -1364,6 +1451,7 @@ class AutonomousTrader {
             }
 
             this._stats.sessionPnL += position.unrealizedPnl;
+            this._recordTradeResult(position.unrealizedPnl || 0);
 
             this._logDecision('TRADE', closeSide.toUpperCase(),
                 `Closed ${position.side} ${position.qty} ${position.symbol} — ${reason} (P&L: $${position.unrealizedPnl.toFixed(2)})`, {
@@ -1557,7 +1645,14 @@ class AutonomousTrader {
                 positions: this._paperPortfolio.positions
             } : null,
             config: this.config,
-            stats: { ...this._stats },
+            stats: {
+                ...this._stats,
+                rollingWinRate: this._recentTrades.length >= 5
+                    ? this._recentTrades.filter(t => t.isWin).length / this._recentTrades.length
+                    : null,
+                rollingTradeCount: this._recentTrades.length,
+                kellyActive: (this._stats.wins + this._stats.losses) >= 10,
+            },
             openPositions: [...this._openPositions],
             uptime: this._stats.sessionStartTime ? Date.now() - this._stats.sessionStartTime : 0,
             // Per-agent confidence from latest signal

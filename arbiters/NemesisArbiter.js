@@ -1173,6 +1173,31 @@ Reply with ONLY this JSON (no other text):
      * @param {Function} geminiCallback - async (prompt, opts) => { text: string } — brain caller
      * @returns {{ score: number, needsRevision: boolean, reason: string, linguistic: { summary: string } }}
      */
+    /**
+     * Persist failed/low-scoring responses to local training data for model refinement.
+     */
+    async persistFailedResponse(prompt, response, reason, score) {
+        try {
+            const dateStr = new Date().toISOString().split('T')[0];
+            const dirPath = path.join(process.cwd(), 'SOMA', 'training-data', 'failed-evals');
+            await fs.mkdir(dirPath, { recursive: true });
+            const filePath = path.join(dirPath, `failed-responses-${dateStr}.jsonl`);
+            
+            const logEntry = JSON.stringify({
+                timestamp: new Date().toISOString(),
+                prompt,
+                response,
+                reason,
+                score
+            }) + '\n';
+            
+            await fs.appendFile(filePath, logEntry, 'utf8');
+            console.log(`[${this.name}] 💾 Persisted failed response to: ${filePath}`);
+        } catch (e) {
+            console.error(`[${this.name}] Failed to persist low-score response: ${e.message}`);
+        }
+    }
+
     async evaluateResponse(brain, message, result, geminiCallback) {
         const responseText = result?.text || result?.response || '';
         if (!responseText) {
@@ -1188,6 +1213,11 @@ Reply with ONLY this JSON (no other text):
             const score = Math.max(0, 1.0 - hit.penalty);
             const needsRevision = score < 0.70 && hit.penalty < 0.30;
             console.log(`[${this.name}] Pattern hit: "${hit.reason}" (score ${score.toFixed(2)})`);
+            
+            if (score < 0.6) {
+                await this.persistFailedResponse(message, responseText, hit.reason, score);
+            }
+
             return {
                 score,
                 needsRevision,
@@ -1247,6 +1277,11 @@ Rules: score >= 0.70 means acceptable. needsRevision = true only if score < 0.70
 
             const parsed = JSON.parse(match[0]);
             const score  = Math.max(0, Math.min(1, Number(parsed.score) || 0.80));
+
+            if (score < 0.6) {
+                await this.persistFailedResponse(message, responseText, parsed.reason || 'low score', score);
+            }
+
             return {
                 score,
                 needsRevision: parsed.needsRevision ?? score < 0.70,

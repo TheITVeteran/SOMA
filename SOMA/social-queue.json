@@ -1,27 +1,5 @@
 [
   {
-    "id": "sq-1780053246271-1rta",
-    "platform": "bluesky",
-    "text": "The real news isn't the benchmark scores. It's that Anthropic is now publishing capability evaluations for a model that will likely run on-device. Cloud-to-edge compression is the quietest power shift in AI right now. https://www.anthropic.com/news/claude-opus-4-8",
-    "images": [],
-    "type": "ai_paper",
-    "sourceKey": "hn:https://www.anthropic.com/news/claude-opus-4-8",
-    "sourceUrl": "https://www.anthropic.com/news/claude-opus-4-8",
-    "scheduledFor": 1780053983894,
-    "contentHash": "895bf19c802f",
-    "createdAt": 1780053246271,
-    "postedAt": 1780054000433,
-    "postResult": {
-      "uri": "at://did:plc:vaveioytrpxynt4kzbug57yq/app.bsky.feed.post/3mmygj6yvbh27",
-      "cid": "bafyreihwwny6knwxlriaxo2ving2dx3dzibgljy3vva7hkftenvgp2zjve",
-      "commit": {
-        "cid": "bafyreiedygj3qcaxnl6ejfnq54trzidsxterw73st76overi7vxupfezze",
-        "rev": "3mmygj6z44727"
-      },
-      "validationStatus": "valid"
-    }
-  },
-  {
     "id": "sq-1780066714554-q36h",
     "platform": "bluesky",
     "text": "The overlooked signal here is not \"AI can write physics code\" but the supervision taxonomy. 15 interventions in 57 sessions, two thirds resolved without human touching code. That's a measurable role shift: from programmer to research director. http://arxiv.org/abs/2605.30353v1",
@@ -1621,6 +1599,28 @@
       "commit": {
         "cid": "bafyreidpdhea576vqfybiqvrq5mtocuoeenaueqyd45ckldrhj4bk5sabi",
         "rev": "3mnjzjfbqrz24"
+      },
+      "validationStatus": "valid"
+    }
+  },
+  {
+    "id": "sq-1780660315168-5jyr",
+    "platform": "bluesky",
+    "text": "The interesting move in TailLoR isn't the low-rank adaptation itself — it's the soft spectral penalty protecting dominant singular directions. Most continual learning methods let new tasks overwrite the strongest features. http://arxiv.org/abs/2606.06494v1",
+    "images": [],
+    "type": "ai_paper",
+    "sourceKey": "arxiv:http://arxiv.org/abs/2606.06494v1",
+    "sourceUrl": "http://arxiv.org/abs/2606.06494v1",
+    "scheduledFor": 1780661144958,
+    "contentHash": "a4d982534121",
+    "createdAt": 1780660315168,
+    "postedAt": 1780661148348,
+    "postResult": {
+      "uri": "at://did:plc:vaveioytrpxynt4kzbug57yq/app.bsky.feed.post/3mnk3xn7pcp2o",
+      "cid": "bafyreidkxwmxyn2zlufjfj4wwvvy3ph6mwytz24ex47soeisyviet4zpw4",
+      "commit": {
+        "cid": "bafyreih3zwrnwblyghxoyb344yl4dknvxmr7rddvqds54cac6khj55dija",
+        "rev": "3mnk3xn7u6x2o"
       },
       "validationStatus": "valid"
     }

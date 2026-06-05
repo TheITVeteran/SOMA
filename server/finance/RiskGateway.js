@@ -36,6 +36,7 @@ class RiskGateway {
                 maxOrderValueUsd: 10000,      // Hard limit for fat-finger protection
                 maxOrdersPer10Sec: 5,         // Gateway-level rate limiter
                 maxPriceDeviationPct: 0.005,  // 0.5% max limit price slippage guard
+                maxPriceThresholdUsd: 5000,   // Max unit price threshold for auto-halt guard
                 symbolCooldownMs: 2000,       // 2s minimum cooldown between orders for same asset
                 failClosedOnQuoteError: true  // Fail-closed pricing reference setting
             },
@@ -194,6 +195,20 @@ class RiskGateway {
             }
         }
 
+        // Rule 4b: Unit Price Guard (auto-halt on breach)
+        const maxPriceThreshold = this.config.maxPriceThresholdUsd || 5000;
+        if (orderPrice > maxPriceThreshold) {
+            this.setHardHalt(true);
+            if (riskManager?.haltTrading) {
+                try {
+                    await riskManager.haltTrading(`Unit price $${orderPrice} exceeds threshold of $${maxPriceThreshold}`);
+                } catch (e) {
+                    console.error('[RiskGateway] Failed to propagate unit price halt to RiskManager:', e.message);
+                }
+            }
+            this.rejectOrder(`Unit price guard. Est. unit price $${orderPrice} exceeds threshold $${maxPriceThreshold}. SYSTEM HALTED.`, orderDetails);
+        }
+
         const totalValue = qty * orderPrice;
         if (totalValue > this.config.maxOrderValueUsd) {
             this.rejectOrder(`Fat-finger protection triggered. Est. value $${totalValue.toFixed(2)} exceeds limit $${this.config.maxOrderValueUsd.toFixed(2)}.`, orderDetails);
@@ -220,7 +235,15 @@ class RiskGateway {
                 const deviation = Math.abs(orderPrice - midPrice) / midPrice;
                 if (deviation > this.config.maxPriceDeviationPct) {
                     const pctStr = (deviation * 100).toFixed(2);
-                    this.rejectOrder(`Price deviation guard. Limit price $${orderPrice} deviates by ${pctStr}% from market mid $${midPrice} (limit: ${(this.config.maxPriceDeviationPct * 100).toFixed(1)}%).`, orderDetails);
+                    this.setHardHalt(true);
+                    if (riskManager?.haltTrading) {
+                        try {
+                            await riskManager.haltTrading(`Price deviation limit exceeded: limit price $${orderPrice} deviates by ${pctStr}% from mid $${midPrice}`);
+                        } catch (err) {
+                            console.error('[RiskGateway] Failed to propagate slippage halt to RiskManager:', err.message);
+                        }
+                    }
+                    this.rejectOrder(`Price deviation guard. Limit price $${orderPrice} deviates by ${pctStr}% from market mid $${midPrice} (limit: ${(this.config.maxPriceDeviationPct * 100).toFixed(1)}%). SYSTEM HALTED.`, orderDetails);
                 }
             } else if (this.config.failClosedOnQuoteError) {
                 this.rejectOrder('Price deviation check failed: Unable to fetch market price reference.', orderDetails);

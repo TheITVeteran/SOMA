@@ -36,8 +36,10 @@ export const SettingsModal = ({ isOpen, onClose, onSaveKeys }) => {
         notifications: false
     });
 
-    // Check backend for persisted credentials on mount
+    // Check backend for persisted credentials whenever the modal opens.
     useEffect(() => {
+        if (!isOpen) return;
+
         // SECURITY: Remove any legacy plaintext keys from localStorage
         localStorage.removeItem('soma_exchange_keys');
 
@@ -54,7 +56,7 @@ export const SettingsModal = ({ isOpen, onClose, onSaveKeys }) => {
                 }
             })
             .catch(() => {});
-    }, []);
+    }, [isOpen]);
 
     const checkBackendCredentials = async () => {
         try {
@@ -62,7 +64,8 @@ export const SettingsModal = ({ isOpen, onClose, onSaveKeys }) => {
             const response = await fetch('/api/exchange/credentials-status');
             const data = await response.json();
             if (data.success && data.status) {
-                setSavedCredentials(data.status);
+                setSavedCredentials(prev => ({ ...prev, ...data.status }));
+                onSaveKeys?.({ status: data.status });
             }
         } catch (e) {
             console.error('Failed to check backend credentials:', e);
@@ -81,22 +84,6 @@ export const SettingsModal = ({ isOpen, onClose, onSaveKeys }) => {
                 console.error('Fallback check also failed:', e2);
             }
         }
-    };
-
-    const handleSave = async () => {
-        // Save notification settings
-        if (keys.notifications.discordWebhookUrl) {
-            await fetch('/api/notifications/settings', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(keys.notifications)
-            });
-        }
-        
-        // Keys are saved securely on the backend via testConnection/connect endpoints
-        // Do NOT store in localStorage — only pass to parent for in-memory use
-        onSaveKeys(keys);
-        onClose();
     };
 
     const testConnection = async (exchange) => {
@@ -121,7 +108,7 @@ export const SettingsModal = ({ isOpen, onClose, onSaveKeys }) => {
                     secretKey: keys[exchange].secretKey,
                     paperTrading: exchange === 'alpaca_paper',
                     credentialType: exchange, // Tell backend which credential set to save
-                    baseUrl: keys[exchange].baseUrl // Optional custom endpoint
+                    baseUrl: keys[exchange].baseUrl?.trim() || null // Optional custom endpoint
                 };
             } else if (exchange === 'binance') {
                 endpoint = '/api/binance/connect';
@@ -144,6 +131,7 @@ export const SettingsModal = ({ isOpen, onClose, onSaveKeys }) => {
                 // Mark as saved and exit edit mode for all exchanges
                 setSavedCredentials(prev => ({ ...prev, [exchange]: true }));
                 setEditMode(prev => ({ ...prev, [exchange]: false }));
+                onSaveKeys?.({ status: { ...savedCredentials, [exchange]: true } });
 
                 if ((exchange === 'alpaca_paper' || exchange === 'alpaca_live') && result.account) {
                     const modeLabel = exchange === 'alpaca_paper' ? 'Paper' : 'Live';
@@ -172,14 +160,44 @@ export const SettingsModal = ({ isOpen, onClose, onSaveKeys }) => {
                         message: `${exchangeNames[exchange] || exchange} credentials saved! ${result.message || ''}`
                     });
                 }
+                await checkBackendCredentials();
+                return true;
             } else {
                 setTestStatus({ type: 'error', message: `❌ Connection failed: ${result.error}` });
+                return false;
             }
         } catch (error) {
             setTestStatus({ type: 'error', message: `❌ Connection error: ${error.message}` });
+            return false;
         } finally {
             setIsTesting(false);
         }
+    };
+
+    const handleSave = async () => {
+        // Save notification settings
+        if (keys.notifications.discordWebhookUrl) {
+            await fetch('/api/notifications/settings', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(keys.notifications)
+            });
+        }
+
+        const activeKeys = keys[activeTab];
+        const isCredentialTab = activeTab !== 'notifications';
+        const hasTypedCredentials = Boolean(activeKeys?.apiKey && activeKeys?.secretKey);
+
+        // Users reasonably expect Save & Close to persist typed keys. For Alpaca,
+        // persistence also validates the account because invalid live keys are dangerous.
+        if (isCredentialTab && (!savedCredentials[activeTab] || editMode[activeTab]) && hasTypedCredentials) {
+            const saved = await testConnection(activeTab);
+            if (!saved) return;
+        } else {
+            await checkBackendCredentials();
+        }
+
+        onClose();
     };
 
     const clearCredentials = async (exchange) => {
@@ -204,6 +222,7 @@ export const SettingsModal = ({ isOpen, onClose, onSaveKeys }) => {
             if (result.success) {
                 setSavedCredentials(prev => ({ ...prev, [exchange]: false }));
                 setEditMode(prev => ({ ...prev, [exchange]: true }));
+                onSaveKeys?.({ status: { ...savedCredentials, [exchange]: false } });
 
                 // Reset keys based on exchange
                 const defaultKeys = {
@@ -507,7 +526,7 @@ export const SettingsModal = ({ isOpen, onClose, onSaveKeys }) => {
                                             <li>Create new API key with trading permissions only</li>
                                             <li>Disable withdrawal permissions for security</li>
                                         </ul>
-                                    )}\
+                                    )}
                                 </div>
                                 </>
                                 )}

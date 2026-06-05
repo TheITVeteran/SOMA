@@ -561,6 +561,7 @@ Respond with EXACTLY:
 TITLE: <concise goal title — max 70 chars>
 CATEGORY: <learning|capability|improvement|research|integration>
 DESCRIPTION: <what to do, why, and first concrete step>
+RATIONALE: <why this goal is crucial for SOMA's evolution right now in 1 sentence>
 PRIORITY: <50-85>
 TIMEFRAME: <hours|days|weeks>`;
 
@@ -570,7 +571,8 @@ TIMEFRAME: <hours|days|weeks>`;
 
             const title = text.match(/TITLE:\s*(.+)/i)?.[1]?.trim();
             const category = (text.match(/CATEGORY:\s*(.+)/i)?.[1]?.trim() || 'research').toLowerCase();
-            const description = text.match(/DESCRIPTION:\s*([\s\S]+?)(?=\nPRIORITY:|$)/i)?.[1]?.trim();
+            const description = text.match(/DESCRIPTION:\s*([\s\S]+?)(?=\nRATIONALE:|\nPRIORITY:|$)/i)?.[1]?.trim();
+            const rationale = text.match(/RATIONALE:\s*(.+)/i)?.[1]?.trim() || 'Proposed by SelfEvolvingGoalEngine strategic planning';
             const priority = parseInt(text.match(/PRIORITY:\s*(\d+)/i)?.[1] || '65');
 
             if (!title || !description) return;
@@ -586,7 +588,7 @@ TIMEFRAME: <hours|days|weeks>`;
                 description,
                 priority,
                 confidence: 0.78,
-                rationale: 'Proposed by SelfEvolvingGoalEngine strategic planning',
+                rationale,
                 metadata: {
                     source: 'self_evolution',
                     proposedBy: 'SelfEvolvingGoalEngine'

@@ -197,8 +197,11 @@ export const useMarketEngine = (riskMetrics, isDemoMode, tickers, selectedSymbol
 // -----------------------------
 
 // LEFT SIDEBAR COMPONENT: P&L + Storm Index
-export const MarketMonitor = ({ engine }) => {
+export const MarketMonitor = ({ engine, pnlSummary = null }) => {
     const { engineData, stormMetrics, pnl, pnlPercent, isProfit, orderbookStatus } = engine;
+    const displayPnl = pnlSummary?.total ?? pnl;
+    const displayPercent = pnlSummary?.percent ?? pnlPercent;
+    const displayProfit = displayPnl >= 0;
 
     const stormColor = stormMetrics.state === 'STORM' ? 'text-soma-danger' : stormMetrics.state === 'UNSTABLE' ? 'text-soma-warning' : 'text-soma-success';
     const stormBg = stormMetrics.state === 'STORM' ? 'bg-soma-danger' : stormMetrics.state === 'UNSTABLE' ? 'bg-soma-warning' : 'bg-soma-success';
@@ -207,18 +210,18 @@ export const MarketMonitor = ({ engine }) => {
         <div className="flex flex-col h-full overflow-hidden">
             {/* Stylized P&L Display */}
             <div className="p-3 bg-black/20 border-b border-white/5 relative overflow-hidden shrink-0">
-                <div className={`absolute right-0 top-0 w-16 h-16 blur-2xl opacity-20 ${isProfit ? 'bg-soma-success' : 'bg-soma-danger'}`}></div>
+                <div className={`absolute right-0 top-0 w-16 h-16 blur-2xl opacity-20 ${displayProfit ? 'bg-soma-success' : 'bg-soma-danger'}`}></div>
                 <div className="relative z-10 flex justify-between items-end">
                     <div>
                         <div className="flex items-center gap-1 text-[9px] text-slate-500 font-bold uppercase tracking-widest mb-0.5">
                             <DollarSign className="w-3 h-3" /> Session P&L
                         </div>
-                        <div className={`text-2xl font-black font-mono tracking-tighter ${isProfit ? 'text-soma-success drop-shadow-[0_0_5px_rgba(0,255,157,0.3)]' : 'text-soma-danger drop-shadow-[0_0_5px_rgba(255,42,42,0.3)]'}`}>
-                            {isProfit ? '+' : ''}{pnl.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                        <div className={`text-2xl font-black font-mono tracking-tighter ${displayProfit ? 'text-soma-success drop-shadow-[0_0_5px_rgba(0,255,157,0.3)]' : 'text-soma-danger drop-shadow-[0_0_5px_rgba(255,42,42,0.3)]'}`}>
+                            {displayProfit ? '+' : ''}{displayPnl.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </div>
                     </div>
-                    <div className={`text-xs font-bold font-mono px-1.5 py-0.5 rounded border ${isProfit ? 'border-soma-success/30 bg-soma-success/10 text-soma-success' : 'border-soma-danger/30 bg-soma-danger/10 text-soma-danger'}`}>
-                        {pnlPercent.toFixed(2)}%
+                    <div className={`text-xs font-bold font-mono px-1.5 py-0.5 rounded border ${displayProfit ? 'border-soma-success/30 bg-soma-success/10 text-soma-success' : 'border-soma-danger/30 bg-soma-danger/10 text-soma-danger'}`}>
+                        {displayPercent.toFixed(2)}%
                     </div>
                 </div>
             </div>

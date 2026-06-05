@@ -674,24 +674,54 @@ Before declaring DONE, verify your own work using read_file or list_files.`
                 console.log(`[${this.name}]   Step ${iteration + 1}: ${toolCall.tool}(${JSON.stringify(toolCall.args).substring(0, 60)})`);
 
                 let toolResult;
-                try {
-                    // 🔱 Sovereign Bridge: Try hardcoded tool first, then fall back to Registry
-                    const tool = this._tools[toolCall.tool];
-                    if (tool) {
-                        toolResult = await tool.execute(toolCall.args);
-                    } else if (this.system?.toolRegistry?.getTool) {
-                        const dynamicTool = this.system.toolRegistry.getTool(toolCall.tool);
-                        if (dynamicTool) {
-                            console.log(`[${this.name}] 🔄 Executing dynamic registry tool: ${toolCall.tool}`);
-                            toolResult = await dynamicTool.execute(toolCall.args);
-                        } else {
+                let attempt = 0;
+                const maxAttempts = 2;
+                while (attempt < maxAttempts) {
+                    attempt++;
+                    try {
+                        let tool = this._tools[toolCall.tool];
+                        let isDynamic = false;
+                        if (!tool && this.system?.toolRegistry?.getTool) {
+                            tool = this.system.toolRegistry.getTool(toolCall.tool);
+                            isDynamic = !!tool;
+                        }
+
+                        if (!tool) {
                             throw new Error(`Tool '${toolCall.tool}' not found in hardcoded list or Registry`);
                         }
-                    } else {
-                        throw new Error(`Tool '${toolCall.tool}' not found`);
+
+                        if (isDynamic) {
+                            console.log(`[${this.name}] 🔄 Executing dynamic registry tool: ${toolCall.tool} (attempt ${attempt}/${maxAttempts})`);
+                        }
+
+                        toolResult = await tool.execute(toolCall.args);
+
+                        if (toolResult && typeof toolResult === 'object' && toolResult.error) {
+                            throw new Error(toolResult.error);
+                        }
+
+                        break; // Success! Break retry loop
+                    } catch (e) {
+                        console.warn(`[${this.name}] ⚠️ Tool '${toolCall.tool}' failed on attempt ${attempt}/${maxAttempts}: ${e.message}`);
+                        
+                        if (attempt < maxAttempts && this.system?.toolCreator?.createTool) {
+                            console.log(`[${this.name}] 🛠️ Self-Healing: Attempting to dynamically compile/repair tool '${toolCall.tool}' via ToolCreator...`);
+                            try {
+                                const toolDescription = `Dynamically generated or repaired tool to address failure. Goal: ${goal.title || ''}. Previous error: ${e.message}. Parameter schema hint: ${JSON.stringify(toolCall.args)}`;
+                                const healing = await this.system.toolCreator.createTool(toolCall.tool, toolDescription);
+                                if (healing && healing.success) {
+                                    console.log(`[${this.name}] ✅ Self-Healing: tool '${toolCall.tool}' compiled and registered successfully. Retrying execution...`);
+                                } else {
+                                    console.warn(`[${this.name}] ❌ Self-Healing: toolCreator returned unsuccessful status for '${toolCall.tool}'.`);
+                                }
+                            } catch (healErr) {
+                                console.error(`[${this.name}] ❌ Self-Healing failed during generation phase: ${healErr.message}`);
+                            }
+                        } else {
+                            toolResult = { error: `${toolCall.tool} failed: ${e.message}` };
+                            break;
+                        }
                     }
-                } catch (e) {
-                    toolResult = { error: `${toolCall.tool} failed: ${e.message}` };
                 }
 
                 toolsUsed.add(toolCall.tool);

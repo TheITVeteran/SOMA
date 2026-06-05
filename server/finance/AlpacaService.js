@@ -166,17 +166,15 @@ class AlpacaService {
    */
   async connect(apiKey, apiSecret, paperTrading = true, saveToStorage = true, credentialType = null, baseUrl = null) {
     try {
+      const normalizedBaseUrl = this._normalizeTradingBaseUrl(baseUrl, paperTrading);
       const config = {
         keyId: apiKey,
         secretKey: apiSecret,
         paper: paperTrading,
-        usePolygon: false
+        usePolygon: false,
+        baseUrl: normalizedBaseUrl,
+        apiVersion: 'v2'
       };
-
-      // Add base URL if provided (overrides paper/live default)
-      if (baseUrl) {
-        config.baseUrl = baseUrl;
-      }
 
       this.client = new Alpaca(config);
       // Initialize stream (lazy connect)
@@ -193,7 +191,7 @@ class AlpacaService {
       this.isConnected = true;
 
       console.log(`[Alpaca] Connected successfully (${paperTrading ? 'Paper' : 'Live'} Trading)`);
-      if (baseUrl) console.log(`[Alpaca] Using Custom Endpoint: ${baseUrl}`);
+      console.log(`[Alpaca] Trading Endpoint: ${normalizedBaseUrl}`);
       console.log(`[Alpaca] Account Value: $${this.accountInfo.portfolio_value}`);
 
       // Save credentials if requested (default: yes)
@@ -218,10 +216,55 @@ class AlpacaService {
         credentialType: this.currentCredentialType
       };
     } catch (error) {
-      console.error('[Alpaca] Connection failed:', error.message);
+      const friendlyError = this._formatConnectionError(error, paperTrading, baseUrl);
+      console.error('[Alpaca] Connection failed:', friendlyError);
       this.isConnected = false;
-      throw new Error(`Alpaca connection failed: ${error.message}`);
+      throw new Error(`Alpaca connection failed: ${friendlyError}`);
     }
+  }
+
+  _normalizeTradingBaseUrl(baseUrl, paperTrading) {
+    const defaultUrl = paperTrading
+      ? 'https://paper-api.alpaca.markets'
+      : 'https://api.alpaca.markets';
+
+    const raw = String(baseUrl || '').trim();
+    if (!raw) return defaultUrl;
+
+    try {
+      const parsed = new URL(raw);
+      const host = parsed.hostname.toLowerCase();
+      if (!host.endsWith('alpaca.markets')) {
+        return defaultUrl;
+      }
+
+      // Users sometimes paste the full account URL. The SDK adds /v2/account,
+      // so keep only the origin to avoid /v2/account/v2/account style 404s.
+      if (host === 'paper-api.alpaca.markets' || host === 'api.alpaca.markets') {
+        return parsed.origin;
+      }
+
+      return defaultUrl;
+    } catch {
+      return defaultUrl;
+    }
+  }
+
+  _formatConnectionError(error, paperTrading, suppliedBaseUrl = null) {
+    const status = error?.response?.status;
+    const body = error?.response?.data;
+    const endpoint = this._normalizeTradingBaseUrl(suppliedBaseUrl, paperTrading);
+
+    if (status === 404) {
+      return `Alpaca returned 404 from ${endpoint}/v2/account. Check that you are using ${paperTrading ? 'Paper' : 'Live'} keys in the ${paperTrading ? 'Alpaca Paper' : 'Alpaca Live'} tab and leave Endpoint URL blank unless you know it is needed.`;
+    }
+    if (status === 401 || status === 403) {
+      return `Alpaca rejected the credentials for ${paperTrading ? 'Paper' : 'Live'} mode (${status}). Check the key/secret pair and whether it belongs to the selected tab.`;
+    }
+    if (body?.message) {
+      return `${body.message} (${status || 'no status'})`;
+    }
+    return error?.message || 'unknown error';
   }
 
   /**

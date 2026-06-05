@@ -1,11 +1,6 @@
 import React from 'react';
 import { AlertTriangle, CheckCircle2, CircleDollarSign, FlaskConical, ShieldCheck, Target, XCircle } from 'lucide-react';
-
-const fmtMoney = (value) => {
-    const n = Number(value);
-    if (!Number.isFinite(n)) return '$0.00';
-    return n.toLocaleString(undefined, { style: 'currency', currency: 'USD', maximumFractionDigits: 2 });
-};
+import { computeMissionPnl, formatMoney } from './PnlSummary.jsx';
 
 const pct = (value, digits = 1) => {
     const n = Number(value);
@@ -40,6 +35,7 @@ export function MissionBriefPanel({
     marketRegime,
     dataSource,
     autonomousStatus,
+    positions = [],
     currentPresetId,
     onOpenBacktest,
     onOpenSim,
@@ -60,9 +56,9 @@ export function MissionBriefPanel({
     const simulated = dataSource === 'SIMULATION';
     const paperOnly = isDemoMode || !liveEligible;
     const allocation = Number(riskMetrics?.initialBalance || 0);
-    const equity = Number(riskMetrics?.equity || allocation || 0);
-    const pnl = equity - allocation;
-    const pnlPct = allocation > 0 ? (pnl / allocation) * 100 : 0;
+    const pnlSummary = computeMissionPnl({ riskMetrics, autonomousStatus, positions });
+    const pnl = pnlSummary.total;
+    const pnlPct = pnlSummary.percent;
 
     const gates = [
         {
@@ -117,9 +113,9 @@ export function MissionBriefPanel({
                     <div className="flex items-center gap-1 text-[9px] uppercase tracking-wider text-zinc-600">
                         <CircleDollarSign className="h-3 w-3" /> Allocation
                     </div>
-                    <div className="mt-1 font-mono text-sm font-bold text-white">{fmtMoney(allocation)}</div>
+                    <div className="mt-1 font-mono text-sm font-bold text-white">{formatMoney(allocation)}</div>
                     <div className={`mt-0.5 font-mono text-[10px] ${pnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                        {pnl >= 0 ? '+' : ''}{fmtMoney(pnl)} · {pnl >= 0 ? '+' : ''}{pct(pnlPct, 2)}
+                        {pnl >= 0 ? '+' : ''}{formatMoney(pnl)} · {pnl >= 0 ? '+' : ''}{pct(pnlPct, 2)}
                     </div>
                 </div>
                 <div className="rounded border border-white/5 bg-black/30 p-2">

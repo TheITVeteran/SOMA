@@ -21,6 +21,7 @@ import { AlertsPanel } from './components/AlertsPanel.jsx';
 import { SimIntelPanel } from './components/SimIntelPanel.jsx';
 import { LifecycleJournalPanel } from './components/LifecycleJournalPanel.jsx';
 import { MissionBriefPanel } from './components/MissionBriefPanel.jsx';
+import { PnlSummaryCard, computeMissionPnl, formatMoney, pnlTextColor } from './components/PnlSummary.jsx';
 import { TradeMode, AssetType } from './types.js';
 
 import { INITIAL_TICKERS, STRATEGY_PRESETS } from './constants.js';
@@ -28,22 +29,25 @@ import './mission-control.css';
 
 const fmt = (n, decimals = 2) => n == null ? '—' : Number(n).toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals });
 const fmtUsd = (n) => n == null ? '—' : `$${fmt(n)}`;
-const pnlColor = (n) => n == null ? 'text-zinc-500' : n >= 0 ? 'text-emerald-400' : 'text-rose-400';
 
-const PortfolioPanel = ({ riskMetrics, positions = [], orders = [], trades = [], isDemoMode, autonomousStatus }) => {
-    const sessionPnl = autonomousStatus?.stats?.sessionPnL ?? null;
-    const totalTrades = autonomousStatus?.stats?.tradesExecuted ?? trades.length;
-    const winRate = autonomousStatus?.stats?.winRate ?? null;
-    const unrealizedPnl = positions.reduce((s, p) => s + (p.unrealizedPnl ?? parseFloat(p.unrealized_pl ?? 0)), 0);
-    const totalPnl = (sessionPnl ?? 0) + unrealizedPnl;
+const PortfolioPanel = ({ riskMetrics, positions = [], orders = [], trades = [], isDemoMode, autonomousStatus, paperModeSource = 'internal' }) => {
+    const pnl = computeMissionPnl({ riskMetrics, autonomousStatus, positions, trades });
 
     return (
         <div className="h-full overflow-y-auto custom-scrollbar p-3 flex flex-col gap-3">
             {/* Mode badge */}
             <div className={`flex items-center gap-2 px-2 py-1 rounded text-[9px] font-bold uppercase tracking-widest w-fit ${isDemoMode ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'}`}>
                 <div className={`w-1.5 h-1.5 rounded-full ${isDemoMode ? 'bg-amber-400' : 'bg-rose-400 animate-pulse'}`} />
-                {isDemoMode ? 'Paper Mode' : 'Live Mode'}
+                {isDemoMode ? (paperModeSource === 'alpaca_paper' ? 'Alpaca Paper' : 'Internal Paper') : 'Live Mode'}
             </div>
+
+            {/* Internal paper mode warning — no Alpaca keys configured */}
+            {isDemoMode && paperModeSource === 'internal' && (
+                <div className="flex items-center gap-1.5 px-2 py-1.5 rounded text-[9px] bg-amber-900/20 border border-amber-500/20 text-amber-300">
+                    <AlertTriangle className="w-3 h-3 shrink-0" />
+                    No Alpaca keys — trades stay inside SOMA. Add paper keys in Settings to reach Alpaca.
+                </div>
+            )}
 
             {/* Balance cards */}
             <div className="grid grid-cols-2 gap-2">
@@ -58,25 +62,7 @@ const PortfolioPanel = ({ riskMetrics, positions = [], orders = [], trades = [],
                 ))}
             </div>
 
-            {/* Session P&L */}
-            <div className="bg-black/40 border border-white/5 rounded p-2">
-                <div className="text-[9px] text-zinc-600 uppercase tracking-wider mb-2">Session P&amp;L</div>
-                <div className="flex items-end justify-between">
-                    <div>
-                        <div className={`text-lg font-mono font-bold ${pnlColor(totalPnl)}`}>
-                            {totalPnl >= 0 ? '+' : ''}{fmtUsd(totalPnl)}
-                        </div>
-                        <div className="text-[9px] text-zinc-600 mt-0.5">
-                            {sessionPnl != null ? `Realized: ${fmtUsd(sessionPnl)}` : 'No session data'}
-                            {unrealizedPnl !== 0 && ` · Unrealized: ${fmtUsd(unrealizedPnl)}`}
-                        </div>
-                    </div>
-                    <div className="text-right">
-                        <div className="text-xs font-mono text-zinc-300">{totalTrades} trades</div>
-                        {winRate != null && <div className="text-[9px] text-zinc-500">{(winRate * 100).toFixed(0)}% win rate</div>}
-                    </div>
-                </div>
-            </div>
+            <PnlSummaryCard summary={pnl} title="Session P&L" />
 
             {/* Open positions */}
             <div>
@@ -96,7 +82,7 @@ const PortfolioPanel = ({ riskMetrics, positions = [], orders = [], trades = [],
                                         <div className="text-xs font-mono font-bold text-zinc-200">{sym}</div>
                                         <div className="text-[9px] text-zinc-600">{side} · {Math.abs(qty)}</div>
                                     </div>
-                                    <div className={`text-xs font-mono font-bold ${pnlColor(upnl)}`}>
+                                    <div className={`text-xs font-mono font-bold ${pnlTextColor(upnl)}`}>
                                         {upnl >= 0 ? '+' : ''}{fmtUsd(upnl)}
                                     </div>
                                 </div>
@@ -151,6 +137,66 @@ const PortfolioPanel = ({ riskMetrics, positions = [], orders = [], trades = [],
     );
 };
 
+const TradeStrategyGate = ({ symbol, presetId, isDemoMode, dataSource, running, onRun, onSkip, onSettings }) => (
+    <div className="absolute inset-0 z-[260] flex items-center justify-center bg-black/82 backdrop-blur-md p-6">
+        <div className="w-full max-w-xl rounded-2xl border border-cyan-500/25 bg-[#101116]/95 shadow-2xl shadow-cyan-950/40 overflow-hidden">
+            <div className="border-b border-white/10 bg-cyan-500/8 p-5">
+                <div className="flex items-center gap-3">
+                    <div className="h-10 w-10 rounded-xl border border-cyan-400/30 bg-cyan-400/10 flex items-center justify-center">
+                        <Target className="h-5 w-5 text-cyan-300" />
+                    </div>
+                    <div>
+                        <div className="text-[10px] font-bold uppercase tracking-[0.22em] text-cyan-300">Mission Control Preflight</div>
+                        <h2 className="mt-1 text-2xl font-black text-white">Run Trade Strategy</h2>
+                    </div>
+                </div>
+                <p className="mt-3 text-sm leading-relaxed text-zinc-400">
+                    SOMA will prepare the thesis, run Deep Scan evidence, backtest/simulate the setup, validate gates, check paper broker readiness, then engage autonomous paper trading.
+                </p>
+            </div>
+            <div className="p-5">
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div className="rounded border border-white/5 bg-black/35 p-3">
+                        <div className="text-[9px] uppercase tracking-wider text-zinc-600">Target</div>
+                        <div className="mt-1 font-mono font-bold text-white">{symbol}</div>
+                    </div>
+                    <div className="rounded border border-white/5 bg-black/35 p-3">
+                        <div className="text-[9px] uppercase tracking-wider text-zinc-600">Strategy Pack</div>
+                        <div className="mt-1 font-mono font-bold text-white">{presetId}</div>
+                    </div>
+                    <div className="rounded border border-white/5 bg-black/35 p-3">
+                        <div className="text-[9px] uppercase tracking-wider text-zinc-600">Execution</div>
+                        <div className={`mt-1 font-bold ${isDemoMode ? 'text-amber-300' : 'text-rose-300'}`}>{isDemoMode ? 'PAPER' : 'LIVE MODE SELECTED'}</div>
+                    </div>
+                    <div className="rounded border border-white/5 bg-black/35 p-3">
+                        <div className="text-[9px] uppercase tracking-wider text-zinc-600">Market Data</div>
+                        <div className={`mt-1 font-bold ${dataSource === 'REAL' ? 'text-emerald-300' : dataSource === 'SIMULATION' ? 'text-amber-300' : 'text-zinc-400'}`}>{dataSource || 'CONNECTING'}</div>
+                    </div>
+                </div>
+
+                <div className="mt-4 rounded border border-white/5 bg-black/25 p-3 text-[11px] leading-relaxed text-zinc-400">
+                    <div className="mb-2 font-bold uppercase tracking-widest text-zinc-500 text-[9px]">Automatic sequence</div>
+                    <div>1. Fresh market bars → 2. Thesis → 3. Deep Scan → 4. Backtest/simulation → 5. Execution validation → 6. Paper autonomous start</div>
+                </div>
+
+                <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
+                    <div className="flex gap-2">
+                        <button onClick={onSettings} className="rounded-lg border border-white/10 px-3 py-2 text-xs font-bold uppercase tracking-wide text-zinc-400 hover:bg-white/5 hover:text-zinc-200">
+                            Settings
+                        </button>
+                        <button onClick={onSkip} className="rounded-lg border border-white/10 px-3 py-2 text-xs font-bold uppercase tracking-wide text-zinc-400 hover:bg-white/5 hover:text-zinc-200">
+                            Skip Strategy
+                        </button>
+                    </div>
+                    <button onClick={onRun} disabled={running} className="rounded-lg bg-cyan-400 px-5 py-2.5 text-sm font-black uppercase tracking-wide text-black hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-60">
+                        {running ? 'Running Preflight...' : 'Run Trade Strategy'}
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+);
+
 const MissionControlApp = ({ somaBackend, isConnected }) => {
     // --- STATE MANAGEMENT ---
     const [mode, setMode] = useState(TradeMode.AUTONOMOUS);
@@ -165,7 +211,7 @@ const MissionControlApp = ({ somaBackend, isConnected }) => {
     // Demo/Live Mode State
     const [isDemoMode, setIsDemoMode] = useState(true);
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-    const [exchangeKeys, setExchangeKeys] = useState(null);
+    const [exchangeCredentialStatus, setExchangeCredentialStatus] = useState(null);
     const [sidebarTab, setSidebarTab] = useState('mission'); // 'mission' | 'agents' | 'learning' | 'debate' | 'backtest'
     const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
@@ -180,6 +226,7 @@ const MissionControlApp = ({ somaBackend, isConnected }) => {
     const [confirmModal, setConfirmModal] = useState(null); // { title, body, verdict, onConfirm }
     const [sessionSummary, setSessionSummary] = useState(null);
     const [sessionStartTime, setSessionStartTime] = useState(null);
+    const [tradeStrategyGateSkipped, setTradeStrategyGateSkipped] = useState(false);
 
     // Data freshness
     const [lastDataTime, setLastDataTime] = useState(null);
@@ -335,6 +382,40 @@ const MissionControlApp = ({ somaBackend, isConnected }) => {
         setToasts(prev => [...prev, { id, message, type }]);
         setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 4500);
     }, []);
+
+    const refreshExchangeCredentialStatus = useCallback(async () => {
+        try {
+            const response = await fetch('/api/exchange/credentials-status');
+            const data = await response.json();
+            if (data.success && data.status) {
+                setExchangeCredentialStatus(data.status);
+                return data.status;
+            }
+        } catch (error) {
+            console.error('Failed to refresh exchange credential status:', error);
+        }
+
+        try {
+            const response = await fetch('/api/alpaca/has-credentials');
+            const data = await response.json();
+            if (data.success) {
+                const fallbackStatus = {
+                    alpaca_paper: Boolean(data.hasPaperCredentials),
+                    alpaca_live: Boolean(data.hasLiveCredentials)
+                };
+                setExchangeCredentialStatus(prev => ({ ...(prev || {}), ...fallbackStatus }));
+                return fallbackStatus;
+            }
+        } catch (error) {
+            console.error('Failed to refresh Alpaca credential fallback status:', error);
+        }
+
+        return null;
+    }, []);
+
+    useEffect(() => {
+        refreshExchangeCredentialStatus();
+    }, [refreshExchangeCredentialStatus]);
 
     const formatDuration = (ms) => {
         const s = Math.floor(ms / 1000);
@@ -759,12 +840,22 @@ const MissionControlApp = ({ somaBackend, isConnected }) => {
 
     // ENGINE HOOK
     const engine = useMarketEngine(riskMetrics, isDemoMode, tickers, selectedSymbol);
+    const missionPnl = useMemo(() => computeMissionPnl({
+        riskMetrics,
+        autonomousStatus,
+        positions: brokerPositions,
+        trades
+    }), [riskMetrics, autonomousStatus, brokerPositions, trades]);
 
     // Derived State
     const currentTicker = tickers.find(t => t.symbol === selectedSymbol) || tickers[0];
     const filteredTickers = tickers.filter(t => t.type === assetType);
     // Derive market sentiment from real price change data (not random Math.random() sentiment field)
     const marketSentiment = tickers.filter(t => (t.changePercent || 0) > 0).length > tickers.length / 2 ? 'BULL' : 'BEAR';
+    // 'alpaca_paper' | 'alpaca_live' | 'internal' — drives Portfolio panel source badge
+    const paperModeSource = isDemoMode
+        ? (exchangeCredentialStatus?.alpaca_paper ? 'alpaca_paper' : 'internal')
+        : 'live';
 
     const createDraftThesisFromInterpret = useCallback(({ analysis, symbol, range, dataSource: source, quality, latestBar, error }) => {
         const price = parseTradeNumber(latestBar?.close ?? currentTicker?.price);
@@ -828,6 +919,10 @@ const MissionControlApp = ({ somaBackend, isConnected }) => {
         const strategy = analysis?.strategy || {};
         const deepScan = analysis?.deepScan || {};
         const direction = inferTradeDirection(strategy.recommendation);
+        const enrichmentUsable = ['BUY', 'SELL'].includes(direction)
+            && parseTradeNumber(strategy.stop_loss) != null
+            && parseTradeNumber(strategy.take_profit) != null
+            && (strategy.confidence ?? 0) >= 0.4;
         const evidenceRefs = [
             deepScan.evidenceId,
             deepScan.feedbackRecord?.id,
@@ -885,7 +980,7 @@ const MissionControlApp = ({ somaBackend, isConnected }) => {
                 evidenceRefs: Array.from(new Set([...(base?.evidenceRefs || []), ...evidenceRefs])),
                 dataSource,
                 dataAgeSec: visibleMarketStatus?.ageSec ?? null,
-                status: 'enriched',
+                status: enrichmentUsable ? 'enriched' : 'enrichment_failed',
                 updatedAt: Date.now()
             };
             merged.qualityGates = buildQualityGates(merged);
@@ -893,7 +988,11 @@ const MissionControlApp = ({ somaBackend, isConnected }) => {
             return merged;
         });
         setDecisionPanelTab('thesis');
-        addToast(`Deep Scan attached evidence to ${selectedSymbol} thesis`, 'success');
+        if (enrichmentUsable) {
+            addToast(`Deep Scan attached evidence to ${selectedSymbol} thesis`, 'success');
+        } else {
+            addToast(`Deep Scan returned weak signal for ${selectedSymbol} — no clear direction or missing levels. Thesis marked enrichment_failed.`, 'warning');
+        }
     }, [addToast, currentTicker?.price, dataSource, isDemoMode, persistTradeThesis, selectedSymbol, timeframe, visibleMarketStatus?.ageSec]);
 
     const mapSymbolForBacktest = useCallback((symbol = selectedSymbol) => {
@@ -1048,6 +1147,16 @@ const MissionControlApp = ({ somaBackend, isConnected }) => {
             updatedAt: Date.now()
         };
         merged.qualityGates = buildQualityGates(merged);
+        if (!['BUY', 'SELL'].includes(direction) || entry == null || stopLoss == null || takeProfit == null) {
+            throw new Error(
+                `Deep Scan returned insufficient data: ${[
+                    !['BUY', 'SELL'].includes(direction) && 'no clear direction',
+                    entry == null && 'missing entry',
+                    stopLoss == null && 'missing stop',
+                    takeProfit == null && 'missing target'
+                ].filter(Boolean).join(', ')}`
+            );
+        }
         return persistTradeThesis(merged);
     }, [activeStrategies, assetType, buildQualityGates, chartData, currentPresetId, currentTicker, dataSource, persistTradeThesis, riskMetrics, selectedSymbol]);
 
@@ -1554,13 +1663,12 @@ const MissionControlApp = ({ somaBackend, isConnected }) => {
 
     const captureSessionSummary = () => {
         if (!autonomousStatus?.stats || !sessionStartTime) return;
-        const unrealizedPnl = brokerPositions.reduce((sum, p) => sum + (p.unrealizedPnl || parseFloat(p.unrealized_pl) || 0), 0);
         setSessionSummary({
             duration: Date.now() - sessionStartTime,
-            trades: autonomousStatus.stats.tradesExecuted || 0,
-            pnl: (autonomousStatus.stats.sessionPnL || 0) + unrealizedPnl,
-            winRate: autonomousStatus.stats.winRate || 0,
-            errors: autonomousStatus.stats.errors || 0,
+            trades: missionPnl.trades,
+            pnl: missionPnl.total,
+            winRate: missionPnl.winRate || 0,
+            errors: missionPnl.errors,
             symbol: selectedSymbol,
         });
     };
@@ -1568,6 +1676,10 @@ const MissionControlApp = ({ somaBackend, isConnected }) => {
     const startAutonomousSession = async ({ requireBrokerCheck = false, source = 'autonomous' } = {}) => {
         setIsTrainingLoading(true);
         try {
+            if (dataSource === 'SIMULATION') {
+                addToast('Cannot start: market data is simulated. Wait for a live data connection before running autonomous sessions.', 'error');
+                return false;
+            }
             let thesisForStart = activeTradeThesis;
             const blockers = getThesisBlockers(thesisForStart);
             if (blockers.length > 0) {
@@ -1613,10 +1725,26 @@ const MissionControlApp = ({ somaBackend, isConnected }) => {
                 }
             }
 
+            // Hard-block live trading if SOMA promotion gates say DO_NOT_GO_LIVE
+            if (!isDemoMode && liveReadiness?.verdict?.recommendation === 'DO_NOT_GO_LIVE') {
+                const issues = (liveReadiness.verdict.issues || []).slice(0, 2);
+                addToast(`Live trading blocked: ${issues.join('; ') || 'promotion gates not met — check Mission Brief.'}`, 'error');
+                setSidebarTab('mission');
+                return false;
+            }
             const engageRes = await fetch('/api/autonomous/start', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ symbol: selectedSymbol, preset: currentPresetId, thesisId: thesisForStart.id })
+                body: JSON.stringify({
+                    symbol: selectedSymbol,
+                    preset: currentPresetId,
+                    thesisId: thesisForStart.id,
+                    config: {
+                        forcePaper: isDemoMode,
+                        thesisId: thesisForStart.id,
+                        launchSource: source
+                    }
+                })
             });
             const engageData = await engageRes.json();
 
@@ -1742,7 +1870,7 @@ const MissionControlApp = ({ somaBackend, isConnected }) => {
 
     const toggleTrading = async () => {
         if (!tradingActive) {
-            await startAutonomousSession({ source: 'autonomous trading' });
+            await startAutonomousSession({ requireBrokerCheck: true, source: tradeStrategyGateSkipped ? 'manual engage' : 'run trade strategy' });
         } else {
             await stopAutonomousSession({ includeScalping: false, source: 'autonomous trading' });
         }
@@ -1813,15 +1941,14 @@ const MissionControlApp = ({ somaBackend, isConnected }) => {
         setRuntimeMode(true);
         addToast('Switched to DEMO/PAPER mode. Restart autonomous trading to apply the mode.', 'success');
 
-        if (exchangeKeys && exchangeKeys.alpaca) {
+        const status = exchangeCredentialStatus || await refreshExchangeCredentialStatus();
+        if (status?.alpaca_paper) {
             try {
-                const response = await fetch('/api/alpaca/connect', {
+                const response = await fetch('/api/alpaca/connect-saved', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        apiKey: exchangeKeys.alpaca.apiKey,
-                        secretKey: exchangeKeys.alpaca.secretKey,
-                        paperTrading: true
+                        credentialType: 'alpaca_paper'
                     })
                 });
                 const data = await response.json();
@@ -1833,8 +1960,9 @@ const MissionControlApp = ({ somaBackend, isConnected }) => {
     };
 
     const requestLiveMode = async () => {
-        if (!exchangeKeys) {
-            addToast('Configure exchange API keys in Settings before going live.', 'warning');
+        const status = exchangeCredentialStatus || await refreshExchangeCredentialStatus();
+        if (!status?.alpaca_live) {
+            addToast('Configure and save Alpaca Live API keys in Settings before going live.', 'warning');
             setIsSettingsOpen(true);
             return;
         }
@@ -1869,15 +1997,36 @@ const MissionControlApp = ({ somaBackend, isConnected }) => {
             verdict: readinessWarning.trim() || null,
             confirmLabel: 'Proceed with Live Trading',
             confirmClassName: 'bg-rose-600 hover:bg-rose-500',
-            onConfirm: () => {
+            onConfirm: async () => {
+                try {
+                    const response = await fetch('/api/alpaca/connect-saved', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ credentialType: 'alpaca_live' })
+                    });
+                    const data = await response.json();
+                    if (!data.success) {
+                        addToast(`Could not connect saved Alpaca Live keys: ${data.error || 'unknown error'}`, 'error');
+                        setIsSettingsOpen(true);
+                        return;
+                    }
+                } catch (error) {
+                    addToast(`Could not connect saved Alpaca Live keys: ${error.message}`, 'error');
+                    setIsSettingsOpen(true);
+                    return;
+                }
                 setRuntimeMode(false);
                 fetchRealBalance();
             }
         });
     };
 
-    const handleSaveKeys = (keys) => {
-        setExchangeKeys(keys);
+    const handleSaveKeys = (payload) => {
+        if (payload?.status) {
+            setExchangeCredentialStatus(prev => ({ ...(prev || {}), ...payload.status }));
+        } else {
+            refreshExchangeCredentialStatus();
+        }
     };
 
     // MANUAL TRADE EXECUTION HANDLER
@@ -1933,6 +2082,25 @@ const MissionControlApp = ({ somaBackend, isConnected }) => {
             {/* Live Trading Warning Border */}
             {!isDemoMode && (
                 <div className="absolute inset-0 pointer-events-none z-[100] rounded-xl border-4 border-rose-500 animate-pulse-glow" />
+            )}
+
+            {!tradingActive && !tradeStrategyGateSkipped && (
+                <TradeStrategyGate
+                    symbol={selectedSymbol}
+                    presetId={currentPresetId}
+                    isDemoMode={isDemoMode}
+                    dataSource={visibleMarketStatus?.source || dataSource}
+                    running={isTrainingLoading}
+                    onSettings={() => setIsSettingsOpen(true)}
+                    onSkip={() => {
+                        setTradeStrategyGateSkipped(true);
+                        addToast('Strategy preflight skipped. Manual Mission Control buttons are available.', 'info');
+                    }}
+                    onRun={async () => {
+                        const started = await startAutonomousSession({ requireBrokerCheck: true, source: 'run trade strategy' });
+                        if (started) setTradeStrategyGateSkipped(true);
+                    }}
+                />
             )}
 
             {/* Autonomous Training Panel — paper-only strategy lab controls */}
@@ -2076,6 +2244,7 @@ const MissionControlApp = ({ somaBackend, isConnected }) => {
                                         marketRegime={marketRegime}
                                         dataSource={dataSource}
                                         autonomousStatus={autonomousStatus}
+                                        positions={brokerPositions}
                                         currentPresetId={currentPresetId}
                                         onOpenBacktest={() => setSidebarTab('backtest')}
                                         onOpenSim={() => setSidebarTab('sim')}
@@ -2128,7 +2297,7 @@ const MissionControlApp = ({ somaBackend, isConnected }) => {
                         </div>
                         {/* Market Monitor (P&L/Storm) - Fixed Height */}
                         <div className="h-[200px] border-t border-white/5 shrink-0">
-                            <MarketMonitor engine={engine} />
+                            <MarketMonitor engine={engine} pnlSummary={missionPnl} />
                         </div>
                         </>
                         )}
@@ -2271,6 +2440,7 @@ const MissionControlApp = ({ somaBackend, isConnected }) => {
                                                     trades={trades}
                                                     isDemoMode={isDemoMode}
                                                     autonomousStatus={autonomousStatus}
+                                                    paperModeSource={paperModeSource}
                                                 />
                                             ) : decisionPanelTab === 'evidence' ? (
                                                 <EvidenceBriefPanel
@@ -2338,8 +2508,6 @@ const MissionControlApp = ({ somaBackend, isConnected }) => {
                                         </span>
                                     </div>
                                     {autonomousStatus?.stats && (() => {
-                                        const unrealizedPnl = brokerPositions.reduce((sum, p) => sum + (p.unrealizedPnl || parseFloat(p.unrealized_pl) || 0), 0);
-                                        const totalPnl = (autonomousStatus.stats.sessionPnL || 0) + unrealizedPnl;
                                         const lastConfidence = autonomousStatus.lastSignal?.confidence ?? null;
                                         const minConfidence = autonomousStatus.config?.minConfidence || autonomousStatus.guardrailsState?.config?.minConfidence || null;
                                         return (
@@ -2350,14 +2518,14 @@ const MissionControlApp = ({ somaBackend, isConnected }) => {
                                             </div>
                                             <div className="bg-black/40 rounded p-1.5 border border-white/5">
                                                 <div className="text-[8px] text-zinc-600">TOTAL P&L</div>
-                                                <div className={`text-sm font-mono font-bold ${totalPnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                                                    {totalPnl >= 0 ? '+' : ''}${totalPnl.toFixed(2)}
+                                                <div className={`text-sm font-mono font-bold ${pnlTextColor(missionPnl.total)}`}>
+                                                    {missionPnl.total >= 0 ? '+' : ''}{formatMoney(missionPnl.total)}
                                                 </div>
                                             </div>
                                             <div className="bg-black/40 rounded p-1.5 border border-white/5">
                                                 <div className="text-[8px] text-zinc-600">UNREALIZED</div>
-                                                <div className={`text-sm font-mono font-bold ${unrealizedPnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                                                    {unrealizedPnl >= 0 ? '+' : ''}${unrealizedPnl.toFixed(2)}
+                                                <div className={`text-sm font-mono font-bold ${pnlTextColor(missionPnl.unrealized)}`}>
+                                                    {missionPnl.unrealized >= 0 ? '+' : ''}{formatMoney(missionPnl.unrealized)}
                                                 </div>
                                             </div>
                                             <div className="bg-black/40 rounded p-1.5 border border-white/5">

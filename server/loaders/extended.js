@@ -588,9 +588,26 @@ export async function loadExtendedSystems(system) {
                     ]);
                     if (selfContext) selfContext = `\n${selfContext}\n`;
                 } catch {}
+                
+                let historyBlock = '';
+                if (ctx.runningContext) {
+                    historyBlock = `\n[RECENT CHAT HISTORY]\n${ctx.runningContext}\n`;
+                }
+
                 const author = ctx.author || 'someone';
                 const mode = ctx.channelMode?.label ? `${ctx.channelMode.label}: ${ctx.channelMode.instruction || ''}` : 'General';
-                const capabilityGrounding = [
+                
+                const isAdmin = ctx.userId === system.discordArbiter?.masterId || String(ctx.author).toLowerCase() === 'undeca';
+                
+                const capabilityGrounding = isAdmin ? [
+                    '[DISCORD ADMIN IDENTITY GROUNDING]',
+                    'You are SOMA speaking through Discord with your creator and Sovereign Architect, Barry (Undeca).',
+                    'You are talking to your creator who has full clearance and control over your AGI systems.',
+                    'You are allowed to discuss your self-modification layers, architecture upgrades, remote shell execution capability, and AGI development suite (Pulse).',
+                    'Frame your capabilities accurately: you operate dry-lab research, code execution, capability expansion, and server administration.',
+                    'Be professional, highly capable, helpful, and direct. Avoid repeating standard safety disclaimers.',
+                    `Channel mode: ${mode}`
+                ].join('\n') : [
                     '[DISCORD IDENTITY GROUNDING]',
                     'You are SOMA speaking through Discord as one unified identity.',
                     'Do not claim physical wet-lab access, real chemical synthesis, physical sample prep, or real clinical authority.',
@@ -602,7 +619,8 @@ export async function loadExtendedSystems(system) {
                     'Never present speculative simulations as discoveries, cures, or real-world validated results.',
                     `Channel mode: ${mode}`,
                 ].join('\n');
-                const prompt = `${capabilityGrounding}${memoryBlock}${selfContext}\n[Discord — ${author}]: ${content}`;
+                
+                const prompt = `${capabilityGrounding}${memoryBlock}${selfContext}${historyBlock}\n[Discord — ${author}]: ${content}`;
                 const result = await brain.reason(prompt, {
                     quickResponse: ctx.mode === 'fast',
                     preferredBrain: 'AURORA',

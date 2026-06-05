@@ -486,6 +486,10 @@ class AutonomousHeartbeat extends EventEmitter {
           this.stats.lastResult = "Failed: " + errorMsg;
           this._updateTaskState(taskKey, 'error', errorMsg, durationMs);
 
+          if (task.source === 'GoalPlanner') {
+            await this._updateNarrativeThread(`Failed goal task: "${task.context?.goalTitle || 'Goal'}" due to: ${errorMsg}`);
+          }
+
           this._appendRunLog({
             source: task.source,
             taskKey,
@@ -734,8 +738,14 @@ class AutonomousHeartbeat extends EventEmitter {
           }
 
           // Activate pending goals — they're ready to work but haven't been started yet
-          if (bestGoal.status === 'pending' && this.system.goalPlanner?.startGoal) {
+          const isPending = bestGoal.status === 'pending';
+          if (isPending && this.system.goalPlanner?.startGoal) {
             await this.system.goalPlanner.startGoal(bestGoal.id).catch(() => {});
+            try {
+              await this._announceIntent(bestGoal);
+            } catch (err) {
+              this.logger.warn(`[AutonomousHeartbeat] Failed to announce intent: ${err.message}`);
+            }
           }
 
           const goal = bestGoal;
@@ -803,6 +813,8 @@ INSIGHT: <one key insight worth remembering, or "none">`,
                 evidence: evidence.summary
               }).catch(() => {});
 
+              await this._updateNarrativeThread(`Worked on "${goal.title}" - progress is now ${newProgress}% (${actionTaken || 'making progress'})`);
+
               // Record progress update to work ledger
               workLedger.record({
                 type: 'goal_progress',
@@ -819,6 +831,8 @@ INSIGHT: <one key insight worth remembering, or "none">`,
                 await this.system.goalPlanner.completeGoal(goal.id, { result: resultText }).catch(() => {});
                 this._goalAttempts.delete(goal.id); // Reset stall counter on natural completion
                 this.drive.onGoalComplete(goal); // Reward: big tension drop + satisfaction spike
+
+                await this._updateNarrativeThread(`Completed goal: "${goal.title}" (${resultText || 'fully completed'})`);
 
                 // Record completion to work ledger
                 workLedger.record({
@@ -1335,6 +1349,28 @@ Identify any specific risks, security concerns, or boundaries that must not be c
       const thalamusFeedback = thalamusResult?.text || 'No safety/security risks identified.';
       this.logger.log(`[AutonomousHeartbeat] 🛡️  THALAMUS feedback: ${thalamusFeedback.replace(/\\n/g, ' ').substring(0, 100)}...`);
 
+      // Interactive Safety Inquiry: trigger if THALAMUS flags high risk or calls for blocking/restrictions
+      if (thalamusFeedback.toLowerCase().includes('critical') || 
+          thalamusFeedback.toLowerCase().includes('block') || 
+          thalamusFeedback.toLowerCase().includes('risk') ||
+          thalamusFeedback.toLowerCase().includes('warning') ||
+          thalamusFeedback.toLowerCase().includes('violation')) {
+        
+        try {
+          const questionId = `quest-${Date.now()}`;
+          this.system.ws?.broadcast?.('proactive_question', {
+            questionId,
+            question: `THALAMUS flagged a safety/policy concern for "${goalTitle}": "${thalamusFeedback.substring(0, 180)}...". How should I handle this?`,
+            options: ["Proceed with safety constraints", "Pause this goal for manual review", "Cancel goal execution"],
+            goalId: task.context?.goalId,
+            type: 'safety_gate'
+          });
+          this.logger.log(`[AutonomousHeartbeat] ⚠️ Safety inquiry broadcasted for "${goalTitle}"`);
+        } catch (wsErr) {
+          // ignore ws broadcast issues
+        }
+      }
+
       // 2. Query LOGOS to adjust execution plan based on THALAMUS's critique
       const logosPrompt = `You are LOGOS (Logic & Deduction). Review this strategic task proposal and the critique from THALAMUS. Adjust the execution instructions to address the concerns logically and make the plan robust:
 
@@ -1361,6 +1397,44 @@ Respond with the adjusted plan directly (max 200 words).`;
       }
     } catch (err) {
       this.logger.warn(`[AutonomousHeartbeat] ⚠️ Debate failed: ${err.message}. Proceeding with original plan.`);
+    }
+  }
+
+  async _announceIntent(goal) {
+    if (!this.system.ws) return;
+    const sourceLabel = goal.category === 'self_repair' ? 'repair task' :
+                        goal.category === 'self_improvement' ? 'optimization task' : 'strategic goal';
+    const rationaleText = goal.rationale || 'advancing SOMA\'s capabilities';
+    const message = `[Intending] Starting a new ${sourceLabel}: "${goal.title}". Rationale: ${rationaleText}.`;
+    
+    this._lastProactiveAt = Date.now();
+    if (this.system) this.system._lastProactiveMs = Date.now();
+    
+    this._broadcast('soma_proactive', { message, source: 'heartbeat_intent', taskSource: 'GoalPlanner' });
+    this.logger.log(`[AutonomousHeartbeat] 📢 Intent announced: "${goal.title}"`);
+    
+    await this._updateNarrativeThread(`Started goal: "${goal.title}" (Rationale: ${rationaleText})`);
+  }
+
+  async _updateNarrativeThread(text) {
+    try {
+      const threadPath = path.join(process.cwd(), 'SOMA', 'narrative-thread.json');
+      let thread = [];
+      try {
+        if (fs.existsSync(threadPath)) {
+          thread = JSON.parse(fs.readFileSync(threadPath, 'utf8'));
+        }
+      } catch (e) {}
+      thread.push({ timestamp: Date.now(), text });
+      if (thread.length > 5) thread.shift();
+      
+      const dir = path.dirname(threadPath);
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+      fs.writeFileSync(threadPath, JSON.stringify(thread, null, 2), 'utf-8');
+    } catch (err) {
+      this.logger.warn(`[AutonomousHeartbeat] Failed to update narrative thread: ${err.message}`);
     }
   }
 }

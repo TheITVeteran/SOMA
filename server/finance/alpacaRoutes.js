@@ -54,12 +54,59 @@ router.post('/connect', async (req, res) => {
 });
 
 /**
+ * POST /api/alpaca/connect-saved
+ * Reconnect using encrypted credentials already stored on disk.
+ * Keeps the frontend from needing raw API keys after restart.
+ */
+router.post('/connect-saved', async (req, res) => {
+    try {
+        const { credentialType = 'alpaca_paper' } = req.body || {};
+        if (!['alpaca_paper', 'alpaca_live', 'alpaca'].includes(credentialType)) {
+            return res.status(400).json({
+                success: false,
+                error: 'credentialType must be alpaca_paper or alpaca_live'
+            });
+        }
+
+        const creds = alpacaService.loadCredentials(credentialType);
+        if (!creds) {
+            return res.status(404).json({
+                success: false,
+                error: `No saved ${credentialType} credentials found`
+            });
+        }
+
+        const result = await alpacaService.connect(
+            creds.apiKey,
+            creds.apiSecret,
+            creds.paperTrading,
+            false,
+            credentialType
+        );
+        flushAlpacaStatusCache();
+        res.json({
+            success: true,
+            account: result.account,
+            credentialType: result.credentialType,
+            message: `Connected using saved ${credentialType} credentials`
+        });
+    } catch (error) {
+        console.error('[Alpaca API] Saved credential connection failed:', error.message);
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+});
+
+/**
  * POST /api/alpaca/disconnect
  * Disconnect from Alpaca
  */
 router.post('/disconnect', (req, res) => {
     try {
         alpacaService.disconnect();
+        flushAlpacaStatusCache();
         res.json({ success: true });
     } catch (error) {
         res.status(500).json({
@@ -103,6 +150,7 @@ router.post('/clear-credentials', (req, res) => {
         if (!credentialType || credentialType === status.credentialType) {
             alpacaService.disconnect();
         }
+        flushAlpacaStatusCache();
 
         res.json({
             success: true,

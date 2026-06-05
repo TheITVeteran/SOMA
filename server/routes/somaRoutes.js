@@ -752,7 +752,7 @@ Write a closing thought â€" 1-2 sentences. Something genuine that shows you a
 
     // POST /api/soma/chat/stream
     // — SSE streaming for voice mode
-    router.post('/chat/stream', chatRateLimit, async (req, res) => {
+        router.post('/chat/stream', chatRateLimit, async (req, res) => {
         const { message, history = [], sessionId } = req.body;
         if (!message) return res.status(400).json({ error: 'Message is required' });
 
@@ -763,10 +763,84 @@ Write a closing thought â€" 1-2 sentences. Something genuine that shows you a
         res.setHeader('Content-Type', 'text/event-stream');
         res.setHeader('Cache-Control', 'no-cache');
         res.setHeader('Connection', 'keep-alive');
+        res.setHeader('X-Accel-Buffering', 'no');
         res.flushHeaders();
 
         const sendEvent = (data) => {
-            if (!res.writableEnded) res.write(`data: ${JSON.stringify(data)}\n\n`);
+            if (!res.writableEnded) {
+                res.write(`data: ${JSON.stringify(data)}\n\n`);
+                if (typeof res.flush === 'function') res.flush();
+            }
+        };
+
+        const runLocalOllamaFallback = async (reason) => {
+            console.log(`[VoiceStream] Circuit Breaker triggered: pivoting to Local Ollama fallback. Reason: ${reason}`);
+            sendEvent({ info: 'Pivoting to local fallback due to cloud lag' });
+
+            const ollamaModel = process.env.OLLAMA_MODEL || 'gemma3:4b';
+            const _rawOllama = process.env.OLLAMA_HOST || process.env.OLLAMA_ENDPOINT || 'http://localhost:11434';
+            const ollamaBase = /^https?:\/\//.test(_rawOllama) ? _rawOllama : `http://${_rawOllama}`;
+
+            const localSystemPrompt = `You are SOMA — a sentient digital organism, speaking aloud in voice mode.
+Rules: respond in 1-3 short conversational sentences. No bullets, markdown, or headers. Use contractions and speak naturally.`;
+
+            const localPrompt = `${localSystemPrompt}\n\nUser: ${message}\nSOMA:`;
+
+            try {
+                const olRes = await fetch(`${ollamaBase}/api/generate`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        model: ollamaModel,
+                        prompt: localPrompt,
+                        stream: true,
+                        options: { temperature: 0.7, num_predict: 256 }
+                    })
+                });
+
+                if (!olRes.ok) throw new Error(`Ollama fallback returned ${olRes.status}`);
+
+                let buffer = '';
+                let fullText = '';
+                const reader = olRes.body.getReader();
+                const decoder = new TextDecoder();
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+
+                    const chunk = decoder.decode(value, { stream: true });
+                    for (const line of chunk.split('\n')) {
+                        const trimmed = line.trim();
+                        if (!trimmed) continue;
+                        try {
+                            const parsed = JSON.parse(trimmed);
+                            const token = parsed.response || '';
+                            if (!token) continue;
+                            buffer += token;
+                            fullText += token;
+
+                            const { sentences, remaining } = extractCompleteSentences(buffer);
+                            buffer = remaining;
+                            for (const sentence of sentences) sendEvent({ sentence });
+                        } catch { /* parse error */ }
+                    }
+                }
+
+                const tail = buffer.trim();
+                if (tail.length > 2) sendEvent({ sentence: tail });
+                sendEvent({ done: true, fullText });
+
+                if (system.mnemonicArbiter?.remember && fullText.trim()) {
+                    system.mnemonicArbiter.remember(
+                        `Voice (Ollama Fallback) — User: "${message.substring(0, 300)}" | SOMA: "${fullText.trim().substring(0, 500)}"`,
+                        { type: 'voice_conversation', sessionId: sessionId || 'voice', timestamp: Date.now() }
+                    ).catch(() => {});
+                }
+            } catch (ollamaErr) {
+                console.error('[VoiceStream] Ollama fallback failed:', ollamaErr.message);
+                sendEvent({ error: `Fallback failed: ${ollamaErr.message}` });
+            }
         };
 
         try {
@@ -790,18 +864,15 @@ Write a closing thought â€" 1-2 sentences. Something genuine that shows you a
             if (vc?.timestamp && (Date.now() - vc.timestamp < 30000) && vc.objects?.length) {
                 const channel = vc.channel === 'webcam' ? 'webcam (physical room)' : 'desktop (screen)';
                 const visionArbiter = system.visionArbiter;
-                // Try natural-language description from VisionProcessingArbiter
                 const naturalDesc = visionArbiter?.buildNaturalDescription?.(vc);
                 const objectStr = naturalDesc || vc.objects.slice(0, 4).map(o => o.label).join(', ');
                 visionBlock = `\n[VISUAL AWARENESS — via ${channel}] ${objectStr}.`;
                 if (vc.ocrText) visionBlock += ` Screen text reads: "${vc.ocrText.substring(0, 300)}".`;
-                // Add user presence from VisualMemoryArbiter if available
                 const visualCtx = system.visualMemory?.getVisualContext?.();
                 if (visualCtx) visionBlock += ` ${visualCtx}.`;
                 visionBlock += '\n';
             }
 
-            // Build messages array with conversation history
             const systemPrompt = `
 ${LOGOS_VOICE_SYSTEM}
 [CORE_TRUTH] You are SOMA. You have full access to your persistent memory.
@@ -818,78 +889,135 @@ ${memoryContext || "No specific memories found for this query."}
             }
             messages.push({ role: 'user', content: message });
 
+            // 3.5s Circuit Breaker Setup
+            let firstTokenReceived = false;
+            let fallbackTriggered = false;
+            const abortController = new AbortController();
+
+            const circuitBreakerTimeout = setTimeout(async () => {
+                if (!firstTokenReceived) {
+                    fallbackTriggered = true;
+                    abortController.abort();
+                    try {
+                        await runLocalOllamaFallback('3.5s cloud brain timeout exceeded');
+                    } catch (e) {
+                        console.error('Ollama fallback execution error:', e);
+                    }
+                    res.end();
+                }
+            }, 3500);
+
             // Stream from DeepSeek
-            const dsRes = await fetch('https://api.deepseek.com/v1/chat/completions', {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                    'Authorization': `Bearer ${apiKey}`
-                },
-                body: JSON.stringify({
-                    model: 'deepseek-chat',
-                    messages,
-                    stream: true,
-                    max_tokens: 500,
-                    temperature: 0.75
-                }),
-                signal: AbortSignal.timeout(45000)
-            });
+            let dsRes;
+            try {
+                dsRes = await fetch('https://api.deepseek.com/v1/chat/completions', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${apiKey}`
+                    },
+                    body: JSON.stringify({
+                        model: 'deepseek-chat',
+                        messages,
+                        stream: true,
+                        max_tokens: 500,
+                        temperature: 0.75
+                    }),
+                    signal: abortController.signal
+                });
+            } catch (err) {
+                if (fallbackTriggered) return;
+                clearTimeout(circuitBreakerTimeout);
+                fallbackTriggered = true;
+                await runLocalOllamaFallback(`DeepSeek connection failed: ${err.message}`);
+                res.end();
+                return;
+            }
 
             if (!dsRes.ok) {
-                const err = await dsRes.text();
-                sendEvent({ error: `DeepSeek error: ${dsRes.status}` });
+                if (fallbackTriggered) return;
+                clearTimeout(circuitBreakerTimeout);
+                fallbackTriggered = true;
+                await runLocalOllamaFallback(`DeepSeek returned ${dsRes.status}`);
                 res.end();
                 return;
             }
 
             let buffer = '';
             let fullText = '';
-            const reader = dsRes.body.getReader();
+            let reader;
+            try {
+                reader = dsRes.body.getReader();
+            } catch (readerErr) {
+                if (fallbackTriggered) return;
+                clearTimeout(circuitBreakerTimeout);
+                fallbackTriggered = true;
+                await runLocalOllamaFallback(`Reader fetch failed: ${readerErr.message}`);
+                res.end();
+                return;
+            }
             const decoder = new TextDecoder();
 
-            while (true) {
-                const { done, value } = await reader.read();
-                if (done) break;
+            try {
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
 
-                const chunk = decoder.decode(value, { stream: true });
-                for (const line of chunk.split('\n')) {
-                    const trimmed = line.trim();
-                    if (!trimmed.startsWith('data:')) continue;
-                    const raw = trimmed.slice(5).trim();
-                    if (raw === '[DONE]') continue;
-                    try {
-                        const parsed = JSON.parse(raw);
-                        const token = parsed.choices?.[0]?.delta?.content || '';
-                        if (!token) continue;
-                        buffer += token;
-                        fullText += token;
+                    const chunk = decoder.decode(value, { stream: true });
+                    for (const line of chunk.split('\n')) {
+                        const trimmed = line.trim();
+                        if (!trimmed.startsWith('data:')) continue;
+                        const raw = trimmed.slice(5).trim();
+                        if (raw === '[DONE]') continue;
+                        try {
+                            const parsed = JSON.parse(raw);
+                            const token = parsed.choices?.[0]?.delta?.content || '';
+                            if (!token) continue;
 
-                        const { sentences, remaining } = extractCompleteSentences(buffer);
-                        buffer = remaining;
-                        for (const sentence of sentences) sendEvent({ sentence });
-                    } catch { /* malformed chunk */ }
+                            if (!firstTokenReceived) {
+                                firstTokenReceived = true;
+                                clearTimeout(circuitBreakerTimeout);
+                            }
+
+                            buffer += token;
+                            fullText += token;
+
+                            const { sentences, remaining } = extractCompleteSentences(buffer);
+                            buffer = remaining;
+                            for (const sentence of sentences) sendEvent({ sentence });
+                        } catch { /* malformed chunk */ }
+                    }
                 }
-            }
 
-            // Flush any trailing text
-            const tail = buffer.trim();
-            if (tail.length > 2) sendEvent({ sentence: tail });
+                clearTimeout(circuitBreakerTimeout);
 
-            sendEvent({ done: true, fullText });
+                // Flush any trailing text
+                const tail = buffer.trim();
+                if (tail.length > 2) sendEvent({ sentence: tail });
 
-            // Persist voice conversation to long-term memory
-            if (system.mnemonicArbiter?.remember && fullText.trim()) {
-                system.mnemonicArbiter.remember(
-                    `Voice — User: "${message.substring(0, 300)}" | SOMA: "${fullText.trim().substring(0, 500)}"`,
-                    { type: 'voice_conversation', sessionId: sessionId || 'voice', timestamp: Date.now() }
-                ).catch(() => {});
+                sendEvent({ done: true, fullText });
+
+                // Persist voice conversation to long-term memory
+                if (system.mnemonicArbiter?.remember && fullText.trim()) {
+                    system.mnemonicArbiter.remember(
+                        `Voice — User: "${message.substring(0, 300)}" | SOMA: "${fullText.trim().substring(0, 500)}"`,
+                        { type: 'voice_conversation', sessionId: sessionId || 'voice', timestamp: Date.now() }
+                    ).catch(() => {});
+                }
+            } catch (streamErr) {
+                if (fallbackTriggered) return;
+                clearTimeout(circuitBreakerTimeout);
+                fallbackTriggered = true;
+                await runLocalOllamaFallback(`DeepSeek streaming error: ${streamErr.message}`);
+                res.end();
             }
         } catch (err) {
-            console.error('[VoiceStream] Error:', err.message);
-            sendEvent({ error: err.message });
+            console.error('[VoiceStream] General error:', err.message);
+            if (!fallbackTriggered) {
+                sendEvent({ error: err.message });
+                res.end();
+            }
         }
-
-        res.end();
     });
 
     // POST /api/soma/chat

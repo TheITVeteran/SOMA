@@ -601,6 +601,45 @@ export function setupWebSocket(server, wss, system) {
                 // Gather what she's been thinking about
                 const parts = [];
 
+                // 1. Narrative thread (continuity)
+                let narrativeThreadText = '';
+                try {
+                    const threadPath = join(process.cwd(), 'SOMA', 'narrative-thread.json');
+                    const threadData = JSON.parse(readFileSync(threadPath, 'utf8'));
+                    if (Array.isArray(threadData) && threadData.length > 0) {
+                        narrativeThreadText = `[NARRATIVE THREAD (CONTINUITY)]\n${threadData.map(t => `• ${t.text}`).join('\n')}`;
+                    }
+                } catch (e) {}
+                if (narrativeThreadText) parts.push(narrativeThreadText);
+
+                // 2. Limbic / Cognitive State
+                let driveTension = 0.5;
+                let driveSatisfaction = 0.5;
+                if (system.attentionEngine?.drive?.tension !== undefined) {
+                    driveTension = system.attentionEngine.drive.tension;
+                } else if (system.heartbeat?.drive?.tension !== undefined) {
+                    driveTension = system.heartbeat.drive.tension;
+                    driveSatisfaction = system.heartbeat.drive.satisfaction;
+                }
+                parts.push(`[COGNITIVE STATE]\nDrive Tension: ${(driveTension * 100).toFixed(0)}%\nSatisfaction: ${(driveSatisfaction * 100).toFixed(0)}%\nActive Brains: ${system.quadBrain?.getStatus?.().lobes?.join(', ') || 'LOGOS, THALAMUS, PROMETHEUS, AURORA'}`);
+
+                // 3. Multi-Modal Awareness (Git Status)
+                let gitChanges = '';
+                try {
+                    const { execSync } = require('child_process');
+                    const diffStat = execSync('git status --porcelain', { encoding: 'utf8', cwd: process.cwd() });
+                    if (diffStat.trim()) {
+                        gitChanges = `[UNCOMMITTED GIT CHANGES]\n${diffStat.trim().substring(0, 300)}`;
+                    }
+                } catch (e) {}
+                if (gitChanges) parts.push(gitChanges);
+
+                // 4. Multi-Modal Awareness (Screen Perception)
+                if (system.visionContext?.objects?.length > 0) {
+                    const ocrSnippet = (system.visionContext.ocrText || '').substring(0, 150);
+                    parts.push(`[SCREEN PERCEPTION]\nDetected elements: ${system.visionContext.objects.map(o => o.label).join(', ')}\nOCR Text: "${ocrSnippet}"`);
+                }
+
                 // Item 2: Derive emotional tone from soul before building stimulus
                 let soulMood = 'focused';
                 if (system.soul?.getRecentReflections) {
