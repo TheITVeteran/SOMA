@@ -133,6 +133,11 @@ kevin_watcher_data/
 temp_agent_platform/
 _archive/
 
+# ── Generated Images / Media Output ──────────────────────────────────────────
+SOMA/photos/generated/
+SOMA/social-media/images/
+Maxwell_extracted/uploads/
+
 tmpclaude-*
 
 # ── Temporary Files ───────────────────────────────────────────────────────────
