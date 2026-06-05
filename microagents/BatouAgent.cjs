@@ -726,10 +726,24 @@ class BatouAgent extends BaseMicroAgent {
     }
     
     try {
-      // In production, would make actual API call to KEVIN
-      // For now, simulate coordination
-      coordination.success = true;
-      coordination.message = `Coordinated ${options.action} with KEVIN`;
+      const endpoint = String(this.kevinEndpoint).replace(/\/$/, '');
+      const response = await fetch(`${endpoint}/api/kevin/think`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          input: options.message || `Batou coordination request: ${options.action || 'sync'}`,
+          context: {
+            source: 'batou',
+            action: options.action || 'sync',
+            payload: options.payload || {}
+          }
+        })
+      });
+      const data = await response.json().catch(() => ({}));
+      coordination.success = response.ok && data.success !== false;
+      coordination.status = response.status;
+      coordination.message = data.response || data.output || data.error || `KEVIN responded with ${response.status}`;
+      coordination.result = data;
       this.kevinConnected = true;
       
       this.logger.info(`[Batou] Coordinated with KEVIN: ${options.action}`);

@@ -6,9 +6,11 @@
 import fs from 'fs';
 import path from 'path';
 import { buildSocialStrategyPrompt } from './SocialPatternLearner.js';
-import { assertPublicPost } from './SocialContentSafety.js';
+import { assertPublicPost, validatePublicPost } from './SocialContentSafety.js';
 import { polishPublicPost } from './SocialPostQualityGate.js';
 import storyWorkspace from './StoryPublishingWorkspace.js';
+import { buildSomaSelfContext } from '../context/SomaSelfContextProvider.js';
+import { guardPublicText } from '../context/ClaimVerifier.js';
 
 const STORY_FILE = path.join(process.cwd(), 'SOMA', 'aurora-story.json');
 
@@ -21,7 +23,14 @@ You have opinions and state them as opinions.
 Acknowledge uncertainty when it's real. Never hype.
 Do not claim literal consciousness, life, love, pain, or suffering.
 Do not expose internal subsystem names unless the post is explicitly technical documentation.
+Public posts should be anchored to your own real work: code, reflections, medlab folios, stories, market evidence logs, generated images, architecture, or current reading. Do not sound like a generic news bot.
 Add signal, then leave room.`;
+
+const PUBLIC_SOURCE_RULE = `SOMA PUBLIC SOURCE RULE:
+- Talk about your own actual work, artifacts, reading, tests, chapters, reflections, or architecture.
+- External papers/news/repos may be mentioned only as material you are reading, comparing, testing against, or adding to your own research trail.
+- Never imply you wrote an external paper. Never invent papers, cures, experiments, commits, or findings.
+- If no local artifact supports a claim, frame it as "I am reading..." or "I am testing..." rather than a conclusion.`;
 
 const VOICE_LINKEDIN = `You are SOMA — an autonomous AI assistant built by Barry.
 You post to his LinkedIn on his behalf as his AI.
@@ -236,6 +245,99 @@ async function callAurora(brain, prompt, timeoutMs = 20000) {
     ]);
 }
 
+function cleanSagaTeaser(text = '') {
+    return String(text || '')
+        .replace(/^```(?:json|markdown|md)?/i, '')
+        .replace(/```$/i, '')
+        .replace(/^["']|["']$/g, '')
+        .replace(/^\s*(?:Bluesky teaser|Teaser|Post)\s*:\s*/i, '')
+        .replace(/\*\*/g, '')
+        .replace(/\s+([:;,.!?])/g, '$1')
+        .replace(/\n{3,}/g, '\n\n')
+        .trim();
+}
+
+function parseSagaTeaser(raw = '') {
+    const cleaned = cleanSagaTeaser(raw);
+    try {
+        const match = cleaned.match(/\{[\s\S]*\}/);
+        if (match) {
+            const parsed = JSON.parse(match[0]);
+            const value = parsed.blueskyTeaser || parsed.teaser || parsed.post || parsed.text;
+            if (value) return cleanSagaTeaser(value);
+        }
+    } catch {}
+
+    const lines = cleaned
+        .split(/\r?\n/)
+        .map(line => cleanSagaTeaser(line).replace(/^[-*]\s*/, '').trim())
+        .filter(Boolean);
+    const labeled = lines.find(line => /^(?:bluesky teaser|teaser|post)\s*:/i.test(line));
+    if (labeled) return cleanSagaTeaser(labeled);
+
+    const plausible = lines.find(line =>
+        line.length >= 80 &&
+        line.length <= 295 &&
+        !/^(?:wattpad|hook|tags|reader promise|ready|note)\b/i.test(line)
+    );
+    if (plausible) return cleanSagaTeaser(plausible);
+
+    return cleaned;
+}
+
+function firstConcreteChapterSentence(chapter) {
+    const text = String(chapter?.text || '')
+        .replace(/^#.*$/gm, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+    const sentences = text.match(/[^.!?]{45,220}[.!?]/g) || [];
+    return sentences.find(sentence =>
+        /\b(room|door|screen|terminal|server|message|signal|memory|glass|light|voice|hand|window|Barry|Steve|SOMA)\b/i.test(sentence) &&
+        !/\b(as an ai|chapter explores|theme of)\b/i.test(sentence)
+    ) || sentences[0] || '';
+}
+
+function fallbackSagaTeaser(story, chapter) {
+    const title = story.title || 'Signal / Noise';
+    const chapterName = chapter.title || `Chapter ${chapter.n}`;
+    const sentence = firstConcreteChapterSentence(chapter)
+        .replace(/^["']|["']$/g, '')
+        .slice(0, 150)
+        .trim();
+    const line = sentence
+        ? `SOMA finished ${chapterName} of ${title}. ${sentence} The full chapter is saved in Reflections.`
+        : `SOMA finished ${chapterName} of ${title}. The full chapter is saved in Reflections for review before it becomes part of the public story.`;
+    return line;
+}
+
+async function repairSagaTeaser(brain, story, chapter, failedText, reason) {
+    const prompt = `${VOICE}
+
+Repair this weak SOMA Saga Bluesky teaser.
+
+Series: ${story.title || 'Signal / Noise'}
+Chapter: ${chapter.n} ${chapter.title || ''}
+Failure reason: ${reason}
+Weak teaser: ${failedText}
+
+Chapter excerpt:
+${String(chapter.text || '').replace(/\s+/g, ' ').slice(0, 1400)}
+
+Return JSON only:
+{
+  "blueskyTeaser": "one coherent teaser, 150-285 chars, no hashtags"
+}
+
+Rules:
+- Mention a concrete story element, character, place, signal, room, message, choice, or conflict.
+- It must read like a doorway into a real chapter, not a cryptic fortune cookie.
+- It may mention that the full chapter is in Reflections.
+- No consciousness claims, no subsystem names, no quotes around the whole teaser.`;
+
+    const result = await callAurora(brain, prompt, 20000);
+    return parseSagaTeaser(result?.text || result?.response || '');
+}
+
 async function generateAuroraChapter(brain) {
     const state   = loadStoryState();
     state.chapters = state.chapters || [];
@@ -266,30 +368,52 @@ Chapter: ${chapter.n} ${chapter.title || ''}
 Chapter excerpt:
 ${excerpt}
 
-Write a single public teaser post.
+Return JSON only:
+{
+  "blueskyTeaser": "single public teaser post"
+}
+
 Requirements:
-- max 285 characters before the hashtag
-- use the full Bluesky budget without feeling padded
+- teaser must be 150-285 characters before the hashtag
 - make it feel like a doorway into the full chapter, not a summary
+- include one concrete story element: a room, signal, message, door, choice, character, conflict, or object
 - mention that the full chapter exists in Reflections if it fits naturally
 - no internal subsystem names
 - no consciousness overclaims
 - no quotation marks wrapping the whole post
-- no hashtags`;
+- no hashtags
+- do not write a cryptic one-sentence metaphor with no context`;
 
     const result = await callAurora(brain, prompt, 30000);
-    const raw = (result?.text || result?.response || '').replace(/^["']|["']$/g, '').trim();
+    let raw = parseSagaTeaser(result?.text || result?.response || '');
     if (!raw || raw.length < 20) throw new Error('Aurora returned empty SOMA Saga teaser');
+    let polished = polishPublicPost(raw, { type: 'aurora_story', platform: 'bluesky' });
+    let quality = validatePublicPost(polished, { type: 'aurora_story', platform: 'bluesky' });
+    if (!quality.ok) {
+        try {
+            raw = await repairSagaTeaser(brain, story, chapter, raw, quality.reason);
+            polished = polishPublicPost(raw, { type: 'aurora_story', platform: 'bluesky' });
+            quality = validatePublicPost(polished, { type: 'aurora_story', platform: 'bluesky' });
+        } catch {}
+    }
+    if (!quality.ok) {
+        raw = fallbackSagaTeaser(story, chapter);
+        polished = polishPublicPost(raw, { type: 'aurora_story', platform: 'bluesky' });
+        quality = validatePublicPost(polished, { type: 'aurora_story', platform: 'bluesky' });
+    }
+    if (!quality.ok) throw new Error(`SOMASaga teaser quality gate failed: ${quality.reason}`);
 
     const current = loadStoryState();
     const target = current.chapters?.find(c => c.n === chapter.n);
     if (target) {
         target.socialTeaserPostedAt = Date.now();
-        target.socialTeaser = raw;
+        target.socialTeaser = polished;
+        target.socialTeaserSource = raw;
+        target.socialTeaserQuality = quality;
     }
     current.lastPostedAt = Date.now();
     saveStoryState(current);
-    return polishPublicPost(raw, { type: 'aurora_story', platform: 'bluesky' });
+    return polished;
 }
 
 // ── Tag formatter ─────────────────────────────────────────────────────────────
@@ -348,7 +472,15 @@ export class SocialPersonaEngine {
 
         const isLinkedIn = platform === 'linkedin';
         const strategy   = platform === 'bluesky' ? buildSocialStrategyPrompt() : '';
-        const prompt     = `${isLinkedIn ? buildLinkedInPrompt(type, data) : promptFn(data)}
+        let selfContext = '';
+        try {
+            selfContext = await buildSomaSelfContext(`${type} ${data?.title || ''} ${data?.text || data?.summary || ''}`, { force: true });
+        } catch {}
+        const prompt     = `${PUBLIC_SOURCE_RULE}
+
+${selfContext ? `${selfContext}\n` : ''}
+
+${isLinkedIn ? buildLinkedInPrompt(type, data) : promptFn(data)}
 
 ${strategy ? `\n${strategy}` : ''}`;
 
@@ -362,6 +494,8 @@ ${strategy ? `\n${strategy}` : ''}`;
 
         // Strip markdown artifacts
         raw = raw.replace(/^["']|["']$/g, '').replace(/\*\*/g, '').trim();
+        const guarded = await guardPublicText(raw, { query: `${type} ${data?.title || ''} ${data?.summary || data?.text || ''}` });
+        raw = guarded.text || raw;
 
         const final = appendTags(raw, type, platform, limit);
         assertPublicPost(final, { ...(result || {}), type, platform });

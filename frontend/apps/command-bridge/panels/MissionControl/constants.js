@@ -149,6 +149,17 @@ export const STRATEGY_PRESETS = [
         ]
     },
     {
+        id: 'HIGH_PROBABILITY',
+        name: 'High Swarm Consensus',
+        description: 'Enforces strict multi-agent voting gates (>=85% confidence).',
+        riskProfile: 'LOW',
+        assetTypes: [AssetType.STOCKS, AssetType.CRYPTO, AssetType.FUTURES],
+        strategies: [
+            { id: 'HP1', name: 'Swarm-Consensus', allocation: 70, pnl: 0, winRate: 0.85, confidence: 95, active: true, description: 'Aggregated agent consensus filter.' },
+            { id: 'HP2', name: 'Regime-Shield', allocation: 30, pnl: 0, winRate: 0.80, confidence: 90, active: true, description: 'Regime-locked low risk executions.' }
+        ]
+    },
+    {
         id: 'STOCKS_EARNINGS',
         name: 'Earnings Momentum',
         description: 'Pre/post-earnings volatility plays on high-volume stocks.',

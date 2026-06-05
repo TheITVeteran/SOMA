@@ -1,11 +1,16 @@
 import express from 'express';
 import fs from 'fs/promises';
 import path from 'path';
+import crypto from 'crypto';
+import { createRequire } from 'module';
 import axisStore from '../axis/AxisStore.js';
+import DendriteSearchEngine from '../services/DendriteSearchEngine.js';
 
 const statePath = path.resolve(process.cwd(), 'data', 'aperture', 'state.json');
 const portalIndexPath = path.resolve(process.cwd(), 'data', 'aperture', 'portal-index.json');
 const reflectionsPath = path.resolve(process.cwd(), 'data', 'vault', 'reflections');
+const require = createRequire(import.meta.url);
+const { WebCrawlerWorker } = require('../../workers/WebCrawlerWorker.cjs');
 
 const defaultState = {
     settings: {
@@ -92,6 +97,73 @@ function snippetForPage(page, queryTerms) {
     return start > 0 ? `...${snippet}` : snippet;
 }
 
+function contentHash(value = '') {
+    return crypto.createHash('sha256').update(String(value)).digest('hex');
+}
+
+function normalizePortalUrl(value = '') {
+    try {
+        const url = new URL(String(value).trim());
+        if (!['http:', 'https:'].includes(url.protocol)) return null;
+        url.hash = '';
+        return url.toString();
+    } catch {
+        return null;
+    }
+}
+
+function portalPageFromBody({ url, title, content, source = 'reader', metadata = {} }) {
+    const normalizedUrl = normalizePortalUrl(url);
+    const cleanContent = String(content || '').replace(/\s+/g, ' ').trim();
+    if (!normalizedUrl || !cleanContent) return null;
+    const hash = contentHash(`${normalizedUrl}\n${cleanContent}`);
+    return {
+        id: Buffer.from(normalizedUrl).toString('base64url').slice(0, 80),
+        url: normalizedUrl,
+        title: String(title || normalizedUrl).trim().slice(0, 250),
+        content: cleanContent.slice(0, 120000),
+        source: String(source).slice(0, 40),
+        hash,
+        metadata: {
+            ...metadata,
+            contentLength: cleanContent.length,
+            capturedAt: new Date().toISOString()
+        },
+        indexedAt: new Date().toISOString()
+    };
+}
+
+function portalPageFromCrawlerItem(item = {}) {
+    const content = item.content || item.question || [item.description, ...(item.answers || [])].filter(Boolean).join('\n\n');
+    return portalPageFromBody({
+        url: item.url,
+        title: item.title || item.topic || item.url,
+        content,
+        source: `crawler:${item.source || 'portal'}`,
+        metadata: {
+            crawlerType: item.type,
+            crawledAt: item.crawledAt,
+            tags: item.tags || []
+        }
+    });
+}
+
+function portalPageFromDendritePage(page = {}) {
+    const content = page.text || page.content || page.excerpt || page.html || '';
+    return portalPageFromBody({
+        url: page.url,
+        title: page.title || page.url,
+        content,
+        source: 'dendrite:objective',
+        metadata: {
+            status: page.status,
+            screenshot: page.screenshot || null,
+            extractedData: page.extractedData || null,
+            acquisition: 'WebScraperDendrite'
+        }
+    });
+}
+
 function safeSettingsPatch(body = {}) {
     const allowedThemes = ['daylight', 'graphite', 'slate'];
     const allowedWallpapers = ['alpine', 'mist', 'graphite', 'custom'];
@@ -128,8 +200,9 @@ async function searchReflections(query) {
     }
 }
 
-export default function createApertureRoutes() {
+export default function createApertureRoutes(system = {}) {
     const router = express.Router();
+    const dendriteSearch = new DendriteSearchEngine({ legacyJsonPath: portalIndexPath });
 
     router.get('/settings', async (_req, res) => {
         const state = await readState();
@@ -183,61 +256,296 @@ export default function createApertureRoutes() {
     });
 
     router.get('/portal/index', async (_req, res) => {
-        const pages = await readPortalIndex();
         res.json({
             success: true,
-            count: pages.length,
-            pages: pages.slice().sort((a, b) => b.indexedAt.localeCompare(a.indexedAt)).slice(0, 100)
-                .map(({ content, ...page }) => ({ ...page, contentLength: content.length }))
+            provider: 'dendrite-search',
+            count: dendriteSearch.count(),
+            pages: dendriteSearch.listPages(100)
+        });
+    });
+
+    router.get('/portal/stats', async (_req, res) => {
+        res.json({
+            success: true,
+            provider: 'dendrite-search',
+            ...dendriteSearch.stats()
         });
     });
 
     router.post('/portal/index', async (req, res) => {
-        const { url, title, content, source = 'reader' } = req.body || {};
-        if (!/^https?:\/\//i.test(String(url || '')) || !String(content || '').trim()) {
+        const page = portalPageFromBody(req.body || {});
+        if (!page) {
             return res.status(400).json({ success: false, error: 'A public URL and extracted content are required.' });
         }
-        const normalizedUrl = String(url).trim().slice(0, 2048);
-        const page = {
-            id: Buffer.from(normalizedUrl).toString('base64url').slice(0, 80),
-            url: normalizedUrl,
-            title: String(title || normalizedUrl).trim().slice(0, 250),
-            content: String(content).trim().slice(0, 120000),
-            source: String(source).slice(0, 40),
-            indexedAt: new Date().toISOString()
-        };
-        const current = await readPortalIndex();
-        const pages = [page, ...current.filter(item => item.url !== page.url)].slice(0, 10000);
-        await writePortalIndex(pages);
-        res.json({ success: true, page: { ...page, contentLength: page.content.length }, count: pages.length });
+        const indexed = dendriteSearch.indexPage(page);
+        res.json({ success: true, provider: 'dendrite-search', page: { ...indexed, contentLength: page.content.length }, count: dendriteSearch.count() });
     });
 
     router.delete('/portal/index/:id', async (req, res) => {
-        const pages = await readPortalIndex();
-        const remaining = pages.filter(page => page.id !== req.params.id);
-        await writePortalIndex(remaining);
-        res.json({ success: true, removed: pages.length !== remaining.length, count: remaining.length });
+        const removed = dendriteSearch.deletePage(req.params.id);
+        res.json({ success: true, provider: 'dendrite-search', removed, count: dendriteSearch.count() });
     });
 
     router.get('/portal/search', async (req, res) => {
         const query = String(req.query.q || '').trim();
-        if (query.length < 2) return res.json({ success: true, provider: 'portal-index', results: [], count: 0 });
-        const terms = indexTerms(query);
-        const pages = await readPortalIndex();
-        const results = pages.map(page => ({ page, score: portalSearchScore(page, terms) }))
-            .filter(result => result.score > 0)
-            .sort((a, b) => b.score - a.score || b.page.indexedAt.localeCompare(a.page.indexedAt))
-            .slice(0, 15)
-            .map(({ page, score }) => ({
-                id: page.id,
-                title: page.title,
-                url: page.url,
-                snippet: snippetForPage(page, terms),
-                score,
-                indexedAt: page.indexedAt,
-                source: page.source
+        if (query.length < 2) return res.json({ success: true, provider: 'dendrite-search', results: [], count: 0 });
+        const results = dendriteSearch.search(query, 15);
+        res.json({ success: true, provider: 'dendrite-search', results, indexedPages: dendriteSearch.count(), count: results.length });
+    });
+
+    router.post('/portal/crawl', async (req, res) => {
+        const query = String(req.body?.query || '').trim();
+        const maxPages = Math.max(1, Math.min(parseInt(req.body?.maxPages || 5, 10), 12));
+        if (query.length < 2) return res.status(400).json({ success: false, error: 'query required' });
+
+        const webScraper = system?.webScraperDendrite;
+        if (webScraper?.browseObjective) {
+            try {
+                const seedUrls = normalizePortalUrl(query) ? [normalizePortalUrl(query)] : [];
+                const dendrite = await webScraper.browseObjective({
+                    objective: query,
+                    seedUrls,
+                    maxPages,
+                    timeoutMs: 30000,
+                    extractors: {
+                        mainContent: 'article, main, .content, .post-content, body',
+                        headings: 'h1, h2, h3',
+                        links: 'a'
+                    }
+                });
+                const indexedPages = (dendrite.pages || [])
+                    .filter(page => page && !page.error)
+                    .map(portalPageFromDendritePage)
+                    .filter(Boolean);
+
+                if (indexedPages.length > 0) {
+                    const indexed = dendriteSearch.indexPages(indexedPages);
+
+                    return res.json({
+                        success: true,
+                        provider: 'web-scraper-dendrite',
+                        query,
+                        crawled: dendrite.count || indexedPages.length,
+                        indexed,
+                        pages: indexedPages.map(({ content, ...page }) => ({ ...page, contentLength: content.length })),
+                        count: dendriteSearch.count(),
+                        summary: dendrite.summary || ''
+                    });
+                }
+            } catch (error) {
+                console.warn(`[AperturePortal] Dendrite acquire failed, falling back to WebCrawlerWorker: ${error.message}`);
+            }
+        }
+
+        const crawler = new WebCrawlerWorker({
+            workerId: `portal-${Date.now()}`,
+            maxPages,
+            maxDepth: 1,
+            timeout: 12000,
+            requestDelay: 650
+        });
+        const crawl = await crawler.crawl({ target: 'portal', query, maxPages });
+        const indexedPages = (crawl.data || []).map(portalPageFromCrawlerItem).filter(Boolean);
+        const indexed = dendriteSearch.indexPages(indexedPages);
+
+        res.json({
+            success: crawl.success,
+            provider: 'portal-crawler',
+            query,
+            crawled: crawl.itemsCollected || 0,
+            indexed,
+            pages: indexedPages.map(({ content, ...page }) => ({ ...page, contentLength: content.length })),
+            count: dendriteSearch.count(),
+            error: crawl.error
+        });
+    });
+
+    // -- Portal Browser V2: Server-backed tabs, history, and bookmarks --
+
+    // Tabs
+    router.get('/portal/tabs', async (req, res) => {
+        try {
+            const rows = axisStore.db.prepare('SELECT * FROM portal_tabs ORDER BY sort_order ASC, updated_at ASC').all();
+            const tabs = rows.map(row => ({
+                id: row.id,
+                title: row.title,
+                is_active: Boolean(row.is_active),
+                sort_order: row.sort_order,
+                ...JSON.parse(row.tab_state)
             }));
-        res.json({ success: true, provider: 'portal-index', results, indexedPages: pages.length, count: results.length });
+            res.json({ success: true, tabs });
+        } catch (e) {
+            res.status(500).json({ success: false, error: e.message });
+        }
+    });
+
+    router.post('/portal/tabs', async (req, res) => {
+        try {
+            const { id, title, is_active = 0, sort_order = 0, page, stack, cursor, trail } = req.body || {};
+            if (!id || !title) return res.status(400).json({ success: false, error: 'id and title required' });
+            const tab_state = JSON.stringify({ page, stack, cursor, trail });
+            axisStore.db.prepare(`
+                INSERT INTO portal_tabs (id, title, is_active, sort_order, tab_state, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    title = excluded.title,
+                    is_active = excluded.is_active,
+                    sort_order = excluded.sort_order,
+                    tab_state = excluded.tab_state,
+                    updated_at = excluded.updated_at
+            `).run(id, title, is_active ? 1 : 0, sort_order, tab_state, Date.now());
+            res.json({ success: true });
+        } catch (e) {
+            res.status(500).json({ success: false, error: e.message });
+        }
+    });
+
+    router.post('/portal/tabs/sync', async (req, res) => {
+        try {
+            const { tabs } = req.body || {};
+            if (!Array.isArray(tabs)) return res.status(400).json({ success: false, error: 'tabs array required' });
+            
+            const deleteStmt = axisStore.db.prepare('DELETE FROM portal_tabs');
+            const insertStmt = axisStore.db.prepare(`
+                INSERT INTO portal_tabs (id, title, is_active, sort_order, tab_state, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+            `);
+            
+            axisStore.db.transaction(() => {
+                deleteStmt.run();
+                tabs.forEach((tab, index) => {
+                    const tab_state = JSON.stringify({
+                        page: tab.page,
+                        stack: tab.stack,
+                        cursor: tab.cursor,
+                        trail: tab.trail
+                    });
+                    insertStmt.run(tab.id, tab.title, tab.is_active ? 1 : 0, tab.sort_order || index, tab_state, Date.now());
+                });
+            })();
+            res.json({ success: true });
+        } catch (e) {
+            res.status(500).json({ success: false, error: e.message });
+        }
+    });
+
+    router.delete('/portal/tabs/:id', async (req, res) => {
+        try {
+            const result = axisStore.db.prepare('DELETE FROM portal_tabs WHERE id = ?').run(req.params.id);
+            res.json({ success: true, removed: result.changes > 0 });
+        } catch (e) {
+            res.status(500).json({ success: false, error: e.message });
+        }
+    });
+
+    // Bookmarks
+    router.get('/portal/bookmarks', async (req, res) => {
+        try {
+            const rows = axisStore.db.prepare('SELECT * FROM portal_bookmarks ORDER BY created_at DESC').all();
+            const bookmarks = rows.map(row => ({
+                id: row.id,
+                title: row.title,
+                address: row.address,
+                kind: row.kind,
+                query: row.query,
+                createdAt: row.created_at
+            }));
+            res.json({ success: true, bookmarks });
+        } catch (e) {
+            res.status(500).json({ success: false, error: e.message });
+        }
+    });
+
+    router.post('/portal/bookmarks', async (req, res) => {
+        try {
+            const { title, address, kind, query = '' } = req.body || {};
+            if (!title || !address || !kind) return res.status(400).json({ success: false, error: 'title, address, and kind required' });
+            const id = Buffer.from(address).toString('base64url').slice(0, 80);
+            axisStore.db.prepare(`
+                INSERT INTO portal_bookmarks (id, title, address, kind, query, created_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+                ON CONFLICT(id) DO UPDATE SET
+                    title = excluded.title,
+                    kind = excluded.kind,
+                    query = excluded.query
+            `).run(id, title, address, kind, query, Date.now());
+            res.json({ success: true, bookmark: { id, title, address, kind, query } });
+        } catch (e) {
+            res.status(500).json({ success: false, error: e.message });
+        }
+    });
+
+    router.delete('/portal/bookmarks/:id', async (req, res) => {
+        try {
+            const result = axisStore.db.prepare('DELETE FROM portal_bookmarks WHERE id = ?').run(req.params.id);
+            res.json({ success: true, removed: result.changes > 0 });
+        } catch (e) {
+            res.status(500).json({ success: false, error: e.message });
+        }
+    });
+
+    router.delete('/portal/bookmarks', async (req, res) => {
+        try {
+            const address = req.query.address || req.body.address;
+            if (!address) return res.status(400).json({ success: false, error: 'address is required' });
+            const id = Buffer.from(address).toString('base64url').slice(0, 80);
+            const result = axisStore.db.prepare('DELETE FROM portal_bookmarks WHERE id = ?').run(id);
+            res.json({ success: true, removed: result.changes > 0 });
+        } catch (e) {
+            res.status(500).json({ success: false, error: e.message });
+        }
+    });
+
+    // History
+    router.get('/portal/history', async (req, res) => {
+        try {
+            const limit = Math.min(parseInt(req.query.limit) || 100, 500);
+            const rows = axisStore.db.prepare('SELECT * FROM portal_history ORDER BY created_at DESC LIMIT ?').all(limit);
+            const history = rows.map(row => ({
+                id: row.id,
+                title: row.title,
+                address: row.address,
+                kind: row.kind,
+                query: row.query,
+                createdAt: row.created_at
+            }));
+            res.json({ success: true, history });
+        } catch (e) {
+            res.status(500).json({ success: false, error: e.message });
+        }
+    });
+
+    router.post('/portal/history', async (req, res) => {
+        try {
+            const { title, address, kind, query = '' } = req.body || {};
+            if (!title || !address || !kind) return res.status(400).json({ success: false, error: 'title, address, and kind required' });
+            const id = `hist-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+            axisStore.db.prepare(`
+                INSERT INTO portal_history (id, title, address, kind, query, created_at)
+                VALUES (?, ?, ?, ?, ?, ?)
+            `).run(id, title, address, kind, query, Date.now());
+            res.json({ success: true, entry: { id, title, address, kind, query } });
+        } catch (e) {
+            res.status(500).json({ success: false, error: e.message });
+        }
+    });
+
+    router.delete('/portal/history/:id', async (req, res) => {
+        try {
+            const result = axisStore.db.prepare('DELETE FROM portal_history WHERE id = ?').run(req.params.id);
+            res.json({ success: true, removed: result.changes > 0 });
+        } catch (e) {
+            res.status(500).json({ success: false, error: e.message });
+        }
+    });
+
+    router.delete('/portal/history', async (req, res) => {
+        try {
+            axisStore.db.prepare('DELETE FROM portal_history').run();
+            res.json({ success: true });
+        } catch (e) {
+            res.status(500).json({ success: false, error: e.message });
+        }
     });
 
     router.get('/search', async (req, res) => {

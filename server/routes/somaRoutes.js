@@ -20,6 +20,9 @@ import CommunicationHub from '../communication/CommunicationHub.js';
 import LatencySpine from '../../core/LatencySpine.js';
 import historicalDataCache from '../finance/HistoricalDataCache.js';
 import walkForwardEngine from '../finance/WalkForwardEngine.js';
+import somaImageGeneration from '../social/SomaImageGenerationEngine.js';
+import { buildSomaContext } from '../context/SomaContextKernel.js';
+import { guardPublicText } from '../context/ClaimVerifier.js';
 const require = createRequire(import.meta.url);
 const { defaultLearningSpine } = require('../../core/LearningSpine.cjs');
 
@@ -48,6 +51,20 @@ function _setCachedAnalysis(fp, analysis, report) {
             _excelCache.delete(oldest);
         }
     } catch { /* non-fatal */ }
+}
+
+function detectImageGenerationRequest(message = '') {
+    const text = String(message || '').trim();
+    const match = text.match(/\b(?:make|create|generate|draw|render|paint|design)\s+(?:me\s+)?(?:a|an|some|one)?\s*(?:picture|image|photo|art|visual|illustration|wallpaper)\s+(?:of|for|about)?\s*([\s\S]*)/i)
+        || text.match(/\b(?:picture|image|photo|art|visual|illustration)\s+(?:of|for|about)\s+([\s\S]*)/i);
+    if (!match) return null;
+    const prompt = (match[1] || text).replace(/\bplease\b/ig, '').trim();
+    if (!prompt || prompt.length < 3) return null;
+    return {
+        prompt,
+        width: /\b(wide|landscape|banner)\b/i.test(text) ? 768 : /\b(tall|portrait)\b/i.test(text) ? 512 : 768,
+        height: /\b(wide|landscape|banner)\b/i.test(text) ? 512 : /\b(tall|portrait)\b/i.test(text) ? 768 : 768,
+    };
 }
 
 // ── Owner config — who SOMA belongs to ──
@@ -903,6 +920,7 @@ ${memoryContext || "No specific memories found for this query."}
         let wallFired = false;
         const wallTimer = setTimeout(() => {
             wallFired = true;
+            if (res.writableEnded) return;
             if (!res.headersSent) {
                 res.json({
                     success: true,
@@ -910,6 +928,10 @@ ${memoryContext || "No specific memories found for this query."}
                     response: "I'm thinking hard but taking too long  --  my AI providers may be slow right now. Try again in a moment.",
                     metadata: { confidence: 0.3, brain: 'TIMEOUT' }
                 });
+            } else {
+                // SSE mode — send final event and close stream
+                res.write(`data: ${JSON.stringify({ done: true, response: "I'm thinking hard but taking too long — my AI providers may be slow right now. Try again in a moment.", timeout: true })}\n\n`);
+                res.end();
             }
         }, WALL_LIMIT);
         const clearWall = () => clearTimeout(wallTimer);
@@ -943,6 +965,73 @@ ${memoryContext || "No specific memories found for this query."}
                         message:  actionCheck.explanation,
                         metadata: { brain: 'THALAMUS', confidence: 1, blocked: true, violation: actionCheck.violation }
                     });
+                }
+            }
+
+            const imageRequest = detectImageGenerationRequest(message);
+            if (imageRequest) {
+                trace.mark('image_generation_requested');
+                try {
+                    const generated = await somaImageGeneration.generate({
+                        prompt: imageRequest.prompt,
+                        width: imageRequest.width,
+                        height: imageRequest.height,
+                        purpose: 'ct-chat',
+                        tags: ['ct-chat', 'user-requested'],
+                    });
+                    clearWall();
+                    const responseText = [
+                        `Generated it.`,
+                        ``,
+                        `Image: ${generated.image.path}`,
+                        `Photos copy: ${generated.image.photoPath || generated.image.path}`,
+                        `Provider: ${generated.provider}`,
+                        `Poseidon: ${generated.poseidon?.state || 'UNKNOWN'}`,
+                    ].join('\n');
+                    const payload = {
+                        success: true,
+                        message: responseText,
+                        response: responseText,
+                        image: generated.image,
+                        metadata: {
+                            action: 'image_generated',
+                            provider: generated.provider,
+                            poseidon: generated.poseidon,
+                            imagePath: generated.image.path,
+                            photoPath: generated.image.photoPath || null,
+                            prompt: generated.prompt,
+                        }
+                    };
+                    if (!deepThinking && req.body.stream === true) {
+                        if (!res.headersSent) {
+                            res.setHeader('Content-Type', 'text/event-stream');
+                            res.setHeader('Cache-Control', 'no-cache');
+                            res.setHeader('Connection', 'keep-alive');
+                            res.setHeader('X-Accel-Buffering', 'no');
+                            res.flushHeaders();
+                        }
+                        res.write(`data: ${JSON.stringify({ done: true, ...payload })}\n\n`);
+                        res.end();
+                    } else {
+                        res.json(payload);
+                    }
+                    return;
+                } catch (imageError) {
+                    clearWall();
+                    const responseText = `I tried to generate that image, but the image engine failed: ${imageError.message}`;
+                    if (!deepThinking && req.body.stream === true) {
+                        if (!res.headersSent) {
+                            res.setHeader('Content-Type', 'text/event-stream');
+                            res.setHeader('Cache-Control', 'no-cache');
+                            res.setHeader('Connection', 'keep-alive');
+                            res.flushHeaders();
+                        }
+                        res.write(`data: ${JSON.stringify({ done: true, response: responseText, error: imageError.message })}\n\n`);
+                        res.end();
+                    } else {
+                        res.json({ success: true, message: responseText, response: responseText, metadata: { action: 'image_generation_failed', error: imageError.message } });
+                    }
+                    return;
                 }
             }
 
@@ -1481,16 +1570,39 @@ ${contextStr}`;
                 } catch { /* never block chat */ }
             }
 
+            let somaKernelContext = '';
+            try {
+                const kernel = await Promise.race([
+                    buildSomaContext(message, { mnemonic: system.mnemonicArbiter || system.mnemonic, includeUser: true }),
+                    new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 2500))
+                ]);
+                if (kernel) somaKernelContext = `\n${kernel}\n`;
+            } catch { /* context kernel is additive, never blocks chat */ }
+
             // Professional request: strip all consciousness/soul layers — persona + memory + prompt only
             const finalPrompt = isProfessionalRequest
-                ? `${personaContext}${memoryContext}${excelAnalysisContext}\n${prompt}`
-                : `${personaContext}${characterContext}${awarenessContext}${selfModelContext}${agentRosterContext}${thoughtContext}${blueprintContext}${memoryContext}${provenContext}${presenceContext}${workingMemoryContext}${visualContext}${voiceConstraint}${manipulationContext}\n${prompt}`;
+                ? `${personaContext}${memoryContext}${somaKernelContext}${excelAnalysisContext}\n${prompt}`
+                : `${personaContext}${characterContext}${awarenessContext}${selfModelContext}${agentRosterContext}${thoughtContext}${blueprintContext}${memoryContext}${provenContext}${presenceContext}${workingMemoryContext}${somaKernelContext}${visualContext}${voiceConstraint}${manipulationContext}\n${prompt}`;
             trace.mark('context_assembled', { promptChars: finalPrompt.length, simple: isSimpleChat });
 
             // Server-side timeout: adaptive  --  uses remaining wall-clock budget so total
             // request time (pre-processing + reasoning) always stays under the wall limit.
             // This prevents pre-processing eating into the 60s client window.
             if (wallFired || res.headersSent) return; // wall already fired, bail out
+
+            // SSE streaming: set headers now that all early-exit paths are behind us.
+            // Deep thinking always uses blocking JSON (needs full metadata + ThinkingBox UI).
+            const wantsStream = !deepThinking && req.body.stream === true;
+            let streamOnToken = null;
+            if (wantsStream) {
+                res.setHeader('Content-Type', 'text/event-stream');
+                res.setHeader('Cache-Control', 'no-cache');
+                res.setHeader('Connection', 'keep-alive');
+                res.setHeader('X-Accel-Buffering', 'no');
+                res.flushHeaders();
+                streamOnToken = (token) => { if (!res.writableEnded) res.write(`data: ${JSON.stringify({ token })}\n\n`); };
+            }
+
             const elapsed = Date.now() - reqStart;
             const SERVER_TIMEOUT = Math.max(5000, WALL_LIMIT - elapsed - 2000); // 2s send buffer
             console.log(`[SOMA] Pre-processing took ${elapsed}ms, reasoning budget: ${SERVER_TIMEOUT}ms`);
@@ -1514,6 +1626,7 @@ ${contextStr}`;
                         activeGoals: contextActiveGoals,
                         tools: dynamicTools,
                         systemContext: bgSystemCtx,
+                        onToken: streamOnToken,
                         ...queryMeta
                     });
                 }
@@ -1631,14 +1744,20 @@ ${personaContext}${characterContext}`.trim()
                     return;
                 }
                 console.warn(`[SOMA] Reasoning timeout after ${Date.now() - reqStart}ms for: "${message.substring(0, 40)}"`);
-                if (res.headersSent) return; // wall already responded
-                latencySpine.record(trace.finish('timeout', { error: timeoutErr.message }));
-                return res.json({
-                    success: true,
-                    message: "I'm thinking hard but taking too long  --  my AI providers may be slow right now. Try again in a moment.",
-                    response: "I'm thinking hard but taking too long  --  my AI providers may be slow right now. Try again in a moment.",
-                    metadata: { confidence: 0.3, brain: 'TIMEOUT', error: timeoutErr.message }
-                });
+                if (res.writableEnded) return;
+                if (!res.headersSent) {
+                    latencySpine.record(trace.finish('timeout', { error: timeoutErr.message }));
+                    return res.json({
+                        success: true,
+                        message: "I'm thinking hard but taking too long  --  my AI providers may be slow right now. Try again in a moment.",
+                        response: "I'm thinking hard but taking too long  --  my AI providers may be slow right now. Try again in a moment.",
+                        metadata: { confidence: 0.3, brain: 'TIMEOUT', error: timeoutErr.message }
+                    });
+                }
+                // SSE mode — send final event and close
+                res.write(`data: ${JSON.stringify({ done: true, response: "I'm thinking hard but taking too long — my AI providers may be slow right now. Try again in a moment.", timeout: true })}\n\n`);
+                res.end();
+                return;
             }
             global.__SOMA_CHAT_ACTIVE = false;
             trace.mark('reasoning_finished', {
@@ -1742,6 +1861,14 @@ ${personaContext}${characterContext}`.trim()
                     console.warn('[CitationGuard] Non-fatal error:', guardErr.message);
                 }
             }
+
+            try {
+                const claimVerdict = await guardPublicText(responseText, { query: message });
+                if (!claimVerdict.ok && claimVerdict.text) {
+                    responseText = claimVerdict.text;
+                    trace.mark('claim_guard_downgraded', { unsupported: claimVerdict.unsupported?.length || 0, hardBlock: Boolean(claimVerdict.hardBlock) });
+                }
+            } catch { /* claim guard should never block chat */ }
 
             const rawConfidence = result?.confidence || 0.8;
             // Item 6: Calibrate confidence against historical correction data
@@ -1889,7 +2016,8 @@ ${personaContext}${characterContext}`.trim()
             }
 
             clearWall(); // cancel wall timer  --  we're responding normally
-            if (res.headersSent) return; // wall fired between NEMESIS and here
+            if (res.writableEnded) return;
+            if (!wantsStream && res.headersSent) return; // wall fired between NEMESIS and here
             trace.mark('response_ready', { responseChars: responseText.length });
             const latencySummary = trace.finish('ok', { confidence });
             latencySpine.record(latencySummary);
@@ -1898,7 +2026,7 @@ ${personaContext}${characterContext}`.trim()
                 action: 'chat_response',
                 metadata: { model: result?.brain || 'unknown', tokens: responseText?.length || 0, deepThinking: !!deepThinking }
             });
-            res.json({
+            const responsePayload = {
                 success: true,
                 message: responseText,
                 response: responseText,
@@ -1912,6 +2040,13 @@ ${personaContext}${characterContext}`.trim()
                     provenance: result?.provenance || null,
                     toolsUsed: result?.toolsUsed || [],
                     uncertainty: result?.uncertainty || null,
+                    sourceBadges: [
+                        system.mnemonicArbiter ? 'memory' : null,
+                        'artifact_registry',
+                        'learning_spine',
+                        'reflection_distiller',
+                        system.knowledgeCurator ? 'knowledge_curator' : null
+                    ].filter(Boolean),
                     latency: {
                         traceId: latencySummary.id,
                         totalMs: latencySummary.totalMs,
@@ -1925,7 +2060,13 @@ ${personaContext}${characterContext}`.trim()
                         stage: nemesisVerdict.stage
                     } : null
                 }
-            });
+            };
+            if (wantsStream) {
+                res.write(`data: ${JSON.stringify({ done: true, ...responsePayload })}\n\n`);
+                res.end();
+            } else {
+                res.json(responsePayload);
+            }
 
             // â"€â"€ Post-Processing Pipeline (non-blocking) â"€â"€
             // These fire after response is sent so they don't slow the user down.
@@ -3961,13 +4102,107 @@ ${personaContext}${characterContext}`.trim()
     // GET /api/soma/knowledge/status — per-lobe entry counts + training progress
     router.get('/knowledge/status', (req, res) => {
         const curator = system.knowledgeCurator;
-        const trainer = system.ollamaTrainer;
+        const trainer = system.ollamaTrainer || system.ollamaAutoTrainer;
         if (!curator) return res.json({ online: false, message: 'KnowledgeCuratorArbiter not loaded' });
         res.json({
             online: true,
             ...curator.getStatus(),
             pendingLoraProposals: trainer?.getPendingLoraProposals?.() || [],
         });
+    });
+
+    router.get('/training/promotion/status', (req, res) => {
+        try {
+            const lobes = ['logos', 'aurora', 'prometheus', 'thalamus'];
+            const curatorStatus = system.knowledgeCurator?.getStatus?.() || {};
+            const trainer = system.ollamaTrainer || system.ollamaAutoTrainer;
+            const trainerStatus = trainer?.getStatus?.() || null;
+            const countLines = (file) => {
+                try {
+                    if (!fs.existsSync(file)) return 0;
+                    return fs.readFileSync(file, 'utf8').split(/\r?\n/).filter(Boolean).length;
+                } catch { return 0; }
+            };
+            const countMd = (dir) => {
+                let total = 0;
+                try {
+                    if (!fs.existsSync(dir)) return 0;
+                    const walk = (current) => {
+                        for (const entry of fs.readdirSync(current, { withFileTypes: true })) {
+                            const full = path.join(current, entry.name);
+                            if (entry.isDirectory()) walk(full);
+                            else if (entry.name.endsWith('.md') && !entry.name.endsWith('README.md')) total += 1;
+                        }
+                    };
+                    walk(dir);
+                } catch {}
+                return total;
+            };
+            const finalDir = path.join(process.cwd(), 'SOMA', 'training-data', 'FINAL');
+            const latestFinal = {};
+            try {
+                const files = fs.existsSync(finalDir) ? fs.readdirSync(finalDir) : [];
+                for (const lobe of lobes) {
+                    latestFinal[lobe] = files
+                        .filter(file => file.startsWith(`lobe-${lobe}-final-`) && file.endsWith('.jsonl'))
+                        .sort()
+                        .at(-1) || null;
+                }
+            } catch {}
+
+            const thresholds = curatorStatus.thresholds || {};
+            const lobeStatus = Object.fromEntries(lobes.map(lobe => {
+                const mdEntries = countMd(path.join(process.cwd(), 'knowledge', lobe));
+                const seedRows = countLines(path.join(process.cwd(), 'knowledge', 'seeds', `${lobe}-seed.jsonl`));
+                const threshold = thresholds[lobe] || 100;
+                const ready = mdEntries >= threshold || seedRows >= threshold;
+                return [lobe, {
+                    mdEntries,
+                    seedRows,
+                    threshold,
+                    ready,
+                    progressPct: Math.min(100, Math.round(Math.max(mdEntries, seedRows) / threshold * 100)),
+                    activeModel: process.env[`OLLAMA_MODEL_${lobe.toUpperCase()}`] || null,
+                    latestFinalDataset: latestFinal[lobe],
+                    qualityPolicy: 'Only verified/training_approved distilled lessons are exported to lobe seed JSONL.',
+                }];
+            }));
+
+            res.json({
+                success: true,
+                online: true,
+                trainer: trainerStatus,
+                pendingLoraProposals: trainer?.getPendingLoraProposals?.() || [],
+                lobes: lobeStatus,
+                graveyardRows: countLines(path.join(process.cwd(), 'data', 'training', 'graveyard', 'experience-bad-examples.jsonl')),
+                learningRows: countLines(path.join(process.cwd(), 'data', 'learning', 'learning-spine-events.jsonl')),
+                antiDriftLock: {
+                    enabled: true,
+                    blockedPatterns: ['literal consciousness claims', 'cure claims', 'wet-lab claims', 'guaranteed-profit claims']
+                },
+                sourceBadges: ['memory', 'artifact_registry', 'learning_spine', 'reflection_distiller', 'knowledge_curator', 'current_files'],
+                nextActions: [
+                    'Run node scripts/build-lobe-datasets.mjs to rebuild FINAL lobe datasets.',
+                    'Use POST /api/soma/training/approve-lora with { lobe } to start a lobe LoRA job when ready.'
+                ]
+            });
+        } catch (e) {
+            res.status(500).json({ success: false, error: e.message });
+        }
+    });
+
+    router.post('/training/rebuild-datasets', async (req, res) => {
+        try {
+            const dryRun = req.body?.dryRun === true;
+            const args = ['scripts/build-lobe-datasets.mjs', ...(dryRun ? ['--dry-run'] : [])];
+            const child = execFile('node', args, { cwd: process.cwd(), timeout: 10 * 60 * 1000 }, (error, stdout, stderr) => {
+                if (error) console.error('[training/rebuild-datasets] failed:', error.message, stderr);
+                else console.log('[training/rebuild-datasets] complete:', stdout.slice(-1000));
+            });
+            res.json({ success: true, started: true, dryRun, pid: child.pid, command: `node ${args.join(' ')}` });
+        } catch (e) {
+            res.status(500).json({ success: false, error: e.message });
+        }
     });
 
     router.get('/knowledge/spine/status', (req, res) => {
@@ -4006,7 +4241,7 @@ ${personaContext}${characterContext}`.trim()
         if (!lobe || !['logos', 'aurora', 'prometheus', 'thalamus'].includes(lobe)) {
             return res.status(400).json({ success: false, error: 'Invalid lobe. Must be logos | aurora | prometheus | thalamus' });
         }
-        const trainer = system.ollamaTrainer;
+        const trainer = system.ollamaTrainer || system.ollamaAutoTrainer;
         if (!trainer?.executeLoraTraining) {
             return res.status(503).json({ success: false, error: 'OllamaAutoTrainer not available' });
         }

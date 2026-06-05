@@ -248,12 +248,12 @@ async function main() {
 ${colors.reset}`);
 
   const flaskSupervisor = new Supervisor('FLASK', () =>
-    startService('FLASK', 'python', [PATHS.FLASK_SERVER], path.join(PATHS.ROOT, 'backend', 'prophet-engine'), colors.blue)
+    startService('FLASK', 'python', [`"${PATHS.FLASK_SERVER}"`], path.join(PATHS.ROOT, 'backend', 'prophet-engine'), colors.blue)
   );
 
   const backendSupervisor = new Supervisor('BACKEND', () => {
     log('SYSTEM', 'Starting SOMA Backend Server (GC Enabled)...', colors.yellow);
-    const proc = spawn('node', ['--expose-gc', PATHS.BACKEND], {
+    const proc = spawn('node', ['--expose-gc', `"${PATHS.BACKEND}"`], {
       cwd: PATHS.ROOT,
       shell: true,
       stdio: 'pipe',
@@ -300,7 +300,7 @@ ${colors.reset}`);
   });
 
   const daemonSupervisor = new Supervisor('DAEMON', () =>
-    startService('DAEMON', 'node', [path.join(PATHS.ROOT, 'start_daemon.js')], PATHS.ROOT, colors.magenta)
+    startService('DAEMON', 'node', [`"${path.join(PATHS.ROOT, 'start_daemon.js')}"`], PATHS.ROOT, colors.magenta)
   );
 
   const viteSupervisor = new Supervisor('VITE', () =>

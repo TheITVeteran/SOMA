@@ -5,8 +5,10 @@ const process = require('process');
 
 class KevinEmailManager {
     constructor() {
-        // NOTE: Local 'rejectUnauthorized: false' is used in configs below 
-        // to handle self-signed certificates from local proxies/antivirus.
+        const allowInsecureTls = process.env.KEVIN_ALLOW_INSECURE_TLS === 'true';
+        if (allowInsecureTls) {
+            console.warn('[KevinEmailManager] KEVIN_ALLOW_INSECURE_TLS=true. TLS certificate verification is disabled for email transport.');
+        }
 
         this.config = {
             imap: {
@@ -15,8 +17,8 @@ class KevinEmailManager {
                 host: 'imap.gmail.com',
                 port: 993,
                 tls: true,
-                rejectUnauthorized: false, // For node-imap root
-                tlsOptions: { rejectUnauthorized: false }, // For nested tlsOptions
+                rejectUnauthorized: !allowInsecureTls,
+                tlsOptions: { rejectUnauthorized: !allowInsecureTls },
                 authTimeout: 10000 // Extended timeout
             }
         };
@@ -27,7 +29,7 @@ class KevinEmailManager {
             port: 465,
             secure: true, // SSL
             tls: {
-                rejectUnauthorized: false // FIX: Bypass self-signed cert issues
+                rejectUnauthorized: !allowInsecureTls
             },
             auth: {
                 user: process.env.EMAIL_ADDRESS,
@@ -122,6 +124,13 @@ class KevinEmailManager {
             // 1. Star if needed
             if (shouldStar || priority === 'High') {
                 await connection.addFlags(emailUid, '\\Flagged'); // Star
+            }
+
+            // Always mark as Seen (Read) when organizing to prevent scanning loop
+            try {
+                await connection.addFlags(emailUid, '\\Seen');
+            } catch (seenErr) {
+                console.log("Error marking email as seen:", seenErr.message);
             }
 
             // 2. Mark Important if Urgent

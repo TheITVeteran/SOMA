@@ -15,6 +15,8 @@ import marketDataService from './marketDataService.js';
 import opportunityScanner from './OpportunityScanner.js';
 import binanceService from './BinanceService.js';
 import marketEvidenceStore from './MarketEvidenceStore.js';
+import blueskeyClient from '../social/BlueskeyClient.js';
+
 
 const router = express.Router();
 const MARKET_LAB_DIR = path.join(process.cwd(), 'data', 'market-lab');
@@ -277,9 +279,44 @@ router.post('/analyze', async (req, res) => {
 router.post('/deep-scan', async (req, res) => {
     const startedAt = Date.now();
     try {
-        const { symbol } = req.body;
-        if (!symbol) {
-            return res.status(400).json({ success: false, error: 'Symbol is required' });
+        let { symbol } = req.body;
+        if (!symbol || symbol === 'ALL' || symbol === 'SCAN' || symbol === 'NONE' || symbol === 'undefined' || symbol === 'null') {
+            console.log('[Finance/DeepScan] No asset selected. Scanning full market (Stocks, Crypto, Futures)...');
+            const cryptoOpportunities = await opportunityScanner.scan('CRYPTO').catch(() => []);
+            const stockOpportunities = await opportunityScanner.scan('STOCKS').catch(() => []);
+            const futuresUniverse = ['ES', 'NQ', 'CL'];
+            const futuresPromises = futuresUniverse.map(async (fSym) => {
+                try {
+                    const bars = await marketDataService.getBars(fSym, '15Min', 50);
+                    if (!bars || bars.length < 30) return null;
+                    const score = opportunityScanner._calculateScore(bars);
+                    const suggestedStrategy = opportunityScanner._suggestStrategy(score, bars);
+                    return {
+                        symbol: fSym,
+                        score: score.total,
+                        metrics: score.metrics,
+                        strategy: suggestedStrategy,
+                        price: bars[bars.length - 1].close,
+                        change24h: ((bars[bars.length - 1].close - bars[0].close) / bars[0].close) * 100
+                    };
+                } catch {
+                    return null;
+                }
+            });
+            const futuresOpportunities = (await Promise.all(futuresPromises)).filter(Boolean);
+            const allOpportunities = [
+                ...cryptoOpportunities,
+                ...stockOpportunities,
+                ...futuresOpportunities
+            ];
+            if (allOpportunities.length > 0) {
+                allOpportunities.sort((a, b) => (b.score || 0) - (a.score || 0));
+                symbol = allOpportunities[0].symbol;
+                console.log(`[Finance/DeepScan] Selected best overall opportunity: ${symbol} (Score: ${allOpportunities[0].score})`);
+            } else {
+                symbol = 'BTC-USD';
+                console.log('[Finance/DeepScan] Opportunity scanner returned no results. Falling back to BTC-USD.');
+            }
         }
 
         const sym = String(symbol).toUpperCase();
@@ -450,8 +487,106 @@ router.post('/deep-scan', async (req, res) => {
             console.warn('[Finance/DeepScan] Swarm synthesis unavailable:', e.message);
         }
 
+        // ── Active Protocol (Strategy Preset) Selection ──────────────────────────
+        const recommendedActiveProtocol = (() => {
+            if (marketLabContext?.best?.strategy?.id) {
+                return {
+                    id: marketLabContext.best.strategy.id,
+                    name: marketLabContext.best.strategy.name,
+                    source: 'Simulation Ledger Champion',
+                    score: marketLabContext.best.prometheusScore,
+                    reason: `This protocol achieved the highest Prometheus score (${(marketLabContext.best.prometheusScore * 100).toFixed(1)}%) in background Monte Carlo trials.`
+                };
+            }
+            const vol = intraday?.volatilityPct || 0;
+            const rsiVal = intraday?.rsi || 50;
+            if (vol > 0.025) {
+                return {
+                    id: 'full_aggression',
+                    name: 'Full Aggression',
+                    source: 'Technical Volatility Fit',
+                    score: 0.75,
+                    reason: `High volatility (${(vol * 100).toFixed(2)}% intraday) fits momentum-based breakout posture.`
+                };
+            } else if (rsiVal < 35 || rsiVal > 65) {
+                return {
+                    id: 'swarm_architecture',
+                    name: 'Swarm Architecture',
+                    source: 'Technical Confluence Fit',
+                    score: 0.78,
+                    reason: `Overextended RSI (${rsiVal.toFixed(1)}) benefits from ensemble consensus voting across reversion and trend signals.`
+                };
+            } else {
+                return {
+                    id: 'standard_portfolio',
+                    name: 'Standard Portfolio',
+                    source: 'Technical Default Fit',
+                    score: 0.72,
+                    reason: `Normal market conditions fit a balanced trend and hedge allocation strategy.`
+                };
+            }
+        })();
+
+        // ── Bluesky Social Intel RAG ──────────────────────────────────────────
+        let socialIntel = "No social feed data resolved.";
+        let blueskySentiment = null;
+        if (blueskeyClient && blueskeyClient.configured) {
+            try {
+                console.log(`[Finance/DeepScan] RAG: Querying Bluesky for "${sym}" social sentiment...`);
+                const searchResults = await blueskeyClient.searchPosts(sym, 15).catch(() => []);
+                let postsToProcess = searchResults || [];
+                if (postsToProcess.length === 0) {
+                    const cleanSym = sym.replace('-USD', '').replace('USDT', '');
+                    const searchResults2 = await blueskeyClient.searchPosts(cleanSym, 15).catch(() => []);
+                    postsToProcess = searchResults2 || [];
+                }
+                if (postsToProcess.length > 0) {
+                    const posts = postsToProcess.map(p => `@${p.author?.handle || 'user'}: ${p.text || ''}`);
+                    socialIntel = posts.join('\n---\n');
+                    console.log(`[Finance/DeepScan] RAG: Retrieved ${postsToProcess.length} posts from Bluesky.`);
+                    
+                    const brain = global.SOMA?.quadBrain;
+                    if (brain) {
+                        const ragPrompt = `You are SOMA's Social Sentiment Arbiter.
+Below is the real-time social feed data (RAG'd from Bluesky) regarding the asset: ${sym}.
+
+SOCIAL FEED CONTENT:
+${socialIntel}
+
+MARKET SUMMARY:
+Asset: ${sym}
+Last Price: ${latestPrice}
+Intraday change: ${intraday?.changePct != null ? `${intraday.changePct}%` : 'unknown'}
+Timeframe alignment: ${alignmentScore}
+Recommended Protocol: ${recommendedActiveProtocol.name}
+
+TASK:
+Analyze the social sentiment and market backdrop. Distill this information into a precise set of trading options/verdicts (e.g. Bullish breakout option, Bearish hedging option, or Range play option).
+Provide:
+1. Social Sentiment summary (bullish/bearish/neutral, volume of discussion).
+2. Distilled trading options (how to trade this sentiment with entry, target, and risk guidelines).
+Keep it concise and highly actionable for SOMA's trading playbook. Output in structured clear paragraphs. Do NOT include markdown code blocks or json, just plain structured markdown text.`;
+                        
+                        const ragResult = await brain.reason(ragPrompt, 'logos').catch(() => null);
+                        if (ragResult) {
+                            blueskySentiment = {
+                                queryUsed: sym,
+                                postsProcessed: postsToProcess.length,
+                                distilledOptions: ragResult.response || ragResult.text
+                            };
+                        }
+                    }
+                }
+            } catch (e) {
+                console.warn('[Finance/DeepScan] Failed to RAG Bluesky posts:', e.message);
+            }
+        }
+
         const analysis = {
-            thesis: swarmAnalysis?.thesis || `${sym} deep scan completed across intraday, swing, and macro bars. ${deterministicRecommendation.rationale}`,
+            thesis: (swarmAnalysis?.thesis || `${sym} deep scan completed across intraday, swing, and macro bars. ${deterministicRecommendation.rationale}`) +
+                    `\n\n[Active Protocol Recommendation]: ${recommendedActiveProtocol.name} (${recommendedActiveProtocol.reason})` +
+                    (blueskySentiment ? `\n\n[Bluesky Social RAG Option]: ${blueskySentiment.distilledOptions}` : ''),
+            blueskySentiment,
             quant: {
                 strategy: matchingOpportunity?.strategy || 'Multi-timeframe real-data scan',
                 technical_indicators: {
@@ -483,12 +618,14 @@ router.post('/deep-scan', async (req, res) => {
                 rationale: swarmAnalysis.strategy.rationale || deterministicRecommendation.rationale,
                 entry_price: latestPrice,
                 stop_loss: swarmAnalysis.strategy.action_plan?.stop_loss || null,
-                take_profit: swarmAnalysis.strategy.action_plan?.target || null
+                take_profit: swarmAnalysis.strategy.action_plan?.target || null,
+                recommendedActiveProtocol
             } : {
                 ...deterministicRecommendation,
                 entry_price: latestPrice,
                 stop_loss: null,
-                take_profit: null
+                take_profit: null,
+                recommendedActiveProtocol
             },
             debate: swarmAnalysis?.debate || null,
             duration: Date.now() - startedAt,

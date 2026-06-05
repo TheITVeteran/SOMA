@@ -409,7 +409,15 @@ class WebScraperDendrite extends BaseDendrite {
       }
     );
 
-    return await safeUrlScrape();
+    const handled = await safeUrlScrape();
+    if (handled?.success && handled.data && typeof handled.data === 'object') {
+      return {
+        ...handled.data,
+        success: handled.data.success !== false,
+        wrapperStatus: handled.status
+      };
+    }
+    return handled;
   }
 
   _isSafeUrl(rawUrl) {
@@ -504,6 +512,7 @@ class WebScraperDendrite extends BaseDendrite {
           url,
           title: result?.title || '',
           status: result?.status,
+          text: this._stripDangerousPatterns(text.substring(0, 120000)),
           excerpt: this._stripDangerousPatterns(excerpt),
           extractedData: result?.extractedData || null,
           screenshot: result?.screenshot || null,

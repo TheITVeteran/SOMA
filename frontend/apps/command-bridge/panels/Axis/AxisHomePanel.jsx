@@ -154,7 +154,7 @@ function AxisDirectDetail({ direct, hdrs, onBack, onRefresh }) {
 export default function AxisHomePanel({ onCreateRoom, onCreateWorkspace, onStartDirect }) {
     const {
         user, workspaces, activeWorkspaceId, setActiveWorkspaceId,
-        setActiveChannelId, workspaceUnreadCounts, hdrs, projects,
+        setActiveChannelId, loadChannels, workspaceUnreadCounts, hdrs, projects,
     } = useAxis();
 
     const [homeData, setHomeData]   = useState({ directs: [], recentChannels: [], mentions: [] });
@@ -308,6 +308,16 @@ export default function AxisHomePanel({ onCreateRoom, onCreateWorkspace, onStart
         setActiveChannelId(channelId);
     };
 
+    const openSpace = async (ws) => {
+        const chs = await loadChannels(ws.id);
+        const first = chs.find(ch => ch.type === 'text' || ch.type === 'system')
+            || chs.find(ch => ch.type !== 'archive')
+            || chs[0]
+            || null;
+        setActiveWorkspaceId(ws.id);
+        setActiveChannelId(first?.id || null);
+    };
+
     const togglePinnedDirect = (id) => {
         setPinnedDirects(prev => prev.includes(id) ? prev.filter(item => item !== id) : [id, ...prev].slice(0, 12));
     };
@@ -319,6 +329,8 @@ export default function AxisHomePanel({ onCreateRoom, onCreateWorkspace, onStart
     const dateStr = now.toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
 
     const nonDirectsWs    = workspaces.filter(ws => ws.name !== 'Directs');
+    const roomSpaces      = nonDirectsWs.filter(ws => ws.type === 'room' || ws.type === 'community');
+    const workSpaces      = nonDirectsWs.filter(ws => ws.type !== 'room' && ws.type !== 'community');
     const totalDirUnread  = homeData.directs.reduce((s, d) => s + (d.unread || 0), 0);
     const totalWsUnread   = nonDirectsWs.reduce((s, ws) => s + (workspaceUnreadCounts[ws.id] || 0), 0);
     const totalUnread     = totalDirUnread + totalWsUnread;
@@ -592,6 +604,78 @@ export default function AxisHomePanel({ onCreateRoom, onCreateWorkspace, onStart
 
                     {/* Right column */}
                     <div>
+
+                        {/* Spaces */}
+                        <div style={CARD}>
+                            <div style={HEAD}>
+                                <h3 style={{ fontSize: 11, fontWeight: 700, color: '#a1a1aa', textTransform: 'uppercase', letterSpacing: '0.11em', margin: 0 }}>Spaces</h3>
+                                <span style={{ fontSize: 10, color: '#3f3f46', fontFamily: MONO }}>{nonDirectsWs.length} total</span>
+                            </div>
+                            {nonDirectsWs.length === 0 ? (
+                                <div style={{ padding: '16px', color: '#3f3f46', fontSize: 12, textAlign: 'center' }}>
+                                    No rooms or workspaces yet.
+                                </div>
+                            ) : (
+                                <div style={{ padding: '10px 12px 12px' }}>
+                                    {[
+                                        { label: 'Rooms', items: roomSpaces, icon: MessageCircle },
+                                        { label: 'Workspaces', items: workSpaces, icon: Briefcase },
+                                    ].filter(group => group.items.length).map(group => {
+                                        const Icon = group.icon;
+                                        return (
+                                            <div key={group.label} style={{ marginBottom: 10 }}>
+                                                <div style={{ fontSize: 9, color: '#3f3f46', fontFamily: MONO, letterSpacing: '0.12em', textTransform: 'uppercase', margin: '0 2px 6px' }}>
+                                                    {group.label}
+                                                </div>
+                                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 7 }}>
+                                                    {group.items.map(ws => {
+                                                        const unread = workspaceUnreadCounts[ws.id] || 0;
+                                                        const active = activeWorkspaceId === ws.id;
+                                                        return (
+                                                            <button key={ws.id}
+                                                                onClick={() => openSpace(ws)}
+                                                                style={{
+                                                                    minWidth: 0,
+                                                                    display: 'flex',
+                                                                    alignItems: 'center',
+                                                                    gap: 8,
+                                                                    padding: '8px 9px',
+                                                                    borderRadius: 10,
+                                                                    border: active ? '1px solid rgba(196,181,253,0.28)' : `1px solid ${BDR}`,
+                                                                    background: active ? 'rgba(167,139,250,0.1)' : 'rgba(255,255,255,0.025)',
+                                                                    cursor: 'pointer',
+                                                                    textAlign: 'left',
+                                                                }}
+                                                                onMouseEnter={e => { if (!active) e.currentTarget.style.background = 'rgba(255,255,255,0.045)'; }}
+                                                                onMouseLeave={e => { if (!active) e.currentTarget.style.background = 'rgba(255,255,255,0.025)'; }}>
+                                                                <span style={{ width: 24, height: 24, borderRadius: 7, background: 'rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                                                                    <Icon style={{ width: 13, height: 13, color: active ? '#c4b5fd' : '#52525b' }} />
+                                                                </span>
+                                                                <span style={{ flex: 1, minWidth: 0 }}>
+                                                                    <span style={{ display: 'block', fontSize: 12, color: active ? '#e4e4e7' : '#a1a1aa', fontWeight: active ? 700 : 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ws.name}</span>
+                                                                    <span style={{ display: 'block', fontSize: 9, color: '#3f3f46', fontFamily: MONO }}>{ws.type || 'workspace'}</span>
+                                                                </span>
+                                                                {unread > 0 && (
+                                                                    <span style={{ fontSize: 9, fontWeight: 700, background: '#6366f1', color: '#fff', borderRadius: 99, padding: '2px 6px', flexShrink: 0 }}>{unread > 99 ? '99+' : unread}</span>
+                                                                )}
+                                                            </button>
+                                                        );
+                                                    })}
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                    <div style={{ display: 'flex', gap: 8, paddingTop: 2 }}>
+                                        <button onClick={onCreateRoom} style={{ flex: 1, border: '1px dashed rgba(167,139,250,0.22)', background: 'rgba(167,139,250,0.06)', color: '#a78bfa', borderRadius: 9, padding: '7px 9px', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
+                                            <Plus style={{ width: 11, height: 11, display: 'inline', marginRight: 5 }} /> Room
+                                        </button>
+                                        <button onClick={onCreateWorkspace} style={{ flex: 1, border: '1px dashed rgba(255,255,255,0.12)', background: 'rgba(255,255,255,0.03)', color: '#a1a1aa', borderRadius: 9, padding: '7px 9px', fontSize: 11, fontWeight: 700, cursor: 'pointer' }}>
+                                            <Plus style={{ width: 11, height: 11, display: 'inline', marginRight: 5 }} /> Workspace
+                                        </button>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
 
                         {/* Channels */}
                         <div style={CARD}>

@@ -35,6 +35,7 @@ import { VisualMemoryArbiter } from '../../arbiters/VisualMemoryArbiter.js';
 import KnowledgeCuratorArbiter from '../../arbiters/KnowledgeCuratorArbiter.js';
 import blueskeyClient from '../../server/social/BlueskeyClient.js';
 import linkedInClient from '../../server/social/LinkedInClient.js';
+import TradingConnectionMonitorDaemon from '../../daemons/TradingConnectionMonitorDaemon.js';
 
 export async function loadCOSSystems(system) {
     console.log('\n[Loader] 🧠 Initializing Cognitive Operating System (COS) Layer...');
@@ -256,6 +257,14 @@ export async function loadCOSSystems(system) {
         daemonManager.register(webPerceptionDaemon);
         system.webPerceptionDaemon = webPerceptionDaemon;
 
+        // Trading Connection Monitor (Cancel-on-Disconnect guard)
+        if (process.env.SOMA_LOAD_TRADING === 'true') {
+            const codMonitor = new TradingConnectionMonitorDaemon();
+            daemonManager.register(codMonitor);
+            system.tradingConnectionMonitor = codMonitor;
+            console.log('      ✅ TradingConnectionMonitorDaemon registered (Cancel-on-Disconnect guard active)');
+        }
+
         // Proactive Perception — personality layer for visual data
         const proactivePerception = new ProactivePerceptionArbiter({
             messageBroker: system.messageBroker,
@@ -315,7 +324,8 @@ export async function loadCOSSystems(system) {
             socialScheduler,
             socialEngagement,
             policyEngine,
-            recoveryCortex
+            recoveryCortex,
+            tradingConnectionMonitor: system.tradingConnectionMonitor || null
         };
 
         await daemonManager.startAll();

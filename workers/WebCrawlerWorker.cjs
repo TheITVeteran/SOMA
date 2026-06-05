@@ -97,6 +97,8 @@ class WebCrawlerWorker {
         await this.crawlDevTo(query, maxPages || this.maxPages);
       } else if (target === 'documentation') {
         await this.crawlDocumentation(query, maxPages || this.maxPages);
+      } else if (target === 'portal') {
+        await this.crawlPortalQuery(query, maxPages || this.maxPages);
       } else if (target === 'general') {
         await this.crawlGeneral(query, maxPages || this.maxPages);
       }
@@ -387,6 +389,70 @@ class WebCrawlerWorker {
     }
   }
 
+  async crawlPortalQuery(query, maxPages) {
+    const cleanQuery = String(query || '').trim();
+    if (!cleanQuery) return;
+
+    const directUrl = this.normalizeUrl(cleanQuery);
+    if (directUrl) {
+      await this.crawlGenericPage(directUrl);
+      return;
+    }
+
+    const searchUrl = `https://duckduckgo.com/html/?q=${encodeURIComponent(cleanQuery)}`;
+    try {
+      const html = await this.fetchWithDelay(searchUrl);
+      const $ = cheerio.load(html);
+      const links = [];
+
+      $('a.result__a, a[href*="uddg="], a[href^="http"]').each((_, el) => {
+        if (links.length >= maxPages) return false;
+        const href = $(el).attr('href');
+        const url = this.extractSearchResultUrl(href);
+        if (url && !links.includes(url)) links.push(url);
+      });
+
+      for (const link of links.slice(0, maxPages)) {
+        await this.crawlGenericPage(link);
+      }
+    } catch (err) {
+      console.error(`[${this.workerId}] Portal crawl error:`, err.message);
+    }
+  }
+
+  async crawlGenericPage(url) {
+    const normalized = this.normalizeUrl(url);
+    if (!normalized || this.visitedUrls.has(normalized)) return;
+    this.visitedUrls.add(normalized);
+
+    try {
+      const html = await this.fetchWithDelay(normalized);
+      const $ = cheerio.load(html);
+
+      $('script, style, noscript, svg, nav, footer, header').remove();
+      const title = ($('meta[property="og:title"]').attr('content') || $('title').first().text() || $('h1').first().text() || normalized).trim();
+      const description = ($('meta[name="description"]').attr('content') || $('meta[property="og:description"]').attr('content') || '').trim();
+      const content = ($('main').text() || $('article').text() || $('body').text() || '')
+        .replace(/\s+/g, ' ')
+        .trim();
+
+      if (content.length < 80) return;
+
+      this.crawledData.push({
+        id: this.generateId(normalized),
+        source: 'portal',
+        type: 'web_page',
+        url: normalized,
+        title: title.substring(0, 250),
+        description: description.substring(0, 500),
+        content: content.substring(0, 120000),
+        crawledAt: new Date().toISOString()
+      });
+    } catch (err) {
+      console.error(`[${this.workerId}] Generic page crawl error (${normalized}):`, err.message);
+    }
+  }
+
   async fetchWithDelay(url) {
     // Rate limiting
     const now = Date.now();
@@ -430,6 +496,31 @@ class WebCrawlerWorker {
 
   generateId(url) {
     return crypto.createHash('md5').update(url).digest('hex').substring(0, 16);
+  }
+
+  normalizeUrl(value) {
+    const raw = String(value || '').trim();
+    if (!raw) return null;
+    try {
+      const url = new URL(/^https?:\/\//i.test(raw) ? raw : `https://${raw}`);
+      if (!['http:', 'https:'].includes(url.protocol)) return null;
+      url.hash = '';
+      return url.toString();
+    } catch {
+      return null;
+    }
+  }
+
+  extractSearchResultUrl(href) {
+    if (!href) return null;
+    try {
+      const raw = href.startsWith('//') ? `https:${href}` : href;
+      const parsed = new URL(raw, 'https://duckduckgo.com');
+      const redirected = parsed.searchParams.get('uddg');
+      return this.normalizeUrl(redirected || parsed.href);
+    } catch {
+      return this.normalizeUrl(href);
+    }
   }
 
   getStats() {

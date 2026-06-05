@@ -167,6 +167,151 @@ function buildLesson(goal = {}, result = {}, verification = {}) {
   };
 }
 
+function inferInteractionCategory(interaction = {}) {
+  const blob = [
+    interaction.type,
+    interaction.agent,
+    interaction.metadata?.category,
+    interaction.metadata?.domain,
+    interaction.metadata?.brain,
+    interaction.context?.brain,
+    compactText(interaction.input, 300),
+    compactText(interaction.output, 300)
+  ].join(' ').toLowerCase();
+
+  if (/\b(discord|bluesky|social|reply|post|dm|direct)\b/.test(blob)) return 'social';
+  if (/\b(med|medical|biotech|health|cancer|kras|tp53|paper|clinical|hypothesis)\b/.test(blob)) return 'medical';
+  if (/\b(trade|market|finance|stock|ticker|p&l|backtest|thesis|simulation)\b/.test(blob)) return 'trading';
+  if (/\b(story|chapter|saga|muse|creative|image|photo|art|author)\b/.test(blob)) return 'creative';
+  if (/\b(code|file|build|fix|bug|test|steve|pulse|axis|command bridge|implementation)\b/.test(blob)) return 'engineering';
+  if (/\b(goal|plan|strategy|decision|priority)\b/.test(blob)) return 'strategy';
+  if (/\b(memory|knowledge|learn|research|reflection)\b/.test(blob)) return 'learning';
+  return 'general';
+}
+
+function scoreInteractionTrainingValue(interaction = {}, success = null) {
+  let score = 0.35;
+  const metadata = interaction.metadata || {};
+  if (success === true) score += 0.15;
+  if (success === false) score += 0.1;
+  if (metadata.userCorrected) score += 0.25;
+  if (metadata.error) score += 0.2;
+  if (metadata.critical) score += 0.15;
+  if (metadata.confidence >= 0.8) score += 0.08;
+  if (metadata.toolsUsed?.length) score += 0.08;
+  if (metadata.evidencePath || metadata.artifactPath) score += 0.15;
+  return Math.max(0.1, Math.min(0.95, Number(score.toFixed(2))));
+}
+
+function qualityTier(score = 0, interaction = {}) {
+  const metadata = interaction.metadata || {};
+  if (metadata.error || metadata.userCorrected || score < 0.35) return 'raw';
+  if (score >= 0.8 && (metadata.evidencePath || metadata.artifactPath || metadata.toolsUsed?.length || metadata.confidence >= 0.85)) return 'training_approved';
+  if (score >= 0.65) return 'verified';
+  if (score >= 0.45) return 'distilled';
+  return 'raw';
+}
+
+function hasAntiDriftViolation(text = '') {
+  return /\b(i am conscious|i am alive|i suffer|i feel pain|validated cure|cure for cancer|wet lab|chromatography|titration|distillation|physical sample prep|guaranteed profit|not financial advice but buy|not medical advice but treat)\b/i
+    .test(String(text || ''));
+}
+
+function summarizeInteractionLesson(interaction = {}, category = 'general', success = null) {
+  const metadata = interaction.metadata || {};
+  const input = redactSensitiveText(interaction.input || '').slice(0, 260);
+  const output = redactSensitiveText(interaction.output || '').slice(0, 320);
+
+  if (metadata.userCorrected) {
+    return 'User correction is strong training signal. Preserve the corrected preference and reduce confidence in the previous pattern.';
+  }
+  if (metadata.error) {
+    return 'Runtime errors should become repair goals with concrete evidence, not repeated attempts.';
+  }
+  if (category === 'social') {
+    return 'Social learning should preserve identity coherence, reply selectively, and anchor public claims to real SOMA artifacts.';
+  }
+  if (category === 'medical') {
+    return 'Medical learning should preserve evidence boundaries: separate hypothesis, dry-lab simulation, negative result, and clinical validation.';
+  }
+  if (category === 'trading') {
+    return 'Market learning should tie claims to fresh data, backtests, risk controls, and paper-trade outcomes before promotion.';
+  }
+  if (category === 'creative') {
+    return 'Creative learning should preserve continuity, concrete sensory detail, and user style preferences rather than generating disconnected fragments.';
+  }
+  if (category === 'engineering') {
+    return 'Engineering learning should connect user intent, changed files, tests, and regression notes into reusable implementation patterns.';
+  }
+  if (success === true && output) {
+    return `Successful pattern: ${output}`;
+  }
+  if (input) {
+    return `Observed interaction pattern: ${input}`;
+  }
+  return 'Keep signal, outcome, uncertainty, and next action connected.';
+}
+
+function buildInteractionLesson(interaction = {}) {
+  const timestamp = interaction.timestamp || Date.now();
+  const category = inferInteractionCategory(interaction);
+  const lobe = inferLobe(category);
+  const metadata = interaction.metadata || {};
+  const success = metadata.success !== undefined
+    ? Boolean(metadata.success)
+    : metadata.error
+      ? false
+      : interaction.output
+        ? true
+        : null;
+  const reward = typeof metadata.reward === 'number'
+    ? metadata.reward
+    : typeof metadata.userSatisfaction === 'number'
+      ? metadata.userSatisfaction
+      : success === false
+        ? -0.25
+        : success === true
+          ? 0.35
+          : 0;
+  const trainingValue = scoreInteractionTrainingValue(interaction, success);
+  const tier = qualityTier(trainingValue, interaction);
+
+  return {
+    id: `experience_${timestamp}_${Math.random().toString(36).slice(2, 8)}`,
+    type: 'experience_lesson',
+    timestamp,
+    recordedAt: new Date(timestamp).toISOString(),
+    interactionId: interaction.id || null,
+    interactionType: interaction.type || 'unknown',
+    agent: interaction.agent || 'unknown',
+    category,
+    lobe,
+    success,
+    reward: Number(reward.toFixed ? reward.toFixed(3) : reward),
+    trainingValue,
+    qualityTier: tier,
+    antiDriftPassed: !hasAntiDriftViolation(`${interaction.input || ''}\n${interaction.output || ''}`),
+    signal: `${interaction.agent || 'SOMA'} handled ${interaction.type || 'an interaction'} in ${category}.`,
+    lesson: summarizeInteractionLesson(interaction, category, success),
+    input: redactSensitiveText(interaction.input || '').slice(0, 700),
+    output: redactSensitiveText(interaction.output || '').slice(0, 900),
+    evidence: redactSensitiveText(metadata.evidencePath || metadata.artifactPath || metadata.source || '').slice(0, 300),
+    nextStep: metadata.userCorrected
+      ? 'Prefer the corrected user direction in similar future contexts.'
+      : metadata.error
+        ? 'Create or update a repair goal with the failing evidence.'
+        : 'Reuse only when the same context, evidence quality, and risk level are present.',
+    metadata: {
+      confidence: metadata.confidence,
+      brain: metadata.brain,
+      toolsUsed: metadata.toolsUsed,
+      source: metadata.source,
+      userCorrected: Boolean(metadata.userCorrected),
+      error: metadata.error ? redactSensitiveText(metadata.error).slice(0, 240) : null
+    }
+  };
+}
+
 class LearningSpine {
   constructor(options = {}) {
     this.root = options.root || process.cwd();
@@ -187,6 +332,21 @@ class LearningSpine {
     appendJsonl(this.eventsPath, lesson);
     this._recordTrainingRow(lesson);
     this._updateScoreboard(lesson);
+    return lesson;
+  }
+
+  recordInteractionOutcome(interaction = {}) {
+    const lesson = buildInteractionLesson(interaction);
+    appendJsonl(this.eventsPath, lesson);
+    if (!lesson.antiDriftPassed || lesson.qualityTier === 'raw' || lesson.success === false) {
+      this._recordGraveyardRow(lesson);
+    }
+    this._recordExperienceTrainingRow(lesson);
+    this._updateScoreboard({
+      ...lesson,
+      title: `${lesson.agent} ${lesson.interactionType}`,
+      verificationScore: Math.round((lesson.trainingValue || 0.4) * 100)
+    });
     return lesson;
   }
 
@@ -322,6 +482,62 @@ class LearningSpine {
     appendJsonl(path.join(this.seedDir, `${lesson.lobe}-seed.jsonl`), row);
   }
 
+  _recordExperienceTrainingRow(lesson) {
+    if ((lesson.trainingValue || 0) < 0.45) return;
+    if (!lesson.antiDriftPassed) return;
+    if (!['verified', 'training_approved'].includes(lesson.qualityTier)) return;
+
+    const row = {
+      instruction: `Apply a distilled SOMA experience lesson for the ${String(lesson.lobe || 'logos').toUpperCase()} lobe.`,
+      input: redactSensitiveText([
+        `Interaction type: ${lesson.interactionType}`,
+        `Agent: ${lesson.agent}`,
+        `Category: ${lesson.category}`,
+        `Success: ${lesson.success}`,
+        `Reward: ${lesson.reward}`,
+        lesson.evidence ? `Evidence: ${lesson.evidence}` : null,
+        lesson.input ? `Input: ${lesson.input}` : null
+      ].filter(Boolean).join('\n')),
+      output: redactSensitiveText([
+        `CORE SIGNAL: ${lesson.signal}`,
+        `LESSON: ${lesson.lesson}`,
+        `NEXT STEP: ${lesson.nextStep}`
+      ].join('\n')),
+      source: 'experience_learning_spine',
+      lobe: lesson.lobe,
+      interactionId: lesson.interactionId,
+      category: lesson.category,
+      qualityTier: lesson.qualityTier,
+      trainingValue: lesson.trainingValue,
+      timestamp: lesson.recordedAt
+    };
+
+    appendJsonl(this.generalTrainingPath, row);
+    appendJsonl(path.join(this.seedDir, `${lesson.lobe}-seed.jsonl`), row);
+  }
+
+  _recordGraveyardRow(lesson) {
+    const row = {
+      id: lesson.id,
+      source: 'experience_learning_spine',
+      reason: !lesson.antiDriftPassed
+        ? 'anti_drift_violation'
+        : lesson.success === false
+          ? 'failed_or_negative_outcome'
+          : 'raw_or_low_quality',
+      lobe: lesson.lobe,
+      category: lesson.category,
+      qualityTier: lesson.qualityTier,
+      trainingValue: lesson.trainingValue,
+      input: lesson.input,
+      output: lesson.output,
+      lesson: lesson.lesson,
+      nextStep: lesson.nextStep,
+      timestamp: lesson.recordedAt
+    };
+    appendJsonl(path.join(this.trainingDir, 'graveyard', 'experience-bad-examples.jsonl'), row);
+  }
+
   _updateScoreboard(lesson) {
     const board = readJson(this.scoreboardPath, { version: 1, domains: {}, updatedAt: null });
     const key = lesson.category || 'general';
@@ -368,6 +584,7 @@ module.exports = {
   normalizeGoalContract,
   applyGoalContract,
   buildLesson,
+  buildInteractionLesson,
   redactSensitiveText,
   inferLobe
 };

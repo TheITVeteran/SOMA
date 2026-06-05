@@ -20,8 +20,13 @@ import { promises as fs } from 'fs';
 import path from 'path';
 
 const KNOWLEDGE_ROOT = path.join(process.cwd(), 'knowledge');
+const TRAINING_THRESHOLDS = {
+    logos: Number(process.env.SOMA_TRAINING_THRESHOLD_LOGOS || 120),
+    aurora: Number(process.env.SOMA_TRAINING_THRESHOLD_AURORA || 180),
+    prometheus: Number(process.env.SOMA_TRAINING_THRESHOLD_PROMETHEUS || 140),
+    thalamus: Number(process.env.SOMA_TRAINING_THRESHOLD_THALAMUS || 75),
+};
 const TRAINING_THRESHOLD = 100;
-const APPROACH_THRESHOLD = Math.floor(TRAINING_THRESHOLD * 0.75);
 
 // ── Routing table: signal type → lobe + entry type ──────────────────────────
 const SIGNAL_ROUTES = {
@@ -277,24 +282,27 @@ export class KnowledgeCuratorArbiter {
 
     _checkThresholds(lobe, count) {
         if (!this.messageBroker) return;
+        const threshold = TRAINING_THRESHOLDS[lobe] || TRAINING_THRESHOLD;
+        const approachThreshold = Math.floor(threshold * 0.75);
 
-        if (count >= TRAINING_THRESHOLD && !this._thresholdFired[lobe].has('ready')) {
+        if (count >= threshold && !this._thresholdFired[lobe].has('ready')) {
             this._thresholdFired[lobe].add('ready');
             console.log(`[KnowledgeCuratorArbiter] 🎓 ${lobe.toUpperCase()} training dataset READY (${count} entries)`);
             this.messageBroker.publish('training.threshold.ready', {
                 lobe,
                 count,
+                threshold,
                 knowledgeDir: path.join(KNOWLEDGE_ROOT, lobe),
                 message: `${lobe.toUpperCase()} lobe has ${count} training entries — LoRA fine-tune can begin`,
             }).catch(() => {});
-        } else if (count >= APPROACH_THRESHOLD && !this._thresholdFired[lobe].has('approaching')) {
+        } else if (count >= approachThreshold && !this._thresholdFired[lobe].has('approaching')) {
             this._thresholdFired[lobe].add('approaching');
-            const remaining = TRAINING_THRESHOLD - count;
-            console.log(`[KnowledgeCuratorArbiter] 📊 ${lobe.toUpperCase()} approaching training threshold (${count}/${TRAINING_THRESHOLD})`);
+            const remaining = threshold - count;
+            console.log(`[KnowledgeCuratorArbiter] 📊 ${lobe.toUpperCase()} approaching training threshold (${count}/${threshold})`);
             this.messageBroker.publish('training.threshold.approaching', {
                 lobe,
                 count,
-                threshold: TRAINING_THRESHOLD,
+                threshold,
                 remaining,
                 message: `${lobe.toUpperCase()} needs ${remaining} more entries before LoRA training`,
             }).catch(() => {});
@@ -315,6 +323,9 @@ export class KnowledgeCuratorArbiter {
             }
         }
         console.log('[KnowledgeCuratorArbiter] 📚 Entry counts synced from disk:', this._counts);
+        for (const [lobe, count] of Object.entries(this._counts)) {
+            this._checkThresholds(lobe, count);
+        }
     }
 
     // ── Manual Filing (for ThoughtNetwork migration + external use) ──────────
@@ -341,11 +352,14 @@ export class KnowledgeCuratorArbiter {
             name: this.name,
             counts: { ...this._counts },
             threshold: TRAINING_THRESHOLD,
-            approachThreshold: APPROACH_THRESHOLD,
+            thresholds: { ...TRAINING_THRESHOLDS },
+            approachThresholds: Object.fromEntries(
+                Object.entries(TRAINING_THRESHOLDS).map(([lobe, threshold]) => [lobe, Math.floor(threshold * 0.75)])
+            ),
             progress: Object.fromEntries(
                 Object.entries(this._counts).map(([lobe, count]) => [
                     lobe,
-                    `${count}/${TRAINING_THRESHOLD} (${Math.round(count / TRAINING_THRESHOLD * 100)}%)`
+                    `${count}/${TRAINING_THRESHOLDS[lobe] || TRAINING_THRESHOLD} (${Math.round(count / (TRAINING_THRESHOLDS[lobe] || TRAINING_THRESHOLD) * 100)}%)`
                 ])
             )
         };

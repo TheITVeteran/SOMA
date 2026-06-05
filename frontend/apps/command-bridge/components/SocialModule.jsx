@@ -244,6 +244,63 @@ const SocialModule = ({ isConnected }) => {
     setComposerStatus({ ok: true, message: 'Image idea loaded.' });
   };
 
+  const [discordBotStatus, setDiscordBotStatus] = useState(null);
+  const [discordBotForm, setDiscordBotForm]     = useState({ token: '', masterId: '', channelId: '', mode: 'general' });
+  const [discordBotMsg, setDiscordBotMsg]       = useState(null);
+
+  const loadDiscordBotStatus = async () => {
+    try {
+      const r = await fetch('/api/social/discord/bot/status');
+      const d = await r.json();
+      setDiscordBotStatus(d);
+    } catch {}
+  };
+
+  const setupDiscordBot = async () => {
+    setDiscordBotMsg({ ok: true, text: 'Connecting...' });
+    try {
+      const r = await fetch('/api/social/discord/bot/setup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: discordBotForm.token, masterId: discordBotForm.masterId }),
+      });
+      const d = await r.json();
+      if (!r.ok || d.ok === false) throw new Error(d.error || 'Bot setup failed');
+      setDiscordBotMsg({ ok: true, text: 'Bot connected.' });
+      await loadDiscordBotStatus();
+    } catch (e) { setDiscordBotMsg({ ok: false, text: e.message }); }
+  };
+
+  const monitorChannel = async (enable) => {
+    if (!discordBotForm.channelId.trim()) return;
+    try {
+      const r = await fetch('/api/social/discord/bot/monitor', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ channelId: discordBotForm.channelId.trim(), enable }),
+      });
+      const d = await r.json();
+      if (!r.ok || d.ok === false) throw new Error(d.error || 'Monitor failed');
+      setDiscordBotMsg({ ok: true, text: enable ? 'Channel monitored.' : 'Channel removed.' });
+      await loadDiscordBotStatus();
+    } catch (e) { setDiscordBotMsg({ ok: false, text: e.message }); }
+  };
+
+  const setDiscordChannelMode = async () => {
+    if (!discordBotForm.channelId.trim()) return;
+    try {
+      const r = await fetch('/api/social/discord/bot/mode', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ channelId: discordBotForm.channelId.trim(), mode: discordBotForm.mode }),
+      });
+      const d = await r.json();
+      if (!r.ok || d.ok === false) throw new Error(d.error || 'Mode update failed');
+      setDiscordBotMsg({ ok: true, text: `Mode set to ${d.mode?.label || discordBotForm.mode}.` });
+      await loadDiscordBotStatus();
+    } catch (e) { setDiscordBotMsg({ ok: false, text: e.message }); }
+  };
+
   const simulateDiscordReply = async () => {
     setDiscordStatus({ ok: true, message: 'Simulating Discord reply...' });
     try {
@@ -669,11 +726,13 @@ const SocialModule = ({ isConnected }) => {
 
             <div className="grid grid-cols-1 gap-4 xl:grid-cols-[0.8fr_1.2fr]">
               <div className="space-y-3">
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-5">
                   {[
                     ['channels', discord.stats?.conversations || 0],
                     ['replies', discord.stats?.replies || 0],
-                    ['simulated', discord.stats?.simulated || 0],
+                    ['real', discord.stats?.posted || 0],
+                    ['failed', discord.stats?.failed || 0],
+                    ['learned', discord.stats?.learned || 0],
                   ].map(([label, value]) => (
                     <div key={label} className="rounded-lg border border-white/10 bg-black/25 p-3 text-center">
                       <div className="font-mono text-lg font-bold text-white">{value}</div>
@@ -700,6 +759,28 @@ const SocialModule = ({ isConnected }) => {
                     )}
                   </div>
                 </div>
+                <div className="rounded-lg border border-white/10 bg-black/25 p-3">
+                  <div className="mb-2 flex items-center justify-between">
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-zinc-500">Learning Notes</span>
+                    <span className="font-mono text-[10px] text-zinc-600">{discord.stats?.reflected || 0} reflected</span>
+                  </div>
+                  <div className="max-h-36 space-y-2 overflow-y-auto pr-1 custom-scrollbar">
+                    {(discord.learning?.lessons || []).slice(0, 4).map(item => (
+                      <div key={item.id} className="rounded-lg border border-emerald-400/10 bg-emerald-400/5 px-3 py-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="truncate text-xs font-semibold text-emerald-100">@{item.author}</span>
+                          <span className="font-mono text-[10px] text-zinc-500">{fmtAge(item.createdAt)}</span>
+                        </div>
+                        <p className="mt-1 line-clamp-2 text-[10px] leading-relaxed text-zinc-400">{item.summary}</p>
+                      </div>
+                    ))}
+                    {!(discord.learning?.lessons || []).length && (
+                      <div className="rounded-lg border border-white/10 bg-black/25 p-3 text-xs text-zinc-500">
+                        No distilled Discord lessons yet.
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
 
               <div className="rounded-lg border border-white/10 bg-black/25 p-3">
@@ -714,6 +795,15 @@ const SocialModule = ({ isConnected }) => {
                         <div className="flex min-w-0 items-center gap-2">
                           <span className="rounded-full border border-indigo-400/20 bg-indigo-400/10 px-2 py-0.5 text-[10px] font-bold uppercase text-indigo-200">#{item.channel}</span>
                           <span className="truncate text-xs font-semibold text-zinc-200">@{item.author}</span>
+                          <span className={`rounded-full border px-1.5 py-0.5 text-[9px] font-bold uppercase ${
+                            item.simulated
+                              ? 'border-zinc-500/30 bg-zinc-500/10 text-zinc-400'
+                              : item.status === 'failed'
+                                ? 'border-rose-400/25 bg-rose-400/10 text-rose-300'
+                                : 'border-emerald-400/25 bg-emerald-400/10 text-emerald-300'
+                          }`}>
+                            {item.simulated ? 'test' : item.status || 'posted'}
+                          </span>
                         </div>
                         <span className="font-mono text-[10px] text-zinc-500">{fmtAge(item.createdAt)}</span>
                       </div>
@@ -734,6 +824,91 @@ const SocialModule = ({ isConnected }) => {
                   )}
                 </div>
               </div>
+            </div>
+
+            {/* Discord Bot Setup */}
+            <div className="mt-4 rounded-lg border border-indigo-400/20 bg-indigo-400/5 p-4">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <div>
+                  <span className="text-sm font-bold text-indigo-100">Bot Configuration</span>
+                  <p className="mt-0.5 text-[10px] text-zinc-500">Connect a real Discord bot to enable live replies and channel monitoring.</p>
+                </div>
+                {discordBotStatus?.online && (
+                  <span className="rounded-full border border-emerald-400/25 bg-emerald-400/10 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-emerald-300">Bot Online</span>
+                )}
+                {discordBotStatus && !discordBotStatus.online && (
+                  <span className="rounded-full border border-zinc-600/50 bg-zinc-800/50 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-zinc-500">Bot Offline</span>
+                )}
+                {!discordBotStatus && (
+                  <button type="button" onClick={loadDiscordBotStatus} className="rounded-lg border border-indigo-400/25 bg-indigo-400/10 px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-indigo-100 hover:bg-indigo-400/20">
+                    Check Status
+                  </button>
+                )}
+              </div>
+              {discordBotStatus?.guilds && (
+                <div className="mb-3 flex flex-wrap gap-4 text-[10px] text-zinc-400">
+                  <span>Guilds: <strong className="text-white">{discordBotStatus.guilds}</strong></span>
+                  <span>Channels: <strong className="text-white">{discordBotStatus.channels?.length || 0}</strong></span>
+                  {discordBotStatus.channels?.slice(0, 3).map(ch => (
+                    <span key={ch.id || ch} className="font-mono text-indigo-300">#{ch.name || ch}</span>
+                  ))}
+                </div>
+              )}
+              {discordBotStatus?.lastError && (
+                <div className="mb-3 rounded-lg border border-rose-400/20 bg-rose-400/10 px-3 py-2 text-xs text-rose-200">
+                  Discord connection error: {discordBotStatus.lastError}
+                </div>
+              )}
+              <div className="grid grid-cols-1 gap-2 lg:grid-cols-2">
+                <input
+                  type="password"
+                  placeholder="Bot token (from Discord Developer Portal)"
+                  value={discordBotForm.token}
+                  onChange={e => setDiscordBotForm(p => ({ ...p, token: e.target.value }))}
+                  className="rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-xs text-zinc-100 outline-none placeholder:text-zinc-600 focus:border-indigo-400/40"
+                />
+                <input
+                  type="text"
+                  placeholder="Master user ID (your Discord user ID)"
+                  value={discordBotForm.masterId}
+                  onChange={e => setDiscordBotForm(p => ({ ...p, masterId: e.target.value }))}
+                  className="rounded-lg border border-white/10 bg-black/30 px-3 py-2 text-xs text-zinc-100 outline-none placeholder:text-zinc-600 focus:border-indigo-400/40"
+                />
+              </div>
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <button type="button" onClick={setupDiscordBot} className="rounded-lg border border-indigo-400/30 bg-indigo-500/20 px-4 py-1.5 text-xs font-bold text-indigo-100 hover:bg-indigo-500/30">
+                  Connect Bot
+                </button>
+                <input
+                  type="text"
+                  placeholder="Channel ID to monitor"
+                  value={discordBotForm.channelId}
+                  onChange={e => setDiscordBotForm(p => ({ ...p, channelId: e.target.value }))}
+                  className="flex-1 rounded-lg border border-white/10 bg-black/30 px-3 py-1.5 text-xs text-zinc-100 outline-none placeholder:text-zinc-600 focus:border-indigo-400/40"
+                />
+                <button type="button" onClick={() => monitorChannel(true)} className="rounded-lg border border-emerald-400/25 bg-emerald-400/10 px-3 py-1.5 text-xs font-bold text-emerald-100 hover:bg-emerald-400/20">Monitor</button>
+                <button type="button" onClick={() => monitorChannel(false)} className="rounded-lg border border-rose-400/25 bg-rose-400/10 px-3 py-1.5 text-xs font-bold text-rose-200 hover:bg-rose-400/20">Remove</button>
+              </div>
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <select
+                  value={discordBotForm.mode}
+                  onChange={e => setDiscordBotForm(p => ({ ...p, mode: e.target.value }))}
+                  className="rounded-lg border border-white/10 bg-black/30 px-3 py-1.5 text-xs text-zinc-100 outline-none focus:border-indigo-400/40"
+                >
+                  <option value="general">General</option>
+                  <option value="bots-commands">Bots / Commands</option>
+                  <option value="creative">Creative</option>
+                  <option value="markets">Markets</option>
+                  <option value="medical">Medical / Research</option>
+                </select>
+                <button type="button" onClick={setDiscordChannelMode} className="rounded-lg border border-cyan-400/25 bg-cyan-400/10 px-3 py-1.5 text-xs font-bold text-cyan-100 hover:bg-cyan-400/20">Set Mode</button>
+                {discordBotStatus?.channelModes && Object.keys(discordBotStatus.channelModes).length > 0 && (
+                  <span className="text-[10px] text-zinc-500">{Object.keys(discordBotStatus.channelModes).length} channel mode{Object.keys(discordBotStatus.channelModes).length === 1 ? '' : 's'} saved</span>
+                )}
+              </div>
+              {discordBotMsg && (
+                <p className={`mt-2 text-xs font-semibold ${discordBotMsg.ok ? 'text-emerald-300' : 'text-rose-300'}`}>{discordBotMsg.text}</p>
+              )}
             </div>
           </section>
 

@@ -7,9 +7,9 @@
       "type": "class",
       "source": "unknown",
       "confidence": 1,
-      "usageCount": 9,
+      "usageCount": 40,
       "createdAt": 1779481329826,
-      "lastSeen": 1779979900572,
+      "lastSeen": 1780582025735,
       "metadata": {
         "domain": "SOMA_ARCHITECTURE",
         "type": "class",
@@ -24,9 +24,9 @@
       "type": "system",
       "source": "unknown",
       "confidence": 1,
-      "usageCount": 9,
+      "usageCount": 40,
       "createdAt": 1779481329826,
-      "lastSeen": 1779979900572,
+      "lastSeen": 1780582025735,
       "metadata": {
         "domain": "SOMA_ARCHITECTURE",
         "type": "system",
@@ -41,9 +41,9 @@
       "type": "class",
       "source": "unknown",
       "confidence": 1,
-      "usageCount": 9,
+      "usageCount": 40,
       "createdAt": 1779481329826,
-      "lastSeen": 1779979900572,
+      "lastSeen": 1780582025735,
       "metadata": {
         "domain": "SOMA_ARCHITECTURE",
         "type": "class",
@@ -58,9 +58,9 @@
       "type": "class",
       "source": "unknown",
       "confidence": 1,
-      "usageCount": 9,
+      "usageCount": 40,
       "createdAt": 1779481329826,
-      "lastSeen": 1779979900572,
+      "lastSeen": 1780582025735,
       "metadata": {
         "domain": "SOMA_ARCHITECTURE",
         "type": "class",
@@ -75,9 +75,9 @@
       "type": "class",
       "source": "unknown",
       "confidence": 1,
-      "usageCount": 9,
+      "usageCount": 40,
       "createdAt": 1779481329826,
-      "lastSeen": 1779979900572,
+      "lastSeen": 1780582025735,
       "metadata": {
         "domain": "SOMA_ARCHITECTURE",
         "type": "class",
@@ -92,9 +92,9 @@
       "type": "class",
       "source": "unknown",
       "confidence": 1,
-      "usageCount": 9,
+      "usageCount": 40,
       "createdAt": 1779481329826,
-      "lastSeen": 1779979900572,
+      "lastSeen": 1780582025735,
       "metadata": {
         "domain": "SOMA_ARCHITECTURE",
         "type": "class",
@@ -127,5 +127,5 @@
     "transferLearnings": 0,
     "graphUpdates": 0
   },
-  "savedAt": 1779980260596
+  "savedAt": 1780659547503
 }

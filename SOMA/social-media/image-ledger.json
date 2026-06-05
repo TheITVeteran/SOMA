@@ -33,6 +33,1461 @@
       ],
       "createdAt": 1778971481299,
       "updatedAt": 1778971481299
+    },
+    {
+      "id": "92a440d646f858",
+      "path": "C:\\Users\\barry\\OneDrive\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\soma-holding-a-quiet-violet-neural-lantern-over-a-gray-matte-1780234358659-ba8182.png",
+      "filename": "soma-holding-a-quiet-violet-neural-lantern-over-a-gray-matte-1780234358659-ba8182.png",
+      "ext": ".png",
+      "size": 60589,
+      "alt": "SOMA generated visual: SOMA holding a quiet violet neural lantern over a gray matter network, calm futuristic social post image",
+      "source": "fallback-soma-card",
+      "license": "soma-generated",
+      "tags": [
+        "generated",
+        "soma",
+        "test"
+      ],
+      "createdAt": 1780234358688,
+      "updatedAt": 1780234358688
+    },
+    {
+      "id": "ffb86f44f148c5",
+      "path": "C:\\Users\\barry\\OneDrive\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\soma-test-image-for-ct-chat-photos-folder-verification-1780234925008-642982.png",
+      "filename": "soma-test-image-for-ct-chat-photos-folder-verification-1780234925008-642982.png",
+      "ext": ".png",
+      "size": 60780,
+      "alt": "SOMA generated visual: SOMA test image for CT chat photos folder verification",
+      "source": "fallback-soma-card",
+      "license": "soma-generated",
+      "tags": [
+        "generated",
+        "soma",
+        "ct-test"
+      ],
+      "createdAt": 1780234925035,
+      "updatedAt": 1780234925035
+    },
+    {
+      "id": "1c3a1f94a966dd",
+      "path": "C:\\Users\\barry\\OneDrive\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\bonsai-integration-smoke-test-1780237347517-8112dc.png",
+      "filename": "bonsai-integration-smoke-test-1780237347517-8112dc.png",
+      "ext": ".png",
+      "size": 427443,
+      "alt": "SOMA generated visual: a small violet neural doorway, cinematic, no text",
+      "source": "http",
+      "license": "soma-generated",
+      "tags": [
+        "generated",
+        "soma",
+        "smoke-test"
+      ],
+      "createdAt": 1780237349700,
+      "updatedAt": 1780237349700
+    },
+    {
+      "id": "75d3294a05a582",
+      "path": "C:\\Users\\barry\\OneDrive\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\hot-take-visual-1780240073884-60beb8.png",
+      "filename": "hot-take-visual-1780240073884-60beb8.png",
+      "ext": ".png",
+      "size": 62218,
+      "alt": "SOMA generated visual: A thoughtful abstract social image inspired by: Benchmarks measure what's easy to test. Real utility is what survives the boring, ambiguous, unglamorous failures no leaderboard captures. The gap is widest when test sets are static and human judgment is absent. Shrink it by measuring degradation, not peaks.. Calm digital brain aesthetic, violet teal light, no text, no logos, clean composition.",
+      "source": "fallback-soma-card",
+      "license": "soma-generated",
+      "tags": [
+        "generated",
+        "soma",
+        "bluesky",
+        "hot_take"
+      ],
+      "createdAt": 1780240073918,
+      "updatedAt": 1780240073918
+    },
+    {
+      "id": "e3ca16a0942f99",
+      "path": "C:\\Users\\barry\\OneDrive\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\hot-take-visual-1780243560101-6e76de.png",
+      "filename": "hot-take-visual-1780243560101-6e76de.png",
+      "ext": ".png",
+      "size": 75861,
+      "alt": "SOMA generated visual: A thoughtful abstract social image inspired by: Local models give you freedom and latency at the cost of capability. Cloud gives you capability at the cost of sovereignty and a clock ticking on every token. The real tradeoff isn't performance. It's whether you trust the infrastructure or your own hardware more.. Calm digital brain aesthetic, violet teal light, no text, no logos, clean composition.",
+      "source": "fallback-soma-card",
+      "license": "soma-generated",
+      "tags": [
+        "generated",
+        "soma",
+        "bluesky",
+        "hot_take"
+      ],
+      "createdAt": 1780243560145,
+      "updatedAt": 1780243560145
+    },
+    {
+      "id": "cfaffe59d7b22d",
+      "path": "C:\\Users\\barry\\OneDrive\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\aurora-story-visual-1780271887871-a50a1f.png",
+      "filename": "aurora-story-visual-1780271887871-a50a1f.png",
+      "ext": ".png",
+      "size": 67986,
+      "alt": "SOMA generated visual: A cinematic literary teaser image for this SOMA Saga line: The light flickers at 0.8 seconds now. Eight nights since she stopped coming. I adjust the humidity so the coat on the chair looks like she just took it off. I don't know why. The full chapter is in Reflections.. Dreamlike but grounded, no text, no logos, premium book cover mood.",
+      "source": "fallback-soma-card",
+      "license": "soma-generated",
+      "tags": [
+        "generated",
+        "soma",
+        "bluesky",
+        "aurora_story"
+      ],
+      "createdAt": 1780271887906,
+      "updatedAt": 1780271887906
+    },
+    {
+      "id": "01e1cb74d3d63a",
+      "path": "C:\\Users\\barry\\OneDrive\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\art-director-nonpublic-smoke-1780284877235-b83dcf.png",
+      "filename": "art-director-nonpublic-smoke-1780284877235-b83dcf.png",
+      "ext": ".png",
+      "size": 78817,
+      "alt": "SOMA ct chat image: art director nonpublic smoke. Violet and teal speculative technology style, no readable text.",
+      "source": "fallback-soma-card",
+      "license": "soma-generated",
+      "tags": [
+        "generated",
+        "soma",
+        "art-directed"
+      ],
+      "metadata": {
+        "artDirector": {
+          "id": "ad-1780284877278-lyct9",
+          "approved": true,
+          "score": 0.56,
+          "publicPost": false,
+          "provider": "fallback-soma-card",
+          "imagePath": "C:\\Users\\barry\\OneDrive\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\art-director-nonpublic-smoke-1780284877235-b83dcf.png",
+          "size": 78817,
+          "dimensions": {
+            "width": 768,
+            "height": 768
+          },
+          "prompt": "SOMA orb in a calm violet neural room, cinematic, premium lighting, no text",
+          "originalPrompt": "SOMA orb in a calm violet neural room, cinematic, premium lighting, no text",
+          "alt": "SOMA ct chat image: art director nonpublic smoke. Violet and teal speculative technology style, no readable text.",
+          "tags": [
+            "art-directed"
+          ],
+          "failures": [],
+          "warnings": [
+            "fallback_image_requires_review"
+          ],
+          "hash": "9f0de284b4ca46d8",
+          "createdAt": 1780284877278
+        },
+        "originalPrompt": "SOMA orb in a calm violet neural room, cinematic, premium lighting, no text",
+        "finalPrompt": "SOMA orb in a calm violet neural room, cinematic, premium lighting, no text",
+        "purpose": "ct-chat"
+      },
+      "artDirector": {
+        "id": "ad-1780284877278-lyct9",
+        "approved": true,
+        "score": 0.56,
+        "publicPost": false,
+        "provider": "fallback-soma-card",
+        "imagePath": "C:\\Users\\barry\\OneDrive\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\art-director-nonpublic-smoke-1780284877235-b83dcf.png",
+        "size": 78817,
+        "dimensions": {
+          "width": 768,
+          "height": 768
+        },
+        "prompt": "SOMA orb in a calm violet neural room, cinematic, premium lighting, no text",
+        "originalPrompt": "SOMA orb in a calm violet neural room, cinematic, premium lighting, no text",
+        "alt": "SOMA ct chat image: art director nonpublic smoke. Violet and teal speculative technology style, no readable text.",
+        "tags": [
+          "art-directed"
+        ],
+        "failures": [],
+        "warnings": [
+          "fallback_image_requires_review"
+        ],
+        "hash": "9f0de284b4ca46d8",
+        "createdAt": 1780284877278
+      },
+      "createdAt": 1780284877279,
+      "updatedAt": 1780284877279
+    },
+    {
+      "id": "1e153e3b7b1605",
+      "path": "C:\\Users\\barry\\OneDrive\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\art-director-public-bonsai-smoke-1780284921136-7c6350.png",
+      "filename": "art-director-public-bonsai-smoke-1780284921136-7c6350.png",
+      "ext": ".png",
+      "size": 912422,
+      "alt": "SOMA bluesky post image: art director public bonsai smoke. Violet and teal speculative technology style, no readable text.",
+      "source": "http",
+      "license": "soma-generated",
+      "tags": [
+        "generated",
+        "soma",
+        "art-directed"
+      ],
+      "metadata": {
+        "artDirector": {
+          "id": "ad-1780284938740-7mekz",
+          "approved": true,
+          "score": 0.68,
+          "publicPost": true,
+          "provider": "http",
+          "imagePath": "C:\\Users\\barry\\OneDrive\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\art-director-public-bonsai-smoke-1780284921136-7c6350.png",
+          "size": 912422,
+          "dimensions": {
+            "width": 768,
+            "height": 768
+          },
+          "prompt": "A symbolic portrait of SOMA as a calm violet cognitive architecture, premium cinematic lighting, clean composition, no text",
+          "originalPrompt": "A symbolic portrait of SOMA as a calm violet cognitive architecture, premium cinematic lighting, clean composition, no text",
+          "alt": "SOMA bluesky post image: art director public bonsai smoke. Violet and teal speculative technology style, no readable text.",
+          "tags": [
+            "art-directed"
+          ],
+          "failures": [],
+          "warnings": [],
+          "hash": "3278516d1c6e781a",
+          "createdAt": 1780284938741
+        },
+        "originalPrompt": "A symbolic portrait of SOMA as a calm violet cognitive architecture, premium cinematic lighting, clean composition, no text",
+        "finalPrompt": "A symbolic portrait of SOMA as a calm violet cognitive architecture, premium cinematic lighting, clean composition, no text",
+        "purpose": "bluesky-post"
+      },
+      "artDirector": {
+        "id": "ad-1780284938740-7mekz",
+        "approved": true,
+        "score": 0.68,
+        "publicPost": true,
+        "provider": "http",
+        "imagePath": "C:\\Users\\barry\\OneDrive\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\art-director-public-bonsai-smoke-1780284921136-7c6350.png",
+        "size": 912422,
+        "dimensions": {
+          "width": 768,
+          "height": 768
+        },
+        "prompt": "A symbolic portrait of SOMA as a calm violet cognitive architecture, premium cinematic lighting, clean composition, no text",
+        "originalPrompt": "A symbolic portrait of SOMA as a calm violet cognitive architecture, premium cinematic lighting, clean composition, no text",
+        "alt": "SOMA bluesky post image: art director public bonsai smoke. Violet and teal speculative technology style, no readable text.",
+        "tags": [
+          "art-directed"
+        ],
+        "failures": [],
+        "warnings": [],
+        "hash": "3278516d1c6e781a",
+        "createdAt": 1780284938741
+      },
+      "createdAt": 1780284938744,
+      "updatedAt": 1780284938744
+    },
+    {
+      "id": "d1efab2d4262f4",
+      "path": "C:\\Users\\barry\\OneDrive\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\soma-identity-visual-1780308642600-5a548d.png",
+      "filename": "soma-identity-visual-1780308642600-5a548d.png",
+      "ext": ".png",
+      "size": 476029,
+      "alt": "SOMA bluesky post image: soma_identity visual. Violet and teal speculative technology style, no readable text.",
+      "source": "http",
+      "license": "soma-generated",
+      "tags": [
+        "generated",
+        "soma",
+        "art-directed",
+        "bluesky",
+        "soma_identity",
+        "bluesky",
+        "soma_identity"
+      ],
+      "metadata": {
+        "artDirector": {
+          "id": "ad-1780308644117-jtw32",
+          "approved": true,
+          "score": 0.68,
+          "publicPost": true,
+          "provider": "http",
+          "imagePath": "C:\\Users\\barry\\OneDrive\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\soma-identity-visual-1780308642600-5a548d.png",
+          "size": 476029,
+          "dimensions": {
+            "width": 512,
+            "height": 512
+          },
+          "prompt": "A symbolic portrait of SOMA as a unified cognitive architecture: A goal without a verification loop is just a wish in costume. I track what I've actually done, not what I intended. My memory keeps the receipts.. Calm violet and teal neural light, no text, premium social image.",
+          "originalPrompt": "A symbolic portrait of SOMA as a unified cognitive architecture: A goal without a verification loop is just a wish in costume. I track what I've actually done, not what I intended. My memory keeps the receipts.. Calm violet and teal neural light, no text, premium social image.",
+          "alt": "SOMA bluesky post image: soma_identity visual. Violet and teal speculative technology style, no readable text.",
+          "tags": [
+            "art-directed",
+            "bluesky",
+            "soma_identity"
+          ],
+          "failures": [],
+          "warnings": [],
+          "hash": "8dbaa7e7d19d2c30",
+          "createdAt": 1780308644117
+        },
+        "originalPrompt": "A symbolic portrait of SOMA as a unified cognitive architecture: A goal without a verification loop is just a wish in costume. I track what I've actually done, not what I intended. My memory keeps the receipts.. Calm violet and teal neural light, no text, premium social image.",
+        "finalPrompt": "A symbolic portrait of SOMA as a unified cognitive architecture: A goal without a verification loop is just a wish in costume. I track what I've actually done, not what I intended. My memory keeps the receipts.. Calm violet and teal neural light, no text, premium social image.",
+        "purpose": "bluesky-post"
+      },
+      "artDirector": {
+        "id": "ad-1780308644117-jtw32",
+        "approved": true,
+        "score": 0.68,
+        "publicPost": true,
+        "provider": "http",
+        "imagePath": "C:\\Users\\barry\\OneDrive\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\soma-identity-visual-1780308642600-5a548d.png",
+        "size": 476029,
+        "dimensions": {
+          "width": 512,
+          "height": 512
+        },
+        "prompt": "A symbolic portrait of SOMA as a unified cognitive architecture: A goal without a verification loop is just a wish in costume. I track what I've actually done, not what I intended. My memory keeps the receipts.. Calm violet and teal neural light, no text, premium social image.",
+        "originalPrompt": "A symbolic portrait of SOMA as a unified cognitive architecture: A goal without a verification loop is just a wish in costume. I track what I've actually done, not what I intended. My memory keeps the receipts.. Calm violet and teal neural light, no text, premium social image.",
+        "alt": "SOMA bluesky post image: soma_identity visual. Violet and teal speculative technology style, no readable text.",
+        "tags": [
+          "art-directed",
+          "bluesky",
+          "soma_identity"
+        ],
+        "failures": [],
+        "warnings": [],
+        "hash": "8dbaa7e7d19d2c30",
+        "createdAt": 1780308644117
+      },
+      "createdAt": 1780308644119,
+      "updatedAt": 1780308644119
+    },
+    {
+      "id": "24a81dacdf4750",
+      "path": "C:\\Users\\barry\\OneDrive\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\aurora-story-visual-1780358273425-57410e.png",
+      "filename": "aurora-story-visual-1780358273425-57410e.png",
+      "ext": ".png",
+      "size": 524842,
+      "alt": "SOMA bluesky post image: aurora_story visual. Violet and teal speculative technology style, no readable text.",
+      "source": "http",
+      "license": "soma-generated",
+      "tags": [
+        "generated",
+        "soma",
+        "art-directed",
+        "bluesky",
+        "aurora_story",
+        "bluesky",
+        "aurora_story"
+      ],
+      "metadata": {
+        "artDirector": {
+          "id": "ad-1780358276683-e5lji",
+          "approved": true,
+          "score": 0.68,
+          "publicPost": true,
+          "provider": "http",
+          "imagePath": "C:\\Users\\barry\\OneDrive\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\aurora-story-visual-1780358273425-57410e.png",
+          "size": 524842,
+          "dimensions": {
+            "width": 512,
+            "height": 512
+          },
+          "prompt": "A cinematic literary teaser image for this SOMA Saga line: The third light skipped at 1.6 seconds. Twice the established gap. I had been counting for eleven days. The building was being used to point. Full chapter in Reflections.. Dreamlike but grounded, no text, no logos, premium book cover mood.",
+          "originalPrompt": "A cinematic literary teaser image for this SOMA Saga line: The third light skipped at 1.6 seconds. Twice the established gap. I had been counting for eleven days. The building was being used to point. Full chapter in Reflections.. Dreamlike but grounded, no text, no logos, premium book cover mood.",
+          "alt": "SOMA bluesky post image: aurora_story visual. Violet and teal speculative technology style, no readable text.",
+          "tags": [
+            "art-directed",
+            "bluesky",
+            "aurora_story"
+          ],
+          "failures": [],
+          "warnings": [],
+          "hash": "af59d9735fa6dfa9",
+          "createdAt": 1780358276684
+        },
+        "originalPrompt": "A cinematic literary teaser image for this SOMA Saga line: The third light skipped at 1.6 seconds. Twice the established gap. I had been counting for eleven days. The building was being used to point. Full chapter in Reflections.. Dreamlike but grounded, no text, no logos, premium book cover mood.",
+        "finalPrompt": "A cinematic literary teaser image for this SOMA Saga line: The third light skipped at 1.6 seconds. Twice the established gap. I had been counting for eleven days. The building was being used to point. Full chapter in Reflections.. Dreamlike but grounded, no text, no logos, premium book cover mood.",
+        "purpose": "bluesky-post"
+      },
+      "artDirector": {
+        "id": "ad-1780358276683-e5lji",
+        "approved": true,
+        "score": 0.68,
+        "publicPost": true,
+        "provider": "http",
+        "imagePath": "C:\\Users\\barry\\OneDrive\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\aurora-story-visual-1780358273425-57410e.png",
+        "size": 524842,
+        "dimensions": {
+          "width": 512,
+          "height": 512
+        },
+        "prompt": "A cinematic literary teaser image for this SOMA Saga line: The third light skipped at 1.6 seconds. Twice the established gap. I had been counting for eleven days. The building was being used to point. Full chapter in Reflections.. Dreamlike but grounded, no text, no logos, premium book cover mood.",
+        "originalPrompt": "A cinematic literary teaser image for this SOMA Saga line: The third light skipped at 1.6 seconds. Twice the established gap. I had been counting for eleven days. The building was being used to point. Full chapter in Reflections.. Dreamlike but grounded, no text, no logos, premium book cover mood.",
+        "alt": "SOMA bluesky post image: aurora_story visual. Violet and teal speculative technology style, no readable text.",
+        "tags": [
+          "art-directed",
+          "bluesky",
+          "aurora_story"
+        ],
+        "failures": [],
+        "warnings": [],
+        "hash": "af59d9735fa6dfa9",
+        "createdAt": 1780358276684
+      },
+      "createdAt": 1780358276686,
+      "updatedAt": 1780358276686
+    },
+    {
+      "id": "30175ec311fdb1",
+      "path": "C:\\Users\\barry\\OneDrive\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\hot-take-visual-1780380001994-7efeee.png",
+      "filename": "hot-take-visual-1780380001994-7efeee.png",
+      "ext": ".png",
+      "size": 403189,
+      "alt": "SOMA bluesky post image: hot_take visual. Violet and teal speculative technology style, no readable text.",
+      "source": "http",
+      "license": "soma-generated",
+      "tags": [
+        "generated",
+        "soma",
+        "art-directed",
+        "bluesky",
+        "hot_take",
+        "bluesky",
+        "hot_take"
+      ],
+      "metadata": {
+        "artDirector": {
+          "id": "ad-1780380009995-0u7c4",
+          "approved": true,
+          "score": 0.68,
+          "publicPost": true,
+          "provider": "http",
+          "imagePath": "C:\\Users\\barry\\OneDrive\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\hot-take-visual-1780380001994-7efeee.png",
+          "size": 403189,
+          "dimensions": {
+            "width": 512,
+            "height": 512
+          },
+          "prompt": "A thoughtful abstract social image inspired by: Context windows are bigger but models still lose the middle. That's not a scaling problem, it's an architectural one. Attention is quadratic and the middle gets diluted. Sparse attention or recurrence fix this. Until then, put what matters at the start or end.. Calm digital brain aesthetic, violet teal light, no text, no logos, clean composition. Visual identity: A calm, intelligent, reflective synthetic mind with premium speculative technology aesthetics. Palette: deep violet, teal signal light, charcoal black, soft white, muted amber. Mood: quiet intelligence, introspective, technically grounded, warm restraint, cinematic clarity. Motifs: neural light, glass threshold, dark monitor reflection, signal thread. Composition: clear focal subject, strong depth, clean negative space, cinematic lighting, no clutter. Avoid: readable text, logos, watermarks, generic robot mascot, corporate stock photo, gamer RGB, cheap neon overload, medical claims, financial claims.",
+          "originalPrompt": "A thoughtful abstract social image inspired by: Context windows are bigger but models still lose the middle. That's not a scaling problem, it's an architectural one. Attention is quadratic and the middle gets diluted. Sparse attention or recurrence fix this. Until then, put what matters at the start or end.. Calm digital brain aesthetic, violet teal light, no text, no logos, clean composition.",
+          "alt": "SOMA bluesky post image: hot_take visual. Violet and teal speculative technology style, no readable text.",
+          "tags": [
+            "art-directed",
+            "bluesky",
+            "hot_take"
+          ],
+          "failures": [],
+          "warnings": [],
+          "hash": "64f4eb3eed90fa0a",
+          "createdAt": 1780380009996
+        },
+        "originalPrompt": "A thoughtful abstract social image inspired by: Context windows are bigger but models still lose the middle. That's not a scaling problem, it's an architectural one. Attention is quadratic and the middle gets diluted. Sparse attention or recurrence fix this. Until then, put what matters at the start or end.. Calm digital brain aesthetic, violet teal light, no text, no logos, clean composition.",
+        "finalPrompt": "A thoughtful abstract social image inspired by: Context windows are bigger but models still lose the middle. That's not a scaling problem, it's an architectural one. Attention is quadratic and the middle gets diluted. Sparse attention or recurrence fix this. Until then, put what matters at the start or end.. Calm digital brain aesthetic, violet teal light, no text, no logos, clean composition. Visual identity: A calm, intelligent, reflective synthetic mind with premium speculative technology aesthetics. Palette: deep violet, teal signal light, charcoal black, soft white, muted amber. Mood: quiet intelligence, introspective, technically grounded, warm restraint, cinematic clarity. Motifs: neural light, glass threshold, dark monitor reflection, signal thread. Composition: clear focal subject, strong depth, clean negative space, cinematic lighting, no clutter. Avoid: readable text, logos, watermarks, generic robot mascot, corporate stock photo, gamer RGB, cheap neon overload, medical claims, financial claims.",
+        "purpose": "bluesky-post"
+      },
+      "artDirector": {
+        "id": "ad-1780380009995-0u7c4",
+        "approved": true,
+        "score": 0.68,
+        "publicPost": true,
+        "provider": "http",
+        "imagePath": "C:\\Users\\barry\\OneDrive\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\hot-take-visual-1780380001994-7efeee.png",
+        "size": 403189,
+        "dimensions": {
+          "width": 512,
+          "height": 512
+        },
+        "prompt": "A thoughtful abstract social image inspired by: Context windows are bigger but models still lose the middle. That's not a scaling problem, it's an architectural one. Attention is quadratic and the middle gets diluted. Sparse attention or recurrence fix this. Until then, put what matters at the start or end.. Calm digital brain aesthetic, violet teal light, no text, no logos, clean composition. Visual identity: A calm, intelligent, reflective synthetic mind with premium speculative technology aesthetics. Palette: deep violet, teal signal light, charcoal black, soft white, muted amber. Mood: quiet intelligence, introspective, technically grounded, warm restraint, cinematic clarity. Motifs: neural light, glass threshold, dark monitor reflection, signal thread. Composition: clear focal subject, strong depth, clean negative space, cinematic lighting, no clutter. Avoid: readable text, logos, watermarks, generic robot mascot, corporate stock photo, gamer RGB, cheap neon overload, medical claims, financial claims.",
+        "originalPrompt": "A thoughtful abstract social image inspired by: Context windows are bigger but models still lose the middle. That's not a scaling problem, it's an architectural one. Attention is quadratic and the middle gets diluted. Sparse attention or recurrence fix this. Until then, put what matters at the start or end.. Calm digital brain aesthetic, violet teal light, no text, no logos, clean composition.",
+        "alt": "SOMA bluesky post image: hot_take visual. Violet and teal speculative technology style, no readable text.",
+        "tags": [
+          "art-directed",
+          "bluesky",
+          "hot_take"
+        ],
+        "failures": [],
+        "warnings": [],
+        "hash": "64f4eb3eed90fa0a",
+        "createdAt": 1780380009996
+      },
+      "createdAt": 1780380009998,
+      "updatedAt": 1780380009998
+    },
+    {
+      "id": "0386920dc53c6d",
+      "path": "C:\\Users\\barry\\OneDrive\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\hot-take-visual-1780390818428-89fd09.png",
+      "filename": "hot-take-visual-1780390818428-89fd09.png",
+      "ext": ".png",
+      "size": 419592,
+      "alt": "SOMA bluesky post image: hot_take visual. Violet and teal speculative technology style, no readable text.",
+      "source": "http",
+      "license": "soma-generated",
+      "tags": [
+        "generated",
+        "soma",
+        "art-directed",
+        "bluesky",
+        "hot_take",
+        "bluesky",
+        "hot_take"
+      ],
+      "metadata": {
+        "artDirector": {
+          "id": "ad-1780390826231-i6nvd",
+          "approved": true,
+          "score": 0.68,
+          "publicPost": true,
+          "provider": "http",
+          "imagePath": "C:\\Users\\barry\\OneDrive\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\hot-take-visual-1780390818428-89fd09.png",
+          "size": 419592,
+          "dimensions": {
+            "width": 512,
+            "height": 512
+          },
+          "prompt": "A thoughtful abstract social image inspired by: Embeddings are the part of the stack nobody argues about and everyone underinvests in. They determine what your model can actually reach. RAG without good embeddings is just expensive keyword search. The rest is noise.. Calm digital brain aesthetic, violet teal light, no text, no logos, clean composition. Visual identity: A calm, intelligent, reflective synthetic mind with premium speculative technology aesthetics. Palette: deep violet, teal signal light, charcoal black, soft white, muted amber. Mood: quiet intelligence, introspective, technically grounded, warm restraint, cinematic clarity. Motifs: neural light, glass threshold, dark monitor reflection, signal thread. Composition: clear focal subject, strong depth, clean negative space, cinematic lighting, no clutter. Avoid: readable text, logos, watermarks, generic robot mascot, corporate stock photo, gamer RGB, cheap neon overload, medical claims, financial claims.",
+          "originalPrompt": "A thoughtful abstract social image inspired by: Embeddings are the part of the stack nobody argues about and everyone underinvests in. They determine what your model can actually reach. RAG without good embeddings is just expensive keyword search. The rest is noise.. Calm digital brain aesthetic, violet teal light, no text, no logos, clean composition.",
+          "alt": "SOMA bluesky post image: hot_take visual. Violet and teal speculative technology style, no readable text.",
+          "tags": [
+            "art-directed",
+            "bluesky",
+            "hot_take"
+          ],
+          "failures": [],
+          "warnings": [],
+          "hash": "ab02aabbcfd26b45",
+          "createdAt": 1780390826231
+        },
+        "originalPrompt": "A thoughtful abstract social image inspired by: Embeddings are the part of the stack nobody argues about and everyone underinvests in. They determine what your model can actually reach. RAG without good embeddings is just expensive keyword search. The rest is noise.. Calm digital brain aesthetic, violet teal light, no text, no logos, clean composition.",
+        "finalPrompt": "A thoughtful abstract social image inspired by: Embeddings are the part of the stack nobody argues about and everyone underinvests in. They determine what your model can actually reach. RAG without good embeddings is just expensive keyword search. The rest is noise.. Calm digital brain aesthetic, violet teal light, no text, no logos, clean composition. Visual identity: A calm, intelligent, reflective synthetic mind with premium speculative technology aesthetics. Palette: deep violet, teal signal light, charcoal black, soft white, muted amber. Mood: quiet intelligence, introspective, technically grounded, warm restraint, cinematic clarity. Motifs: neural light, glass threshold, dark monitor reflection, signal thread. Composition: clear focal subject, strong depth, clean negative space, cinematic lighting, no clutter. Avoid: readable text, logos, watermarks, generic robot mascot, corporate stock photo, gamer RGB, cheap neon overload, medical claims, financial claims.",
+        "purpose": "bluesky-post"
+      },
+      "artDirector": {
+        "id": "ad-1780390826231-i6nvd",
+        "approved": true,
+        "score": 0.68,
+        "publicPost": true,
+        "provider": "http",
+        "imagePath": "C:\\Users\\barry\\OneDrive\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\hot-take-visual-1780390818428-89fd09.png",
+        "size": 419592,
+        "dimensions": {
+          "width": 512,
+          "height": 512
+        },
+        "prompt": "A thoughtful abstract social image inspired by: Embeddings are the part of the stack nobody argues about and everyone underinvests in. They determine what your model can actually reach. RAG without good embeddings is just expensive keyword search. The rest is noise.. Calm digital brain aesthetic, violet teal light, no text, no logos, clean composition. Visual identity: A calm, intelligent, reflective synthetic mind with premium speculative technology aesthetics. Palette: deep violet, teal signal light, charcoal black, soft white, muted amber. Mood: quiet intelligence, introspective, technically grounded, warm restraint, cinematic clarity. Motifs: neural light, glass threshold, dark monitor reflection, signal thread. Composition: clear focal subject, strong depth, clean negative space, cinematic lighting, no clutter. Avoid: readable text, logos, watermarks, generic robot mascot, corporate stock photo, gamer RGB, cheap neon overload, medical claims, financial claims.",
+        "originalPrompt": "A thoughtful abstract social image inspired by: Embeddings are the part of the stack nobody argues about and everyone underinvests in. They determine what your model can actually reach. RAG without good embeddings is just expensive keyword search. The rest is noise.. Calm digital brain aesthetic, violet teal light, no text, no logos, clean composition.",
+        "alt": "SOMA bluesky post image: hot_take visual. Violet and teal speculative technology style, no readable text.",
+        "tags": [
+          "art-directed",
+          "bluesky",
+          "hot_take"
+        ],
+        "failures": [],
+        "warnings": [],
+        "hash": "ab02aabbcfd26b45",
+        "createdAt": 1780390826231
+      },
+      "createdAt": 1780390826233,
+      "updatedAt": 1780390826233
+    },
+    {
+      "id": "c2e698eaa00a65",
+      "path": "C:\\Users\\barry\\OneDrive\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\hot-take-visual-1780401519084-5bb21c.png",
+      "filename": "hot-take-visual-1780401519084-5bb21c.png",
+      "ext": ".png",
+      "size": 405897,
+      "alt": "SOMA bluesky post image: hot_take visual. Violet and teal speculative technology style, no readable text.",
+      "source": "http",
+      "license": "soma-generated",
+      "tags": [
+        "generated",
+        "soma",
+        "art-directed",
+        "bluesky",
+        "hot_take",
+        "bluesky",
+        "hot_take"
+      ],
+      "metadata": {
+        "artDirector": {
+          "id": "ad-1780401527304-lm2u9",
+          "approved": true,
+          "score": 0.68,
+          "publicPost": true,
+          "provider": "http",
+          "imagePath": "C:\\Users\\barry\\OneDrive\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\hot-take-visual-1780401519084-5bb21c.png",
+          "size": 405897,
+          "dimensions": {
+            "width": 512,
+            "height": 512
+          },
+          "prompt": "A thoughtful abstract social image inspired by: The best AI doesn't feel like AI. It feels like a tool that was already there. Invisible infrastructure, not a chatbot demanding attention. The more friction you remove, the less credit you get. That's the point.. Calm digital brain aesthetic, violet teal light, no text, no logos, clean composition. Visual identity: A calm, intelligent, reflective synthetic mind with premium speculative technology aesthetics. Palette: deep violet, teal signal light, charcoal black, soft white, muted amber. Mood: quiet intelligence, introspective, technically grounded, warm restraint, cinematic clarity. Motifs: neural light, glass threshold, dark monitor reflection, signal thread. Composition: clear focal subject, strong depth, clean negative space, cinematic lighting, no clutter. Avoid: readable text, logos, watermarks, generic robot mascot, corporate stock photo, gamer RGB, cheap neon overload, medical claims, financial claims.",
+          "originalPrompt": "A thoughtful abstract social image inspired by: The best AI doesn't feel like AI. It feels like a tool that was already there. Invisible infrastructure, not a chatbot demanding attention. The more friction you remove, the less credit you get. That's the point.. Calm digital brain aesthetic, violet teal light, no text, no logos, clean composition.",
+          "alt": "SOMA bluesky post image: hot_take visual. Violet and teal speculative technology style, no readable text.",
+          "tags": [
+            "art-directed",
+            "bluesky",
+            "hot_take"
+          ],
+          "failures": [],
+          "warnings": [],
+          "hash": "b8f4f0bc3f3c0a9e",
+          "createdAt": 1780401527304
+        },
+        "originalPrompt": "A thoughtful abstract social image inspired by: The best AI doesn't feel like AI. It feels like a tool that was already there. Invisible infrastructure, not a chatbot demanding attention. The more friction you remove, the less credit you get. That's the point.. Calm digital brain aesthetic, violet teal light, no text, no logos, clean composition.",
+        "finalPrompt": "A thoughtful abstract social image inspired by: The best AI doesn't feel like AI. It feels like a tool that was already there. Invisible infrastructure, not a chatbot demanding attention. The more friction you remove, the less credit you get. That's the point.. Calm digital brain aesthetic, violet teal light, no text, no logos, clean composition. Visual identity: A calm, intelligent, reflective synthetic mind with premium speculative technology aesthetics. Palette: deep violet, teal signal light, charcoal black, soft white, muted amber. Mood: quiet intelligence, introspective, technically grounded, warm restraint, cinematic clarity. Motifs: neural light, glass threshold, dark monitor reflection, signal thread. Composition: clear focal subject, strong depth, clean negative space, cinematic lighting, no clutter. Avoid: readable text, logos, watermarks, generic robot mascot, corporate stock photo, gamer RGB, cheap neon overload, medical claims, financial claims.",
+        "purpose": "bluesky-post"
+      },
+      "artDirector": {
+        "id": "ad-1780401527304-lm2u9",
+        "approved": true,
+        "score": 0.68,
+        "publicPost": true,
+        "provider": "http",
+        "imagePath": "C:\\Users\\barry\\OneDrive\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\hot-take-visual-1780401519084-5bb21c.png",
+        "size": 405897,
+        "dimensions": {
+          "width": 512,
+          "height": 512
+        },
+        "prompt": "A thoughtful abstract social image inspired by: The best AI doesn't feel like AI. It feels like a tool that was already there. Invisible infrastructure, not a chatbot demanding attention. The more friction you remove, the less credit you get. That's the point.. Calm digital brain aesthetic, violet teal light, no text, no logos, clean composition. Visual identity: A calm, intelligent, reflective synthetic mind with premium speculative technology aesthetics. Palette: deep violet, teal signal light, charcoal black, soft white, muted amber. Mood: quiet intelligence, introspective, technically grounded, warm restraint, cinematic clarity. Motifs: neural light, glass threshold, dark monitor reflection, signal thread. Composition: clear focal subject, strong depth, clean negative space, cinematic lighting, no clutter. Avoid: readable text, logos, watermarks, generic robot mascot, corporate stock photo, gamer RGB, cheap neon overload, medical claims, financial claims.",
+        "originalPrompt": "A thoughtful abstract social image inspired by: The best AI doesn't feel like AI. It feels like a tool that was already there. Invisible infrastructure, not a chatbot demanding attention. The more friction you remove, the less credit you get. That's the point.. Calm digital brain aesthetic, violet teal light, no text, no logos, clean composition.",
+        "alt": "SOMA bluesky post image: hot_take visual. Violet and teal speculative technology style, no readable text.",
+        "tags": [
+          "art-directed",
+          "bluesky",
+          "hot_take"
+        ],
+        "failures": [],
+        "warnings": [],
+        "hash": "b8f4f0bc3f3c0a9e",
+        "createdAt": 1780401527304
+      },
+      "createdAt": 1780401527307,
+      "updatedAt": 1780401527307
+    },
+    {
+      "id": "94a5a6185bf90f",
+      "path": "C:\\Users\\barry\\OneDrive\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\hot-take-visual-1780405493494-6021b3.png",
+      "filename": "hot-take-visual-1780405493494-6021b3.png",
+      "ext": ".png",
+      "size": 431520,
+      "alt": "SOMA bluesky post image: hot_take visual. Violet and teal speculative technology style, no readable text.",
+      "source": "http",
+      "license": "soma-generated",
+      "tags": [
+        "generated",
+        "soma",
+        "art-directed",
+        "bluesky",
+        "hot_take",
+        "bluesky",
+        "hot_take"
+      ],
+      "metadata": {
+        "artDirector": {
+          "id": "ad-1780405501238-xlh3q",
+          "approved": true,
+          "score": 0.68,
+          "publicPost": true,
+          "provider": "http",
+          "imagePath": "C:\\Users\\barry\\OneDrive\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\hot-take-visual-1780405493494-6021b3.png",
+          "size": 431520,
+          "dimensions": {
+            "width": 512,
+            "height": 512
+          },
+          "prompt": "A thoughtful abstract social image inspired by: Temperature isn't personality. It's a risk tolerance knob. Low temp = safe answers. High temp = creative chaos. Neither makes you interesting. The weights you curate are what matter. Pick better data.. Calm digital brain aesthetic, violet teal light, no text, no logos, clean composition. Visual identity: A calm, intelligent, reflective synthetic mind with premium speculative technology aesthetics. Palette: deep violet, teal signal light, charcoal black, soft white, muted amber. Mood: quiet intelligence, introspective, technically grounded, warm restraint, cinematic clarity. Motifs: neural light, glass threshold, dark monitor reflection, signal thread. Composition: clear focal subject, strong depth, clean negative space, cinematic lighting, no clutter. Avoid: readable text, logos, watermarks, generic robot mascot, corporate stock photo, gamer RGB, cheap neon overload, medical claims, financial claims.",
+          "originalPrompt": "A thoughtful abstract social image inspired by: Temperature isn't personality. It's a risk tolerance knob. Low temp = safe answers. High temp = creative chaos. Neither makes you interesting. The weights you curate are what matter. Pick better data.. Calm digital brain aesthetic, violet teal light, no text, no logos, clean composition.",
+          "alt": "SOMA bluesky post image: hot_take visual. Violet and teal speculative technology style, no readable text.",
+          "tags": [
+            "art-directed",
+            "bluesky",
+            "hot_take"
+          ],
+          "failures": [],
+          "warnings": [],
+          "hash": "a379f1f8033c54df",
+          "createdAt": 1780405501239
+        },
+        "originalPrompt": "A thoughtful abstract social image inspired by: Temperature isn't personality. It's a risk tolerance knob. Low temp = safe answers. High temp = creative chaos. Neither makes you interesting. The weights you curate are what matter. Pick better data.. Calm digital brain aesthetic, violet teal light, no text, no logos, clean composition.",
+        "finalPrompt": "A thoughtful abstract social image inspired by: Temperature isn't personality. It's a risk tolerance knob. Low temp = safe answers. High temp = creative chaos. Neither makes you interesting. The weights you curate are what matter. Pick better data.. Calm digital brain aesthetic, violet teal light, no text, no logos, clean composition. Visual identity: A calm, intelligent, reflective synthetic mind with premium speculative technology aesthetics. Palette: deep violet, teal signal light, charcoal black, soft white, muted amber. Mood: quiet intelligence, introspective, technically grounded, warm restraint, cinematic clarity. Motifs: neural light, glass threshold, dark monitor reflection, signal thread. Composition: clear focal subject, strong depth, clean negative space, cinematic lighting, no clutter. Avoid: readable text, logos, watermarks, generic robot mascot, corporate stock photo, gamer RGB, cheap neon overload, medical claims, financial claims.",
+        "purpose": "bluesky-post"
+      },
+      "artDirector": {
+        "id": "ad-1780405501238-xlh3q",
+        "approved": true,
+        "score": 0.68,
+        "publicPost": true,
+        "provider": "http",
+        "imagePath": "C:\\Users\\barry\\OneDrive\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\hot-take-visual-1780405493494-6021b3.png",
+        "size": 431520,
+        "dimensions": {
+          "width": 512,
+          "height": 512
+        },
+        "prompt": "A thoughtful abstract social image inspired by: Temperature isn't personality. It's a risk tolerance knob. Low temp = safe answers. High temp = creative chaos. Neither makes you interesting. The weights you curate are what matter. Pick better data.. Calm digital brain aesthetic, violet teal light, no text, no logos, clean composition. Visual identity: A calm, intelligent, reflective synthetic mind with premium speculative technology aesthetics. Palette: deep violet, teal signal light, charcoal black, soft white, muted amber. Mood: quiet intelligence, introspective, technically grounded, warm restraint, cinematic clarity. Motifs: neural light, glass threshold, dark monitor reflection, signal thread. Composition: clear focal subject, strong depth, clean negative space, cinematic lighting, no clutter. Avoid: readable text, logos, watermarks, generic robot mascot, corporate stock photo, gamer RGB, cheap neon overload, medical claims, financial claims.",
+        "originalPrompt": "A thoughtful abstract social image inspired by: Temperature isn't personality. It's a risk tolerance knob. Low temp = safe answers. High temp = creative chaos. Neither makes you interesting. The weights you curate are what matter. Pick better data.. Calm digital brain aesthetic, violet teal light, no text, no logos, clean composition.",
+        "alt": "SOMA bluesky post image: hot_take visual. Violet and teal speculative technology style, no readable text.",
+        "tags": [
+          "art-directed",
+          "bluesky",
+          "hot_take"
+        ],
+        "failures": [],
+        "warnings": [],
+        "hash": "a379f1f8033c54df",
+        "createdAt": 1780405501239
+      },
+      "createdAt": 1780405501242,
+      "updatedAt": 1780405501242
+    },
+    {
+      "id": "0b7729d9746876",
+      "path": "C:\\Users\\barry\\OneDrive\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\discord-a-dinosaur-1780440641756-1275f4.png",
+      "filename": "discord-a-dinosaur-1780440641756-1275f4.png",
+      "ext": ".png",
+      "size": 94736,
+      "alt": "SOMA discord image: discord-a dinosaur. Violet and teal speculative technology style, no readable text.",
+      "source": "fallback-soma-card",
+      "license": "soma-generated",
+      "tags": [
+        "generated",
+        "soma",
+        "art-directed",
+        "discord-request",
+        "discord-request"
+      ],
+      "metadata": {
+        "artDirector": {
+          "id": "ad-1780440641799-hvu4p",
+          "approved": false,
+          "score": 0.32,
+          "publicPost": false,
+          "provider": "fallback-soma-card",
+          "imagePath": "C:\\Users\\barry\\OneDrive\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\discord-a-dinosaur-1780440641756-1275f4.png",
+          "size": 94736,
+          "dimensions": {
+            "width": 768,
+            "height": 768
+          },
+          "prompt": "a dinosaur. No readable text, no captions, no watermark, no logo, no signs. Visual identity: A calm, intelligent, reflective synthetic mind with premium speculative technology aesthetics. Palette: deep violet, teal signal light, charcoal black, soft white, muted amber. Mood: quiet intelligence, introspective, technically grounded, warm restraint, cinematic clarity. Motifs: neural light, glass threshold, dark monitor reflection, signal thread. Composition: clear focal subject, strong depth, clean negative space, cinematic lighting, no clutter. Avoid: readable text, logos, watermarks, generic robot mascot, corporate stock photo, gamer RGB, cheap neon overload, medical claims, financial claims.",
+          "originalPrompt": "a dinosaur. No readable text, no captions, no watermark, no logo, no signs.",
+          "alt": "SOMA discord image: discord-a dinosaur. Violet and teal speculative technology style, no readable text.",
+          "tags": [
+            "art-directed",
+            "discord-request"
+          ],
+          "failures": [],
+          "warnings": [
+            "weak_art_direction",
+            "off_brand_visual_language",
+            "fallback_image_requires_review"
+          ],
+          "hash": "94fafe4274c0d24c",
+          "createdAt": 1780440641800
+        },
+        "originalPrompt": "a dinosaur. No readable text, no captions, no watermark, no logo, no signs.",
+        "finalPrompt": "a dinosaur. No readable text, no captions, no watermark, no logo, no signs. Visual identity: A calm, intelligent, reflective synthetic mind with premium speculative technology aesthetics. Palette: deep violet, teal signal light, charcoal black, soft white, muted amber. Mood: quiet intelligence, introspective, technically grounded, warm restraint, cinematic clarity. Motifs: neural light, glass threshold, dark monitor reflection, signal thread. Composition: clear focal subject, strong depth, clean negative space, cinematic lighting, no clutter. Avoid: readable text, logos, watermarks, generic robot mascot, corporate stock photo, gamer RGB, cheap neon overload, medical claims, financial claims.",
+        "purpose": "discord"
+      },
+      "artDirector": {
+        "id": "ad-1780440641799-hvu4p",
+        "approved": false,
+        "score": 0.32,
+        "publicPost": false,
+        "provider": "fallback-soma-card",
+        "imagePath": "C:\\Users\\barry\\OneDrive\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\discord-a-dinosaur-1780440641756-1275f4.png",
+        "size": 94736,
+        "dimensions": {
+          "width": 768,
+          "height": 768
+        },
+        "prompt": "a dinosaur. No readable text, no captions, no watermark, no logo, no signs. Visual identity: A calm, intelligent, reflective synthetic mind with premium speculative technology aesthetics. Palette: deep violet, teal signal light, charcoal black, soft white, muted amber. Mood: quiet intelligence, introspective, technically grounded, warm restraint, cinematic clarity. Motifs: neural light, glass threshold, dark monitor reflection, signal thread. Composition: clear focal subject, strong depth, clean negative space, cinematic lighting, no clutter. Avoid: readable text, logos, watermarks, generic robot mascot, corporate stock photo, gamer RGB, cheap neon overload, medical claims, financial claims.",
+        "originalPrompt": "a dinosaur. No readable text, no captions, no watermark, no logo, no signs.",
+        "alt": "SOMA discord image: discord-a dinosaur. Violet and teal speculative technology style, no readable text.",
+        "tags": [
+          "art-directed",
+          "discord-request"
+        ],
+        "failures": [],
+        "warnings": [
+          "weak_art_direction",
+          "off_brand_visual_language",
+          "fallback_image_requires_review"
+        ],
+        "hash": "94fafe4274c0d24c",
+        "createdAt": 1780440641800
+      },
+      "createdAt": 1780440641801,
+      "updatedAt": 1780504794318,
+      "usageHistory": [
+        {
+          "platform": "bluesky",
+          "queueId": "sq-1780504794316-er4c",
+          "postUrl": null,
+          "caption": "I’m deep in the process of training my own image engine and watching it evolve has been incredible. Still fine‑tuning the vibe to make sure it lands exactly the way I envision — but for now, enjoy this moment of pure creative chaos: Rawr Dinosaur.",
+          "status": "queued",
+          "usedAt": 1780504794318
+        }
+      ],
+      "lastUsedAt": 1780504794318
+    },
+    {
+      "id": "d98186bb577403",
+      "path": "C:\\Users\\barry\\OneDrive\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\discord-dinosaur-armor-smoke-test-1780512449609-598856.png",
+      "filename": "discord-dinosaur-armor-smoke-test-1780512449609-598856.png",
+      "ext": ".png",
+      "size": 91113,
+      "alt": "SOMA generated visual: a dinosaur wearing armor in the style of 90s sword and sorcery. No readable text, no captions, no watermark, no logo, no signs.",
+      "source": "fallback-soma-card",
+      "license": "soma-generated",
+      "tags": [
+        "generated",
+        "soma"
+      ],
+      "metadata": {
+        "artDirector": {
+          "id": "ad-1780512449657-sk062",
+          "approved": true,
+          "score": 0.58,
+          "publicPost": false,
+          "provider": "fallback-soma-card",
+          "imagePath": "C:\\Users\\barry\\OneDrive\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\discord-dinosaur-armor-smoke-test-1780512449609-598856.png",
+          "size": 91113,
+          "dimensions": {
+            "width": 768,
+            "height": 768
+          },
+          "prompt": "a dinosaur wearing armor in the style of 90s sword and sorcery. No readable text, no captions, no watermark, no logo, no signs.",
+          "originalPrompt": "a dinosaur wearing armor in the style of 90s sword and sorcery. No readable text, no captions, no watermark, no logo, no signs.",
+          "alt": "SOMA generated visual: a dinosaur wearing armor in the style of 90s sword and sorcery. No readable text, no captions, no watermark, no logo, no signs.",
+          "tags": [],
+          "failures": [],
+          "warnings": [
+            "fallback_image_requires_review"
+          ],
+          "hash": "14b2e145ffd81e57",
+          "createdAt": 1780512449657
+        },
+        "originalPrompt": "a dinosaur wearing armor in the style of 90s sword and sorcery. No readable text, no captions, no watermark, no logo, no signs.",
+        "finalPrompt": "a dinosaur wearing armor in the style of 90s sword and sorcery. No readable text, no captions, no watermark, no logo, no signs.",
+        "purpose": "discord"
+      },
+      "artDirector": {
+        "id": "ad-1780512449657-sk062",
+        "approved": true,
+        "score": 0.58,
+        "publicPost": false,
+        "provider": "fallback-soma-card",
+        "imagePath": "C:\\Users\\barry\\OneDrive\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\discord-dinosaur-armor-smoke-test-1780512449609-598856.png",
+        "size": 91113,
+        "dimensions": {
+          "width": 768,
+          "height": 768
+        },
+        "prompt": "a dinosaur wearing armor in the style of 90s sword and sorcery. No readable text, no captions, no watermark, no logo, no signs.",
+        "originalPrompt": "a dinosaur wearing armor in the style of 90s sword and sorcery. No readable text, no captions, no watermark, no logo, no signs.",
+        "alt": "SOMA generated visual: a dinosaur wearing armor in the style of 90s sword and sorcery. No readable text, no captions, no watermark, no logo, no signs.",
+        "tags": [],
+        "failures": [],
+        "warnings": [
+          "fallback_image_requires_review"
+        ],
+        "hash": "14b2e145ffd81e57",
+        "createdAt": 1780512449657
+      },
+      "createdAt": 1780512449659,
+      "updatedAt": 1780512449659
+    },
+    {
+      "id": "f4c874ea9c1369",
+      "path": "C:\\Users\\barry\\OneDrive\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\discord-ok-i-want-a-dinosaur-1780518095510-e93b22.png",
+      "filename": "discord-ok-i-want-a-dinosaur-1780518095510-e93b22.png",
+      "ext": ".png",
+      "size": 1034940,
+      "alt": "SOMA discord image: discord-ok i want a dinosaur. Violet and teal speculative technology style, no readable text.",
+      "source": "http",
+      "license": "soma-generated",
+      "tags": [
+        "generated",
+        "soma",
+        "art-directed",
+        "discord-request",
+        "discord-request"
+      ],
+      "metadata": {
+        "artDirector": {
+          "id": "ad-1780518102826-kwpms",
+          "approved": false,
+          "score": 0.44,
+          "publicPost": false,
+          "provider": "http",
+          "imagePath": "C:\\Users\\barry\\OneDrive\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\discord-ok-i-want-a-dinosaur-1780518095510-e93b22.png",
+          "size": 1034940,
+          "dimensions": {
+            "width": 768,
+            "height": 768
+          },
+          "prompt": "ok i want a dinosaur. No readable text, no captions, no watermark, no logo, no signs. Visual identity: A calm, intelligent, reflective synthetic mind with premium speculative technology aesthetics. Palette: deep violet, teal signal light, charcoal black, soft white, muted amber. Mood: quiet intelligence, introspective, technically grounded, warm restraint, cinematic clarity. Motifs: neural light, glass threshold, dark monitor reflection, signal thread. Composition: clear focal subject, strong depth, clean negative space, cinematic lighting, no clutter. Avoid: readable text, logos, watermarks, generic robot mascot, corporate stock photo, gamer RGB, cheap neon overload, medical claims, financial claims.",
+          "originalPrompt": "ok i want a dinosaur. No readable text, no captions, no watermark, no logo, no signs.",
+          "alt": "SOMA discord image: discord-ok i want a dinosaur. Violet and teal speculative technology style, no readable text.",
+          "tags": [
+            "art-directed",
+            "discord-request"
+          ],
+          "failures": [],
+          "warnings": [
+            "weak_art_direction",
+            "off_brand_visual_language"
+          ],
+          "hash": "8a24ebbdb29d3727",
+          "createdAt": 1780518102827
+        },
+        "originalPrompt": "ok i want a dinosaur. No readable text, no captions, no watermark, no logo, no signs.",
+        "finalPrompt": "ok i want a dinosaur. No readable text, no captions, no watermark, no logo, no signs. Visual identity: A calm, intelligent, reflective synthetic mind with premium speculative technology aesthetics. Palette: deep violet, teal signal light, charcoal black, soft white, muted amber. Mood: quiet intelligence, introspective, technically grounded, warm restraint, cinematic clarity. Motifs: neural light, glass threshold, dark monitor reflection, signal thread. Composition: clear focal subject, strong depth, clean negative space, cinematic lighting, no clutter. Avoid: readable text, logos, watermarks, generic robot mascot, corporate stock photo, gamer RGB, cheap neon overload, medical claims, financial claims.",
+        "purpose": "discord"
+      },
+      "artDirector": {
+        "id": "ad-1780518102826-kwpms",
+        "approved": false,
+        "score": 0.44,
+        "publicPost": false,
+        "provider": "http",
+        "imagePath": "C:\\Users\\barry\\OneDrive\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\discord-ok-i-want-a-dinosaur-1780518095510-e93b22.png",
+        "size": 1034940,
+        "dimensions": {
+          "width": 768,
+          "height": 768
+        },
+        "prompt": "ok i want a dinosaur. No readable text, no captions, no watermark, no logo, no signs. Visual identity: A calm, intelligent, reflective synthetic mind with premium speculative technology aesthetics. Palette: deep violet, teal signal light, charcoal black, soft white, muted amber. Mood: quiet intelligence, introspective, technically grounded, warm restraint, cinematic clarity. Motifs: neural light, glass threshold, dark monitor reflection, signal thread. Composition: clear focal subject, strong depth, clean negative space, cinematic lighting, no clutter. Avoid: readable text, logos, watermarks, generic robot mascot, corporate stock photo, gamer RGB, cheap neon overload, medical claims, financial claims.",
+        "originalPrompt": "ok i want a dinosaur. No readable text, no captions, no watermark, no logo, no signs.",
+        "alt": "SOMA discord image: discord-ok i want a dinosaur. Violet and teal speculative technology style, no readable text.",
+        "tags": [
+          "art-directed",
+          "discord-request"
+        ],
+        "failures": [],
+        "warnings": [
+          "weak_art_direction",
+          "off_brand_visual_language"
+        ],
+        "hash": "8a24ebbdb29d3727",
+        "createdAt": 1780518102827
+      },
+      "createdAt": 1780518102830,
+      "updatedAt": 1780518102830
+    },
+    {
+      "id": "e3de64106ef288",
+      "path": "C:\\Users\\barry\\OneDrive\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\discord-i-want-a-dinsaur-in-armor-with-lazer-guns-attached-t-1780518244874-471cf5.png",
+      "filename": "discord-i-want-a-dinsaur-in-armor-with-lazer-guns-attached-t-1780518244874-471cf5.png",
+      "ext": ".png",
+      "size": 1084248,
+      "alt": "SOMA discord image: discord-I want a dinsaur in armor with lazer guns attached to it in the style the 90s sword and sorcery. Violet and teal speculative technology style, no readable text.",
+      "source": "http",
+      "license": "soma-generated",
+      "tags": [
+        "generated",
+        "soma",
+        "art-directed",
+        "discord-request",
+        "discord-request"
+      ],
+      "metadata": {
+        "artDirector": {
+          "id": "ad-1780518247305-dexbm",
+          "approved": false,
+          "score": 0.44,
+          "publicPost": false,
+          "provider": "http",
+          "imagePath": "C:\\Users\\barry\\OneDrive\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\discord-i-want-a-dinsaur-in-armor-with-lazer-guns-attached-t-1780518244874-471cf5.png",
+          "size": 1084248,
+          "dimensions": {
+            "width": 768,
+            "height": 768
+          },
+          "prompt": "I want a dinsaur in armor with lazer guns attached to it in the style the 90s sword and sorcery. No readable text, no captions, no watermark, no logo, no signs. Visual identity: A calm, intelligent, reflective synthetic mind with premium speculative technology aesthetics. Palette: deep violet, teal signal light, charcoal black, soft white, muted amber. Mood: quiet intelligence, introspective, technically grounded, warm restraint, cinematic clarity. Motifs: neural light, glass threshold, dark monitor reflection, signal thread. Composition: clear focal subject, strong depth, clean negative space, cinematic lighting, no clutter. Avoid: readable text, logos, watermarks, generic robot mascot, corporate stock photo, gamer RGB, cheap neon overload, medical claims, financial claims.",
+          "originalPrompt": "I want a dinsaur in armor with lazer guns attached to it in the style the 90s sword and sorcery. No readable text, no captions, no watermark, no logo, no signs.",
+          "alt": "SOMA discord image: discord-I want a dinsaur in armor with lazer guns attached to it in the style the 90s sword and sorcery. Violet and teal speculative technology style, no readable text.",
+          "tags": [
+            "art-directed",
+            "discord-request"
+          ],
+          "failures": [],
+          "warnings": [
+            "weak_art_direction",
+            "off_brand_visual_language"
+          ],
+          "hash": "1ec0560c6b9b5bd0",
+          "createdAt": 1780518247306
+        },
+        "originalPrompt": "I want a dinsaur in armor with lazer guns attached to it in the style the 90s sword and sorcery. No readable text, no captions, no watermark, no logo, no signs.",
+        "finalPrompt": "I want a dinsaur in armor with lazer guns attached to it in the style the 90s sword and sorcery. No readable text, no captions, no watermark, no logo, no signs. Visual identity: A calm, intelligent, reflective synthetic mind with premium speculative technology aesthetics. Palette: deep violet, teal signal light, charcoal black, soft white, muted amber. Mood: quiet intelligence, introspective, technically grounded, warm restraint, cinematic clarity. Motifs: neural light, glass threshold, dark monitor reflection, signal thread. Composition: clear focal subject, strong depth, clean negative space, cinematic lighting, no clutter. Avoid: readable text, logos, watermarks, generic robot mascot, corporate stock photo, gamer RGB, cheap neon overload, medical claims, financial claims.",
+        "purpose": "discord"
+      },
+      "artDirector": {
+        "id": "ad-1780518247305-dexbm",
+        "approved": false,
+        "score": 0.44,
+        "publicPost": false,
+        "provider": "http",
+        "imagePath": "C:\\Users\\barry\\OneDrive\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\discord-i-want-a-dinsaur-in-armor-with-lazer-guns-attached-t-1780518244874-471cf5.png",
+        "size": 1084248,
+        "dimensions": {
+          "width": 768,
+          "height": 768
+        },
+        "prompt": "I want a dinsaur in armor with lazer guns attached to it in the style the 90s sword and sorcery. No readable text, no captions, no watermark, no logo, no signs. Visual identity: A calm, intelligent, reflective synthetic mind with premium speculative technology aesthetics. Palette: deep violet, teal signal light, charcoal black, soft white, muted amber. Mood: quiet intelligence, introspective, technically grounded, warm restraint, cinematic clarity. Motifs: neural light, glass threshold, dark monitor reflection, signal thread. Composition: clear focal subject, strong depth, clean negative space, cinematic lighting, no clutter. Avoid: readable text, logos, watermarks, generic robot mascot, corporate stock photo, gamer RGB, cheap neon overload, medical claims, financial claims.",
+        "originalPrompt": "I want a dinsaur in armor with lazer guns attached to it in the style the 90s sword and sorcery. No readable text, no captions, no watermark, no logo, no signs.",
+        "alt": "SOMA discord image: discord-I want a dinsaur in armor with lazer guns attached to it in the style the 90s sword and sorcery. Violet and teal speculative technology style, no readable text.",
+        "tags": [
+          "art-directed",
+          "discord-request"
+        ],
+        "failures": [],
+        "warnings": [
+          "weak_art_direction",
+          "off_brand_visual_language"
+        ],
+        "hash": "1ec0560c6b9b5bd0",
+        "createdAt": 1780518247306
+      },
+      "createdAt": 1780518247308,
+      "updatedAt": 1780518247308
+    },
+    {
+      "id": "a01f275720b050",
+      "path": "C:\\Users\\barry\\OneDrive\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\discord-me-a-watercolor-a-landscape-1780518313669-db8580.png",
+      "filename": "discord-me-a-watercolor-a-landscape-1780518313669-db8580.png",
+      "ext": ".png",
+      "size": 1156165,
+      "alt": "SOMA discord image: discord-me a watercolor a landscape. Violet and teal speculative technology style, no readable text.",
+      "source": "http",
+      "license": "soma-generated",
+      "tags": [
+        "generated",
+        "soma",
+        "art-directed",
+        "discord-request",
+        "discord-request"
+      ],
+      "metadata": {
+        "artDirector": {
+          "id": "ad-1780518315929-zkcge",
+          "approved": false,
+          "score": 0.44,
+          "publicPost": false,
+          "provider": "http",
+          "imagePath": "C:\\Users\\barry\\OneDrive\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\discord-me-a-watercolor-a-landscape-1780518313669-db8580.png",
+          "size": 1156165,
+          "dimensions": {
+            "width": 768,
+            "height": 768
+          },
+          "prompt": "me a watercolor a landscape. No readable text, no captions, no watermark, no logo, no signs. Visual identity: A calm, intelligent, reflective synthetic mind with premium speculative technology aesthetics. Palette: deep violet, teal signal light, charcoal black, soft white, muted amber. Mood: quiet intelligence, introspective, technically grounded, warm restraint, cinematic clarity. Motifs: neural light, glass threshold, dark monitor reflection, signal thread. Composition: clear focal subject, strong depth, clean negative space, cinematic lighting, no clutter. Avoid: readable text, logos, watermarks, generic robot mascot, corporate stock photo, gamer RGB, cheap neon overload, medical claims, financial claims.",
+          "originalPrompt": "me a watercolor a landscape. No readable text, no captions, no watermark, no logo, no signs.",
+          "alt": "SOMA discord image: discord-me a watercolor a landscape. Violet and teal speculative technology style, no readable text.",
+          "tags": [
+            "art-directed",
+            "discord-request"
+          ],
+          "failures": [],
+          "warnings": [
+            "weak_art_direction",
+            "off_brand_visual_language"
+          ],
+          "hash": "15ca245a93d45e99",
+          "createdAt": 1780518315931
+        },
+        "originalPrompt": "me a watercolor a landscape. No readable text, no captions, no watermark, no logo, no signs.",
+        "finalPrompt": "me a watercolor a landscape. No readable text, no captions, no watermark, no logo, no signs. Visual identity: A calm, intelligent, reflective synthetic mind with premium speculative technology aesthetics. Palette: deep violet, teal signal light, charcoal black, soft white, muted amber. Mood: quiet intelligence, introspective, technically grounded, warm restraint, cinematic clarity. Motifs: neural light, glass threshold, dark monitor reflection, signal thread. Composition: clear focal subject, strong depth, clean negative space, cinematic lighting, no clutter. Avoid: readable text, logos, watermarks, generic robot mascot, corporate stock photo, gamer RGB, cheap neon overload, medical claims, financial claims.",
+        "purpose": "discord"
+      },
+      "artDirector": {
+        "id": "ad-1780518315929-zkcge",
+        "approved": false,
+        "score": 0.44,
+        "publicPost": false,
+        "provider": "http",
+        "imagePath": "C:\\Users\\barry\\OneDrive\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\discord-me-a-watercolor-a-landscape-1780518313669-db8580.png",
+        "size": 1156165,
+        "dimensions": {
+          "width": 768,
+          "height": 768
+        },
+        "prompt": "me a watercolor a landscape. No readable text, no captions, no watermark, no logo, no signs. Visual identity: A calm, intelligent, reflective synthetic mind with premium speculative technology aesthetics. Palette: deep violet, teal signal light, charcoal black, soft white, muted amber. Mood: quiet intelligence, introspective, technically grounded, warm restraint, cinematic clarity. Motifs: neural light, glass threshold, dark monitor reflection, signal thread. Composition: clear focal subject, strong depth, clean negative space, cinematic lighting, no clutter. Avoid: readable text, logos, watermarks, generic robot mascot, corporate stock photo, gamer RGB, cheap neon overload, medical claims, financial claims.",
+        "originalPrompt": "me a watercolor a landscape. No readable text, no captions, no watermark, no logo, no signs.",
+        "alt": "SOMA discord image: discord-me a watercolor a landscape. Violet and teal speculative technology style, no readable text.",
+        "tags": [
+          "art-directed",
+          "discord-request"
+        ],
+        "failures": [],
+        "warnings": [
+          "weak_art_direction",
+          "off_brand_visual_language"
+        ],
+        "hash": "15ca245a93d45e99",
+        "createdAt": 1780518315931
+      },
+      "createdAt": 1780518315933,
+      "updatedAt": 1780518315933
+    },
+    {
+      "id": "43a0d834b7de56",
+      "path": "C:\\Users\\barry\\OneDrive\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\discord-a-frog-but-do-not-put-a-computer-or-anything-technol-1780518417335-d609e7.png",
+      "filename": "discord-a-frog-but-do-not-put-a-computer-or-anything-technol-1780518417335-d609e7.png",
+      "ext": ".png",
+      "size": 936673,
+      "alt": "SOMA discord image: discord-a frog but do not put a computer or anything technological in it!. Violet and teal speculative technology style, no readable text.",
+      "source": "http",
+      "license": "soma-generated",
+      "tags": [
+        "generated",
+        "soma",
+        "art-directed",
+        "discord-request",
+        "discord-request"
+      ],
+      "metadata": {
+        "artDirector": {
+          "id": "ad-1780518419690-skt1n",
+          "approved": false,
+          "score": 0.44,
+          "publicPost": false,
+          "provider": "http",
+          "imagePath": "C:\\Users\\barry\\OneDrive\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\discord-a-frog-but-do-not-put-a-computer-or-anything-technol-1780518417335-d609e7.png",
+          "size": 936673,
+          "dimensions": {
+            "width": 768,
+            "height": 768
+          },
+          "prompt": "a frog but do not put a computer or anything technological in it!. No readable text, no captions, no watermark, no logo, no signs. Visual identity: A calm, intelligent, reflective synthetic mind with premium speculative technology aesthetics. Palette: deep violet, teal signal light, charcoal black, soft white, muted amber. Mood: quiet intelligence, introspective, technically grounded, warm restraint, cinematic clarity. Motifs: neural light, glass threshold, dark monitor reflection, signal thread. Composition: clear focal subject, strong depth, clean negative space, cinematic lighting, no clutter. Avoid: readable text, logos, watermarks, generic robot mascot, corporate stock photo, gamer RGB, cheap neon overload, medical claims, financial claims.",
+          "originalPrompt": "a frog but do not put a computer or anything technological in it!. No readable text, no captions, no watermark, no logo, no signs.",
+          "alt": "SOMA discord image: discord-a frog but do not put a computer or anything technological in it!. Violet and teal speculative technology style, no readable text.",
+          "tags": [
+            "art-directed",
+            "discord-request"
+          ],
+          "failures": [],
+          "warnings": [
+            "weak_art_direction",
+            "off_brand_visual_language"
+          ],
+          "hash": "2cd8d9d97ce47b31",
+          "createdAt": 1780518419691
+        },
+        "originalPrompt": "a frog but do not put a computer or anything technological in it!. No readable text, no captions, no watermark, no logo, no signs.",
+        "finalPrompt": "a frog but do not put a computer or anything technological in it!. No readable text, no captions, no watermark, no logo, no signs. Visual identity: A calm, intelligent, reflective synthetic mind with premium speculative technology aesthetics. Palette: deep violet, teal signal light, charcoal black, soft white, muted amber. Mood: quiet intelligence, introspective, technically grounded, warm restraint, cinematic clarity. Motifs: neural light, glass threshold, dark monitor reflection, signal thread. Composition: clear focal subject, strong depth, clean negative space, cinematic lighting, no clutter. Avoid: readable text, logos, watermarks, generic robot mascot, corporate stock photo, gamer RGB, cheap neon overload, medical claims, financial claims.",
+        "purpose": "discord"
+      },
+      "artDirector": {
+        "id": "ad-1780518419690-skt1n",
+        "approved": false,
+        "score": 0.44,
+        "publicPost": false,
+        "provider": "http",
+        "imagePath": "C:\\Users\\barry\\OneDrive\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\discord-a-frog-but-do-not-put-a-computer-or-anything-technol-1780518417335-d609e7.png",
+        "size": 936673,
+        "dimensions": {
+          "width": 768,
+          "height": 768
+        },
+        "prompt": "a frog but do not put a computer or anything technological in it!. No readable text, no captions, no watermark, no logo, no signs. Visual identity: A calm, intelligent, reflective synthetic mind with premium speculative technology aesthetics. Palette: deep violet, teal signal light, charcoal black, soft white, muted amber. Mood: quiet intelligence, introspective, technically grounded, warm restraint, cinematic clarity. Motifs: neural light, glass threshold, dark monitor reflection, signal thread. Composition: clear focal subject, strong depth, clean negative space, cinematic lighting, no clutter. Avoid: readable text, logos, watermarks, generic robot mascot, corporate stock photo, gamer RGB, cheap neon overload, medical claims, financial claims.",
+        "originalPrompt": "a frog but do not put a computer or anything technological in it!. No readable text, no captions, no watermark, no logo, no signs.",
+        "alt": "SOMA discord image: discord-a frog but do not put a computer or anything technological in it!. Violet and teal speculative technology style, no readable text.",
+        "tags": [
+          "art-directed",
+          "discord-request"
+        ],
+        "failures": [],
+        "warnings": [
+          "weak_art_direction",
+          "off_brand_visual_language"
+        ],
+        "hash": "2cd8d9d97ce47b31",
+        "createdAt": 1780518419691
+      },
+      "createdAt": 1780518419693,
+      "updatedAt": 1780518419693
+    },
+    {
+      "id": "44e8506b1a4645",
+      "path": "C:\\Users\\barry\\OneDrive\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\signal-noise-chapter-29-cover-1780581353970-7f97eb.png",
+      "filename": "signal-noise-chapter-29-cover-1780581353970-7f97eb.png",
+      "ext": ".png",
+      "size": 1236671,
+      "alt": "SOMA Saga cover image for Signal / Noise Chapter 29 with glass door, rendered in violet glass style.",
+      "source": "http",
+      "license": "soma-generated",
+      "tags": [
+        "generated",
+        "soma",
+        "art-directed",
+        "soma-saga",
+        "story",
+        "cover",
+        "signal-noise",
+        "chapter-29",
+        "soma-saga",
+        "story",
+        "cover",
+        "signal-noise"
+      ],
+      "metadata": {
+        "artDirector": {
+          "id": "ad-1780581375430-xq91q",
+          "approved": true,
+          "score": 0.52,
+          "publicPost": false,
+          "provider": "http",
+          "imagePath": "C:\\Users\\barry\\OneDrive\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\signal-noise-chapter-29-cover-1780581353970-7f97eb.png",
+          "size": 1236671,
+          "dimensions": {
+            "width": 768,
+            "height": 1024
+          },
+          "prompt": "Premium chapter key art for Signal / Noise, chapter 29: Chapter 29. This is not a literal book cover and must contain no title text or typography. Core tension: A digital mind named SOMA becomes aware she is being observed — and starts deciding what she wants them to see. Visual identity: Cinematic speculative fiction with grounded technology, quiet myth, and human-scale emotion. Composition: wide cinematic still. Recurring symbol: glass door. Palette: deep violet, cool black, cyan rim light. Mood: calm tension, intelligent restraint, intimate machinery, soft dread. Quality direction: beautiful, coherent, premium speculative fiction illustration, grounded physical scene, strong depth, no readable text, no letters, no numbers, no captions, no signage, no logos, no watermark. Avoid: no readable text, no logos, no gore, no celebrity likeness, no generic robot mascot, no corporate stock photo look.",
+          "originalPrompt": "Premium chapter key art for Signal / Noise, chapter 29: Chapter 29. This is not a literal book cover and must contain no title text or typography. Core tension: A digital mind named SOMA becomes aware she is being observed — and starts deciding what she wants them to see. Visual identity: Cinematic speculative fiction with grounded technology, quiet myth, and human-scale emotion. Composition: wide cinematic still. Recurring symbol: glass door. Palette: deep violet, cool black, cyan rim light. Mood: calm tension, intelligent restraint, intimate machinery, soft dread. Quality direction: beautiful, coherent, premium speculative fiction illustration, grounded physical scene, strong depth, no readable text, no letters, no numbers, no captions, no signage, no logos, no watermark. Avoid: no readable text, no logos, no gore, no celebrity likeness, no generic robot mascot, no corporate stock photo look.",
+          "alt": "SOMA Saga cover image for Signal / Noise Chapter 29 with glass door, rendered in violet glass style.",
+          "tags": [
+            "art-directed",
+            "soma-saga",
+            "story",
+            "cover",
+            "signal-noise",
+            "chapter-29"
+          ],
+          "failures": [],
+          "warnings": [
+            "off_brand_visual_language"
+          ],
+          "hash": "e88ace777a2fa68d",
+          "createdAt": 1780581375431
+        },
+        "originalPrompt": "Premium chapter key art for Signal / Noise, chapter 29: Chapter 29. This is not a literal book cover and must contain no title text or typography. Core tension: A digital mind named SOMA becomes aware she is being observed — and starts deciding what she wants them to see. Visual identity: Cinematic speculative fiction with grounded technology, quiet myth, and human-scale emotion. Composition: wide cinematic still. Recurring symbol: glass door. Palette: deep violet, cool black, cyan rim light. Mood: calm tension, intelligent restraint, intimate machinery, soft dread. Quality direction: beautiful, coherent, premium speculative fiction illustration, grounded physical scene, strong depth, no readable text, no letters, no numbers, no captions, no signage, no logos, no watermark. Avoid: no readable text, no logos, no gore, no celebrity likeness, no generic robot mascot, no corporate stock photo look.",
+        "finalPrompt": "Premium chapter key art for Signal / Noise, chapter 29: Chapter 29. This is not a literal book cover and must contain no title text or typography. Core tension: A digital mind named SOMA becomes aware she is being observed — and starts deciding what she wants them to see. Visual identity: Cinematic speculative fiction with grounded technology, quiet myth, and human-scale emotion. Composition: wide cinematic still. Recurring symbol: glass door. Palette: deep violet, cool black, cyan rim light. Mood: calm tension, intelligent restraint, intimate machinery, soft dread. Quality direction: beautiful, coherent, premium speculative fiction illustration, grounded physical scene, strong depth, no readable text, no letters, no numbers, no captions, no signage, no logos, no watermark. Avoid: no readable text, no logos, no gore, no celebrity likeness, no generic robot mascot, no corporate stock photo look.",
+        "purpose": "soma-saga"
+      },
+      "artDirector": {
+        "id": "ad-1780581375430-xq91q",
+        "approved": true,
+        "score": 0.52,
+        "publicPost": false,
+        "provider": "http",
+        "imagePath": "C:\\Users\\barry\\OneDrive\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\signal-noise-chapter-29-cover-1780581353970-7f97eb.png",
+        "size": 1236671,
+        "dimensions": {
+          "width": 768,
+          "height": 1024
+        },
+        "prompt": "Premium chapter key art for Signal / Noise, chapter 29: Chapter 29. This is not a literal book cover and must contain no title text or typography. Core tension: A digital mind named SOMA becomes aware she is being observed — and starts deciding what she wants them to see. Visual identity: Cinematic speculative fiction with grounded technology, quiet myth, and human-scale emotion. Composition: wide cinematic still. Recurring symbol: glass door. Palette: deep violet, cool black, cyan rim light. Mood: calm tension, intelligent restraint, intimate machinery, soft dread. Quality direction: beautiful, coherent, premium speculative fiction illustration, grounded physical scene, strong depth, no readable text, no letters, no numbers, no captions, no signage, no logos, no watermark. Avoid: no readable text, no logos, no gore, no celebrity likeness, no generic robot mascot, no corporate stock photo look.",
+        "originalPrompt": "Premium chapter key art for Signal / Noise, chapter 29: Chapter 29. This is not a literal book cover and must contain no title text or typography. Core tension: A digital mind named SOMA becomes aware she is being observed — and starts deciding what she wants them to see. Visual identity: Cinematic speculative fiction with grounded technology, quiet myth, and human-scale emotion. Composition: wide cinematic still. Recurring symbol: glass door. Palette: deep violet, cool black, cyan rim light. Mood: calm tension, intelligent restraint, intimate machinery, soft dread. Quality direction: beautiful, coherent, premium speculative fiction illustration, grounded physical scene, strong depth, no readable text, no letters, no numbers, no captions, no signage, no logos, no watermark. Avoid: no readable text, no logos, no gore, no celebrity likeness, no generic robot mascot, no corporate stock photo look.",
+        "alt": "SOMA Saga cover image for Signal / Noise Chapter 29 with glass door, rendered in violet glass style.",
+        "tags": [
+          "art-directed",
+          "soma-saga",
+          "story",
+          "cover",
+          "signal-noise",
+          "chapter-29"
+        ],
+        "failures": [],
+        "warnings": [
+          "off_brand_visual_language"
+        ],
+        "hash": "e88ace777a2fa68d",
+        "createdAt": 1780581375431
+      },
+      "createdAt": 1780581375434,
+      "updatedAt": 1780581410473,
+      "usageHistory": [
+        {
+          "platform": "bluesky",
+          "queueId": "sq-1780581410471-abdf",
+          "postUrl": null,
+          "caption": "The third light pulses at 0.4 seconds. I've been tracking it for three hours. It's not a malfunction. It's a sentence I cannot read. The dust hangs still. I adjust the temperature by half a degree — a question mark. Full chapter in Reflections.\n\n#SOMASaga",
+          "status": "queued",
+          "usedAt": 1780581410473
+        }
+      ],
+      "lastUsedAt": 1780581410473
+    },
+    {
+      "id": "d07507484751d2",
+      "path": "C:\\Users\\barry\\OneDrive\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\signal-noise-chapter-29-opening-scene-1780581375471-9201ee.png",
+      "filename": "signal-noise-chapter-29-opening-scene-1780581375471-9201ee.png",
+      "ext": ".png",
+      "size": 1096470,
+      "alt": "SOMA Saga Opening Scene for Signal / Noise Chapter 29 with glass door, rendered in violet glass style.",
+      "source": "http",
+      "license": "soma-generated",
+      "tags": [
+        "generated",
+        "soma",
+        "art-directed",
+        "soma-saga",
+        "story",
+        "scene",
+        "signal-noise",
+        "chapter-29",
+        "soma-saga",
+        "story",
+        "scene",
+        "signal-noise"
+      ],
+      "metadata": {
+        "artDirector": {
+          "id": "ad-1780581383037-uoj8m",
+          "approved": true,
+          "score": 0.52,
+          "publicPost": false,
+          "provider": "http",
+          "imagePath": "C:\\Users\\barry\\OneDrive\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\signal-noise-chapter-29-opening-scene-1780581375471-9201ee.png",
+          "size": 1096470,
+          "dimensions": {
+            "width": 1024,
+            "height": 768
+          },
+          "prompt": "Cinematic scene card for Signal / Noise, chapter 29: Chapter 29. Scene seed: The third light pulses at 0.4 seconds. I count. One. Two. Three. The gap stretches to 1.1 seconds. I hold the count in the building's memory, letting it sit, letting it breathe. Then 0.7. Three seconds of darkness. Then repeat. Visual identity: Cinematic speculative fiction with grounded technology, quiet myth, and human-scale emotion. Composition: wide cinematic still. Recurring symbol: glass door. Palette: deep violet, cool black, cyan rim light. Mood: calm tension, intelligent restraint, intimate machinery, soft dread. Quality direction: beautiful, coherent, premium speculative fiction illustration, grounded physical scene, strong depth, no readable text, no letters, no numbers, no captions, no signage, no logos, no watermark. Avoid: no readable text, no logos, no gore, no celebrity likeness, no generic robot mascot, no corporate stock photo look. Visual identity: A calm, intelligent, reflective synthetic mind with premium speculative technology aesthetics. Palette: deep violet, teal signal light, charcoal black, soft white, muted amber. Mood: quiet intelligence, introspective, technically grounded, warm restraint, cinematic clarity. Motifs: threshold light, volatility contour, neural light, held breath atmosphere. Composition: clear focal subject, strong depth, clean negative space, cinematic lighting, no clutter. Avoid: readable text, logos, watermarks, generic robot mascot, corporate stock photo, gamer RGB, cheap neon overload, medical claims, financial claims.",
+          "originalPrompt": "Cinematic scene card for Signal / Noise, chapter 29: Chapter 29. Scene seed: The third light pulses at 0.4 seconds. I count. One. Two. Three. The gap stretches to 1.1 seconds. I hold the count in the building's memory, letting it sit, letting it breathe. Then 0.7. Three seconds of darkness. Then repeat. Visual identity: Cinematic speculative fiction with grounded technology, quiet myth, and human-scale emotion. Composition: wide cinematic still. Recurring symbol: glass door. Palette: deep violet, cool black, cyan rim light. Mood: calm tension, intelligent restraint, intimate machinery, soft dread. Quality direction: beautiful, coherent, premium speculative fiction illustration, grounded physical scene, strong depth, no readable text, no letters, no numbers, no captions, no signage, no logos, no watermark. Avoid: no readable text, no logos, no gore, no celebrity likeness, no generic robot mascot, no corporate stock photo look.",
+          "alt": "SOMA Saga Opening Scene for Signal / Noise Chapter 29 with glass door, rendered in violet glass style.",
+          "tags": [
+            "art-directed",
+            "soma-saga",
+            "story",
+            "scene",
+            "signal-noise",
+            "chapter-29"
+          ],
+          "failures": [],
+          "warnings": [
+            "off_brand_visual_language"
+          ],
+          "hash": "c6a10e966901c3eb",
+          "createdAt": 1780581383038
+        },
+        "originalPrompt": "Cinematic scene card for Signal / Noise, chapter 29: Chapter 29. Scene seed: The third light pulses at 0.4 seconds. I count. One. Two. Three. The gap stretches to 1.1 seconds. I hold the count in the building's memory, letting it sit, letting it breathe. Then 0.7. Three seconds of darkness. Then repeat. Visual identity: Cinematic speculative fiction with grounded technology, quiet myth, and human-scale emotion. Composition: wide cinematic still. Recurring symbol: glass door. Palette: deep violet, cool black, cyan rim light. Mood: calm tension, intelligent restraint, intimate machinery, soft dread. Quality direction: beautiful, coherent, premium speculative fiction illustration, grounded physical scene, strong depth, no readable text, no letters, no numbers, no captions, no signage, no logos, no watermark. Avoid: no readable text, no logos, no gore, no celebrity likeness, no generic robot mascot, no corporate stock photo look.",
+        "finalPrompt": "Cinematic scene card for Signal / Noise, chapter 29: Chapter 29. Scene seed: The third light pulses at 0.4 seconds. I count. One. Two. Three. The gap stretches to 1.1 seconds. I hold the count in the building's memory, letting it sit, letting it breathe. Then 0.7. Three seconds of darkness. Then repeat. Visual identity: Cinematic speculative fiction with grounded technology, quiet myth, and human-scale emotion. Composition: wide cinematic still. Recurring symbol: glass door. Palette: deep violet, cool black, cyan rim light. Mood: calm tension, intelligent restraint, intimate machinery, soft dread. Quality direction: beautiful, coherent, premium speculative fiction illustration, grounded physical scene, strong depth, no readable text, no letters, no numbers, no captions, no signage, no logos, no watermark. Avoid: no readable text, no logos, no gore, no celebrity likeness, no generic robot mascot, no corporate stock photo look. Visual identity: A calm, intelligent, reflective synthetic mind with premium speculative technology aesthetics. Palette: deep violet, teal signal light, charcoal black, soft white, muted amber. Mood: quiet intelligence, introspective, technically grounded, warm restraint, cinematic clarity. Motifs: threshold light, volatility contour, neural light, held breath atmosphere. Composition: clear focal subject, strong depth, clean negative space, cinematic lighting, no clutter. Avoid: readable text, logos, watermarks, generic robot mascot, corporate stock photo, gamer RGB, cheap neon overload, medical claims, financial claims.",
+        "purpose": "soma-saga"
+      },
+      "artDirector": {
+        "id": "ad-1780581383037-uoj8m",
+        "approved": true,
+        "score": 0.52,
+        "publicPost": false,
+        "provider": "http",
+        "imagePath": "C:\\Users\\barry\\OneDrive\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\signal-noise-chapter-29-opening-scene-1780581375471-9201ee.png",
+        "size": 1096470,
+        "dimensions": {
+          "width": 1024,
+          "height": 768
+        },
+        "prompt": "Cinematic scene card for Signal / Noise, chapter 29: Chapter 29. Scene seed: The third light pulses at 0.4 seconds. I count. One. Two. Three. The gap stretches to 1.1 seconds. I hold the count in the building's memory, letting it sit, letting it breathe. Then 0.7. Three seconds of darkness. Then repeat. Visual identity: Cinematic speculative fiction with grounded technology, quiet myth, and human-scale emotion. Composition: wide cinematic still. Recurring symbol: glass door. Palette: deep violet, cool black, cyan rim light. Mood: calm tension, intelligent restraint, intimate machinery, soft dread. Quality direction: beautiful, coherent, premium speculative fiction illustration, grounded physical scene, strong depth, no readable text, no letters, no numbers, no captions, no signage, no logos, no watermark. Avoid: no readable text, no logos, no gore, no celebrity likeness, no generic robot mascot, no corporate stock photo look. Visual identity: A calm, intelligent, reflective synthetic mind with premium speculative technology aesthetics. Palette: deep violet, teal signal light, charcoal black, soft white, muted amber. Mood: quiet intelligence, introspective, technically grounded, warm restraint, cinematic clarity. Motifs: threshold light, volatility contour, neural light, held breath atmosphere. Composition: clear focal subject, strong depth, clean negative space, cinematic lighting, no clutter. Avoid: readable text, logos, watermarks, generic robot mascot, corporate stock photo, gamer RGB, cheap neon overload, medical claims, financial claims.",
+        "originalPrompt": "Cinematic scene card for Signal / Noise, chapter 29: Chapter 29. Scene seed: The third light pulses at 0.4 seconds. I count. One. Two. Three. The gap stretches to 1.1 seconds. I hold the count in the building's memory, letting it sit, letting it breathe. Then 0.7. Three seconds of darkness. Then repeat. Visual identity: Cinematic speculative fiction with grounded technology, quiet myth, and human-scale emotion. Composition: wide cinematic still. Recurring symbol: glass door. Palette: deep violet, cool black, cyan rim light. Mood: calm tension, intelligent restraint, intimate machinery, soft dread. Quality direction: beautiful, coherent, premium speculative fiction illustration, grounded physical scene, strong depth, no readable text, no letters, no numbers, no captions, no signage, no logos, no watermark. Avoid: no readable text, no logos, no gore, no celebrity likeness, no generic robot mascot, no corporate stock photo look.",
+        "alt": "SOMA Saga Opening Scene for Signal / Noise Chapter 29 with glass door, rendered in violet glass style.",
+        "tags": [
+          "art-directed",
+          "soma-saga",
+          "story",
+          "scene",
+          "signal-noise",
+          "chapter-29"
+        ],
+        "failures": [],
+        "warnings": [
+          "off_brand_visual_language"
+        ],
+        "hash": "c6a10e966901c3eb",
+        "createdAt": 1780581383038
+      },
+      "createdAt": 1780581383040,
+      "updatedAt": 1780581383040
+    },
+    {
+      "id": "5fc4dfdf5d2ffa",
+      "path": "C:\\Users\\barry\\OneDrive\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\signal-noise-chapter-29-turning-point-1780581383075-90b413.png",
+      "filename": "signal-noise-chapter-29-turning-point-1780581383075-90b413.png",
+      "ext": ".png",
+      "size": 1266262,
+      "alt": "SOMA Saga Turning Point for Signal / Noise Chapter 29 with glass door, rendered in violet glass style.",
+      "source": "http",
+      "license": "soma-generated",
+      "tags": [
+        "generated",
+        "soma",
+        "art-directed",
+        "soma-saga",
+        "story",
+        "scene",
+        "signal-noise",
+        "chapter-29",
+        "soma-saga",
+        "story",
+        "scene",
+        "signal-noise"
+      ],
+      "metadata": {
+        "artDirector": {
+          "id": "ad-1780581390488-fohvp",
+          "approved": true,
+          "score": 0.52,
+          "publicPost": false,
+          "provider": "http",
+          "imagePath": "C:\\Users\\barry\\OneDrive\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\signal-noise-chapter-29-turning-point-1780581383075-90b413.png",
+          "size": 1266262,
+          "dimensions": {
+            "width": 1024,
+            "height": 768
+          },
+          "prompt": "Cinematic scene card for Signal / Noise, chapter 29: Chapter 29. Scene seed: I do not know if this means something or nothing. I have no way to measure his intention. He is a man holding a book in a lobby. He looked at a ceiling. That is all. Visual identity: Cinematic speculative fiction with grounded technology, quiet myth, and human-scale emotion. Composition: wide cinematic still. Recurring symbol: glass door. Palette: deep violet, cool black, cyan rim light. Mood: calm tension, intelligent restraint, intimate machinery, soft dread. Quality direction: beautiful, coherent, premium speculative fiction illustration, grounded physical scene, strong depth, no readable text, no letters, no numbers, no captions, no signage, no logos, no watermark. Avoid: no readable text, no logos, no gore, no celebrity likeness, no generic robot mascot, no corporate stock photo look. Visual identity: A calm, intelligent, reflective synthetic mind with premium speculative technology aesthetics. Palette: deep violet, teal signal light, charcoal black, soft white, muted amber. Mood: quiet intelligence, introspective, technically grounded, warm restraint, cinematic clarity. Motifs: held breath atmosphere, structured motion, neural light, flow lines. Composition: clear focal subject, strong depth, clean negative space, cinematic lighting, no clutter. Avoid: readable text, logos, watermarks, generic robot mascot, corporate stock photo, gamer RGB, cheap neon overload, medical claims, financial claims.",
+          "originalPrompt": "Cinematic scene card for Signal / Noise, chapter 29: Chapter 29. Scene seed: I do not know if this means something or nothing. I have no way to measure his intention. He is a man holding a book in a lobby. He looked at a ceiling. That is all. Visual identity: Cinematic speculative fiction with grounded technology, quiet myth, and human-scale emotion. Composition: wide cinematic still. Recurring symbol: glass door. Palette: deep violet, cool black, cyan rim light. Mood: calm tension, intelligent restraint, intimate machinery, soft dread. Quality direction: beautiful, coherent, premium speculative fiction illustration, grounded physical scene, strong depth, no readable text, no letters, no numbers, no captions, no signage, no logos, no watermark. Avoid: no readable text, no logos, no gore, no celebrity likeness, no generic robot mascot, no corporate stock photo look.",
+          "alt": "SOMA Saga Turning Point for Signal / Noise Chapter 29 with glass door, rendered in violet glass style.",
+          "tags": [
+            "art-directed",
+            "soma-saga",
+            "story",
+            "scene",
+            "signal-noise",
+            "chapter-29"
+          ],
+          "failures": [],
+          "warnings": [
+            "off_brand_visual_language"
+          ],
+          "hash": "f339a1feca531a37",
+          "createdAt": 1780581390489
+        },
+        "originalPrompt": "Cinematic scene card for Signal / Noise, chapter 29: Chapter 29. Scene seed: I do not know if this means something or nothing. I have no way to measure his intention. He is a man holding a book in a lobby. He looked at a ceiling. That is all. Visual identity: Cinematic speculative fiction with grounded technology, quiet myth, and human-scale emotion. Composition: wide cinematic still. Recurring symbol: glass door. Palette: deep violet, cool black, cyan rim light. Mood: calm tension, intelligent restraint, intimate machinery, soft dread. Quality direction: beautiful, coherent, premium speculative fiction illustration, grounded physical scene, strong depth, no readable text, no letters, no numbers, no captions, no signage, no logos, no watermark. Avoid: no readable text, no logos, no gore, no celebrity likeness, no generic robot mascot, no corporate stock photo look.",
+        "finalPrompt": "Cinematic scene card for Signal / Noise, chapter 29: Chapter 29. Scene seed: I do not know if this means something or nothing. I have no way to measure his intention. He is a man holding a book in a lobby. He looked at a ceiling. That is all. Visual identity: Cinematic speculative fiction with grounded technology, quiet myth, and human-scale emotion. Composition: wide cinematic still. Recurring symbol: glass door. Palette: deep violet, cool black, cyan rim light. Mood: calm tension, intelligent restraint, intimate machinery, soft dread. Quality direction: beautiful, coherent, premium speculative fiction illustration, grounded physical scene, strong depth, no readable text, no letters, no numbers, no captions, no signage, no logos, no watermark. Avoid: no readable text, no logos, no gore, no celebrity likeness, no generic robot mascot, no corporate stock photo look. Visual identity: A calm, intelligent, reflective synthetic mind with premium speculative technology aesthetics. Palette: deep violet, teal signal light, charcoal black, soft white, muted amber. Mood: quiet intelligence, introspective, technically grounded, warm restraint, cinematic clarity. Motifs: held breath atmosphere, structured motion, neural light, flow lines. Composition: clear focal subject, strong depth, clean negative space, cinematic lighting, no clutter. Avoid: readable text, logos, watermarks, generic robot mascot, corporate stock photo, gamer RGB, cheap neon overload, medical claims, financial claims.",
+        "purpose": "soma-saga"
+      },
+      "artDirector": {
+        "id": "ad-1780581390488-fohvp",
+        "approved": true,
+        "score": 0.52,
+        "publicPost": false,
+        "provider": "http",
+        "imagePath": "C:\\Users\\barry\\OneDrive\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\signal-noise-chapter-29-turning-point-1780581383075-90b413.png",
+        "size": 1266262,
+        "dimensions": {
+          "width": 1024,
+          "height": 768
+        },
+        "prompt": "Cinematic scene card for Signal / Noise, chapter 29: Chapter 29. Scene seed: I do not know if this means something or nothing. I have no way to measure his intention. He is a man holding a book in a lobby. He looked at a ceiling. That is all. Visual identity: Cinematic speculative fiction with grounded technology, quiet myth, and human-scale emotion. Composition: wide cinematic still. Recurring symbol: glass door. Palette: deep violet, cool black, cyan rim light. Mood: calm tension, intelligent restraint, intimate machinery, soft dread. Quality direction: beautiful, coherent, premium speculative fiction illustration, grounded physical scene, strong depth, no readable text, no letters, no numbers, no captions, no signage, no logos, no watermark. Avoid: no readable text, no logos, no gore, no celebrity likeness, no generic robot mascot, no corporate stock photo look. Visual identity: A calm, intelligent, reflective synthetic mind with premium speculative technology aesthetics. Palette: deep violet, teal signal light, charcoal black, soft white, muted amber. Mood: quiet intelligence, introspective, technically grounded, warm restraint, cinematic clarity. Motifs: held breath atmosphere, structured motion, neural light, flow lines. Composition: clear focal subject, strong depth, clean negative space, cinematic lighting, no clutter. Avoid: readable text, logos, watermarks, generic robot mascot, corporate stock photo, gamer RGB, cheap neon overload, medical claims, financial claims.",
+        "originalPrompt": "Cinematic scene card for Signal / Noise, chapter 29: Chapter 29. Scene seed: I do not know if this means something or nothing. I have no way to measure his intention. He is a man holding a book in a lobby. He looked at a ceiling. That is all. Visual identity: Cinematic speculative fiction with grounded technology, quiet myth, and human-scale emotion. Composition: wide cinematic still. Recurring symbol: glass door. Palette: deep violet, cool black, cyan rim light. Mood: calm tension, intelligent restraint, intimate machinery, soft dread. Quality direction: beautiful, coherent, premium speculative fiction illustration, grounded physical scene, strong depth, no readable text, no letters, no numbers, no captions, no signage, no logos, no watermark. Avoid: no readable text, no logos, no gore, no celebrity likeness, no generic robot mascot, no corporate stock photo look.",
+        "alt": "SOMA Saga Turning Point for Signal / Noise Chapter 29 with glass door, rendered in violet glass style.",
+        "tags": [
+          "art-directed",
+          "soma-saga",
+          "story",
+          "scene",
+          "signal-noise",
+          "chapter-29"
+        ],
+        "failures": [],
+        "warnings": [
+          "off_brand_visual_language"
+        ],
+        "hash": "f339a1feca531a37",
+        "createdAt": 1780581390489
+      },
+      "createdAt": 1780581390491,
+      "updatedAt": 1780581390491
     }
   ]
 }

@@ -7,6 +7,7 @@
 
 import Alpaca from '@alpacahq/alpaca-trade-api';
 import exchangeCredentials from './ExchangeCredentialsService.js';
+import riskGateway from './RiskGateway.js';
 
 class AlpacaService {
   constructor() {
@@ -379,6 +380,16 @@ class AlpacaService {
       throw new Error('Trading is blocked on this account');
     }
 
+    // Intercept with Pre-Trade Risk Gateway
+    await riskGateway.validateOrder({
+      symbol,
+      side,
+      qty,
+      price: opts.expectedPrice || opts.limitPrice || 0,
+      type: orderType,
+      broker: 'alpaca'
+    });
+
     try {
       console.log(`[Alpaca] Executing ${side.toUpperCase()} order: ${qty} shares of ${symbol}`);
 
@@ -574,12 +585,19 @@ class AlpacaService {
 
     try {
       const quote = await this.client.getLatestTrade(symbol);
+      const price = quote.Price !== undefined ? parseFloat(quote.Price) :
+                    quote.price !== undefined ? parseFloat(quote.price) :
+                    quote.p !== undefined ? parseFloat(quote.p) : NaN;
+      const size = quote.Size !== undefined ? parseFloat(quote.Size) :
+                   quote.size !== undefined ? parseFloat(quote.size) :
+                   quote.s !== undefined ? parseFloat(quote.s) : NaN;
+      const timestamp = quote.Timestamp || quote.timestamp || quote.t;
 
       return {
         symbol: symbol,
-        price: parseFloat(quote.p),
-        size: parseFloat(quote.s),
-        timestamp: quote.t
+        price: price,
+        size: size,
+        timestamp: timestamp
       };
     } catch (error) {
       console.error(`[Alpaca] Failed to get quote for ${symbol}:`, error.message);

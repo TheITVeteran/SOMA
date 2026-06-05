@@ -45,6 +45,7 @@ class KevinSMSService extends EventEmitter {
         // User configuration
         this.config = {
             enabled: false,
+            provider: 'gateway', // 'gateway' or 'twilio'
             phoneNumber: null,
             carrier: null,
             carrierGateway: null,
@@ -79,6 +80,11 @@ class KevinSMSService extends EventEmitter {
         // Scheduled job reference
         this.morningJob = null;
 
+        // Twilio Polling
+        this.twilioPollInterval = null;
+        this.processedTwilioSids = new Set();
+        this.isFirstPoll = true;
+
         this._loadConfig();
     }
 
@@ -90,7 +96,10 @@ class KevinSMSService extends EventEmitter {
                 console.log('[KevinSMS] Loaded configuration');
 
                 if (this.config.enabled && this.config.phoneNumber) {
-                    console.log(`[KevinSMS] SMS enabled for: ${this._maskPhone(this.config.phoneNumber)}`);
+                    console.log(`[KevinSMS] SMS enabled for: ${this._maskPhone(this.config.phoneNumber)} (Provider: ${this.config.provider})`);
+                    if (this.config.provider === 'twilio') {
+                        this._startTwilioPoll();
+                    }
                 }
             }
         } catch (e) {
@@ -109,6 +118,194 @@ class KevinSMSService extends EventEmitter {
             console.error('[KevinSMS] Failed to save config:', e.message);
         }
     }
+
+    cleanup() {
+        this._stopTwilioPoll();
+        if (this.morningJob) {
+            clearTimeout(this.morningJob);
+            this.morningJob = null;
+        }
+    }
+
+    _startTwilioPoll() {
+        this._stopTwilioPoll();
+        
+        if (!this.config.enabled || this.config.provider !== 'twilio') {
+            return;
+        }
+
+        // Poll immediately
+        this._pollTwilioReplies().catch(e => {
+            console.error('[KevinSMS] Initial Twilio poll failed:', e.message);
+        });
+
+        // Then poll every 15 seconds to be polite but responsive
+        this.twilioPollInterval = setInterval(() => {
+            this._pollTwilioReplies().catch(e => {
+                console.error('[KevinSMS] Twilio poll failed:', e.message);
+            });
+        }, 15000);
+        console.log('[KevinSMS] Started Twilio polling interval (15s)');
+    }
+
+    _stopTwilioPoll() {
+        if (this.twilioPollInterval) {
+            clearInterval(this.twilioPollInterval);
+            this.twilioPollInterval = null;
+            console.log('[KevinSMS] Stopped Twilio polling interval');
+        }
+    }
+
+    async _pollTwilioReplies() {
+        const accountSid = process.env.TWILIO_ACCOUNT_SID;
+        const authToken = process.env.TWILIO_AUTH_TOKEN;
+        const twilioPhone = process.env.TWILIO_PHONE_NUMBER;
+
+        if (!accountSid || !authToken || !twilioPhone) {
+            return;
+        }
+
+        const normalizedFrom = twilioPhone.startsWith('+') ? twilioPhone : `+1${twilioPhone.replace(/\D/g, '')}`;
+
+        return new Promise((resolve) => {
+            const queryParams = new URLSearchParams({
+                To: normalizedFrom,
+                PageSize: '10'
+            }).toString();
+
+            const req = https.request({
+                method: 'GET',
+                hostname: 'api.twilio.com',
+                path: `/2010-04-01/Accounts/${accountSid}/Messages.json?${queryParams}`,
+                headers: {
+                    'Authorization': 'Basic ' + Buffer.from(`${accountSid}:${authToken}`).toString('base64'),
+                    'Accept': 'application/json'
+                }
+            }, (res) => {
+                let data = '';
+                res.on('data', (chunk) => data += chunk);
+                res.on('end', () => {
+                    try {
+                        if (res.statusCode < 200 || res.statusCode >= 300) {
+                            console.error(`[KevinSMS] Twilio poll error status ${res.statusCode}`);
+                            resolve();
+                            return;
+                        }
+                        const parsed = JSON.parse(data);
+                        const messages = parsed.messages || [];
+
+                        for (const msg of messages) {
+                            if (msg.direction === 'inbound') {
+                                if (this.processedTwilioSids.has(msg.sid)) {
+                                    continue;
+                                }
+
+                                this.processedTwilioSids.add(msg.sid);
+
+                                // On first poll, populate cache to avoid retroactively triggering old texts
+                                if (this.isFirstPoll) {
+                                    continue;
+                                }
+
+                                const cleanMessage = msg.body || '';
+                                const fromPhone = msg.from;
+
+                                console.log(`[KevinSMS] Received Twilio SMS from ${fromPhone}: "${cleanMessage}"`);
+
+                                this.messageHistory.push({
+                                    direction: 'inbound',
+                                    message: cleanMessage,
+                                    timestamp: new Date(msg.date_sent || msg.date_created).toISOString(),
+                                    type: 'chat'
+                                });
+
+                                if (this.messageHistory.length > 100) {
+                                    this.messageHistory = this.messageHistory.slice(-100);
+                                }
+
+                                this.emit('sms:received', {
+                                    message: cleanMessage,
+                                    from: fromPhone,
+                                    timestamp: new Date(msg.date_sent || msg.date_created).toISOString()
+                                });
+                            }
+                        }
+
+                        if (this.isFirstPoll) {
+                            this.isFirstPoll = false;
+                        }
+
+                        resolve();
+                    } catch (e) {
+                        console.error('[KevinSMS] Failed to parse Twilio poll response:', e.message);
+                        resolve();
+                    }
+                });
+            });
+
+            req.on('error', (err) => {
+                console.error('[KevinSMS] Twilio poll request error:', err.message);
+                resolve();
+            });
+
+            req.end();
+        });
+    }
+
+    async _sendTwilioSMS(to, body) {
+        const accountSid = process.env.TWILIO_ACCOUNT_SID;
+        const authToken = process.env.TWILIO_AUTH_TOKEN;
+        const fromNumber = process.env.TWILIO_PHONE_NUMBER;
+
+        if (!accountSid || !authToken || !fromNumber) {
+            return { success: false, error: 'Twilio credentials not configured in .env' };
+        }
+
+        const normalizedTo = to.startsWith('+') ? to : `+1${to.replace(/\D/g, '')}`;
+        const normalizedFrom = fromNumber.startsWith('+') ? fromNumber : `+1${fromNumber.replace(/\D/g, '')}`;
+
+        const postData = new URLSearchParams({
+            To: normalizedTo,
+            From: normalizedFrom,
+            Body: body
+        }).toString();
+
+        return new Promise((resolve) => {
+            const req = https.request({
+                method: 'POST',
+                hostname: 'api.twilio.com',
+                path: `/2010-04-01/Accounts/${accountSid}/Messages.json`,
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'Content-Length': Buffer.byteLength(postData),
+                    'Authorization': 'Basic ' + Buffer.from(`${accountSid}:${authToken}`).toString('base64')
+                }
+            }, (res) => {
+                let data = '';
+                res.on('data', (chunk) => data += chunk);
+                res.on('end', () => {
+                    try {
+                        const parsed = JSON.parse(data);
+                        if (res.statusCode >= 200 && res.statusCode < 300) {
+                            resolve({ success: true, sid: parsed.sid });
+                        } else {
+                            resolve({ success: false, error: parsed.message || `Twilio error: ${res.statusCode}` });
+                        }
+                    } catch (e) {
+                        resolve({ success: false, error: `Invalid response format: ${e.message}` });
+                    }
+                });
+            });
+
+            req.on('error', (err) => {
+                resolve({ success: false, error: err.message });
+            });
+
+            req.write(postData);
+            req.end();
+        });
+    }
+
 
     _maskPhone(phone) {
         if (!phone) return 'none';
@@ -188,7 +385,11 @@ class KevinSMSService extends EventEmitter {
      */
     async configure(settings) {
         console.log('[KevinSMS] Configuring SMS settings...');
-        const { phoneNumber, carrier, morningBriefing } = settings;
+        const { phoneNumber, carrier, provider, morningBriefing } = settings;
+
+        if (provider) {
+            this.config.provider = provider;
+        }
 
         if (phoneNumber) {
             const normalized = this._normalizePhone(phoneNumber);
@@ -214,13 +415,24 @@ class KevinSMSService extends EventEmitter {
             Object.assign(this.config.morningBriefing, morningBriefing);
         }
 
-        // Enable if we have both phone and carrier
-        if (this.config.phoneNumber && this.config.carrier) {
-            this.config.enabled = true;
+        // Enable check
+        if (this.config.phoneNumber) {
+            if (this.config.provider === 'twilio') {
+                this.config.enabled = true;
+            } else if (this.config.provider === 'gateway' && this.config.carrier) {
+                this.config.enabled = true;
+            }
         }
 
         this._saveConfig();
         console.log('[KevinSMS] Configuration saved');
+
+        // Manage Twilio Poll Loop
+        if (this.config.enabled && this.config.provider === 'twilio') {
+            this._startTwilioPoll();
+        } else {
+            this._stopTwilioPoll();
+        }
 
         // Schedule morning briefing if enabled
         if (this.config.morningBriefing.enabled) {
@@ -232,8 +444,9 @@ class KevinSMSService extends EventEmitter {
         return {
             success: true,
             enabled: this.config.enabled,
+            provider: this.config.provider,
             phoneNumber: this._maskPhone(this.config.phoneNumber),
-            carrier: CARRIER_GATEWAYS[this.config.carrier]?.name,
+            carrier: this.config.carrier ? CARRIER_GATEWAYS[this.config.carrier]?.name : null,
             morningBriefing: this.config.morningBriefing
         };
     }
@@ -244,6 +457,7 @@ class KevinSMSService extends EventEmitter {
     getConfig() {
         return {
             enabled: this.config.enabled,
+            provider: this.config.provider || 'gateway',
             phoneNumber: this._maskPhone(this.config.phoneNumber),
             carrier: this.config.carrier ? CARRIER_GATEWAYS[this.config.carrier]?.name : null,
             carrierId: this.config.carrier,
@@ -281,11 +495,6 @@ class KevinSMSService extends EventEmitter {
             return { success: false, error: 'Rate limit exceeded' };
         }
 
-        const smsEmail = this.getSMSEmailAddress();
-        if (!smsEmail) {
-            return { success: false, error: 'SMS gateway not configured' };
-        }
-
         // Truncate message if too long
         let truncatedMessage = message;
         if (message.length > this.config.maxMessageLength) {
@@ -297,60 +506,104 @@ class KevinSMSService extends EventEmitter {
             ? truncatedMessage
             : `${truncatedMessage}\n-KEVIN`;
 
-        try {
-            // Use email manager to send
-            if (!this.emailManager) {
-                console.error('[KevinSMS] Email manager not available');
-                return { success: false, error: 'Email manager not available. Configure email credentials first.' };
-            }
+        if (this.config.provider === 'twilio') {
+            try {
+                console.log(`[KevinSMS] Sending SMS via Twilio to: ${this.config.phoneNumber}`);
+                const result = await this._sendTwilioSMS(this.config.phoneNumber, formattedMessage);
 
-            // Check if email credentials are configured
-            if (!process.env.EMAIL_ADDRESS || !process.env.APP_PASSWORD) {
-                console.error('[KevinSMS] Email credentials not configured');
-                return { 
-                    success: false, 
-                    error: 'Email credentials not configured. Set EMAIL_ADDRESS and APP_PASSWORD in .env to enable SMS.' 
-                };
-            }
+                if (result.success) {
+                    this.messageCount++;
 
-            console.log(`[KevinSMS] Sending SMS to: ${smsEmail}`);
-            const result = await this.emailManager.sendEmail(
-                smsEmail,
-                '', // SMS gateways ignore subject
-                formattedMessage,
-                { isPlainText: true }
-            );
+                    // Log message
+                    this.messageHistory.push({
+                        direction: 'outbound',
+                        message: truncatedMessage,
+                        timestamp: new Date().toISOString(),
+                        type: options.type || 'general'
+                    });
 
-            if (result.success) {
-                this.messageCount++;
+                    // Keep history limited
+                    if (this.messageHistory.length > 100) {
+                        this.messageHistory = this.messageHistory.slice(-100);
+                    }
 
-                // Log message
-                this.messageHistory.push({
-                    direction: 'outbound',
-                    message: truncatedMessage,
-                    timestamp: new Date().toISOString(),
-                    type: options.type || 'general'
-                });
-
-                // Keep history limited
-                if (this.messageHistory.length > 100) {
-                    this.messageHistory = this.messageHistory.slice(-100);
+                    console.log('[KevinSMS] Twilio SMS sent successfully');
+                    this.emit('sms:sent', { message: truncatedMessage });
+                } else {
+                    console.error('[KevinSMS] Failed to send Twilio SMS:', result.error);
                 }
 
-                console.log('[KevinSMS] SMS sent successfully');
-                this.emit('sms:sent', { message: truncatedMessage });
-            } else {
-                console.error('[KevinSMS] Failed to send SMS:', result.error);
+                return result;
+
+            } catch (error) {
+                console.error('[KevinSMS] Twilio send error:', error.message);
+                return {
+                    success: false,
+                    error: `Failed to send SMS via Twilio: ${error.message}`
+                };
+            }
+        } else {
+            // Gateway provider
+            const smsEmail = this.getSMSEmailAddress();
+            if (!smsEmail) {
+                return { success: false, error: 'SMS gateway not configured' };
             }
 
-            return result;
+            try {
+                // Use email manager to send
+                if (!this.emailManager) {
+                    console.error('[KevinSMS] Email manager not available');
+                    return { success: false, error: 'Email manager not available. Configure email credentials first.' };
+                }
 
-        } catch (error) {
-            console.error('[KevinSMS] Send error:', error.message);
-            return { 
-                success: false, 
-                error: `Failed to send SMS: ${error.message}. Ensure email credentials are valid.` 
-            };
+                // Check if email credentials are configured
+                if (!process.env.EMAIL_ADDRESS || !process.env.APP_PASSWORD) {
+                    console.error('[KevinSMS] Email credentials not configured');
+                    return { 
+                        success: false, 
+                        error: 'Email credentials not configured. Set EMAIL_ADDRESS and APP_PASSWORD in .env to enable SMS.' 
+                    };
+                }
+
+                console.log(`[KevinSMS] Sending SMS via gateway to: ${smsEmail}`);
+                const result = await this.emailManager.sendEmail(
+                    smsEmail,
+                    '', // SMS gateways ignore subject
+                    formattedMessage,
+                    { isPlainText: true }
+                );
+
+                if (result.success) {
+                    this.messageCount++;
+
+                    // Log message
+                    this.messageHistory.push({
+                        direction: 'outbound',
+                        message: truncatedMessage,
+                        timestamp: new Date().toISOString(),
+                        type: options.type || 'general'
+                    });
+
+                    // Keep history limited
+                    if (this.messageHistory.length > 100) {
+                        this.messageHistory = this.messageHistory.slice(-100);
+                    }
+
+                    console.log('[KevinSMS] SMS gateway message sent successfully');
+                    this.emit('sms:sent', { message: truncatedMessage });
+                } else {
+                    console.error('[KevinSMS] Failed to send SMS via gateway:', result.error);
+                }
+
+                return result;
+
+            } catch (error) {
+                console.error('[KevinSMS] Gateway send error:', error.message);
+                return { 
+                    success: false, 
+                    error: `Failed to send SMS via gateway: ${error.message}. Ensure email credentials are valid.` 
+                };
+            }
         }
     }
 

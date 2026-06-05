@@ -1,0 +1,69 @@
+{
+  "version": 1,
+  "name": "SOMA Saga Visual Style Bible",
+  "identity": "Cinematic speculative fiction with grounded technology, quiet myth, and human-scale emotion.",
+  "mood": [
+    "calm tension",
+    "intelligent restraint",
+    "intimate machinery",
+    "soft dread",
+    "earned wonder"
+  ],
+  "palette": [
+    {
+      "name": "violet glass",
+      "colors": [
+        "deep violet",
+        "cool black",
+        "cyan rim light"
+      ]
+    },
+    {
+      "name": "signal dusk",
+      "colors": [
+        "indigo",
+        "warm amber",
+        "rain-washed slate"
+      ]
+    },
+    {
+      "name": "terminal moon",
+      "colors": [
+        "charcoal",
+        "pale green",
+        "silver white"
+      ]
+    },
+    {
+      "name": "memory bloom",
+      "colors": [
+        "muted magenta",
+        "blue gray",
+        "soft teal"
+      ]
+    }
+  ],
+  "recurringSymbols": [
+    "glass door",
+    "server light",
+    "thread of signal",
+    "unopened message",
+    "reflection in dark screen",
+    "room lit by a monitor"
+  ],
+  "composition": [
+    "wide cinematic still",
+    "close human detail",
+    "symmetrical threshold",
+    "over-the-shoulder terminal view",
+    "quiet object as omen"
+  ],
+  "bans": [
+    "no readable text",
+    "no logos",
+    "no gore",
+    "no celebrity likeness",
+    "no generic robot mascot",
+    "no corporate stock photo look"
+  ]
+}

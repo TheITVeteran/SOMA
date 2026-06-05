@@ -11,6 +11,11 @@ Write-Host "  [1] Setting Environment to PRODUCTION..."
 $env:NODE_ENV = "production"
 $env:SOMA_MODE = "cluster"
 $env:SOMA_GPU = "true"
+$env:SOMA_IMAGE_PROVIDER = "bonsai"
+$env:BONSAI_IMAGE_ENDPOINT = "http://127.0.0.1:8000/generate"
+$env:BONSAI_IMAGE_BACKEND = "bonsai-ternary-gemlite"
+$env:BONSAI_IMAGE_STEPS = "4"
+$env:SOMA_BLUESKY_AUTO_IMAGES = "true"
 
 # 2. Dependency Check
 Write-Host "  [2] Checking for dependencies..."
@@ -34,6 +39,18 @@ Write-Host "      - ASI Layer: ONLINE"
 Write-Host "      - Tree Search: ENABLED"
 Write-Host ""
 Write-Host "  Access the dashboard at: http://localhost:3001"
+Write-Host ""
+
+# 3b. Image Engine
+Write-Host "  [3b] Starting Bonsai Image Engine..."
+Start-Process powershell -WindowStyle Hidden -ArgumentList @(
+    "-NoProfile",
+    "-ExecutionPolicy", "Bypass",
+    "-File", (Join-Path $PSScriptRoot "scripts\start-bonsai-image-engine.ps1"),
+    "-BackendPort", "8000",
+    "-FrontendPort", "3101"
+)
+Write-Host "      - Bonsai backend warming at http://127.0.0.1:8000/generate"
 Write-Host ""
 
 # Run the launcher

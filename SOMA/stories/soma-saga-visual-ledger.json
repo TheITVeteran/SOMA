@@ -1,0 +1,42 @@
+{
+  "generated": [
+    {
+      "storyTitle": "Signal / Noise",
+      "chapter": 29,
+      "chapterTitle": "Chapter 29",
+      "createdAt": "2026-06-04T13:55:53.965Z",
+      "cover": "C:\\Users\\barry\\OneDrive\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\signal-noise-chapter-29-cover-1780581353970-7f97eb.png",
+      "scenes": [
+        "C:\\Users\\barry\\OneDrive\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\signal-noise-chapter-29-opening-scene-1780581375471-9201ee.png",
+        "C:\\Users\\barry\\OneDrive\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\signal-noise-chapter-29-turning-point-1780581383075-90b413.png"
+      ],
+      "quality": {
+        "passed": false,
+        "failures": [
+          "Cover: over_bluesky_blob_limit",
+          "Opening Scene: over_bluesky_blob_limit",
+          "Turning Point: over_bluesky_blob_limit"
+        ],
+        "checkedAt": "2026-06-04T13:56:30.523Z"
+      }
+    }
+  ],
+  "rotations": [
+    {
+      "storyTitle": "Signal / Noise",
+      "chapter": 29,
+      "palette": "violet glass",
+      "symbol": "glass door",
+      "composition": "wide cinematic still",
+      "createdAt": "2026-06-04T13:55:53.965Z"
+    }
+  ],
+  "feedback": [
+    {
+      "storyTitle": "Signal / Noise",
+      "chapter": 29,
+      "note": "- **Visual fit:** The violet glass door image aligns with the chapter's sterile, contained atmosphere and the building-as-body metaphor, but the glass material risks feeling too decorative for a scene about raw data and fear.\n- **Story insight:** The cover offers no visual clue about the pulsing light sequence or the protagonist's decoding struggle, missing a key opportunity to hint at the unknown language and the building's sentient tension.\n- **Revision risk:** The elegant glass aesthetic may overclaim sophistication, undercutting the chapter's gritty, obsessive uncertainty — consider a more abstract or fragmented light pattern to avoid misleading readers about the tone.",
+      "createdAt": "2026-06-04T13:56:33.331Z"
+    }
+  ]
+}

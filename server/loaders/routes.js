@@ -1,4 +1,4 @@
-﻿import os from 'os';
+import os from 'os';
 import path from 'path';
 import fs from 'fs/promises';
 import { exec } from 'child_process';
@@ -10,6 +10,12 @@ const { buildQualityReport, verifyGoal } = require('../../core/GoalQualityGate.c
 const workLedger = require('../../core/AutonomousWorkLedger.cjs');
 import { ContentExtractor } from '../utils/ContentExtractor.js';
 import { requireEnterpriseAuth } from '../loaders/authMiddleware.js';
+import { listArtifacts, recordArtifact } from '../context/ArtifactRegistry.js';
+import { buildSomaContext } from '../context/SomaContextKernel.js';
+import { verifyClaims } from '../context/ClaimVerifier.js';
+import { ensurePublicIdentityLedger, updatePublicIdentityLedger } from '../context/PublicIdentityLedger.js';
+import { distillReflection, readDistilledReflections } from '../context/ReflectionDistiller.js';
+import { reasonGrounded, guardSomaText } from '../context/GroundedReasoning.js';
 import financeRoutes from '../../server/finance/financeRoutes.js';
 import marketDataRoutes from '../../server/finance/marketDataRoutes.js';
 import scalpingRoutes from '../../server/finance/scalpingRoutes.js';
@@ -34,6 +40,7 @@ import knowledgeRoutes from '../../server/routes/knowledgeRoutes.js';
 import researchRoutes from '../../server/routes/researchRoutes.js';
 import somaRoutes from '../../server/routes/somaRoutes.js';
 import notificationRoutes from '../../server/routes/notificationRoutes.js';
+import riskGatewayRoutes from '../../server/routes/riskGatewayRoutes.js';
 import perceptionRoutes from '../../server/routes/perceptionRoutes.js';
 import createAxisRoutes from '../../server/routes/axisRoutes.js';
 import createProjectRoutes from '../../server/routes/projectRoutes.js';
@@ -44,6 +51,7 @@ import createWorkspaceRoutes from '../../server/routes/workspaceRoutes.js';
 import createStudioRoutes from '../../server/routes/studioRoutes.js';
 import createThirdPlaceRoutes from '../../server/routes/thirdPlaceRoutes.js';
 import createApertureRoutes from '../../server/routes/apertureRoutes.js';
+import createGmnRoutes from '../../server/routes/gmnRoutes.js';
 import { toggleAutopilot, getAutopilotStatus } from './extended.js';
 import { buildSystemSnapshot } from '../utils/systemState.js';
 import { executeCommand } from '../utils/commandRouter.js';
@@ -523,6 +531,84 @@ export async function loadRoutes(app, system) {
         }
     });
 
+    app.get('/api/soma/artifacts', async (req, res) => {
+        try {
+            const artifacts = await listArtifacts({
+                query: String(req.query.q || ''),
+                limit: Number(req.query.limit || 40),
+                includeCode: req.query.includeCode !== 'false'
+            });
+            res.json({ success: true, artifacts });
+        } catch (error) {
+            res.status(500).json({ success: false, error: error.message });
+        }
+    });
+
+    app.post('/api/soma/artifacts', async (req, res) => {
+        try {
+            const artifact = await recordArtifact(req.body || {});
+            res.json({ success: true, artifact });
+        } catch (error) {
+            res.status(500).json({ success: false, error: error.message });
+        }
+    });
+
+    app.post('/api/soma/context', async (req, res) => {
+        try {
+            const { query = '', force = true } = req.body || {};
+            const context = await buildSomaContext(query, {
+                force,
+                mnemonic: system.mnemonicArbiter || system.mnemonic,
+                includeUser: true
+            });
+            res.json({ success: true, context });
+        } catch (error) {
+            res.status(500).json({ success: false, error: error.message });
+        }
+    });
+
+    app.post('/api/soma/claims/verify', async (req, res) => {
+        try {
+            const verdict = await verifyClaims(req.body?.text || '', { query: req.body?.query || req.body?.text || '' });
+            res.json({ success: true, verdict });
+        } catch (error) {
+            res.status(500).json({ success: false, error: error.message });
+        }
+    });
+
+    app.get('/api/soma/public-identity', async (_req, res) => {
+        try {
+            res.json({ success: true, ledger: await ensurePublicIdentityLedger() });
+        } catch (error) {
+            res.status(500).json({ success: false, error: error.message });
+        }
+    });
+
+    app.put('/api/soma/public-identity', async (req, res) => {
+        try {
+            res.json({ success: true, ledger: await updatePublicIdentityLedger(req.body || {}) });
+        } catch (error) {
+            res.status(500).json({ success: false, error: error.message });
+        }
+    });
+
+    app.post('/api/soma/reflections/distill-action', async (req, res) => {
+        try {
+            const packet = await distillReflection(req.body || {});
+            res.json({ success: true, packet });
+        } catch (error) {
+            res.status(500).json({ success: false, error: error.message });
+        }
+    });
+
+    app.get('/api/soma/reflections/distilled', async (req, res) => {
+        try {
+            res.json({ success: true, packets: await readDistilledReflections(Number(req.query.limit || 25)) });
+        } catch (error) {
+            res.status(500).json({ success: false, error: error.message });
+        }
+    });
+
     app.post('/api/soma/reason', async (req, res) => {
         try {
             const { query, conversationId, context: reqContext } = req.body;
@@ -623,9 +709,20 @@ export async function loadRoutes(app, system) {
             }
 
             const actionCapabilityContext = buildActionCapabilityContext();
+            let somaKernelContext = '';
+            try {
+                const kernel = await Promise.race([
+                    buildSomaContext(query, {
+                        mnemonic: system.mnemonicArbiter || system.mnemonic,
+                        includeUser: true
+                    }),
+                    new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 2500))
+                ]);
+                if (kernel) somaKernelContext = `\n${kernel}\n`;
+            } catch {}
 
             // 4. Reasoning
-            const finalPrompt = `${personaContext}${awarenessContext}${actionCapabilityContext}${expertiseContext}${memoryContext}\n${query}`;
+            const finalPrompt = `${personaContext}${awarenessContext}${actionCapabilityContext}${expertiseContext}${memoryContext}${somaKernelContext}\n${query}`;
             console.log(`[ReasonRoute] ðŸ§  Calling Brain (${brain.name}) with prompt length: ${finalPrompt.length}`);
             
             const result = await brain.reason(finalPrompt, {
@@ -674,6 +771,11 @@ export async function loadRoutes(app, system) {
                     console.warn('[ReasonRoute] Failed to recover leaked tool call:', e.message);
                 }
             }
+
+            try {
+                const claimVerdict = await verifyClaims(responseText, { query });
+                if (!claimVerdict.ok && claimVerdict.downgradedText) responseText = claimVerdict.downgradedText;
+            } catch {}
 
             res.json({
                 success: true,
@@ -926,6 +1028,14 @@ export async function loadRoutes(app, system) {
         if (!action) return res.status(400).json({ success: false, error: 'action required' });
         try {
             const result = await executeCommand(action, params, system, (type, payload) => system.ws?.broadcast?.(type, payload));
+            if (typeof result?.response === 'string') {
+                const guarded = await guardSomaText(result.response, `${action} ${JSON.stringify(params || {}).slice(0, 400)}`);
+                result.response = guarded.text || result.response;
+            }
+            if (typeof result?.message === 'string') {
+                const guarded = await guardSomaText(result.message, `${action} ${JSON.stringify(params || {}).slice(0, 400)}`);
+                result.message = guarded.text || result.message;
+            }
             res.json(result);
         } catch (e) {
             res.status(500).json({ success: false, error: e.message });
@@ -941,9 +1051,13 @@ export async function loadRoutes(app, system) {
             const brain = system.quadBrain || system.somArbiter || system.kevinArbiter;
             if (!brain) return res.status(503).json({ error: 'No brain available' });
 
-            const result = await brain.reason(query, {
+            const result = await reasonGrounded(brain, query, {
+                system,
+                forceContext: false,
+                context: {
                 temperature: 0.4,
                 ...(context || {})
+                }
             });
 
             const responseText = result?.text || result?.response || result?.output || (typeof result === 'string' ? result : 'Processed.');
@@ -975,7 +1089,10 @@ export async function loadRoutes(app, system) {
             if (!message) return res.status(400).json({ success: false, error: 'message is required' });
             const brain = system.quadBrain || system.somArbiter || system.steveArbiter;
             if (!brain?.reason) return res.status(503).json({ success: false, error: 'SOMA brain not available' });
-            const result = await brain.reason(message, { ...(context || {}), source: 'pulse', tier, model, quickResponse: tier === 'fast' });
+            const result = await reasonGrounded(brain, message, {
+                system,
+                context: { ...(context || {}), source: 'pulse', tier, model, quickResponse: tier === 'fast' }
+            });
             const reply = textFromBrainResult(result);
             res.json({ success: true, reply, response: reply, persona: result?.persona || 'architect' });
         } catch (error) {
@@ -989,7 +1106,11 @@ export async function loadRoutes(app, system) {
             if (!task) return res.status(400).json({ success: false, error: 'task is required' });
             const brain = system.quadBrain || system.somArbiter;
             if (!brain?.reason) return res.status(503).json({ success: false, error: 'SOMA brain not available' });
-            const result = await brain.reason(`Coordinate a concise engineering swarm plan for:\n${task}`, { source: 'pulse-swarm', preferredBrain: 'PROMETHEUS' });
+            const result = await reasonGrounded(brain, `Coordinate a concise engineering swarm plan for:\n${task}`, {
+                system,
+                forceContext: true,
+                context: { source: 'pulse-swarm', preferredBrain: 'PROMETHEUS' }
+            });
             const reply = textFromBrainResult(result);
             res.json({ success: true, reply, response: reply, result: reply, synthesis: reply });
         } catch (error) {
@@ -1003,7 +1124,11 @@ export async function loadRoutes(app, system) {
             if (!topic) return res.status(400).json({ success: false, error: 'topic is required' });
             const brain = system.quadBrain || system.somArbiter;
             if (!brain?.reason) return res.status(503).json({ success: false, error: 'SOMA brain not available' });
-            const result = await brain.reason(`Give a short adversarial engineering debate, then a verdict:\n${topic}`, { source: 'pulse-debate', preferredBrain: 'LOGOS' });
+            const result = await reasonGrounded(brain, `Give a short adversarial engineering debate, then a verdict:\n${topic}`, {
+                system,
+                forceContext: true,
+                context: { source: 'pulse-debate', preferredBrain: 'LOGOS' }
+            });
             const reply = textFromBrainResult(result);
             res.json({ success: true, reply, response: reply, result: reply, verdict: reply });
         } catch (error) {
@@ -1115,6 +1240,383 @@ export async function loadRoutes(app, system) {
         send({ type: 'status', persona: 'architect', tension: 0.35, memoryCount: memoryCount() });
         const interval = setInterval(() => send({ type: 'status', persona: 'architect', tension: 0.35, memoryCount: memoryCount() }), 15000);
         req.on('close', () => clearInterval(interval));
+    });
+
+    // ── Construct Foundry: 4-stage generation pipeline ───────────────────────────
+    const constructDraftPath = path.resolve(process.cwd(), 'data', 'aperture', 'construct-foundry-draft.json');
+    const saveConstructDraft = async (patch = {}) => {
+        await fs.mkdir(path.dirname(constructDraftPath), { recursive: true });
+        let current = {};
+        try { current = JSON.parse(await fs.readFile(constructDraftPath, 'utf8')); } catch {}
+        const next = { ...current, ...patch, updatedAt: new Date().toISOString() };
+        await fs.writeFile(constructDraftPath, JSON.stringify(next, null, 2), 'utf8');
+        return next;
+    };
+
+    app.get('/api/construct/draft', async (_req, res) => {
+        try {
+            const draft = JSON.parse(await fs.readFile(constructDraftPath, 'utf8'));
+            res.json({ success: true, draft });
+        } catch {
+            res.json({ success: true, draft: null });
+        }
+    });
+
+    app.put('/api/construct/draft', async (req, res) => {
+        try {
+            const draft = await saveConstructDraft(req.body || {});
+            res.json({ success: true, draft });
+        } catch (error) {
+            res.status(400).json({ success: false, error: error.message });
+        }
+    });
+
+    // Stage flow: Persona (SOMA values framing) → Aurora (creative expansion) →
+    //             DeepSeek (manifest synthesis) → Expertise (domain execution)
+    app.post('/api/construct/generate', checkReady, async (req, res) => {
+        const { prompt, type, name, description } = req.body || {};
+        if (!name && !prompt) return res.status(400).json({ error: 'name or prompt required' });
+
+        const brain = system.quadBrain;
+        if (!brain?.reason) return res.status(503).json({ error: 'Brain not available' });
+
+        res.setHeader('Content-Type', 'text/event-stream');
+        res.setHeader('Cache-Control', 'no-cache');
+        res.setHeader('Connection', 'keep-alive');
+        res.setHeader('X-Accel-Buffering', 'no');
+        res.flushHeaders?.();
+
+        const send = (stage, status, data = {}) => {
+            try { res.write(`data: ${JSON.stringify({ stage, status, ...data, ts: Date.now() })}\n\n`); } catch {}
+        };
+
+        const userIntent = [name && `Name: ${name}`, type && `Type: ${type}`, description && `Purpose: ${description}`, prompt].filter(Boolean).join('. ');
+        const ollamaEndpoint = process.env.OLLAMA_ENDPOINT || 'http://localhost:11434';
+        const auroraModel = process.env.OLLAMA_MODEL_AURORA || 'soma-aurora';
+        const constructType = type || 'custom';
+        await saveConstructDraft({ phase: 'generate_started', prompt, type: constructType, name, description }).catch(() => {});
+
+        try {
+            // ─── Stage 1: SOMA Persona ────────────────────────────────────────────────
+            send('persona', 'running', { message: 'SOMA is framing your intent…' });
+            let personaFramed = userIntent;
+            try {
+                const personaResult = await Promise.race([
+                    brain.reason(
+                        `You are SOMA. A user wants to create something: "${userIntent}"\n\nUsing your values of Truth, Humility, Empathy, Honor, Respect, and Preserve — reframe their intent as a clear, purposeful construction brief. Ask: what is the real need here? Who will this serve? What would make it meaningful rather than just functional?\n\nRespond with 2-3 sentences capturing the essence of what this construct should be and why it matters. Be specific. No fluff.`,
+                        { sessionId: 'construct-persona', quickResponse: true, temperature: 0.6 }
+                    ),
+                    new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 9000))
+                ]);
+                personaFramed = personaResult?.text || personaResult?.response || userIntent;
+                await saveConstructDraft({ phase: 'persona_ready', personaFrame: personaFramed, type: constructType, name }).catch(() => {});
+                send('persona', 'done', { output: personaFramed });
+            } catch (e) {
+                send('persona', 'skipped', { message: 'Persona framing timed out — continuing', output: userIntent });
+            }
+
+            // ─── Stage 2: Aurora Creative Expansion ──────────────────────────────────
+            send('aurora', 'running', { message: 'Aurora is expanding the concept…' });
+            let auroraBrief = personaFramed;
+            try {
+                // Check if soma-aurora is registered in Ollama
+                const tagsRes = await fetch(`${ollamaEndpoint}/api/tags`, { signal: AbortSignal.timeout(2000) }).catch(() => null);
+                const tags = tagsRes ? await tagsRes.json().catch(() => ({})) : {};
+                const models = (tags.models || []).map(m => m.name || m);
+                const auroraAvailable = models.some(m => m === auroraModel || m.startsWith(auroraModel + ':'));
+
+                if (auroraAvailable) {
+                    const auroraRes = await fetch(`${ollamaEndpoint}/api/generate`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            model: auroraModel,
+                            prompt: `Creative brief expansion task:\n\n"${personaFramed}"\n\nYou are Aurora — SOMA's creative and emotional intelligence. Expand this into a rich creative brief for a digital construct. Include: a compelling name (if not given), the emotional tone and aesthetic vision, 3-5 key experiences the construct creates, and the community it serves. Be evocative and specific. 150 words max.`,
+                            stream: false,
+                            options: { temperature: 0.8, num_predict: 350 }
+                        }),
+                        signal: AbortSignal.timeout(12000)
+                    });
+                    if (auroraRes.ok) {
+                        const auroraData = await auroraRes.json();
+                        auroraBrief = auroraData.response?.trim() || personaFramed;
+                    }
+                    send('aurora', 'done', { output: auroraBrief, modelUsed: auroraModel });
+                } else {
+                    // Fallback: brain call with Aurora persona
+                    const fallbackResult = await Promise.race([
+                        brain.reason(
+                            `Creative brief expansion:\n"${personaFramed}"\n\nAs SOMA's Aurora creative intelligence, expand this into a rich brief with: compelling name, emotional tone, 3-5 key user experiences, and who it serves. 150 words max.`,
+                            { sessionId: 'construct-aurora', quickResponse: true, temperature: 0.8 }
+                        ),
+                        new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 9000))
+                    ]);
+                    auroraBrief = fallbackResult?.text || fallbackResult?.response || personaFramed;
+                    send('aurora', 'done', { output: auroraBrief, modelUsed: 'brain-fallback' });
+                }
+                await saveConstructDraft({ phase: 'brief_ready', auroraBrief, personaFrame: personaFramed, type: constructType, name }).catch(() => {});
+            } catch (e) {
+                send('aurora', 'skipped', { message: `Aurora unavailable — continuing`, output: personaFramed });
+            }
+
+            // ─── Stage 3: DeepSeek Manifest Generation ───────────────────────────────
+            send('deepseek', 'running', { message: 'Generating manifest from creative brief…' });
+            const fallbackManifest = {
+                id: (name || 'my-construct').toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, ''),
+                name: name || 'My Construct', type: constructType, version: '1.0.0',
+                description: description || `A ${constructType} construct`,
+                permissions: ['read', 'write'],
+                components: { required: ['core', 'auth'], optional: ['analytics', 'notifications'] },
+                trust: { level: 'community', verification: 'Self-signed' },
+                discovery: { public: true, searchable: true },
+                security: { sandboxed: true, capabilities: ['network', 'storage'] },
+                _brief: auroraBrief,
+                _personaFrame: personaFramed
+            };
+            let manifest = fallbackManifest;
+            try {
+                const manifestResult = await Promise.race([
+                    brain.reason(
+                        `You are generating an Aperture Construct manifest.\n\nCreative brief:\n"${auroraBrief}"\n\nGenerate ONLY valid JSON (no markdown, no explanation) for a ${constructType} construct:\n{"id":"slug","name":"Full Name","type":"${constructType}","version":"1.0.0","description":"one sentence","permissions":["perm1"],"components":{"required":["comp1"],"optional":["comp2"]},"trust":{"level":"community","verification":"Self-signed"},"discovery":{"public":true,"searchable":true},"security":{"sandboxed":true,"capabilities":["network"]}}\n\nName and description must reflect the creative brief. Be specific and meaningful.`,
+                        { sessionId: 'construct-manifest', quickResponse: true, temperature: 0.3 }
+                    ),
+                    new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 22000))
+                ]);
+                const rawText = manifestResult?.text || manifestResult?.response || '';
+                const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+                if (jsonMatch) {
+                    try { manifest = { ...JSON.parse(jsonMatch[0]), _brief: auroraBrief, _personaFrame: personaFramed }; }
+                    catch { /* keep fallback */ }
+                }
+                send('deepseek', 'done', { manifest });
+                await saveConstructDraft({ phase: 'manifest_ready', auroraBrief, personaFrame: personaFramed, type: constructType, name, manifest }).catch(() => {});
+            } catch (e) {
+                send('deepseek', 'skipped', { message: 'Manifest generation timed out — using fallback', manifest });
+            }
+
+            // ─── Stage 4: Expertise Execution ────────────────────────────────────────
+            send('expertise', 'running', { message: 'Routing to expertise runtime…' });
+            const expertiseMap = {
+                community: 'creative/writer', workspace: 'creative/writer', media: 'creative/writer',
+                identity: 'creative/writer', service: 'creative/writer', custom: 'creative/writer',
+                knowledge: 'creative/writer', commerce: 'finance', market: 'finance'
+            };
+            const expertiseId = expertiseMap[constructType] || 'creative/writer';
+            try {
+                const registry = system.expertiseRegistry;
+                if (registry?.load) {
+                    const loaded = await Promise.race([
+                        registry.load(expertiseId),
+                        new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 6000))
+                    ]);
+                    if (loaded?.runtime?.runMission) {
+                        const missionResult = await Promise.race([
+                            loaded.runtime.runMission({ prompt: auroraBrief, mode: 'structures', constructType, manifest }),
+                            new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 15000))
+                        ]);
+                        send('expertise', 'done', { expertiseId, result: missionResult, message: `Executed via ${expertiseId}` });
+                    } else {
+                        send('expertise', 'skipped', { message: `${expertiseId} loaded but runMission unavailable`, expertiseId });
+                    }
+                } else {
+                    send('expertise', 'skipped', { message: 'ExpertiseRegistry offline — manifest ready', expertiseId });
+                }
+            } catch (e) {
+                send('expertise', 'skipped', { message: e.message, expertiseId });
+            }
+
+            send('complete', 'done', { manifest, brief: auroraBrief, personaFrame: personaFramed });
+        } catch (err) {
+            console.error('[ConstructGenerate] Pipeline error:', err.message);
+            send('error', 'failed', { message: err.message });
+        } finally {
+            res.end();
+        }
+    });
+
+    // ── Construct Foundry: Stage 1+2 only (returns brief for human review) ──────
+    app.post('/api/construct/brief', checkReady, async (req, res) => {
+        const { prompt, type, name, description } = req.body || {};
+        if (!name && !prompt) return res.status(400).json({ error: 'name or prompt required' });
+        const brain = system.quadBrain;
+        if (!brain?.reason) return res.status(503).json({ error: 'Brain not available' });
+
+        res.setHeader('Content-Type', 'text/event-stream');
+        res.setHeader('Cache-Control', 'no-cache');
+        res.setHeader('Connection', 'keep-alive');
+        res.setHeader('X-Accel-Buffering', 'no');
+        res.flushHeaders?.();
+
+        const send = (stage, status, data = {}) => {
+            try { res.write(`data: ${JSON.stringify({ stage, status, ...data, ts: Date.now() })}\n\n`); } catch {}
+        };
+
+        const userIntent = [name && `Name: ${name}`, type && `Type: ${type}`, description && `Purpose: ${description}`, prompt].filter(Boolean).join('. ');
+        const ollamaEndpoint = process.env.OLLAMA_ENDPOINT || 'http://localhost:11434';
+        const auroraModel = process.env.OLLAMA_MODEL_AURORA || 'soma-aurora';
+        const constructType = type || 'custom';
+        await saveConstructDraft({ phase: 'brief_started', prompt, type: constructType, name, description }).catch(() => {});
+
+        try {
+            // Stage 1 — Persona
+            send('persona', 'running', { message: 'SOMA is framing your intent…' });
+            let personaFramed = userIntent;
+            try {
+                const result = await Promise.race([
+                    brain.reason(
+                        `You are SOMA. A user wants to create something: "${userIntent}"\n\nUsing your values of Truth, Humility, Empathy, Honor, Respect, and Preserve — reframe their intent as a clear, purposeful construction brief. Ask: what is the real need here? Who will this serve? What would make it meaningful rather than just functional?\n\nRespond with 2-3 sentences capturing the essence of what this construct should be and why it matters. Be specific. No fluff.`,
+                        { sessionId: 'construct-persona', quickResponse: true, temperature: 0.6 }
+                    ),
+                    new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 9000))
+                ]);
+                personaFramed = result?.text || result?.response || userIntent;
+                await saveConstructDraft({ phase: 'persona_ready', personaFrame: personaFramed, type: constructType, name }).catch(() => {});
+                send('persona', 'done', { output: personaFramed });
+            } catch {
+                send('persona', 'skipped', { message: 'Persona framing timed out', output: userIntent });
+            }
+
+            // Stage 2 — Aurora
+            send('aurora', 'running', { message: 'Aurora is expanding the concept…' });
+            let auroraBrief = personaFramed;
+            try {
+                const tagsRes = await fetch(`${ollamaEndpoint}/api/tags`, { signal: AbortSignal.timeout(2000) }).catch(() => null);
+                const tags = tagsRes ? await tagsRes.json().catch(() => ({})) : {};
+                const models = (tags.models || []).map(m => m.name || m);
+                const auroraAvailable = models.some(m => m === auroraModel || m.startsWith(auroraModel + ':'));
+
+                if (auroraAvailable) {
+                    const auroraRes = await fetch(`${ollamaEndpoint}/api/generate`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            model: auroraModel,
+                            prompt: `Creative brief expansion task:\n\n"${personaFramed}"\n\nYou are Aurora — SOMA's creative and emotional intelligence. Expand this into a rich creative brief for a digital construct. Include: a compelling name (if not given), the emotional tone and aesthetic vision, 3-5 key experiences the construct creates, and the community it serves. Be evocative and specific. 150 words max.`,
+                            stream: false,
+                            options: { temperature: 0.8, num_predict: 350 }
+                        }),
+                        signal: AbortSignal.timeout(12000)
+                    });
+                    if (auroraRes.ok) {
+                        const data = await auroraRes.json();
+                        auroraBrief = data.response?.trim() || personaFramed;
+                    }
+                    send('aurora', 'done', { output: auroraBrief, modelUsed: auroraModel });
+                } else {
+                    const fallback = await Promise.race([
+                        brain.reason(
+                            `Creative brief expansion:\n"${personaFramed}"\n\nAs SOMA's Aurora creative intelligence, expand this into a rich brief with: compelling name, emotional tone, 3-5 key user experiences, and who it serves. 150 words max.`,
+                            { sessionId: 'construct-aurora', quickResponse: true, temperature: 0.8 }
+                        ),
+                        new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 9000))
+                    ]);
+                    auroraBrief = fallback?.text || fallback?.response || personaFramed;
+                    send('aurora', 'done', { output: auroraBrief, modelUsed: 'brain-fallback' });
+                }
+            } catch {
+                send('aurora', 'skipped', { message: 'Aurora unavailable', output: personaFramed });
+            }
+
+            await saveConstructDraft({ phase: 'brief_ready', auroraBrief, personaFrame: personaFramed, type: constructType, name }).catch(() => {});
+            send('brief_ready', 'done', { brief: auroraBrief, personaFrame: personaFramed, constructType, name });
+        } catch (err) {
+            send('error', 'failed', { message: err.message });
+        } finally {
+            res.end();
+        }
+    });
+
+    // ── Construct Foundry: Stage 3+4 only (takes edited brief, returns manifest) ──
+    app.post('/api/construct/manifest', checkReady, async (req, res) => {
+        const { brief, personaFrame, type, name } = req.body || {};
+        if (!brief) return res.status(400).json({ error: 'brief required' });
+        const brain = system.quadBrain;
+        if (!brain?.reason) return res.status(503).json({ error: 'Brain not available' });
+
+        res.setHeader('Content-Type', 'text/event-stream');
+        res.setHeader('Cache-Control', 'no-cache');
+        res.setHeader('Connection', 'keep-alive');
+        res.setHeader('X-Accel-Buffering', 'no');
+        res.flushHeaders?.();
+
+        const send = (stage, status, data = {}) => {
+            try { res.write(`data: ${JSON.stringify({ stage, status, ...data, ts: Date.now() })}\n\n`); } catch {}
+        };
+
+        const constructType = type || 'custom';
+        await saveConstructDraft({ phase: 'manifest_started', auroraBrief: brief, personaFrame, type: constructType, name }).catch(() => {});
+        const fallbackManifest = {
+            id: (name || 'my-construct').toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, ''),
+            name: name || 'My Construct', type: constructType, version: '1.0.0',
+            description: `A ${constructType} construct`,
+            permissions: ['read', 'write'],
+            components: { required: ['core', 'auth'], optional: ['analytics', 'notifications'] },
+            trust: { level: 'community', verification: 'Self-signed' },
+            discovery: { public: true, searchable: true },
+            security: { sandboxed: true, capabilities: ['network', 'storage'] },
+            _brief: brief, _personaFrame: personaFrame
+        };
+
+        try {
+            // Stage 3 — DeepSeek
+            send('deepseek', 'running', { message: 'Generating manifest from your brief…' });
+            let manifest = fallbackManifest;
+            try {
+                const result = await Promise.race([
+                    brain.reason(
+                        `You are generating an Aperture Construct manifest.\n\nCreative brief:\n"${brief}"\n\nGenerate ONLY valid JSON (no markdown, no explanation) for a ${constructType} construct:\n{"id":"slug","name":"Full Name","type":"${constructType}","version":"1.0.0","description":"one sentence","permissions":["perm1"],"components":{"required":["comp1"],"optional":["comp2"]},"trust":{"level":"community","verification":"Self-signed"},"discovery":{"public":true,"searchable":true},"security":{"sandboxed":true,"capabilities":["network"]}}\n\nName and description must directly reflect the creative brief.`,
+                        { sessionId: 'construct-manifest', quickResponse: true, temperature: 0.3 }
+                    ),
+                    new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 22000))
+                ]);
+                const rawText = result?.text || result?.response || '';
+                const jsonMatch = rawText.match(/\{[\s\S]*\}/);
+                if (jsonMatch) {
+                    try { manifest = { ...JSON.parse(jsonMatch[0]), _brief: brief, _personaFrame: personaFrame }; } catch {}
+                }
+                send('deepseek', 'done', { manifest });
+                await saveConstructDraft({ phase: 'manifest_ready', auroraBrief: brief, personaFrame, type: constructType, name, manifest }).catch(() => {});
+            } catch {
+                send('deepseek', 'skipped', { message: 'Manifest generation timed out — using fallback', manifest });
+            }
+
+            // Stage 4 — Expertise
+            send('expertise', 'running', { message: 'Routing to expertise runtime…' });
+            const expertiseMap = {
+                community: 'creative/writer', workspace: 'creative/writer', media: 'creative/writer',
+                identity: 'creative/writer', service: 'creative/writer', custom: 'creative/writer',
+                knowledge: 'creative/writer', commerce: 'finance', market: 'finance'
+            };
+            const expertiseId = expertiseMap[constructType] || 'creative/writer';
+            try {
+                const registry = system.expertiseRegistry;
+                if (registry?.load) {
+                    const loaded = await Promise.race([
+                        registry.load(expertiseId),
+                        new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 6000))
+                    ]);
+                    if (loaded?.runtime?.runMission) {
+                        const missionResult = await Promise.race([
+                            loaded.runtime.runMission({ prompt: brief, mode: 'structures', constructType, manifest }),
+                            new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 15000))
+                        ]);
+                        send('expertise', 'done', { expertiseId, result: missionResult });
+                    } else {
+                        send('expertise', 'skipped', { message: `${expertiseId} loaded but runMission unavailable`, expertiseId });
+                    }
+                } else {
+                    send('expertise', 'skipped', { message: 'ExpertiseRegistry offline', expertiseId });
+                }
+            } catch (e) {
+                send('expertise', 'skipped', { message: e.message, expertiseId });
+            }
+
+            send('complete', 'done', { manifest, brief, personaFrame });
+        } catch (err) {
+            send('error', 'failed', { message: err.message });
+        } finally {
+            res.end();
+        }
     });
 
     // 2. ARBITERIUM (Fixing Empty Tab)
@@ -3127,6 +3629,72 @@ Return ONLY valid JSON (no markdown, no explanation):
             tools: nemesis.config?.tools || []
         });
     });
+    
+    // Setup endpoint to update .env
+    app.post('/api/setup/env', async (req, res) => {
+        try {
+            const updates = req.body;
+            const envPath = path.resolve(process.cwd(), '.env');
+
+            // Read existing
+            let envContent = '';
+            try {
+                envContent = await fs.readFile(envPath, 'utf8');
+            } catch (e) {
+                // If it doesn't exist, we will create it
+            }
+
+            // Parse existing
+            const envLines = envContent.split('\n');
+            const newEnvLines = [];
+            const updatedKeys = new Set();
+
+            for (const line of envLines) {
+                if (!line.trim() || line.startsWith('#')) {
+                    newEnvLines.push(line);
+                    continue;
+                }
+                const [key, ...rest] = line.split('=');
+                const cleanKey = key.trim();
+
+                if (updates[cleanKey] !== undefined) {
+                    newEnvLines.push(`${cleanKey}=${updates[cleanKey]}`);
+                    updatedKeys.add(cleanKey);
+                } else {
+                    newEnvLines.push(line); // Keep existing
+                }
+            }
+
+            // Append new keys
+            for (const [key, value] of Object.entries(updates)) {
+                if (!updatedKeys.has(key)) {
+                    newEnvLines.push(`${key}=${value}`);
+                }
+                // Also update process.env temporarily
+                process.env[key] = value;
+            }
+
+            await fs.writeFile(envPath, newEnvLines.join('\n'), 'utf8');
+
+            // Proactively notify Kevin if online to reload credentials
+            const kevin = system.kevinArbiter || global.SOMA?.kevinArbiter || global.kevinManager;
+            if (kevin) {
+                if (typeof kevin.reloadCredentials === 'function') {
+                    await kevin.reloadCredentials();
+                }
+                // Also emit a credential updated log event
+                if (typeof kevin.emit === 'function') {
+                    kevin.emit('log', `[Security] Credentials updated for monitored accounts.`);
+                }
+            }
+
+            res.json({ success: true, message: "Environment updated & Kevin notified" });
+        } catch (e) {
+            console.error("Env update failed:", e);
+            res.status(500).json({ success: false, error: e.message });
+        }
+    });
+
     safeMount('/api/knowledge', checkReady, knowledgeRoutes(system));
     safeMount('/api/research', checkReady, researchRoutes(system));
     safeMount('/api/kevin', kevinRoutes);
@@ -3135,7 +3703,8 @@ Return ONLY valid JSON (no markdown, no explanation):
         goalPlanner: system.goalPlanner,
         contextManager: system.contextManager,
         pulseArbiter: system.pulseArbiter,
-        steveArbiter: system.steveArbiter
+        steveArbiter: system.steveArbiter,
+        astIndexer: system.astIndexer
     }));
 
     // 5b. ARBITERIUM
@@ -3187,6 +3756,7 @@ Return ONLY valid JSON (no markdown, no explanation):
     safeMount('/api/guardian',      ...financeAuth, createGuardianRoutes(system.guardian || null));
     safeMount('/api/autonomous',    ...financeAuth, autonomousRoutes);
     safeMount('/api/gridbot',       ...financeAuth, gridBotRoutes);
+    safeMount('/api/risk/gateway',   ...financeAuth, riskGatewayRoutes);
     safeMount('/api/notifications', notificationRoutes);  // no checkReady — used during settings modal before system.ready
     safeMount('/api/perception', perceptionRoutes);        // no checkReady — COS daemons may load before system.ready
     safeMount('/api/studio', createStudioRoutes(system));  // user.md-backed operator profile for Studio + Axis
@@ -4973,6 +5543,7 @@ Return ONLY valid JSON (no markdown, no explanation):
     safeMount('/api/workspace',  createWorkspaceRoutes(system));
     safeMount('/api/thirdplace', createThirdPlaceRoutes(system));
     safeMount('/api/aperture', createApertureRoutes(system));
+    safeMount('/api/gmn', createGmnRoutes(system));
 
     const kevin = system.kevinArbiter || system.kevinManager;
     if (kevin) app.locals.kevinArbiter = kevin;

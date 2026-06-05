@@ -19,6 +19,7 @@ try { nodemailer = require('nodemailer'); } catch { /* nodemailer optional */ }
 const { DriveSystem }  = require('../../core/DriveSystem.cjs');
 const { AgendaSystem } = require('../../core/AgendaSystem.cjs');
 const { ownerName }    = require('../../core/SomaOwner.cjs');
+const workLedger = require('../../core/AutonomousWorkLedger.cjs');
 
 // ── Run Log constants ──
 const RUN_LOG_DIR = path.join(__dirname, '..', '.soma', 'heartbeat');
@@ -314,6 +315,16 @@ class AutonomousHeartbeat extends EventEmitter {
         const startTime = Date.now();
         this.logger.log(`[AutonomousHeartbeat] ⚡ Executing autonomous task: "${task.description.substring(0, 60)}..."`);
         this.stats.lastTask = task.description;
+
+        // ── Multi-Lobe Consensus Debate Gate ──
+        // Only run for strategic goal tasks under high drive tension
+        if (task.context?.goalId && this.drive.getStatus().tension > 0.6) {
+          try {
+            await this._debateTaskProposal(task);
+          } catch (e) {
+            this.logger.warn(`[AutonomousHeartbeat] ⚠️  Debate gate error: ${e.message}`);
+          }
+        }
 
         // ── Agentic execution for real goal tasks ──
         // If this is a GoalPlanner task and the AgenticExecutor is wired in,
@@ -792,12 +803,33 @@ INSIGHT: <one key insight worth remembering, or "none">`,
                 evidence: evidence.summary
               }).catch(() => {});
 
+              // Record progress update to work ledger
+              workLedger.record({
+                type: 'goal_progress',
+                title: `Progress on Goal: ${goal.title}`,
+                summary: actionTaken || `Updated progress to ${newProgress}%`,
+                evidence: evidence.summary || 'Goal execution check',
+                status: 'observed',
+                source: 'AutonomousHeartbeat'
+              });
+
               // Complete goal when done
               if (isComplete && newProgress >= 80 && evidence.hasConcreteEvidence) {
                 const resultText = (text.match(/RESULT:\s*([\s\S]+?)(?=\nPROGRESS:|$)/i)?.[1] || '').substring(0, 300);
                 await this.system.goalPlanner.completeGoal(goal.id, { result: resultText }).catch(() => {});
                 this._goalAttempts.delete(goal.id); // Reset stall counter on natural completion
                 this.drive.onGoalComplete(goal); // Reward: big tension drop + satisfaction spike
+
+                // Record completion to work ledger
+                workLedger.record({
+                  type: 'goal_completed',
+                  title: `Completed Goal: ${goal.title}`,
+                  summary: resultText || `Goal fully completed`,
+                  evidence: evidence.summary || 'Goal execution check',
+                  status: 'reported',
+                  source: 'AutonomousHeartbeat'
+                });
+
                 this.logger.log(`[AutonomousHeartbeat] 🏆 Goal COMPLETED: "${goal.title}"`);
                 this._broadcast('soma_activity', {
                   source: 'GoalCompleted',
@@ -1267,6 +1299,68 @@ Write the update now:`,
       this.logger.log(`[AutonomousHeartbeat] 📧 Email sent: "${subject}"`);
     } catch (e) {
       this.logger.warn(`[AutonomousHeartbeat] 📧 Email failed: ${e.message}`);
+    }
+  }
+
+  /**
+   * Run a strategic goal task through a consensus debate gate (LOGOS vs THALAMUS).
+   * THALAMUS identifies potential safety/security risks and policy conflicts.
+   * LOGOS refines the implementation plan and execution logic.
+   * Modifies task.description with the debate consensus/adjustments.
+   */
+  async _debateTaskProposal(task) {
+    if (!this.system.quadBrain) return;
+    
+    this.logger.log(`[AutonomousHeartbeat] 🧠 High tension (${this.drive.getStatus().tension.toFixed(2)}) detected. Initiating multi-lobe debate gate for: "${task.context?.goalTitle || task.description.substring(0, 50)}"...`);
+    
+    try {
+      const originalDesc = task.description;
+      const goalTitle = task.context?.goalTitle || 'Strategic Goal';
+
+      // 1. Query THALAMUS for risk assessment
+      const thalamusPrompt = `You are THALAMUS (Safety & Sensory Gate). Analyze this strategic task proposal for risk, security, permission boundaries, and safety:
+      
+TASK: "${goalTitle}"
+DESCRIPTION:
+${originalDesc}
+
+Identify any specific risks, security concerns, or boundaries that must not be crossed. Keep it brief (max 3 bullet points).`;
+      
+      const thalamusResult = await this.system.quadBrain.reason(thalamusPrompt, {
+        activeLobe: 'THALAMUS',
+        localModel: true,
+        source: 'heartbeat_debate'
+      });
+      
+      const thalamusFeedback = thalamusResult?.text || 'No safety/security risks identified.';
+      this.logger.log(`[AutonomousHeartbeat] 🛡️  THALAMUS feedback: ${thalamusFeedback.replace(/\\n/g, ' ').substring(0, 100)}...`);
+
+      // 2. Query LOGOS to adjust execution plan based on THALAMUS's critique
+      const logosPrompt = `You are LOGOS (Logic & Deduction). Review this strategic task proposal and the critique from THALAMUS. Adjust the execution instructions to address the concerns logically and make the plan robust:
+
+TASK: "${goalTitle}"
+ORIGINAL DESCRIPTION:
+${originalDesc}
+
+THALAMUS RISK FEEDBACK:
+${thalamusFeedback}
+
+Provide an adjusted, safe, and precise instruction plan. Preserve the original goal but add clear constraints or logical steps to mitigate any risks.
+Respond with the adjusted plan directly (max 200 words).`;
+
+      const logosResult = await this.system.quadBrain.reason(logosPrompt, {
+        activeLobe: 'LOGOS',
+        localModel: true,
+        source: 'heartbeat_debate'
+      });
+
+      const refinedPlan = logosResult?.text;
+      if (refinedPlan && refinedPlan.trim().length > 30) {
+        task.description = `[DEBATE REFINED PLAN]\n${refinedPlan}\n\n[Original Proposal]\n${originalDesc}`;
+        this.logger.log(`[AutonomousHeartbeat] ✅ Debate consensus reached. Instruction plan updated.`);
+      }
+    } catch (err) {
+      this.logger.warn(`[AutonomousHeartbeat] ⚠️ Debate failed: ${err.message}. Proceeding with original plan.`);
     }
   }
 }

@@ -4000,8 +4000,8 @@ const SomaCommandBridge = () => {
         )}
       </div>
 
-      {/* Global SOMA Chat - Available on all tabs except terminal */}
-      {activeModule !== 'terminal' && (
+      {/* Global SOMA Chat - Available on all tabs except terminal and pulse */}
+      {activeModule !== 'terminal' && activeModule !== 'pulse' && (
         <FloatingChat
           isServerRunning={isConnected}
           isBusy={isSomaBusy}

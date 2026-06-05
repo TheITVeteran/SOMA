@@ -14,9 +14,9 @@ import { LongHorizonPlanner }   from './LongHorizonPlanner.js';
 import { ASIKernel }            from './ASIKernel.js';
 
 export class SomaBootstrap {
-    constructor(rootPath, config) {
-        this.rootPath = rootPath;
-        this.config = config;
+    constructor(rootPath = process.cwd(), config = {}) {
+        this.rootPath = rootPath || process.cwd();
+        this.config = config || {};
         this.system = {};
     }
 
@@ -2117,6 +2117,16 @@ export class SomaBootstrap {
         const GoalPlannerArbiterModule = require('../arbiters/GoalPlannerArbiter.cjs');
         modules.GoalPlannerArbiter = GoalPlannerArbiterModule.default || GoalPlannerArbiterModule.GoalPlannerArbiter || GoalPlannerArbiterModule;
 
+        // Load SelfEvolvingGoalEngine
+        console.log('   - Importing SelfEvolvingGoalEngine...');
+        const { SelfEvolvingGoalEngine } = await import('./SelfEvolvingGoalEngine.js');
+        modules.SelfEvolvingGoalEngine = SelfEvolvingGoalEngine;
+
+        // Load ToolCreatorArbiter
+        console.log('   - Importing ToolCreatorArbiter...');
+        const { ToolCreatorArbiter } = await import('../arbiters/ToolCreatorArbiter.js');
+        modules.ToolCreatorArbiter = ToolCreatorArbiter;
+
         return modules;
     }
 
@@ -2201,6 +2211,53 @@ export class SomaBootstrap {
             } catch (error) {
                 console.warn('   ⚠️ GoalPlannerArbiter failed to initialize:', error.message);
                 console.warn('      Continuing without goal planning...');
+            }
+        }
+
+        // Tool Creator Arbiter (Dynamic Tool & Skill Generation)
+        if (modules.ToolCreatorArbiter) {
+            try {
+                console.log('   - Initializing ToolCreatorArbiter...');
+                const ToolCreatorClass = modules.ToolCreatorArbiter.default || modules.ToolCreatorArbiter;
+                this.system.toolCreator = new ToolCreatorClass({
+                    name: 'ToolCreatorArbiter',
+                    quadBrain: this.system.quadBrain,
+                    toolRegistry: this.system.toolRegistry,
+                    skillWatcher: this.system.skillWatcher
+                });
+                await this.system.toolCreator.initialize();
+                this.system.messageBroker.registerArbiter('ToolCreatorArbiter', {
+                    instance: this.system.toolCreator
+                });
+                console.log('   ✅ ToolCreatorArbiter ready (dynamic tool generation active)');
+            } catch (error) {
+                console.warn('   ⚠️ ToolCreatorArbiter failed to initialize:', error.message);
+                console.warn('      Continuing without dynamic tool creation...');
+            }
+        }
+
+        // Self-Evolving Goal Engine (Strategic goal proposal & evolution)
+        if (modules.SelfEvolvingGoalEngine && this.system.goalPlanner) {
+            try {
+                console.log('   - Initializing SelfEvolvingGoalEngine...');
+                const SelfEvolvingGoalEngineClass = modules.SelfEvolvingGoalEngine.default || modules.SelfEvolvingGoalEngine;
+                this.system.selfEvolvingGoalEngine = new SelfEvolvingGoalEngineClass();
+                await this.system.selfEvolvingGoalEngine.initialize({
+                    goalPlanner: this.system.goalPlanner,
+                    brain: this.system.quadBrain,
+                    memory: this.system.mnemonic,
+                    curiosityEngine: this.system.curiosity,
+                    toolCreator: this.system.toolCreator,
+                    system: this.system,
+                    nemesis: this.system.nemesis
+                });
+                this.system.messageBroker.registerArbiter('SelfEvolvingGoalEngine', {
+                    instance: this.system.selfEvolvingGoalEngine
+                });
+                console.log('   ✅ Self-Evolving Goal Engine ready (strategic goal evolution)');
+            } catch (error) {
+                console.warn('   ⚠️ SelfEvolvingGoalEngine failed to initialize:', error.message);
+                console.warn('      Continuing without strategic self-evolving goals...');
             }
         }
     }
@@ -2360,6 +2417,19 @@ export class SomaBootstrap {
             // Assert: if attentionEngine isn't wired, the CNS gate is gone — log loudly
             if (!this.system.messageBroker.attentionEngine) {
                 console.error('[CRITICAL] AttentionArbiter NOT wired — CNS gate is absent. Arbiter storms are possible under load. Check arbiters/AttentionArbiter.js and BaseArbiter.js import.');
+            }
+
+            // Maxwell Attention Engine
+            try {
+                const { createRequire } = await import('module');
+                const require = createRequire(import.meta.url);
+                const { AttentionEngine } = require('./AttentionEngine.cjs');
+                this.system.attentionEngine = new AttentionEngine({
+                    debug: true
+                });
+                console.log('   ✅ Maxwell Attention Engine v0.2 online');
+            } catch (err) {
+                console.warn(`   ⚠️  Maxwell Attention Engine skipped: ${err.message}`);
             }
 
             // 3. EngineeringSwarmArbiter — full research/plan/debate/synthesis cycle

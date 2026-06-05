@@ -219,9 +219,9 @@ export class BacktestEngine extends EventEmitter {
         const slippage = bar.close * this.config.slippage;
 
         switch (action) {
-            case 'open_long':
-                if (this._canOpenPosition(size)) {
-                    const entryPrice = bar.close + slippage;
+            case 'open_long': {
+                const entryPrice = bar.close + slippage;
+                if (this._canOpenPosition(size, entryPrice)) {
                     const fee = size * entryPrice * this.config.feeRate;
                     this.capital -= fee;
 
@@ -241,10 +241,11 @@ export class BacktestEngine extends EventEmitter {
                     this.emit('positionOpened', { position, bar });
                 }
                 break;
+            }
 
-            case 'open_short':
-                if (this._canOpenPosition(size)) {
-                    const entryPrice = bar.close - slippage;
+            case 'open_short': {
+                const entryPrice = bar.close - slippage;
+                if (this._canOpenPosition(size, entryPrice)) {
                     const fee = size * entryPrice * this.config.feeRate;
                     this.capital -= fee;
 
@@ -264,6 +265,7 @@ export class BacktestEngine extends EventEmitter {
                     this.emit('positionOpened', { position, bar });
                 }
                 break;
+            }
 
             case 'close_long':
                 this._closePositionsBySide('long', bar.close - slippage, bar.time, 'signal');
@@ -282,9 +284,9 @@ export class BacktestEngine extends EventEmitter {
     /**
      * Check if we can open a position based on risk management
      */
-    _canOpenPosition(size) {
+    _canOpenPosition(size, price) {
         const totalExposure = this.positions.reduce((sum, p) => sum + (p.size * p.entryPrice), 0);
-        const newExposure = size * this.capital;
+        const newExposure = size * price;
         const maxAllowed = this.capital * this.config.maxPositionSize;
 
         return (totalExposure + newExposure) <= maxAllowed * 2; // Allow 2x max position
@@ -368,6 +370,8 @@ export class BacktestEngine extends EventEmitter {
         if (trades.length === 0) {
             return {
                 totalTrades: 0,
+                winningTrades: 0,
+                losingTrades: 0,
                 winRate: 0,
                 profitFactor: 0,
                 sharpeRatio: 0,
@@ -376,12 +380,14 @@ export class BacktestEngine extends EventEmitter {
                 totalReturn: 0,
                 annualizedReturn: 0,
                 totalPnL: 0,
+                netPnL: 0,
                 avgWin: 0,
                 avgLoss: 0,
                 largestWin: 0,
                 largestLoss: 0,
                 avgHoldingPeriod: 0,
-                totalFees: 0
+                totalFees: 0,
+                finalCapital: this.capital
             };
         }
 

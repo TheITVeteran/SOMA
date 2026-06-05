@@ -338,6 +338,32 @@ export class AutoTrainingCoordinator extends EventEmitter {
       // Ignore directory not found errors
     }
 
+    // 1b. Current runtime location: .soma/experiences/experiences_current.json
+    const nestedExperiencesPath = path.join(process.cwd(), '.soma', 'experiences');
+    try {
+      const files = await fs.readdir(nestedExperiencesPath);
+      const experienceFiles = files.filter(f => f.startsWith('experiences') && f.endsWith('.json'));
+
+      for (const file of experienceFiles) {
+        const filepath = path.join(nestedExperiencesPath, file);
+        const content = await fs.readFile(filepath, 'utf8');
+        const data = JSON.parse(content);
+        if (Array.isArray(data)) totalCount += data.length;
+        else if (Array.isArray(data.experiences)) totalCount += data.experiences.length;
+      }
+    } catch (error) {
+      // Ignore directory not found errors
+    }
+
+    // 1c. Distilled LearningSpine rows are the highest-quality auto-training signal.
+    try {
+      const spinePath = path.join(process.cwd(), 'data', 'learning', 'learning-spine-events.jsonl');
+      const content = await fs.readFile(spinePath, 'utf8');
+      totalCount += content.split(/\r?\n/).filter(Boolean).length;
+    } catch (error) {
+      // Ignore until LearningSpine exists
+    }
+
     // 2. Count Synthetic Golden Truths (.soma/synthetic-data/train_*.json)
     const syntheticPath = path.join(process.cwd(), '.soma', 'synthetic-data');
     try {

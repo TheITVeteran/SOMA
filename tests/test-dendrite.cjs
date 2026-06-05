@@ -1,33 +1,51 @@
 #!/usr/bin/env node
 /**
- * Test Dendrite web search
+ * Smoke test for WebScraperDendrite objective browsing.
+ *
+ * Usage:
+ *   node tests/test-dendrite.cjs
  */
 
-const { Dendrite } = require('../cognitive/Dendrite.cjs');
+const { WebScraperDendrite } = require('../cognitive/WebScraperDendrite.cjs');
 
-async function test() {
-  const dendrite = new Dendrite();
-  
-  console.log('\n🧪 Testing Dendrite Web Search\n');
-  console.log('Query: "quantum realm color MCU"\n');
-  
-  const results = await dendrite.search('quantum realm color MCU');
-  
-  if (results.success) {
-    console.log(`✅ Found ${results.count} results in ${results.elapsed}ms\n`);
-    console.log('='.repeat(60) + '\n');
-    
-    results.results.forEach((result, index) => {
-      console.log(`[${index + 1}] ${result.title}`);
-      console.log(`    ${result.snippet.substring(0, 200)}...`);
-      console.log(`    🔗 ${result.url}\n`);
+async function main() {
+  const dendrite = new WebScraperDendrite({
+    name: 'DendriteSmokeTest',
+    maxConcurrent: 1,
+    minDelay: 10,
+    maxDelay: 20,
+    scrollSteps: 1,
+    scrollDelay: 10,
+    enableScreenshots: false
+  });
+
+  try {
+    await dendrite.initialize();
+    const result = await dendrite.browseObjective({
+      objective: 'Dendrite smoke test',
+      seedUrls: ['https://example.com'],
+      maxPages: 1,
+      timeoutMs: 15000
     });
-    
-    console.log('='.repeat(60));
-    console.log('\n📊 Metrics:', dendrite.getMetrics());
-  } else {
-    console.log('❌ Search failed:', results.error);
+
+    const page = result.pages?.[0];
+    const ok = result.success && page && !page.error && page.title && page.text?.includes('Example Domain');
+    console.log(JSON.stringify({
+      success: !!ok,
+      count: result.count,
+      title: page?.title,
+      status: page?.status,
+      textLength: page?.text?.length || 0,
+      error: page?.error || result.error || null
+    }, null, 2));
+
+    if (!ok) process.exitCode = 1;
+  } finally {
+    await dendrite.shutdown().catch(() => {});
   }
 }
 
-test().catch(console.error);
+main().catch(error => {
+  console.error(error);
+  process.exit(1);
+});

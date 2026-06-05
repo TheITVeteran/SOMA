@@ -65,6 +65,8 @@ class KevinNotificationService extends EventEmitter {
 
         // Alert history
         this.alertHistory = [];
+        this.alertDedupe = new Map();
+        this.dedupeWindowMs = Number(process.env.KEVIN_NOTIFY_DEDUPE_MS || 10 * 60 * 1000);
 
         console.log(`[KevinNotify] Initialized with ${this.webhooks.length} webhooks`);
     }
@@ -259,6 +261,29 @@ class KevinNotificationService extends EventEmitter {
             source: alert.source || 'email_scan'
         };
 
+        const dedupeKey = this._alertDedupeKey(formattedAlert);
+        const now = Date.now();
+        this._pruneAlertDedupe(now);
+        const previous = this.alertDedupe.get(dedupeKey);
+        if (previous && now - previous < this.dedupeWindowMs) {
+            const suppressedAlert = {
+                ...formattedAlert,
+                suppressed: true,
+                suppressionReason: 'duplicate_alert',
+                suppressedUntil: new Date(previous + this.dedupeWindowMs).toISOString()
+            };
+            this.alertHistory.push(suppressedAlert);
+            if (this.alertHistory.length > 100) this.alertHistory.shift();
+            return {
+                success: true,
+                suppressed: true,
+                reason: 'duplicate_alert',
+                alert: suppressedAlert,
+                results: {}
+            };
+        }
+        this.alertDedupe.set(dedupeKey, now);
+
         // Add to history
         this.alertHistory.push(formattedAlert);
         if (this.alertHistory.length > 100) this.alertHistory.shift();
@@ -283,6 +308,28 @@ class KevinNotificationService extends EventEmitter {
             alert: formattedAlert,
             results
         };
+    }
+
+    _alertDedupeKey(alert) {
+        const details = alert.details || {};
+        const core = [
+            alert.type,
+            alert.severity,
+            alert.source,
+            details.sender,
+            details.subject,
+            details.domain,
+            details.url,
+            alert.title,
+            String(alert.message || '').slice(0, 180)
+        ].filter(Boolean).join('|').toLowerCase();
+        return crypto.createHash('sha256').update(core || JSON.stringify(alert)).digest('hex');
+    }
+
+    _pruneAlertDedupe(now = Date.now()) {
+        for (const [key, timestamp] of this.alertDedupe.entries()) {
+            if (now - timestamp > this.dedupeWindowMs) this.alertDedupe.delete(key);
+        }
     }
 
     /**

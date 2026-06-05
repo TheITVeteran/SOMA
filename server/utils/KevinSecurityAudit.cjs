@@ -17,6 +17,9 @@
 
 const fs = require('fs');
 const path = require('path');
+const { exec } = require('child_process');
+const { promisify } = require('util');
+const execAsync = promisify(exec);
 
 // Audit finding severity
 const Severity = {
@@ -105,6 +108,16 @@ class KevinSecurityAudit {
                 'Email credentials not configured',
                 'Kevin is running in simulation mode without real email access',
                 'Set EMAIL_ADDRESS and APP_PASSWORD environment variables for real email monitoring'
+            );
+        }
+
+        if (process.env.KEVIN_ALLOW_INSECURE_TLS === 'true') {
+            this._addFinding(
+                Severity.CRITICAL,
+                'email',
+                'Email TLS verification disabled',
+                'KEVIN_ALLOW_INSECURE_TLS=true disables certificate verification for Kevin email transport',
+                'Unset KEVIN_ALLOW_INSECURE_TLS except during a short local proxy diagnostic'
             );
         }
 
@@ -270,6 +283,51 @@ class KevinSecurityAudit {
                 'Running in production without TLS encryption',
                 'Configure TLS_CERT and TLS_KEY for HTTPS, or use a reverse proxy'
             );
+        }
+
+        const listening = await this._getListeningPorts();
+        const risky = listening.filter(row => {
+            const local = String(row.localAddress || '');
+            const globallyBound = local === '0.0.0.0' || local === '::' || local === '*';
+            return globallyBound && [22, 80, 443, 3000, 3001, 3389, 8080, 8081].includes(Number(row.port));
+        });
+        for (const port of risky.slice(0, 10)) {
+            this._addFinding(
+                Severity.WARN,
+                'network',
+                `Sensitive port globally bound: ${port.port}`,
+                `Port ${port.port} appears to be listening on ${port.localAddress}`,
+                'Bind dev services to 127.0.0.1 unless remote access is required'
+            );
+        }
+    }
+
+    async _getListeningPorts() {
+        try {
+            if (process.platform === 'win32') {
+                const { stdout } = await execAsync('powershell -NoProfile -Command "Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue | Select-Object LocalAddress,LocalPort,OwningProcess | ConvertTo-Json -Compress"', { timeout: 5000 });
+                const parsed = stdout.trim() ? JSON.parse(stdout) : [];
+                return (Array.isArray(parsed) ? parsed : [parsed]).map(row => ({
+                    localAddress: row.LocalAddress,
+                    port: Number(row.LocalPort),
+                    pid: Number(row.OwningProcess)
+                })).filter(row => row.port);
+            }
+            const { stdout } = await execAsync('netstat -tunlp 2>/dev/null || netstat -an', { timeout: 5000 });
+            return stdout.split(/\r?\n/)
+                .filter(line => /\bLISTEN\b/i.test(line))
+                .map(line => {
+                    const parts = line.trim().split(/\s+/);
+                    const address = parts[3] || parts[0] || '';
+                    return {
+                        localAddress: address.replace(/:\d+$/, ''),
+                        port: Number((address.match(/:(\d+)$/) || [])[1]),
+                        raw: line
+                    };
+                })
+                .filter(row => row.port);
+        } catch {
+            return [];
         }
     }
 

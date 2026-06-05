@@ -427,13 +427,13 @@ export class SomaServiceBridge {
   async *handleReasoning(query, contextFiles = [], deepThinking = false) {
     // Create thinking box with ID for updates
     const thinkingId = Date.now();
-    
+
     // Only show full ThinkingBox for deep thinking mode (Brain button)
     // Otherwise just show simple "thinking..." text
     if (deepThinking) {
-      yield { 
-        historyItems: [{ 
-          id: thinkingId, 
+      yield {
+        historyItems: [{
+          id: thinkingId,
           type: 'thinking',
           isThinking: true,
           streamedText: 'Engaging deep reasoning...',
@@ -452,6 +452,7 @@ export class SomaServiceBridge {
         body: JSON.stringify({
           message: query,
           deepThinking,
+          stream: !deepThinking, // stream regular queries token by token
           sessionId: this.userId,
           contextFiles,
           history: this.conversationHistory.slice(-20) // Last 20 messages for context
@@ -462,12 +463,51 @@ export class SomaServiceBridge {
         throw new Error(`Backend error: ${response.status}`);
       }
 
+      const contentType = response.headers.get('content-type') || '';
+
+      // SSE streaming path — token-by-token for regular queries
+      if (!deepThinking && contentType.includes('text/event-stream')) {
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        const streamMsgId = thinkingId + 1;
+        let fullText = '';
+
+        // Replace thinking indicator with an empty streaming message
+        yield { replaceId: thinkingId, historyItems: [{ id: streamMsgId, type: 'response', content: '', streaming: true }] };
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          const chunk = decoder.decode(value, { stream: true });
+          for (const line of chunk.split('\n')) {
+            const trimmed = line.trim();
+            if (!trimmed.startsWith('data:')) continue;
+            try {
+              const evt = JSON.parse(trimmed.slice(5).trim());
+              if (evt.token) {
+                fullText += evt.token;
+                yield { updateId: streamMsgId, historyItems: [{ id: streamMsgId, type: 'response', content: fullText, streaming: true }] };
+              } else if (evt.done) {
+                const finalText = (evt.response || fullText).trim();
+                if (finalText) this.conversationHistory.push({ role: 'assistant', content: finalText });
+                yield { updateId: streamMsgId, historyItems: [{ id: streamMsgId, type: 'response', content: finalText, streaming: false, metadata: evt.metadata }] };
+              } else if (evt.timeout || evt.error) {
+                const errText = evt.response || evt.error || 'Taking too long. Try again.';
+                yield { updateId: streamMsgId, historyItems: [{ id: streamMsgId, type: 'response', content: errText, streaming: false }] };
+              }
+            } catch {}
+          }
+        }
+        return;
+      }
+
+      // Non-streaming path (deep thinking or SSE not supported)
       const data = await response.json();
 
       if (data.success) {
         // Enhanced response with metadata from new endpoint
         const responseText = data.message || data.response;
-        
+
         // Check for directive (e.g., open_pulse)
         if (data.metadata?.directive === 'open_pulse') {
           yield {
@@ -555,8 +595,8 @@ export class SomaServiceBridge {
    * @param {string} query - Chat query
    */
   async *handleSimpleChat(query) {
-    // Simple thinking indicator (no box)
-    yield { historyItems: [{ id: Date.now(), type: 'think', content: '...' }] };
+    const thinkingId = Date.now();
+    yield { historyItems: [{ id: thinkingId, type: 'think', content: '...' }] };
 
     try {
       // Use enhanced endpoint - it auto-detects simple chat and routes to fast LOGOS brain
@@ -567,6 +607,7 @@ export class SomaServiceBridge {
           message: query,
           sessionId: this.userId,
           deepThinking: false,
+          stream: true,
           history: this.conversationHistory.slice(-20)
         })
       }, 60000); // 60 second timeout (backend may cascade through LLM fallbacks)
@@ -577,13 +618,47 @@ export class SomaServiceBridge {
         throw new Error(`Chat API ${response.status}`);
       }
 
+      const contentType = response.headers.get('content-type') || '';
+      if (contentType.includes('text/event-stream')) {
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        const streamMsgId = thinkingId + 1;
+        let fullText = '';
+
+        yield { replaceId: thinkingId, historyItems: [{ id: streamMsgId, type: 'response', content: '', streaming: true }] };
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          const chunk = decoder.decode(value, { stream: true });
+          for (const line of chunk.split('\n')) {
+            const trimmed = line.trim();
+            if (!trimmed.startsWith('data:')) continue;
+            try {
+              const evt = JSON.parse(trimmed.slice(5).trim());
+              if (evt.token) {
+                fullText += evt.token;
+                yield { updateId: streamMsgId, historyItems: [{ id: streamMsgId, type: 'response', content: fullText, streaming: true }] };
+              } else if (evt.done) {
+                const finalText = (evt.response || fullText).trim();
+                if (finalText) this.conversationHistory.push({ role: 'assistant', content: finalText });
+                yield { updateId: streamMsgId, historyItems: [{ id: streamMsgId, type: 'response', content: finalText || '...', streaming: false }] };
+              } else if (evt.timeout || evt.error) {
+                const errText = evt.response || evt.error || 'Taking too long. Try again.';
+                yield { updateId: streamMsgId, historyItems: [{ id: streamMsgId, type: 'response', content: errText, streaming: false }] };
+              }
+            } catch {}
+          }
+        }
+        return;
+      }
+
+      // Fallback non-streaming path
       const data = await response.json();
       const text = data.response || data.message || data.text;
-
-      // Push history
       if (text) this.conversationHistory.push({ role: 'assistant', content: text });
-
       yield {
+        replaceId: thinkingId,
         historyItems: [{
           id: Date.now(),
           type: 'response',
@@ -593,8 +668,8 @@ export class SomaServiceBridge {
       };
     } catch (e) {
       console.error('[SomaServiceBridge] handleSimpleChat failed:', e.message);
-      // Fallback to local if backend fails
       yield {
+        replaceId: thinkingId,
         historyItems: [{
           id: Date.now(),
           type: 'response',

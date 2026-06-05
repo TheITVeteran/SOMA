@@ -5,6 +5,7 @@ import crypto from 'crypto';
 import { createRequire } from 'module';
 import socialImageLibrary from '../social/SocialImageLibrary.js';
 import axisProfileStore from '../axis/AxisProfileStore.js';
+import { reasonGrounded } from '../context/GroundedReasoning.js';
 
 const SOMA_DIR = path.join(process.cwd(), 'SOMA');
 const USER_MD = path.join(SOMA_DIR, 'user.md');
@@ -992,11 +993,15 @@ export default function createStudioRoutes(system = {}) {
                 });
             }
 
-            const result = await brain.reason(prompt, {
-                source: 'studio-assistant',
-                quickResponse: true,
-                preferredBrain: 'AURORA',
-                profilePath: USER_MD,
+            const result = await reasonGrounded(brain, prompt, {
+                system,
+                forceContext: true,
+                context: {
+                    source: 'studio-assistant',
+                    quickResponse: true,
+                    preferredBrain: 'AURORA',
+                    profilePath: USER_MD,
+                }
             });
 
             res.json({

@@ -269,7 +269,15 @@ export const AIAnalysisModal = ({
                                         {analysis.strategy.entry_price && <Stat label="Entry" value={`$${analysis.strategy.entry_price}`} />}
                                         {analysis.strategy.stop_loss && <Stat label="Stop Loss" value={analysis.strategy.stop_loss} />}
                                         {analysis.strategy.take_profit && <Stat label="Take Profit" value={analysis.strategy.take_profit} />}
+                                        {analysis.strategy.recommendedActiveProtocol && (
+                                            <Stat label="Recommended Protocol" value={analysis.strategy.recommendedActiveProtocol.name} highlight />
+                                        )}
                                     </div>
+                                    {analysis.strategy.recommendedActiveProtocol?.reason && (
+                                        <p className="text-[11px] text-cyan-400 mt-2 font-mono">
+                                            PROTOCOL FIT: {analysis.strategy.recommendedActiveProtocol.reason}
+                                        </p>
+                                    )}
                                     {analysis.strategy.rationale && (
                                         <p className="text-xs text-slate-400 mt-3 leading-relaxed">{analysis.strategy.rationale}</p>
                                     )}
@@ -315,6 +323,21 @@ export const AIAnalysisModal = ({
                                         <Stat label="Score" value={(analysis.sentiment.score || 0).toFixed(2)} />
                                         <Stat label="Label" value={analysis.sentiment.label} />
                                         <Stat label="Social Volume" value={analysis.sentiment.social_volume} />
+                                    </div>
+                                </Section>
+                            )}
+
+                            {/* Bluesky RAG Sentiment */}
+                            {analysis.blueskySentiment && (
+                                <Section icon={<MessageSquare className="w-4 h-4" />} title="BLUESKY RAG INTEL" color="text-cyan-400">
+                                    <div className="bg-soma-900/50 p-3 rounded border border-soma-800/30">
+                                        <div className="flex items-center justify-between text-[10px] text-slate-500 mb-2 font-mono">
+                                            <span>QUERY: {analysis.blueskySentiment.queryUsed}</span>
+                                            <span>POSTS PROCESS: {analysis.blueskySentiment.postsProcessed}</span>
+                                        </div>
+                                        <p className="text-xs text-slate-300 leading-relaxed whitespace-pre-line font-mono">
+                                            {analysis.blueskySentiment.distilledOptions}
+                                        </p>
                                     </div>
                                 </Section>
                             )}

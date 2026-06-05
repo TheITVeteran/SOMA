@@ -217,21 +217,52 @@ export class SelfEvolvingGoalEngine {
                 fs.readdir(path.join(ROOT_PATH, 'core')).catch(() => [])
             ]);
 
+            // Graphify manifest integration to look beyond arbiters and core
+            let graphifyFiles = [];
+            try {
+                const manifestPath = path.join(ROOT_PATH, 'graphify-out', 'manifest.json');
+                const manifestData = JSON.parse(await fs.readFile(manifestPath, 'utf8'));
+                graphifyFiles = Object.keys(manifestData);
+                console.log(`[${this.name}] 🧬 Graphify manifest query loaded ${graphifyFiles.length} tracked files.`);
+            } catch (err) {
+                console.warn(`[${this.name}] ⚠️ Failed to load Graphify manifest:`, err.message);
+            }
+
             const loadedSystems = this.system
                 ? Object.keys(this.system).filter(k =>
                     this.system[k] && typeof this.system[k] === 'object' &&
-                    (k.includes('Arbiter') || k.includes('Engine') || k.includes('Cortex') || k.includes('Registry'))
+                    (k.includes('Arbiter') || k.includes('Engine') || k.includes('Cortex') || k.includes('Registry') || k.includes('Daemon') || k.includes('Service') || k.includes('Brain'))
                   )
                 : [];
 
-            const unloadedArbiters = arbiterFiles
-                .filter(f => f.endsWith('.js') || f.endsWith('.cjs'))
-                .map(f => f.replace(/\.(js|cjs)$/, ''))
-                .filter(name => !loadedSystems.some(la =>
-                    la.toLowerCase().replace(/arbiter|engine/gi, '') ===
-                    name.toLowerCase().replace(/arbiter|engine/gi, '')
-                ))
-                .slice(0, 25);
+            const pathBasename = (p) => path.basename(p, path.extname(p));
+            
+            const manifestArbiters = graphifyFiles
+                .filter(f => f.toLowerCase().includes('arbiters') && (f.endsWith('.js') || f.endsWith('.cjs')))
+                .map(p => pathBasename(p));
+            const manifestDaemons = graphifyFiles
+                .filter(f => f.toLowerCase().includes('daemons') && (f.endsWith('.js') || f.endsWith('.cjs')))
+                .map(p => pathBasename(p));
+            const manifestServices = graphifyFiles
+                .filter(f => f.toLowerCase().includes('services') && (f.endsWith('.js') || f.endsWith('.cjs')))
+                .map(p => pathBasename(p));
+
+            const isLoaded = (name) => {
+                const normalized = name.toLowerCase().replace(/arbiter|engine|daemon|service|cortex/gi, '');
+                return loadedSystems.some(la => 
+                    la.toLowerCase().replace(/arbiter|engine|daemon|service|cortex/gi, '') === normalized
+                );
+            };
+
+            const unloadedArbiters = [
+                ...new Set([
+                    ...arbiterFiles.filter(f => f.endsWith('.js') || f.endsWith('.cjs')).map(f => f.replace(/\.(js|cjs)$/, '')),
+                    ...manifestArbiters
+                ])
+            ].filter(name => !isLoaded(name)).slice(0, 25);
+
+            const unloadedDaemons = manifestDaemons.filter(name => !isLoaded(name)).slice(0, 25);
+            const unloadedServices = manifestServices.filter(name => !isLoaded(name)).slice(0, 25);
 
             // 🧬 Sovereign Assembly: Autonomously integrate dormant arbiters
             if (this.ace && unloadedArbiters.length > 0) {
@@ -303,6 +334,12 @@ ${loadedSystems.slice(0, 30).join(', ')}
 UNLOADED ARBITERS ON DISK (${unloadedArbiters.length}):
 ${unloadedArbiters.join(', ')}
 
+UNLOADED DAEMONS ON DISK (${unloadedDaemons.length}):
+${unloadedDaemons.join(', ')}
+
+UNLOADED SERVICES ON DISK (${unloadedServices.length}):
+${unloadedServices.join(', ')}
+
 CORE FILES:
 ${coreFiles.filter(f => f.endsWith('.js')).slice(0, 20).join(', ')}
 
@@ -315,7 +352,7 @@ ${recentInsights || 'None yet'}
 SOMA's mission: Become a self-evolving ASI. She can research topics, create new tools, read/write code, browse GitHub, and load new arbiters.
 
 Look at the gap between what's loaded and what's available on disk. Consider:
-- Is there an unloaded arbiter that would genuinely improve SOMA's capabilities?
+- Is there an unloaded arbiter, daemon, or service that would genuinely improve SOMA's capabilities?
 - Is there a capability SOMA clearly lacks (web search, voice, vision, external APIs)?
 - Is there something in the loaded systems that seems broken or underutilized?
 - What would make the biggest difference to SOMA's autonomy and intelligence?

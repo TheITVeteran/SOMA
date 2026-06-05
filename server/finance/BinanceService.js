@@ -10,6 +10,7 @@
 
 import crypto from 'crypto';
 import exchangeCredentials from './ExchangeCredentialsService.js';
+import riskGateway from './RiskGateway.js';
 
 const BASE_URL = 'https://api.binance.com';
 const FUTURES_URL = 'https://fapi.binance.com';
@@ -93,10 +94,30 @@ class BinanceService {
         }
 
         const response = await fetch(url, options);
+        if (!response.ok) {
+            let errMsg = `HTTP Error ${response.status}`;
+            try {
+                const errData = await response.json();
+                if (errData && errData.msg) {
+                    errMsg += `: ${errData.msg}`;
+                } else if (errData && errData.message) {
+                    errMsg += `: ${errData.message}`;
+                }
+            } catch (e) {
+                // Ignore json parse error
+            }
+            throw new Error(errMsg);
+        }
+
         const data = await response.json();
 
-        if (data.code && data.code < 0) {
-            throw new Error(`Binance API Error: ${data.msg} (${data.code})`);
+        if (data && typeof data === 'object' && !Array.isArray(data)) {
+            if (data.code !== undefined && data.code < 0) {
+                throw new Error(`Binance API Error: ${data.msg} (${data.code})`);
+            }
+            if (data.msg) {
+                throw new Error(`Binance API Error: ${data.msg}`);
+            }
         }
 
         return data;
@@ -311,6 +332,16 @@ class BinanceService {
     async placeOrder(symbol, side, type, quantity, price = null) {
         this._checkConnection();
 
+        // Intercept with Pre-Trade Risk Gateway
+        await riskGateway.validateOrder({
+            symbol,
+            side,
+            qty: quantity,
+            price: price || 0,
+            type,
+            broker: 'binance'
+        });
+
         const params = {
             symbol,
             side: side.toUpperCase(),
@@ -342,6 +373,16 @@ class BinanceService {
      */
     async placeFuturesOrder(symbol, side, type, quantity, price = null, leverage = null) {
         this._checkConnection();
+
+        // Intercept with Pre-Trade Risk Gateway
+        await riskGateway.validateOrder({
+            symbol,
+            side,
+            qty: quantity,
+            price: price || 0,
+            type,
+            broker: 'binance'
+        });
 
         // Set leverage if specified
         if (leverage) {

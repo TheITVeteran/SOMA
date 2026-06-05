@@ -22,6 +22,7 @@ import { registry } from '../server/SystemRegistry.js';
 import { SomaAgenticExecutor } from './SomaAgenticExecutor.js';
 import { ExpertiseRegistry } from './ExpertiseRegistry.js';
 import { ComputerControlArbiter } from '../arbiters/ComputerControlArbiter.js';
+import { ASTIndexerService } from '../server/services/ASTIndexerService.js';
 import { createRequire } from 'module';
 
 const require = createRequire(import.meta.url);
@@ -68,6 +69,25 @@ export class SomaBootstrapV2 {
                 this.system.quadBrain = bridge;
                 registry.markLoading('BrainWorker');
                 
+                // Register/override brain instances in the message broker
+                if (this.system.messageBroker) {
+                    this.system.messageBroker.registerArbiter('SomaBrain', {
+                        instance: bridge,
+                        role: 'core',
+                        version: bridge.version
+                    });
+                    this.system.messageBroker.registerArbiter('QuadBrain', {
+                        instance: bridge,
+                        role: 'core',
+                        version: bridge.version
+                    });
+                    this.system.messageBroker.registerArbiter('SOMArbiter', {
+                        instance: bridge,
+                        role: 'core',
+                        version: bridge.version
+                    });
+                }
+
                 // Get tools manifest to pass to worker
                 const toolsManifest = this.system.toolRegistry?.getToolsManifest() || [];
 
@@ -116,6 +136,7 @@ export class SomaBootstrapV2 {
 
             await this._wireAutonomyRuntime(this.system);
             await this._wireExpertiseRuntime(this.system);
+            await this._wireASTIndexer(this.system);
 
             // Wire dashboard WebSocket clients into the Guardian (now that WS is ready)
             if (tradingSafety.guardian && wsSystem.dashboardClients) {
@@ -263,6 +284,21 @@ export class SomaBootstrapV2 {
         await expertiseRegistry.initialize();
         system.expertiseRegistry = expertiseRegistry;
         console.log(`[SOMA V2] ✅ ExpertiseRegistry wired — ${expertiseRegistry.list().length} manifest(s), lazy-load enabled`);
+    }
+
+    async _wireASTIndexer(system) {
+        if (system.astIndexer) return;
+
+        const astIndexer = new ASTIndexerService();
+        astIndexer.initialize();
+        system.astIndexer = astIndexer;
+
+        // Kick off indexing asynchronously (non-blocking)
+        astIndexer.startIndexing().catch(e => {
+            console.warn('[SOMA V2] AST indexing background run failed:', e.message);
+        });
+
+        console.log('[SOMA V2] ✅ ASTIndexerService wired — indexing running in background');
     }
 
     async _loadEssentialBackground(system) {

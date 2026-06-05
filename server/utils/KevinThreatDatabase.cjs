@@ -106,6 +106,10 @@ class KevinThreatDatabase {
         // Decision audit trail for reversible security actions
         this.trustDecisions = [];
 
+        // Sender/domain memory. This is KEVIN's long-term reputation cache.
+        this.senderMemory = {};
+        this.domainMemory = {};
+
         // Load persisted data
         this._loadData();
     }
@@ -132,24 +136,50 @@ class KevinThreatDatabase {
             filename,
             isSafe: true,
             threatLevel: 0,
-            warnings: []
+            warnings: [],
+            evidence: [],
+            hash: null,
+            extension: path.extname(filename || '').toLowerCase(),
+            category: 'unknown'
         };
 
         // Check extension
-        const ext = path.extname(filename).toLowerCase();
+        const ext = result.extension;
+        if (['.pdf'].includes(ext)) result.category = 'document_pdf';
+        else if (['.doc', '.docx', '.xls', '.xlsx', '.ppt', '.pptx'].includes(ext)) result.category = 'office_document';
+        else if (['.zip', '.rar', '.7z', '.gz'].includes(ext)) result.category = 'archive';
+        else if (['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp'].includes(ext)) result.category = 'image';
+        else if (this.suspiciousExtensions.includes(ext)) result.category = 'executable_or_script';
+
         if (this.suspiciousExtensions.includes(ext)) {
             result.isSafe = false;
             result.threatLevel += 50;
             result.warnings.push(`Dangerous file type: ${ext}`);
+            result.evidence.push({ type: 'dangerous_extension', severity: 'high', detail: ext, score: 50 });
+        }
+
+        if (['.zip', '.rar', '.7z', '.iso', '.img'].includes(ext)) {
+            result.threatLevel += 20;
+            result.warnings.push(`Container/archive requires sandbox inspection: ${ext}`);
+            result.evidence.push({ type: 'container_attachment', severity: 'medium', detail: ext, score: 20 });
+        }
+
+        if (/\.(pdf|docx?|xlsx?|pptx?)\.(exe|scr|js|vbs|ps1|bat|cmd)$/i.test(filename || '')) {
+            result.isSafe = false;
+            result.threatLevel += 45;
+            result.warnings.push('Document-disguised executable');
+            result.evidence.push({ type: 'document_disguised_executable', severity: 'critical', detail: filename, score: 45 });
         }
 
         // Check hash if content provided
         if (content) {
             const hash = this.calculateHash(content);
+            result.hash = hash;
             if (this.isHashMalicious(hash)) {
                 result.isSafe = false;
                 result.threatLevel = 100;
                 result.warnings.push('KNOWN MALWARE - Hash match in threat database');
+                result.evidence.push({ type: 'known_malware_hash', severity: 'critical', detail: hash, score: 100 });
             }
         }
 
@@ -158,7 +188,11 @@ class KevinThreatDatabase {
         if (doubleExtMatch) {
             result.threatLevel += 30;
             result.warnings.push('Suspicious double extension');
+            result.evidence.push({ type: 'double_extension', severity: 'medium', detail: filename, score: 30 });
         }
+
+        result.threatLevel = Math.min(100, result.threatLevel);
+        result.isSafe = result.threatLevel < 40;
 
         return result;
     }
@@ -252,6 +286,19 @@ class KevinThreatDatabase {
             score -= 20;
         }
 
+        const domain = sender.split('@')[1] || '';
+        const senderRep = this._getSenderMemory(sender);
+        const domainRep = this._getDomainMemory(domain);
+        if (senderRep.interactions > 0) {
+            evidence.push({ type: 'sender_memory', severity: 'info', detail: `${senderRep.interactions} prior interaction(s), trust ${senderRep.trustScore}`, score: -Math.round(senderRep.trustScore * 10) });
+            score -= Math.round(senderRep.trustScore * 10);
+        }
+        if (domainRep.riskScore > 0) {
+            score += Math.round(domainRep.riskScore * 0.35);
+            riskFactors.push(`Domain reputation risk: ${domainRep.riskScore}`);
+            evidence.push({ type: 'domain_reputation', severity: domainRep.riskScore >= 60 ? 'high' : 'medium', detail: domain, score: Math.round(domainRep.riskScore * 0.35) });
+        }
+
         const phishing = this.checkPhishing(email);
         if (phishing.indicators.length) {
             score += phishing.threatScore;
@@ -309,13 +356,45 @@ class KevinThreatDatabase {
             }
         }
 
+        const attachments = this._normalizeAttachments(email.attachments || []);
+        for (const attachment of attachments.slice(0, 10)) {
+            const analysis = this.analyzeAttachment(attachment.filename || attachment.name || 'attachment', attachment.content || attachment.buffer || attachment.data);
+            if (analysis.threatLevel > 0) {
+                score += analysis.threatLevel;
+                riskFactors.push(...analysis.warnings);
+                evidence.push(...analysis.evidence);
+            }
+        }
+
+        if (this._looksLikeImpersonation(sender, subject, body)) {
+            score += 25;
+            riskFactors.push('Possible brand or executive impersonation');
+            evidence.push({ type: 'impersonation_signal', severity: 'high', detail: 'Brand/executive wording with external sender context', score: 25 });
+        }
+
         const category = this.categorizeEmail(email);
         score = Math.max(0, Math.min(100, score));
         const verdict = score >= 80 ? 'block' : score >= 55 ? 'high_risk' : score >= 30 ? 'caution' : 'allow';
         const confidence = evidence.length >= 4 ? 0.9 : evidence.length >= 2 ? 0.78 : evidence.length === 1 ? 0.66 : 0.58;
         const requiresApproval = verdict !== 'allow' || /\b(send|reply|schedule|pay|transfer|approve)\b/i.test(text);
 
-        return {
+        // Generate dynamic safety/risk explanation
+        let analysis = '';
+        if (sender && this.blockedSenders.has(sender)) {
+            analysis = `The sender "${sender}" is explicitly blocked in SOMA's threat database. Interacting with this email is highly discouraged.`;
+        } else if (sender && this.safeSenders.has(sender) && score < 55) {
+            analysis = `The sender "${sender}" is on the safe/trusted list. The email is marked as safe.`;
+        } else {
+            if (score >= 55) {
+                analysis = `Flagged as unsafe (Score: ${score}%). Kevin detected the following warning indicators: ${riskFactors.join(', ')}.`;
+            } else if (score > 0) {
+                analysis = `Marked as safe with minor warnings (Score: ${score}%). Triggers detected: ${riskFactors.join(', ')}.`;
+            } else {
+                analysis = `Marked as safe. Kevin scanned the email and found no suspicious links, keywords, or phishing patterns.`;
+            }
+        }
+
+        const result = {
             success: true,
             verdict,
             confidence,
@@ -328,7 +407,100 @@ class KevinThreatDatabase {
             reversible: true,
             requiresApproval,
             subject,
-            sender
+            sender,
+            analysis
+        };
+        this.recordEmailOutcome({
+            sender,
+            domain,
+            verdict,
+            score,
+            evidence,
+            subject,
+            urls: urls.length,
+            attachments: attachments.length
+        });
+        return result;
+    }
+
+    _normalizeAttachments(attachments) {
+        if (!Array.isArray(attachments)) return [];
+        return attachments.map(item => ({
+            filename: item.filename || item.name || item.path || 'attachment',
+            content: item.content || item.buffer || item.data || null,
+            size: item.size || item.length || 0,
+            contentType: item.contentType || item.mimeType || ''
+        }));
+    }
+
+    _looksLikeImpersonation(sender, subject, body) {
+        const text = `${subject} ${body}`.toLowerCase();
+        const domain = String(sender || '').split('@')[1] || '';
+        const protectedBrands = ['google', 'microsoft', 'apple', 'amazon', 'paypal', 'github', 'bank', 'irs', 'docusign'];
+        const mentionsBrand = protectedBrands.some(brand => text.includes(brand));
+        const fromBrandDomain = protectedBrands.some(brand => domain.includes(brand));
+        const executivePressure = /\b(ceo|cfo|boss|executive|director|confidential|wire|gift card|urgent)\b/i.test(text);
+        return (mentionsBrand && !fromBrandDomain) || executivePressure;
+    }
+
+    _getSenderMemory(sender) {
+        if (!sender) return { interactions: 0, trustScore: 0, riskScore: 0, reasons: [] };
+        return this.senderMemory[sender] || { sender, firstSeen: null, lastSeen: null, interactions: 0, trustScore: 0, riskScore: 0, reasons: [] };
+    }
+
+    _getDomainMemory(domain) {
+        if (!domain) return { interactions: 0, trustScore: 0, riskScore: 0, reasons: [] };
+        return this.domainMemory[domain] || { domain, firstSeen: null, lastSeen: null, interactions: 0, trustScore: 0, riskScore: 0, reasons: [] };
+    }
+
+    recordEmailOutcome({ sender, domain, verdict, score, evidence = [], subject = '', urls = 0, attachments = 0 }) {
+        const now = new Date().toISOString();
+        const normalizedSender = String(sender || '').toLowerCase();
+        const normalizedDomain = String(domain || normalizedSender.split('@')[1] || '').toLowerCase();
+        const riskDelta = Math.min(100, Math.max(0, Number(score) || 0));
+        const trustDelta = verdict === 'allow' ? 0.05 : -0.08;
+        const reasons = evidence.map(e => e.type || e.detail).filter(Boolean).slice(0, 12);
+
+        if (normalizedSender) {
+            const memory = this._getSenderMemory(normalizedSender);
+            this.senderMemory[normalizedSender] = {
+                ...memory,
+                sender: normalizedSender,
+                firstSeen: memory.firstSeen || now,
+                lastSeen: now,
+                interactions: (memory.interactions || 0) + 1,
+                trustScore: Math.max(-1, Math.min(1, Number(memory.trustScore || 0) + trustDelta)),
+                riskScore: Math.round(((Number(memory.riskScore || 0) * Math.max(0, memory.interactions || 0)) + riskDelta) / Math.max(1, (memory.interactions || 0) + 1)),
+                lastVerdict: verdict,
+                lastSubject: String(subject || '').slice(0, 160),
+                urls,
+                attachments,
+                reasons: [...new Set([...(memory.reasons || []), ...reasons])].slice(-25)
+            };
+        }
+
+        if (normalizedDomain) {
+            const memory = this._getDomainMemory(normalizedDomain);
+            this.domainMemory[normalizedDomain] = {
+                ...memory,
+                domain: normalizedDomain,
+                firstSeen: memory.firstSeen || now,
+                lastSeen: now,
+                interactions: (memory.interactions || 0) + 1,
+                trustScore: Math.max(-1, Math.min(1, Number(memory.trustScore || 0) + trustDelta)),
+                riskScore: Math.round(((Number(memory.riskScore || 0) * Math.max(0, memory.interactions || 0)) + riskDelta) / Math.max(1, (memory.interactions || 0) + 1)),
+                lastVerdict: verdict,
+                reasons: [...new Set([...(memory.reasons || []), ...reasons])].slice(-25)
+            };
+        }
+        this._saveData();
+    }
+
+    getReputationCache() {
+        return {
+            success: true,
+            senders: Object.values(this.senderMemory).sort((a, b) => new Date(b.lastSeen || 0) - new Date(a.lastSeen || 0)),
+            domains: Object.values(this.domainMemory).sort((a, b) => Number(b.riskScore || 0) - Number(a.riskScore || 0))
         };
     }
 
@@ -450,6 +622,8 @@ class KevinThreatDatabase {
                 if (data.safeSenders) this.safeSenders = new Set(data.safeSenders);
                 if (data.blockedSenders) this.blockedSenders = new Set(data.blockedSenders);
                 if (data.trustDecisions) this.trustDecisions = data.trustDecisions.slice(-200);
+                if (data.senderMemory && typeof data.senderMemory === 'object') this.senderMemory = data.senderMemory;
+                if (data.domainMemory && typeof data.domainMemory === 'object') this.domainMemory = data.domainMemory;
                 if (data.customHashes) {
                     data.customHashes.forEach(h => this.maliciousHashes.add(h));
                 }
@@ -473,6 +647,8 @@ class KevinThreatDatabase {
                 safeSenders: [...this.safeSenders],
                 blockedSenders: [...this.blockedSenders],
                 trustDecisions: this.trustDecisions.slice(-200),
+                senderMemory: this.senderMemory,
+                domainMemory: this.domainMemory,
                 updatedAt: new Date().toISOString()
             };
             fs.writeFileSync(this.dataPath, JSON.stringify(data, null, 2));

@@ -144,8 +144,20 @@ router.get('/verdict-timeline', async (req, res) => {
     await callKevin(req, res, 'getVerdictTimeline', [req.query.limit || 50], 'verdict timeline');
 });
 
+router.get('/evidence-ledger', async (req, res) => {
+    await callKevin(req, res, 'getEvidenceLedger', [req.query.limit || 100], 'evidence ledger');
+});
+
 router.get('/local-watch', async (req, res) => {
     await callKevin(req, res, 'getLocalWatchSummary', [], 'local watch');
+});
+
+router.get('/dependency-audit', async (req, res) => {
+    await callKevin(req, res, 'getDependencyAuditStatus', [req.query.force === 'true'], 'dependency audit');
+});
+
+router.post('/local-watch/rebaseline', async (req, res) => {
+    await callKevin(req, res, 'resetFileBaseline', [], 'file baseline reset');
 });
 
 router.post('/links/inspect', async (req, res) => {
@@ -160,6 +172,10 @@ router.get('/briefing', async (req, res) => {
 
 router.get('/reputation', async (req, res) => {
     await callKevin(req, res, 'getReputationMemory', [], 'reputation memory');
+});
+
+router.get('/reputation-cache', async (req, res) => {
+    await callKevin(req, res, 'getReputationCache', [], 'sender/domain reputation cache');
 });
 
 router.post('/pairing/challenge', async (req, res) => {
@@ -211,7 +227,7 @@ router.get('/config', async (req, res) => {
     const kevin = getKevin(req);
     if (!kevin) return res.status(503).json({ success: false, error: 'Kevin offline' });
 
-    const config = kevin.getConfig ? kevin.getConfig() : kevin.config || {};
+    const config = kevin._redactConfig ? kevin._redactConfig() : (kevin.getConfig ? kevin.getConfig() : kevin.config || {});
     res.json({ success: true, config });
 });
 
@@ -687,6 +703,14 @@ router.post('/threats/safe-sender', async (req, res) => {
     const { sender } = req.body;
     if (!sender) {
         return res.status(400).json({ success: false, error: 'sender required' });
+    }
+
+    // Remove matching threat logs for this sender from local memory
+    if (kevin.scanLogs) {
+        kevin.scanLogs = kevin.scanLogs.filter(log => {
+            const logSender = log.origin || log.from || '';
+            return logSender.toLowerCase() !== sender.toLowerCase();
+        });
     }
 
     await callService(req, res, 'threatDatabase', 'markSenderSafe', [sender], 'safe sender marking');

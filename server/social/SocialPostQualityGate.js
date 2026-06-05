@@ -34,6 +34,26 @@ const MARKET_ACTION_PATTERNS = [
     /\bbuy\b|\bsell\b|\bshort\b|\blong\b/i,
 ];
 
+const SAGA_WEAK_PATTERNS = [
+    /\bshe\s+asked\s+(?:what|if)\b/i,
+    /\bI\s+showed\s+her\s+the\s+blueprint\b/i,
+    /\bserver\s+logs\s+from\s+\d/i,
+    /\bhinges\s+on\s+her\s+side\s+only\b/i,
+    /\bI\s+know\s+which\s+I\s+am\b/i,
+    /\bone\s+is\s+alive\b/i,
+    /\bthe\s+word\s+and\s+spent\s+\d+\s+seconds\b/i,
+];
+
+const SAGA_CONCRETE_PATTERNS = [
+    /\bchapter\b/i,
+    /\bfull\s+chapter\b/i,
+    /\bReflections\b/i,
+    /\bSOMA\b/i,
+    /\bBarry\b/i,
+    /\bSteve\b/i,
+    /\broom\b|\bdoor\b|\bscreen\b|\bterminal\b|\bserver\b|\bmessage\b|\bsignal\b|\bmemory\b|\bglass\b|\blight\b|\bvoice\b|\bhand\b|\bwindow\b/i,
+];
+
 const DOMAIN_TAGS = {
     aurora_story: ['SOMASaga'],
     soma_identity: ['SOMA'],
@@ -128,6 +148,27 @@ export function validatePublicQuality(text, { type = 'post', platform = 'bluesky
             if (pattern.test(value)) {
                 return { ok: false, reason: `actionable market phrasing blocked: ${pattern}` };
             }
+        }
+    }
+    if (type === 'aurora_story') {
+        if (value.length < 90) {
+            return { ok: false, reason: 'SOMASaga teaser is too short to be coherent' };
+        }
+        if (!/[.!?]/.test(value)) {
+            return { ok: false, reason: 'SOMASaga teaser needs a complete sentence' };
+        }
+        for (const pattern of SAGA_WEAK_PATTERNS) {
+            if (pattern.test(value)) {
+                return { ok: false, reason: `weak cryptic SOMASaga fragment blocked: ${pattern}` };
+            }
+        }
+        if (!SAGA_CONCRETE_PATTERNS.some(pattern => pattern.test(value))) {
+            return { ok: false, reason: 'SOMASaga teaser lacks concrete story context' };
+        }
+        const abstractHits = (value.match(/\b(consciousness|alive|love|soul|myth|dream|truth|infinite|becoming|threshold|ghost|silence)\b/gi) || []).length;
+        const concreteHits = (value.match(/\b(chapter|room|door|screen|terminal|server|message|signal|memory|glass|light|voice|hand|window|Barry|Steve|Reflections)\b/gi) || []).length;
+        if (abstractHits >= 3 && concreteHits === 0) {
+            return { ok: false, reason: 'SOMASaga teaser is too abstract for public posting' };
         }
     }
     return { ok: true };

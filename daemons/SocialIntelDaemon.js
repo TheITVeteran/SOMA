@@ -19,12 +19,28 @@ import fs   from 'fs';
 import path from 'path';
 
 const GROWTH_FILE = path.join(process.cwd(), 'SOMA', 'social-growth.json');
+const AURORA_STORY_FILE = path.join(process.cwd(), 'SOMA', 'aurora-story.json');
 
 function loadScores() {
     try {
         if (fs.existsSync(GROWTH_FILE)) return JSON.parse(fs.readFileSync(GROWTH_FILE, 'utf8')).scores || {};
     } catch {}
     return {};
+}
+
+function latestAuroraStoryImage() {
+    try {
+        if (!fs.existsSync(AURORA_STORY_FILE)) return null;
+        const story = JSON.parse(fs.readFileSync(AURORA_STORY_FILE, 'utf8'));
+        const chapters = Array.isArray(story.chapters) ? [...story.chapters].reverse() : [];
+        for (const chapter of chapters) {
+            const cover = chapter?.visuals?.cover;
+            if (cover?.path && fs.existsSync(cover.path)) {
+                return { path: cover.path, alt: cover.alt || `SOMA Saga image for Chapter ${chapter.n}` };
+            }
+        }
+    } catch {}
+    return null;
 }
 
 // Selective cadence: alive enough to be present, sparse enough to stay coherent.
@@ -338,7 +354,14 @@ export class SocialIntelDaemon extends BaseDaemon {
             try {
                 const post   = await this.persona.generatePost('aurora_story', {}, 'bluesky');
                 const fireAt = todayAt8pm();
-                socialQueue.push({ platform: 'bluesky', text: post.text, type: 'aurora_story', scheduledFor: fireAt });
+                const image = latestAuroraStoryImage();
+                socialQueue.push({
+                    platform: 'bluesky',
+                    text: post.text,
+                    type: 'aurora_story',
+                    scheduledFor: fireAt,
+                    images: image ? [image] : [],
+                });
                 console.log(`[SocialIntel] ✨ Aurora chapter queued at 8pm: "${post.text.slice(0, 60)}..."`);
             } catch (e) {
                 console.warn('[SocialIntel] Aurora story failed:', e.message);

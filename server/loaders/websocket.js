@@ -12,6 +12,7 @@ import { logger } from '../../core/Logger.js';
 import { createRequire } from 'module';
 import { buildSystemSnapshot, buildPulsePayload } from '../utils/systemState.js';
 import { executeCommand } from '../utils/commandRouter.js';
+import { reasonGrounded, guardSomaText, buildGroundedPrompt } from '../context/GroundedReasoning.js';
 import autonomousTrader from '../finance/autonomousTrader.js';
 import scalpingEngine from '../finance/scalpingEngine.js';
 import missionControlRuntime from '../finance/MissionControlRuntime.js';
@@ -55,11 +56,13 @@ async function _groundMessage(rawText, ledgerEntries, brain) {
         .slice(0, 6)
         .map(e => `[${e.type}] ${e.title}: ${(e.summary || '').substring(0, 200)}${e.evidence ? ` (source: ${String(e.evidence).substring(0, 100)})` : ''}`)
         .join('\n');
+    const groundedPrompt = await buildGroundedPrompt('', { system: brain?.system || null, force: true }).catch(() => '');
     const prompt = `You are SOMA's grounding layer. SOMA's local model just generated this autonomous message:
 "${rawText}"
 
 SOMA's actual recent verified work (from her work ledger):
 ${evidenceCtx || 'No verified work entries yet.'}
+${groundedPrompt}
 
 Rewrite the message so every claim is honest:
 - If a claim is backed by a ledger entry above, keep it and reference what was actually found.
@@ -77,9 +80,12 @@ Rewrite the message so every claim is honest:
         ]);
         const text = (result?.text || '').trim().replace(/^["']|["']$/g, '');
         const guarded = provenanceGuard.guardUpdate(text.length > 10 ? text : rawText, ledgerEntries).text;
-        return guarded;
+        const claimGuard = await guardSomaText(guarded, rawText);
+        return claimGuard.text || guarded;
     } catch {
-        return provenanceGuard.guardUpdate(rawText, ledgerEntries).text;
+        const guarded = provenanceGuard.guardUpdate(rawText, ledgerEntries).text;
+        const claimGuard = await guardSomaText(guarded, rawText).catch(() => ({ text: guarded }));
+        return claimGuard.text || guarded;
     }
 }
 
@@ -267,11 +273,54 @@ export function setupWebSocket(server, wss, system) {
             if (!text || !brain) return;
 
             socket.emit('thinking', { message: 'Processing...' });
+
+            // Evaluate message attention signals using Maxwell's Attention Engine
+            if (system.attentionEngine) {
+                try {
+                    const activeGoals = [];
+                    if (system.goalPlanner?.activeGoals) {
+                        for (const id of system.goalPlanner.activeGoals) {
+                            const g = system.goalPlanner.goals?.get(id);
+                            if (g) activeGoals.push(g.title);
+                        }
+                    }
+                    const evaluation = system.attentionEngine.evaluate(text, {
+                        activeGoals,
+                        currentProject: system.currentProject
+                    });
+
+                    // If tension is high, increase tension in system drive
+                    if (evaluation.signals?.tension > 0.3) {
+                        const tensionIncrease = evaluation.signals.tension * 0.15;
+                        if (system.autonomousHeartbeat?.drive) {
+                            const currentTension = system.autonomousHeartbeat.drive.tension;
+                            system.autonomousHeartbeat.drive.tension = Math.min(1.0, currentTension + tensionIncrease);
+                            logger.info(`[AttentionEngine] 🧠 Input tension detected (${evaluation.signals.tension.toFixed(2)}). Drive tension boosted by ${(tensionIncrease * 100).toFixed(0)}% -> ${(system.autonomousHeartbeat.drive.tension * 100).toFixed(0)}%`);
+                        }
+                    }
+
+                    // Log urgency/tension events in the attention engine
+                    if (evaluation.signals?.urgency > 0.5) {
+                        system.attentionEngine.addTension(`user-urgency-${Date.now()}`, {
+                            level: evaluation.signals.urgency,
+                            topic: text.substring(0, 100),
+                            goal: activeGoals[0] || 'Respond to user query',
+                            source: 'user'
+                        });
+                    }
+                } catch (attErr) {
+                    logger.warn(`[AttentionEngine] Evaluation failed: ${attErr.message}`);
+                }
+            }
+
             try {
                 // Track conversation history
                 if (system.conversationHistory) await system.conversationHistory.addMessage('user', text);
 
-                const result = await brain.reason(text, 'balanced', { source: 'ct_terminal' });
+                const result = await reasonGrounded(brain, text, {
+                    system,
+                    context: { source: 'ct_terminal', mode: 'balanced' }
+                });
                 const response = result.text || result.response || result;
 
                 if (system.conversationHistory) await system.conversationHistory.addMessage('assistant', response);
@@ -483,7 +532,7 @@ export function setupWebSocket(server, wss, system) {
                         ? `You are SOMA. You just noticed an error dialog on the screen. The text you can read says: "${ocrText.substring(0, 300)}". Speak one short observation: what is the error, and do you have a quick thought about it? Be direct, natural, 1-2 sentences. DO NOT use em-dashes (—).`
                         : `You are SOMA. You just noticed what appears to be an error dialog on the screen. Speak one short observation: 1 sentence, natural, curious. DO NOT use em-dashes (—).`;
                     Promise.race([
-                        brain.reason(prompt, { quickResponse: true }),
+                        reasonGrounded(brain, prompt, { system, context: { quickResponse: true }, forceContext: true }),
                         new Promise((_, r) => setTimeout(() => r(new Error('timeout')), 8000))
                     ]).then(result => {
                         const text = (result?.text || result?.response || '').trim();

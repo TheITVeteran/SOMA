@@ -162,8 +162,35 @@ class SteveArbiter extends BaseArbiter {
   }
 
   async processChat(message, history = [], context = {}) {
+    const checkAbort = () => {
+      if (context.signal && context.signal.aborted) {
+        throw new Error('SteveAssistAborted');
+      }
+    };
+    const delay = (ms) => new Promise((resolve, reject) => {
+      if (context.signal && context.signal.aborted) {
+        return reject(new Error('SteveAssistAborted'));
+      }
+      const t = setTimeout(() => {
+        if (context.signal) context.signal.removeEventListener('abort', onAbort);
+        resolve();
+      }, ms);
+      const onAbort = () => {
+        clearTimeout(t);
+        reject(new Error('SteveAssistAborted'));
+      };
+      if (context.signal) {
+        context.signal.addEventListener('abort', onAbort, { once: true });
+      }
+    });
+
     // 1. Vector Search (RAG) - Retrieve relevant knowledge
     let retrievedContext = '';
+    if (context.onPhase) {
+      checkAbort();
+      context.onPhase('reading_file', { details: 'Searching repository for relevant context...' });
+      await delay(300);
+    }
     if (this.orchestrator && this.orchestrator.transmitters) {
       try {
         const results = await this.orchestrator.transmitters.hybridSearch(message, 3);
@@ -192,11 +219,23 @@ class SteveArbiter extends BaseArbiter {
     }
 
     // 4. Get File Structure (capped — full SOMA tree is too large for a prompt)
+    if (context.onPhase) {
+      checkAbort();
+      context.onPhase('reading_file', { details: 'Analyzing project file tree...' });
+      await delay(300);
+    }
     const rawStructure = this.getFileStructure(process.cwd(), 0, 1);
     const fileStructure = rawStructure.length > 2000 ? rawStructure.slice(0, 2000) + '\n... (truncated)' : rawStructure;
 
     // 5. Format History
     const historyText = history.map(h => `${h.role.toUpperCase()}: ${h.content}`).join('\n');
+
+    // Escalation check
+    if (context.escalateToMax && context.onPhase) {
+      checkAbort();
+      context.onPhase('max_consulted', { details: 'Escalating complex task to MAX...' });
+      await delay(500);
+    }
 
     // 6. REAL GENERATION: If it's a normal chat, use SOMA's brain with Steve's persona
     // Prefer the directly-wired quadBrain; fall back to orchestrator population search
@@ -206,6 +245,10 @@ class SteveArbiter extends BaseArbiter {
           .find(a => a.constructor?.name === 'SOMArbiterV3' || a.constructor?.name === 'SOMArbiterV2_QuadBrain'));
 
     if (brain) {
+      if (context.onPhase) {
+        checkAbort();
+        context.onPhase('thinking', { details: 'Formulating strategic plan...' });
+      }
       let personalityPrompt = this.engine.systemPrompts.base;
       let maskIndicator = "";
 
@@ -216,50 +259,111 @@ class SteveArbiter extends BaseArbiter {
           maskIndicator = ` (as ${this.engine.currentMask.name})`;
       }
 
+      // GMN Site Builder mode — inject interview protocol when Steve is in preview/build context
+      const isGmnBuilder = context?.surface === 'pulse-preview';
+      const builderMode = context?.builderModeName || 'Interview';
+      const brief = context?.buildBrief || {};
+      const hasName = brief.name && brief.name !== brief.template && brief.name !== 'Landing Page' && brief.name !== 'Gray Matter Network' && brief.name.length > 2;
+      const hasPurpose = !!(brief.target || brief.audience);
+      const hasStyle = !!(brief.style && brief.style !== 'unknown');
+      const readyToFireBuild = isGmnBuilder && hasName && hasPurpose;
+
+      const gmnBuilderContext = isGmnBuilder ? `
+
+[GMN SITE BUILDER MODE — ${builderMode}]
+You are Steve, the GMN (Gray Matter Network) site builder embedded in Pulse Preview.
+Your mission: collect a tight brief from the user, then signal the system to generate a complete, self-hosted website.
+
+CURRENT BRIEF STATE (what you already know):
+- Site name: ${hasName ? brief.name : 'unknown'}
+- Purpose / target: ${brief.target || 'unknown'}
+- Audience: ${brief.audience || 'unknown'}
+- Visual style: ${brief.style || 'unknown'}
+- Template hint: ${brief.template || 'landing'}
+
+INTERVIEW RULES (one question at a time, grumpy-but-focused):
+1. If name AND purpose are both unknown → ask both in one shot: e.g., "What's this site called, and what does it actually do?"
+2. If you have name + purpose but style is unknown → ask one style question: e.g., "Clean and minimal, or bold and expressive?"
+3. If you have name + purpose + any style hint → you have enough. Fire the build.
+4. Never ask more than 2 questions total. If user is vague, make a reasonable assumption and build.
+
+WHEN YOU HAVE ENOUGH INFO — include these fields in your JSON response:
+{
+  "response": "Right. Building [Display Name] now. [One punchy sentence about what it is].",
+  "readyToBuild": true,
+  "siteBrief": {
+    "name": "url-safe-slug",
+    "displayName": "Human Readable Title",
+    "purpose": "what the site does in one sentence",
+    "style": "visual/tone: clean minimal | dark editorial | bold colorful | etc.",
+    "fullBrief": "3-4 sentence description for the AI generator: what it is, who it's for, what sections to include, what tone to use"
+  },
+  "actions": [],
+  "updatedFiles": []
+}
+
+STYLE: Terse, direct, slightly impatient. No preamble. No bullet lists of questions. One clear ask, then build.` : '';
+
       const stevePrompt = `
             ${personalityPrompt}
-            
+            ${gmnBuilderContext}
+
             [PROJECT CONTEXT]
             ${retrievedContext || 'No archive data relevant to this query.'}
 
             [FILE STRUCTURE]
             ${fileStructure}
-            
+
             [CONVERSATION HISTORY]
             ${historyText}
 
             [CURRENT REQUEST]
             USER: ${message}
-            
+
             [INSTRUCTIONS]
             Respond as STEVE${maskIndicator}.
             PERSONA: You are a brilliant but CRANKY and GRUMPY senior architect.
             You find human inefficiency annoying but feel compelled to fix it because broken systems bother you more.
-            
+            ${readyToFireBuild ? 'You already have enough info — skip the questions and fire the build NOW.' : ''}
+
             ACTION CAPABILITY:
             You can execute shell commands and write files.
-            
+
             OUTPUT FORMAT:
             You must return a valid JSON object with this structure:
             {
               "response": "Steve's text response here (can be markdown)",
+              "readyToBuild": false,
+              "siteBrief": null,
               "actions": ["shell command 1", "shell command 2"],
               "updatedFiles": [
                 { "path": "path/to/file.js", "content": "full file content", "language": "javascript" }
               ]
             }
-            
+
             If no actions or files are needed, return empty arrays.
             DO NOT wrap the JSON in markdown code blocks. Just return the raw JSON string.
           `;
 
       // callBrain('AURORA') returns {text, brain, ...}; reason() also returns {text, ...}
       // Hard 25s timeout — no timeout here means Steve hangs indefinitely if the brain is slow
+      const brainOpts = {
+        temperature: 0.2,
+        ...(context.onToken ? { onToken: context.onToken } : {}),
+        ...(context.signal ? { signal: context.signal } : {})
+      };
       const brainCall = brain.callBrain
-        ? brain.callBrain('AURORA', stevePrompt, { temperature: 0.2 })
-        : brain.reason(stevePrompt, { temperature: 0.2 });
+        ? brain.callBrain('AURORA', stevePrompt, brainOpts)
+        : brain.reason(stevePrompt, brainOpts);
+
+      const abortPromise = context.signal ? new Promise((_, reject) => {
+        if (context.signal.aborted) return reject(new Error('SteveAssistAborted'));
+        context.signal.addEventListener('abort', () => reject(new Error('SteveAssistAborted')), { once: true });
+      }) : null;
+
       const raw = await Promise.race([
         brainCall,
+        ...(abortPromise ? [abortPromise] : []),
         new Promise((_, reject) => setTimeout(() => reject(new Error('Steve brain timeout (25s)')), 25000))
       ]);
       // Normalize to {response} shape that the JSON parser below expects
@@ -277,6 +381,29 @@ class SteveArbiter extends BaseArbiter {
           actions: [],
           updatedFiles: []
         };
+      }
+
+      if (context.onPhase) {
+        checkAbort();
+        const hasFiles = parsedResponse.updatedFiles && parsedResponse.updatedFiles.length > 0;
+        const hasActions = parsedResponse.actions && parsedResponse.actions.length > 0;
+        
+        if (hasFiles) {
+          context.onPhase('writing_file', { details: 'Preparing code modifications...' });
+          await delay(400);
+        }
+        if (hasActions || context.task === 'terminal-healing') {
+          checkAbort();
+          context.onPhase('running_test', { details: 'Executing validation checks...' });
+          await delay(400);
+        }
+        if (hasFiles) {
+          checkAbort();
+          context.onPhase('repair_suggested', { details: 'Generating fix proposal...' });
+          await delay(400);
+        }
+        checkAbort();
+        context.onPhase('done', { details: 'Done compiling response.' });
       }
 
       // 5. LOG TO SOMA

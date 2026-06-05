@@ -985,6 +985,24 @@
   "spaces": [],
   "activities": [
     {
+      "id": "activity-1780578368514-i0ahu",
+      "type": "studio_profile_saved",
+      "title": "Studio profile saved",
+      "summary": "Profile, widgets, or Studio settings were updated.",
+      "createdAt": 1780578368514,
+      "source": "studio-profile",
+      "metadata": {}
+    },
+    {
+      "id": "activity-1780236240732-wwbjh",
+      "type": "studio_profile_saved",
+      "title": "Studio profile saved",
+      "summary": "Profile, widgets, or Studio settings were updated.",
+      "createdAt": 1780236240732,
+      "source": "studio-profile",
+      "metadata": {}
+    },
+    {
       "id": "activity-1779377457824-hey7v",
       "type": "studio_profile_saved",
       "title": "Studio profile saved",
@@ -1078,6 +1096,6 @@
       "metadata": {}
     }
   ],
-  "updatedAt": 1779377457837,
+  "updatedAt": 1780578368533,
   "source": "C:\\Users\\barry\\OneDrive\\Desktop\\The Stack\\SOMA\\SOMA\\axis\\axis-state.json"
 }

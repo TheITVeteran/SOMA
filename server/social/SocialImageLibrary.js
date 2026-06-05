@@ -132,6 +132,8 @@ export class SocialImageLibrary {
             source: String(options.source || 'local').trim(),
             license: String(options.license || 'user-provided').trim(),
             tags: normalizeTags(options.tags),
+            metadata: options.metadata && typeof options.metadata === 'object' ? options.metadata : {},
+            artDirector: options.artDirector || options.metadata?.artDirector || null,
             createdAt: existingIndex >= 0 ? ledger.images[existingIndex].createdAt || now : now,
             updatedAt: now,
         };

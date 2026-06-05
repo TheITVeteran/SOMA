@@ -1,0 +1,23 @@
+<Playbook>
+  <Actions>
+    <!-- Install Ollama Silently -->
+    <RunCommand title="Installing Local Reasoning Engine (Ollama)" path="Executables\OllamaSetup.exe" arguments="/silent" />
+    
+    <!-- Wait for Ollama service to start -->
+    <RunCommand title="Starting Ollama Service" command="net start ollama" wait="true" />
+    
+    <!-- Pre-load the SOMA Lobe Models -->
+    <!-- THALAMUS (Fast Security Gate) -->
+    <RunCommand title="Loading THALAMUS Lobe" command="ollama pull llama3.2:1b" wait="true" />
+    <!-- PROMETHEUS (Strategy) -->
+    <RunCommand title="Loading PROMETHEUS Lobe" command="ollama pull llama3.2:3b" wait="true" />
+    <!-- AURORA (Creative/Synthesis) -->
+    <RunCommand title="Loading AURORA Lobe" command="ollama pull phi3.5:latest" wait="true" />
+    <!-- LOGOS (Logic/Code) -->
+    <RunCommand title="Loading LOGOS Lobe" command="ollama pull gemma2:9b" wait="true" />
+
+    <!-- Create SOMA Data Directories -->
+    <RunCommand title="Creating Cortex Structures" command="mkdir C:\SOMA\Data" wait="true" />
+    <RunCommand title="Creating Cortex Structures" command="mkdir C:\SOMA\Memory" wait="true" />
+  </Actions>
+</Playbook>

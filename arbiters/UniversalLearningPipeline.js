@@ -21,8 +21,12 @@
  */
 
 import EventEmitter from 'events';
+import { createRequire } from 'module';
 import ExperienceReplayBuffer from './ExperienceReplayBuffer.js';
 import OutcomeTracker from './OutcomeTracker.js';
+
+const require = createRequire(import.meta.url);
+const { defaultLearningSpine } = require('../core/LearningSpine.cjs');
 
 export class UniversalLearningPipeline extends EventEmitter {
   constructor(config = {}) {
@@ -30,6 +34,7 @@ export class UniversalLearningPipeline extends EventEmitter {
 
     this.name = config.name || 'UniversalLearningPipeline';
     this.config = config; // Store config for later use
+    this.messageBroker = config.messageBroker || null;
 
     // Connected arbiters
     this.mnemonicArbiter = null;
@@ -162,7 +167,8 @@ export class UniversalLearningPipeline extends EventEmitter {
       this.storeAsExperience(standardized),
       this.trackOutcome(standardized),
       this.storeInMemory(standardized),
-      this.updateLearningPlanner(standardized)
+      this.updateLearningPlanner(standardized),
+      this.storeDistilledLesson(standardized)
     ]);
 
     // Emit event for real-time learning
@@ -326,6 +332,32 @@ export class UniversalLearningPipeline extends EventEmitter {
       this.emit('learning_signal', learningSignal);
     } catch (error) {
       console.error(`[${this.name}] Failed to update learning planner:`, error.message);
+    }
+  }
+
+  /**
+   * Store a compact, redacted lesson for retrieval and training export.
+   * Raw interactions are noisy; this bridge turns them into reusable learning.
+   */
+  async storeDistilledLesson(interaction) {
+    try {
+      const lesson = defaultLearningSpine.recordInteractionOutcome(interaction);
+      this.stats.totalDistilledLessons = (this.stats.totalDistilledLessons || 0) + 1;
+      this.emit('distilled_lesson', lesson);
+      if (this.messageBroker?.publish && (lesson.trainingValue || 0) >= 0.65) {
+        this.messageBroker.publish('insight.generated', {
+          insight: `${lesson.signal} ${lesson.lesson}`,
+          content: `${lesson.signal}\n\nLesson: ${lesson.lesson}\nNext step: ${lesson.nextStep}`,
+          source: 'experience_learning_spine',
+          lobe: lesson.lobe,
+          category: lesson.category,
+          interactionId: lesson.interactionId
+        }).catch(() => {});
+      }
+      return lesson;
+    } catch (error) {
+      console.error(`[${this.name}] Failed to store distilled lesson:`, error.message);
+      return null;
     }
   }
 

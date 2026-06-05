@@ -3,12 +3,13 @@ import fs from 'fs';
 import path from 'path';
 import { exec } from 'child_process';
 import { VirtualShell } from '../../arbiters/VirtualShell.js';
+import { guardSomaText } from '../context/GroundedReasoning.js';
 
 // Convert module.exports = function(context) { ... } to export default function(context) { ... }
 
 export default function (context) {
   const router = express.Router();
-  const { quadBrain, goalPlanner, pulseArbiter, contextManager } = context;
+  const { quadBrain, goalPlanner, pulseArbiter, contextManager, astIndexer } = context;
 
   // Initialize persistent VirtualShell for this session
   if (!context.virtualShell) {
@@ -121,8 +122,9 @@ Return ONLY valid JSON in this format:
   // Helper to safely resolve paths
   const safeResolve = (targetPath) => {
     const root = process.cwd();
-    const resolved = path.resolve(root, targetPath);
-    if (!resolved.startsWith(root)) {
+    const resolved = path.resolve(root, targetPath || '.');
+    const relative = path.relative(root, resolved);
+    if (relative.startsWith('..') || path.isAbsolute(relative)) {
       throw new Error("Access denied: Path outside workspace");
     }
     return resolved;
@@ -143,7 +145,10 @@ Return ONLY valid JSON in this format:
 
   router.post('/fs/read-file', async (req, res) => {
     try {
-      const { path: filePath } = req.body;
+      const filePath = req.body.path || req.body.filePath || req.body.sourcePath;
+      if (!filePath) {
+        return res.status(400).json({ success: false, error: 'Path is required' });
+      }
       const resolved = safeResolve(filePath);
 
       if (!fs.existsSync(resolved)) {
@@ -159,12 +164,16 @@ Return ONLY valid JSON in this format:
 
   router.post('/fs/write-file', async (req, res) => {
     try {
-      const { path: filePath, content } = req.body;
+      const filePath = req.body.path || req.body.filePath || req.body.sourcePath;
+      if (!filePath) {
+        return res.status(400).json({ success: false, error: 'Path is required' });
+      }
+      const { content } = req.body;
       const resolved = safeResolve(filePath);
 
       // Ensure dir exists
       fs.mkdirSync(path.dirname(resolved), { recursive: true });
-      fs.writeFileSync(resolved, content, 'utf8');
+      fs.writeFileSync(resolved, content || '', 'utf8');
 
       res.json({ success: true, path: resolved });
     } catch (error) {
@@ -178,14 +187,83 @@ Return ONLY valid JSON in this format:
       const resolved = safeResolve(dirPath || '.');
 
       const files = fs.readdirSync(resolved, { withFileTypes: true }).map(dirent => ({
-        name: dirent.name, // Fixed bug: was dirPath.name
-        isDirectory: dirent.isDirectory(), // Fixed bug: was dirPath.isDirectory()
-        path: path.join(dirPath || '.', dirent.name) // Fixed bug: was dirPath.name
+        name: dirent.name,
+        isDirectory: dirent.isDirectory(),
+        path: path.join(dirPath || '.', dirent.name)
       }));
 
       res.json({ success: true, files });
     } catch (error) {
       res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  const handleListTree = (req, res) => {
+    try {
+      const dirPath = req.query.dir || req.body.path || req.body.dir || '.';
+      const resolved = safeResolve(dirPath);
+
+      const getDirectoryTree = (currentPath) => {
+        const currentResolved = safeResolve(currentPath);
+        const entries = fs.readdirSync(currentResolved, { withFileTypes: true });
+
+        return entries.map(dirent => {
+          if (dirent.name.startsWith('.') && dirent.name !== '.env') {
+            return null;
+          }
+
+          const childRelPath = path.join(currentPath, dirent.name).replace(/\\/g, '/');
+          const isDirectory = dirent.isDirectory();
+
+          // Exclude large models, build folders, dependency caches, and system structures
+          if ([
+            '.git', 'node_modules', 'dist', 'build', '.venv', 'venv', '__pycache__',
+            'models', 'data/models', 'llama.cpp'
+          ].includes(dirent.name) || 
+            childRelPath.includes('data/models') || 
+            childRelPath.includes('llama.cpp/build')) {
+            return null;
+          }
+
+          const node = {
+            name: dirent.name,
+            isDir: isDirectory,
+            path: childRelPath
+          };
+
+          if (isDirectory) {
+            node.children = getDirectoryTree(childRelPath);
+          }
+
+          return node;
+        }).filter(Boolean);
+      };
+
+      const files = getDirectoryTree(dirPath);
+      res.json({ success: true, files });
+    } catch (error) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  };
+
+  router.get('/fs/list-tree', handleListTree);
+  router.post('/fs/list-tree', handleListTree);
+
+  router.get('/fs/raw', async (req, res) => {
+    try {
+      const filePath = req.query.path || req.query.filePath;
+      if (!filePath) {
+        return res.status(400).json({ error: 'path query parameter is required' });
+      }
+      const resolved = safeResolve(filePath);
+
+      if (!fs.existsSync(resolved)) {
+        return res.status(404).json({ error: 'File not found' });
+      }
+
+      res.sendFile(resolved);
+    } catch (error) {
+      res.status(500).json({ error: error.message });
     }
   });
 
@@ -248,22 +326,62 @@ Return ONLY valid JSON in this format:
       return res.status(503).json({ success: false, error: 'SteveArbiter not initialized' });
     }
 
+    const abortController = new AbortController();
+    const onReqClose = () => {
+      if (res.writableEnded) return;
+      console.log('[PulseRoutes] Connection closed prematurely, aborting Steve Assist...');
+      abortController.abort();
+    };
+    res.on('close', onReqClose);
+    const cleanup = () => { res.off('close', onReqClose); };
+
     try {
       const { message, history, context: chatContext } = req.body;
+      const wantsStream = chatContext?.stream === true || req.query.stream === 'true';
 
-      // Call Steve's real brain
-      // Now returns structured JSON: { response, actions, updatedFiles }
-      const result = await steveArbiter.processChat(message, history, chatContext);
+      if (wantsStream) {
+        res.setHeader('Content-Type', 'text/event-stream');
+        res.setHeader('Cache-Control', 'no-cache');
+        res.setHeader('Connection', 'keep-alive');
+        res.setHeader('X-Accel-Buffering', 'no');
+        res.flushHeaders();
 
-      res.json({
-        success: true,
-        ...result, // Spread the structured result (response, actions, updatedFiles)
-        arbitersConsulted: ['SteveArbiter', 'SOMArbiterV3'],
-        agenticMode: true
-      });
+        const sendSSE = (data) => { if (!res.writableEnded) res.write(`data: ${JSON.stringify(data)}\n\n`); };
+        const onToken = (token) => sendSSE({ token });
+        const onPhase = (phase, details) => sendSSE({ type: 'phase', phase, details });
+
+        const result = await steveArbiter.processChat(message, history, { ...chatContext, onToken, onPhase, signal: abortController.signal });
+        if (typeof result?.response === 'string') {
+          const guarded = await guardSomaText(result.response, message || '');
+          result.response = guarded.text || result.response;
+        }
+        sendSSE({ done: true, success: true, ...result, arbitersConsulted: ['SteveArbiter', 'SOMArbiterV3'], agenticMode: true });
+        res.end();
+      } else {
+        // Call Steve's real brain
+        // Now returns structured JSON: { response, actions, updatedFiles }
+        const result = await steveArbiter.processChat(message, history, { ...chatContext, signal: abortController.signal });
+        if (typeof result?.response === 'string') {
+          const guarded = await guardSomaText(result.response, message || '');
+          result.response = guarded.text || result.response;
+        }
+
+        res.json({
+          success: true,
+          ...result, // Spread the structured result (response, actions, updatedFiles)
+          arbitersConsulted: ['SteveArbiter', 'SOMArbiterV3'],
+          agenticMode: true
+        });
+      }
     } catch (error) {
       console.error('[PulseRoutes] Steve assist error:', error);
-      res.status(500).json({ success: false, error: error.message });
+      if (res.headersSent) {
+        if (!res.writableEnded) { res.write(`data: ${JSON.stringify({ error: error.message })}\n\n`); res.end(); }
+      } else {
+        res.status(500).json({ success: false, error: error.message });
+      }
+    } finally {
+      cleanup();
     }
   });
 
@@ -338,6 +456,54 @@ Return ONLY valid JSON in this format:
     try {
       // Placeholder for workflow execution logic
       res.json({ success: true, message: 'Workflow execution not yet fully implemented in PulseRoutes' });
+    } catch (error) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  // ═══════════════════════════════════════════════════════════
+  // AST CODEBASE INDEXING & BLAST RADIUS
+  // ═══════════════════════════════════════════════════════════
+
+  router.post('/ast/reindex', async (req, res) => {
+    if (!astIndexer) {
+      return res.status(503).json({ success: false, error: 'ASTIndexerService not initialized' });
+    }
+    try {
+      console.log('[PulseRoutes] Triggering manual AST re-indexing...');
+      astIndexer.startIndexing();
+      res.json({ success: true, message: 'AST indexing started in background' });
+    } catch (error) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  router.get('/ast/symbols', async (req, res) => {
+    if (!astIndexer) {
+      return res.status(503).json({ success: false, error: 'ASTIndexerService not initialized' });
+    }
+    try {
+      const { query, limit } = req.query;
+      const symbols = astIndexer.searchSymbols(query || '', parseInt(limit) || 50);
+      res.json({ success: true, symbols });
+    } catch (error) {
+      res.status(500).json({ success: false, error: error.message });
+    }
+  });
+
+  router.post('/ast/blast-radius', async (req, res) => {
+    if (!astIndexer) {
+      return res.status(503).json({ success: false, error: 'ASTIndexerService not initialized' });
+    }
+    try {
+      const { filePaths, filePath } = req.body;
+      const targetPaths = filePaths || (filePath ? [filePath] : []);
+      if (targetPaths.length === 0) {
+        return res.status(400).json({ success: false, error: 'filePath or filePaths is required' });
+      }
+      
+      const result = astIndexer.computeBlastRadius(targetPaths);
+      res.json(result);
     } catch (error) {
       res.status(500).json({ success: false, error: error.message });
     }

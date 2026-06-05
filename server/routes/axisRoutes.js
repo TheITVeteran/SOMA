@@ -2,6 +2,7 @@ import express from 'express';
 import axisStore from '../axis/AxisStore.js';
 import axisProfileStore from '../axis/AxisProfileStore.js';
 import { stableAvatar } from '../axis/stableAvatar.js';
+import { reasonGrounded } from '../context/GroundedReasoning.js';
 
 export default function createAxisRoutes(system) {
     const router = express.Router();
@@ -15,9 +16,9 @@ export default function createAxisRoutes(system) {
     const bcast = (type, payload) => system.broadcast?.(type, payload);
 
     const getDirectsWorkspace = (u, createIfMissing = false) => {
-        let ws = axisStore.getWorkspaces().find(item => item.name === 'Main') || axisStore.getWorkspaces()[0];
+        let ws = axisStore.getWorkspaces().find(item => item.name === 'Directs');
         if (!ws && createIfMissing) {
-            ws = axisStore.createWorkspace({ name: 'Main', icon: '🌐', color: 'blue', createdBy: u.userId });
+            ws = axisStore.createWorkspace({ name: 'Directs', icon: 'mail', color: 'violet', createdBy: u.userId, type: 'workspace', description: 'Private direct message hub.' });
             bcast('axis.workspace_created', ws);
         }
         return ws;
@@ -444,9 +445,13 @@ export default function createAxisRoutes(system) {
     });
 
     router.delete('/workspaces/:id', (req, res) => {
-        axisStore.deleteWorkspace(req.params.id);
-        bcast('axis.workspace_deleted', { id: req.params.id });
-        res.json({ ok: true });
+        try {
+            const deleted = axisStore.deleteWorkspace(req.params.id);
+            if (deleted) bcast('axis.workspace_deleted', { id: req.params.id });
+            res.json({ ok: true, deleted });
+        } catch (e) {
+            res.status(500).json({ ok: false, error: e.message });
+        }
     });
 
     // ── Channels ─────────────────────────────────────────────────────────────
@@ -584,7 +589,10 @@ export default function createAxisRoutes(system) {
                 try {
                     const brain = system.quadBrain || system.brain;
                     if (!brain?.reason) return;
-                    const result   = await brain.reason(content.trim(), { quickResponse: false, context: `axis:${ch.name}` });
+                    const result   = await reasonGrounded(brain, content.trim(), {
+                        system,
+                        context: { quickResponse: false, context: `axis:${ch.name}`, source: 'axis' }
+                    });
                     const text     = result?.text || result?.message || '';
                     if (!text) return;
                     const somaMsg  = axisStore.addMessage({ channelId, workspaceId: ch.workspace_id, senderId: 'soma', senderName: 'SOMA', senderColor: 'violet', content: text, mode: 'archive', isSoma: true });
@@ -1002,6 +1010,69 @@ export default function createAxisRoutes(system) {
             res.json({ ok: true, comment });
         } catch (e) {
             res.status(400).json({ ok: false, error: e.message });
+        }
+    });
+
+    router.get('/link-preview', async (req, res) => {
+        try {
+            const { url } = req.query;
+            if (!url) {
+                return res.status(400).json({ error: 'URL parameter is required' });
+            }
+
+            let targetUrl;
+            try {
+                targetUrl = new URL(url);
+            } catch (err) {
+                return res.status(400).json({ error: 'Invalid URL' });
+            }
+
+            const response = await fetch(targetUrl.toString(), {
+                headers: {
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) SOMA-AxisLinkPreview/1.0',
+                },
+                signal: AbortSignal.timeout(5000),
+            });
+
+            if (!response.ok) {
+                return res.status(response.status).json({ error: `Failed to fetch page: ${response.statusText}` });
+            }
+
+            const html = await response.text();
+
+            const getMeta = (regex) => {
+                const match = html.match(regex);
+                return match ? match[1]?.trim() || match[2]?.trim() || '' : '';
+            };
+
+            const ogTitle = getMeta(/<meta\s+property=["']og:title["']\s+content=["']([\s\S]*?)["']/i) ||
+                            getMeta(/<meta\s+content=["']([\s\S]*?)["']\s+property=["']og:title["']/i);
+            
+            const title = ogTitle ||
+                          (html.match(/<title>([\s\S]*?)<\/title>/i)?.[1]?.trim() || '');
+
+            const ogDesc = getMeta(/<meta\s+property=["']og:description["']\s+content=["']([\s\S]*?)["']/i) ||
+                           getMeta(/<meta\s+content=["']([\s\S]*?)["']\s+property=["']og:description["']/i);
+            
+            const description = ogDesc ||
+                                getMeta(/<meta\s+name=["']description["']\s+content=["']([\s\S]*?)["']/i) ||
+                                getMeta(/<meta\s+content=["']([\s\S]*?)["']\s+name=["']description["']/i);
+
+            const image = getMeta(/<meta\s+property=["']og:image["']\s+content=["']([\s\S]*?)["']/i) ||
+                          getMeta(/<meta\s+content=["']([\s\S]*?)["']\s+property=["']og:image["']/i);
+
+            const siteName = getMeta(/<meta\s+property=["']og:site_name["']\s+content=["']([\s\S]*?)["']/i) ||
+                             targetUrl.hostname;
+
+            res.json({
+                title,
+                description,
+                image,
+                siteName,
+                url: targetUrl.toString(),
+            });
+        } catch (e) {
+            res.status(500).json({ error: e.message });
         }
     });
 

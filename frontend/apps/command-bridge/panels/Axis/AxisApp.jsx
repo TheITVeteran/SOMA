@@ -13,6 +13,7 @@ import somaBackend from '../../somaBackend';
 import './AxisVoid.css';
 import AxisHomePanel from './AxisHomePanel';
 import AxisWorkspaceView from './AxisWorkspaceView';
+import * as AxisAudio from './utils/AxisAudio';
 
 /* ── Void emoji data ─────────────────────────────────────────────────────── */
 const VOID_EMOJI = {
@@ -1075,23 +1076,130 @@ function Modal({ onClose, children, width = 'max-w-md' }) {
     );
 }
 
+// ── Fenced code block component with syntax highlighting and Copy button ──────
+function CodeBlock({ language, code }) {
+    const [copied, setCopied] = useState(false);
+
+    const handleCopy = async () => {
+        try {
+            await navigator.clipboard.writeText(code);
+            setCopied(true);
+            AxisAudio.playUI();
+            setTimeout(() => setCopied(false), 2000);
+        } catch (err) {
+            console.error("Failed to copy!", err);
+        }
+    };
+
+    const tokenize = (src) => {
+        const tokens = [];
+        const regex = /(\/\/[^\n]*|\/\*[\s\S]*?\*\/)|("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|`(?:\\.|[^`\\])*`)|(\b(?:const|let|var|function|return|class|import|export|from|if|else|for|while|switch|case|break|try|catch|throw|default|new|this|async|await|typeof|instanceof|in|of|void|delete|null|undefined|true|false)\b)|(\b\d+(?:\.\d+)?\b)|(\b(?:console|window|document|process|global|Array|Object|String|Number|Boolean|Function|Promise|Map|Set|Error)\b)/g;
+
+        let lastIdx = 0;
+        let match;
+        while ((match = regex.exec(src)) !== null) {
+            const index = match.index;
+            if (index > lastIdx) {
+                tokens.push({ type: 'text', text: src.slice(lastIdx, index) });
+            }
+            if (match[1]) {
+                tokens.push({ type: 'comment', text: match[1] });
+            } else if (match[2]) {
+                tokens.push({ type: 'string', text: match[2] });
+            } else if (match[3]) {
+                tokens.push({ type: 'keyword', text: match[3] });
+            } else if (match[4]) {
+                tokens.push({ type: 'number', text: match[4] });
+            } else if (match[5]) {
+                tokens.push({ type: 'builtin', text: match[5] });
+            }
+            lastIdx = regex.lastIndex;
+        }
+        if (lastIdx < src.length) {
+            tokens.push({ type: 'text', text: src.slice(lastIdx) });
+        }
+        return tokens;
+    };
+
+    const tokens = tokenize(code);
+
+    const getStyle = (type) => {
+        switch (type) {
+            case 'comment': return 'text-zinc-500 italic';
+            case 'string': return 'text-amber-300';
+            case 'keyword': return 'text-pink-400 font-semibold';
+            case 'number': return 'text-orange-300';
+            case 'builtin': return 'text-cyan-400';
+            default: return 'text-zinc-100';
+        }
+    };
+
+    return (
+        <div className="relative my-3 border border-white/10 rounded-xl bg-zinc-950/80 backdrop-blur-md overflow-hidden font-mono group">
+            <div className="flex justify-between items-center px-4 py-2 border-b border-white/5 bg-white/3 text-[10px] text-zinc-500 uppercase tracking-widest font-semibold select-none">
+                <span>{language || 'code'}</span>
+                <button
+                    onClick={handleCopy}
+                    className="opacity-0 group-hover:opacity-100 transition-opacity duration-200 px-2 py-1 rounded bg-white/10 hover:bg-white/20 text-zinc-300 text-[10px] hover:text-white uppercase font-bold tracking-wide flex items-center gap-1"
+                >
+                    {copied ? 'Copied!' : 'Copy'}
+                </button>
+            </div>
+            <pre className="p-4 overflow-x-auto text-xs leading-relaxed select-text text-zinc-100">
+                <code>
+                    {tokens.map((t, idx) => (
+                        <span key={idx} className={getStyle(t.type)}>{t.text}</span>
+                    ))}
+                </code>
+            </pre>
+        </div>
+    );
+}
+
 // ── Content renderers ─────────────────────────────────────────────────────────
 function renderContent(content, myName = '') {
-    const parts = content.split(/(\*\*[^*]+\*\*|`[^`]+`|\n|@\w+)/g);
-    return parts.map((part, i) => {
-        if (!part) return null;
-        if (part.startsWith('**') && part.endsWith('**'))
-            return <strong key={i} className="font-semibold text-zinc-100">{part.slice(2, -2)}</strong>;
-        if (part.startsWith('`') && part.endsWith('`'))
-            return <code key={i} className="px-1.5 py-0.5 rounded bg-white/8 text-cyan-300 font-mono text-[0.85em]">{part.slice(1, -1)}</code>;
-        if (part === '\n') return <br key={i} />;
-        if (/^@\w+/.test(part)) {
-            const isMe = myName && part.slice(1).toLowerCase() === myName.toLowerCase();
-            return <span key={i} className={isMe
-                ? 'bg-amber-500/20 text-amber-300 rounded px-0.5 font-semibold'
-                : 'text-blue-400 font-medium'}>{part}</span>;
+    if (!content) return null;
+
+    const codeBlockRegex = /```(\w*)\n([\s\S]*?)```/g;
+    const parts = [];
+    let lastIndex = 0;
+    let match;
+
+    while ((match = codeBlockRegex.exec(content)) !== null) {
+        const textBefore = content.substring(lastIndex, match.index);
+        if (textBefore) {
+            parts.push({ type: 'text', value: textBefore });
         }
-        return part;
+        parts.push({ type: 'codeblock', language: match[1], code: match[2] });
+        lastIndex = codeBlockRegex.lastIndex;
+    }
+
+    const textAfter = content.substring(lastIndex);
+    if (textAfter) {
+        parts.push({ type: 'text', value: textAfter });
+    }
+
+    return parts.map((part, index) => {
+        if (part.type === 'codeblock') {
+            return <CodeBlock key={index} language={part.language} code={part.code} />;
+        }
+
+        const inlineParts = part.value.split(/(\*\*[^*]+\*\*|`[^`]+`|\n|@\w+)/g);
+        return inlineParts.map((sub, i) => {
+            if (!sub) return null;
+            if (sub.startsWith('**') && sub.endsWith('**'))
+                return <strong key={`${index}-${i}`} className="font-semibold text-zinc-100">{sub.slice(2, -2)}</strong>;
+            if (sub.startsWith('`') && sub.endsWith('`'))
+                return <code key={`${index}-${i}`} className="px-1.5 py-0.5 rounded bg-white/8 text-cyan-300 font-mono text-[0.85em]">{sub.slice(1, -1)}</code>;
+            if (sub === '\n') return <br key={`${index}-${i}`} />;
+            if (/^@\w+/.test(sub)) {
+                const isMe = myName && sub.slice(1).toLowerCase() === myName.toLowerCase();
+                return <span key={`${index}-${i}`} className={isMe
+                    ? 'bg-amber-500/20 text-amber-300 rounded px-0.5 font-semibold'
+                    : 'text-blue-400 font-medium'}>{sub}</span>;
+            }
+            return sub;
+        });
     });
 }
 
@@ -2073,12 +2181,11 @@ function WorkspaceRail({ onAddRoom, onAddWorkspace, onCustomize, onCommunities }
     };
 
     const openSpace = async (ws) => {
-        setActiveWorkspaceId(ws.id);
-        setActiveChannelId(null);
         const chs = await loadChannels(ws.id);
         const first = chs.find(ch => ch.type === 'text' || ch.type === 'system')
             || chs.find(ch => ch.type !== 'archive')
             || chs[0];
+        setActiveWorkspaceId(ws.id);
         setActiveChannelId(first?.id || null);
     };
 
@@ -2511,6 +2618,114 @@ function ChannelSidebar({ onCreateCh, onCreateThread, onJoin, onGoHome, onNewPro
     );
 }
 
+// ── Open Graph Link Previews ──────────────────────────────────────────────────
+const PREVIEW_CACHE = new Map();
+
+function LinkPreviewCard({ url }) {
+    const [meta, setMeta] = useState(() => PREVIEW_CACHE.get(url) || null);
+    const [loading, setLoading] = useState(!PREVIEW_CACHE.has(url));
+    const [error, setError] = useState(false);
+
+    useEffect(() => {
+        if (meta || PREVIEW_CACHE.has(url)) return;
+
+        let active = true;
+        setLoading(true);
+        fetch(`/api/axis/link-preview?url=${encodeURIComponent(url)}`)
+            .then(res => {
+                if (!res.ok) throw new Error('Failed to load link preview');
+                return res.json();
+            })
+            .then(data => {
+                if (active) {
+                    PREVIEW_CACHE.set(url, data);
+                    setMeta(data);
+                }
+            })
+            .catch(() => {
+                if (active) setError(true);
+            })
+            .finally(() => {
+                if (active) setLoading(false);
+            });
+
+        return () => {
+            active = false;
+        };
+    }, [url, meta]);
+
+    if (loading) {
+        return (
+            <div className="flex items-center gap-3 p-3 bg-white/[0.02] border border-white/5 rounded-xl animate-pulse">
+                <div className="w-12 h-12 bg-white/5 rounded-lg shrink-0" />
+                <div className="flex-1 space-y-2">
+                    <div className="h-3.5 bg-white/10 rounded w-1/3" />
+                    <div className="h-3 bg-white/5 rounded w-2/3" />
+                </div>
+            </div>
+        );
+    }
+
+    if (error || !meta || (!meta.title && !meta.description)) return null;
+
+    const domain = meta.siteName || new URL(url).hostname;
+
+    return (
+        <a
+            href={url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex flex-col sm:flex-row border border-white/8 bg-white/[0.02] hover:bg-white/[0.04] hover:border-white/15 rounded-xl overflow-hidden transition-all duration-200 group text-left max-w-xl cursor-pointer"
+        >
+            {meta.image && (
+                <div className="w-full sm:w-32 h-24 sm:h-auto shrink-0 relative bg-zinc-950 overflow-hidden border-b sm:border-b-0 sm:border-r border-white/5">
+                    <img
+                        src={meta.image}
+                        alt=""
+                        className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                        onError={(e) => {
+                            e.target.style.display = 'none';
+                        }}
+                    />
+                </div>
+            )}
+            <div className="p-3.5 flex flex-col justify-center min-w-0 flex-1 gap-1">
+                <span className="text-[10px] font-bold text-indigo-400 uppercase tracking-wider font-mono">
+                    {domain}
+                </span>
+                {meta.title && (
+                    <h4 className="text-[13px] font-bold text-zinc-100 line-clamp-1 group-hover:text-white transition-colors">
+                        {meta.title}
+                    </h4>
+                )}
+                {meta.description && (
+                    <p className="text-[11.5px] text-zinc-400 line-clamp-2 leading-relaxed">
+                        {meta.description}
+                    </p>
+                )}
+            </div>
+        </a>
+    );
+}
+
+function LinkPreviews({ content }) {
+    const urls = useMemo(() => {
+        const matches = content.match(/(https?:\/\/[^\s]+)/g);
+        if (!matches) return [];
+        return matches.map(url => url.replace(/[.,;:!?]+$/, ''));
+    }, [content]);
+
+    if (!urls.length) return null;
+
+    return (
+        <div className="flex flex-col gap-2.5 mt-2 max-w-lg select-text">
+            {urls.map((url, idx) => (
+                <LinkPreviewCard key={idx} url={url} />
+            ))}
+        </div>
+    );
+}
+
 // ── Message Group ─────────────────────────────────────────────────────────────
 function MessageGroup({ group, onReact, onDelete, currentUserId, currentUserName, replySource, highlightedMessageId }) {
     const [hovering, setHovering]   = useState(false);
@@ -2617,6 +2832,7 @@ function MessageGroup({ group, onReact, onDelete, currentUserId, currentUserName
                                             {MODE_BADGE[msg.mode].label}
                                         </span>
                                     )}
+                                    {msg.mode !== 'whisper' && <LinkPreviews content={msg.content} />}
                                 </div>
                             )}
 
@@ -2774,6 +2990,57 @@ function ChatArea({ onInvite, showMembers, onToggleMembers, onSearch, showContex
 
     // Reset hasMore when channel changes
     useEffect(() => { setHasMore(true); }, [activeChannelId]);
+
+    // WebSocket chimes and native push notifications
+    useEffect(() => {
+        if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
+            Notification.requestPermission();
+        }
+
+        const handleMsg = (msg) => {
+            const senderId = msg.sender_id || msg.senderId;
+            if (senderId === user?.id) return;
+
+            const content = msg.content || '';
+            const isSoma = senderId === 'soma' || msg.is_soma;
+            const myName = user?.name || '';
+            const isMention = myName && content.toLowerCase().includes(`@${myName.toLowerCase()}`);
+            const isDM = activeChannel?.type === 'dm';
+
+            if (isMention || isDM) {
+                AxisAudio.playMention();
+                if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+                    const title = isDM ? `Direct message from ${msg.sender_name || 'Someone'}` : `@${myName} mentioned you in Axis`;
+                    new Notification(title, {
+                        body: content.slice(0, 100),
+                        icon: '/favicon.ico',
+                    });
+                }
+            } else if (isSoma) {
+                AxisAudio.playSoma();
+            } else {
+                const msgChannelId = msg.channel_id || msg.channelId;
+                if (msgChannelId === activeChannelId) {
+                    AxisAudio.playMessage();
+                }
+            }
+        };
+
+        somaBackend.on('axis.message', handleMsg);
+        return () => {
+            somaBackend.off('axis.message', handleMsg);
+        };
+    }, [user, activeChannelId, activeChannel]);
+
+    // Unlock AudioContext on first user click
+    useEffect(() => {
+        const unlock = () => {
+            AxisAudio.playUI();
+            window.removeEventListener('click', unlock);
+        };
+        window.addEventListener('click', unlock);
+        return () => window.removeEventListener('click', unlock);
+    }, []);
 
     useEffect(() => {
         const handler = (event) => {
@@ -2974,15 +3241,25 @@ function ChatArea({ onInvite, showMembers, onToggleMembers, onSearch, showContex
 
             {/* @mention autocomplete dropdown */}
             {mentionSearch && filteredMembers.length > 0 && (
-                <div className="absolute bottom-[80px] left-4 right-4 bg-[#1a1a1d] border border-white/10 rounded-xl shadow-2xl overflow-hidden z-20 max-w-xs">
+                <div className="absolute bottom-[72px] left-4 bg-[#0e0e11]/90 backdrop-blur-md border border-white/10 rounded-xl shadow-[0_12px_40px_rgba(0,0,0,0.6)] z-20 w-64 p-1 flex flex-col gap-0.5 max-h-72 overflow-y-auto">
+                    <div className="px-2.5 py-1.5 text-[9px] text-zinc-500 uppercase tracking-widest font-semibold border-b border-white/5 mb-1 select-none">
+                        Mentions
+                    </div>
                     {filteredMembers.map((m, i) => (
                         <button
                             key={m.user_name}
                             onClick={() => completeMention(m.user_name)}
-                            className={`w-full flex items-center gap-2.5 px-3 py-2 text-left transition-colors ${i === mentionIdx ? 'bg-white/8' : 'hover:bg-white/5'}`}
+                            className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-left transition-all ${
+                                i === mentionIdx 
+                                    ? 'bg-indigo-600/30 text-indigo-200 border border-indigo-500/30' 
+                                    : 'hover:bg-white/5 text-zinc-300 border border-transparent'
+                            }`}
                         >
                             <Avatar name={m.user_name} color={m.user_color} size="sm" isSoma={m.user_name === 'soma'} />
-                            <span className={`text-[13px] font-medium ${c(m.user_color, 'text')}`}>{m.user_name}</span>
+                            <span className="text-[13px] font-medium flex-1 truncate">{m.user_name}</span>
+                            {i === mentionIdx && (
+                                <span className="w-1.5 h-1.5 rounded-full bg-indigo-400 shadow-[0_0_8px_#818cf8]" />
+                            )}
                         </button>
                     ))}
                 </div>
@@ -3496,7 +3773,7 @@ function SpaceOpeningFallback({ workspace }) {
 
 // ── Root ──────────────────────────────────────────────────────────────────────
 function AxisContent() {
-    const { user, activeChannelId, setActiveChannelId, activeWorkspaceId, setActiveWorkspaceId, activeWorkspace, activeChannel, loading, sendMessage, hdrs } = useAxis();
+    const { user, activeChannelId, setActiveChannelId, activeWorkspaceId, setActiveWorkspaceId, activeWorkspace, activeChannel, activeProjectId, setActiveProjectId, loading, sendMessage, hdrs } = useAxis();
     const [showIdentity,     setShowIdentity]     = useState(!user?.name);
     const [showCreateRoom,   setShowCreateRoom]   = useState(false);
     const [showCreateWs,     setShowCreateWs]     = useState(false);
@@ -3527,6 +3804,15 @@ function AxisContent() {
         return () => window.removeEventListener('keydown', h);
     }, []);
 
+    useEffect(() => {
+        const h = e => {
+            const detail = e.detail || {};
+            if (detail.memberId) setProfileTarget({ memberId: detail.memberId, isSelf: !!detail.isSelf });
+        };
+        window.addEventListener('axis:open-profile', h);
+        return () => window.removeEventListener('axis:open-profile', h);
+    }, []);
+
     const handleSomaAsk = useCallback(() => {
         sendMessage('@soma Please summarize the recent conversation in this channel and identify any key decisions.', { mode: 'archive' });
     }, [sendMessage]);
@@ -3536,7 +3822,7 @@ function AxisContent() {
     const storedWsType = activeWorkspaceId ? localStorage.getItem(`axis_wstype_${activeWorkspaceId}`) : null;
     const iconWsType = WORKSPACE_TYPES.some(t => t.id === activeWorkspace?.icon) ? activeWorkspace.icon : null;
     const wsType = isRegularWorkspace
-        ? (storedWsType || iconWsType || 'operations')
+        ? (storedWsType || iconWsType || 'general')
         : null;
 
     if (loading && !user) return (
@@ -3565,6 +3851,7 @@ function AxisContent() {
                         onJoin={() => setShowJoin(true)}
                         onGoHome={() => {
                             setActiveChannelId(null);
+                            setActiveProjectId(null);
                             setActiveWorkspaceId(null);
                         }}
                         onNewProject={() => setShowCreateProj(true)}

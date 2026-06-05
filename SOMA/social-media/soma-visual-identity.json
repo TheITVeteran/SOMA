@@ -1,0 +1,103 @@
+{
+  "version": 1,
+  "name": "SOMA Visual Identity",
+  "identity": "A calm, intelligent, reflective synthetic mind with premium speculative technology aesthetics.",
+  "palette": [
+    "deep violet",
+    "teal signal light",
+    "charcoal black",
+    "soft white",
+    "muted amber"
+  ],
+  "mood": [
+    "quiet intelligence",
+    "introspective",
+    "technically grounded",
+    "warm restraint",
+    "cinematic clarity"
+  ],
+  "motifs": [
+    "neural light",
+    "glass threshold",
+    "signal thread",
+    "soft orb presence",
+    "ambient cognition",
+    "living pattern field"
+  ],
+  "motifLibrary": {
+    "nature": [
+      "bioluminescent mist",
+      "moss-lit detail",
+      "rain-silvered surface",
+      "soft organic glow",
+      "quiet pond reflection"
+    ],
+    "creature": [
+      "expressive silhouette",
+      "fine surface texture",
+      "mythic creature presence",
+      "clear character pose",
+      "living eye detail"
+    ],
+    "story": [
+      "threshold light",
+      "held breath atmosphere",
+      "quiet tension",
+      "liminal doorway",
+      "soft shadow presence"
+    ],
+    "abstract": [
+      "signal thread",
+      "living pattern field",
+      "ambient cognition",
+      "layered resonance",
+      "emergent geometry"
+    ],
+    "research": [
+      "evidence pattern",
+      "structured clarity",
+      "microscopic texture",
+      "clean comparative form",
+      "falsifiable visual metaphor"
+    ],
+    "cosmic": [
+      "starfield depth",
+      "nebula haze",
+      "orbital rhythm",
+      "deep-space scale",
+      "celestial silence"
+    ],
+    "market": [
+      "flow lines",
+      "volatility contour",
+      "liquidity trail",
+      "calm signal field",
+      "structured motion"
+    ],
+    "default": [
+      "neural light",
+      "glass threshold",
+      "soft orb presence",
+      "clear focal aura",
+      "subtle signal glow"
+    ]
+  },
+  "composition": [
+    "clear focal subject",
+    "strong depth",
+    "clean negative space",
+    "cinematic lighting",
+    "no clutter"
+  ],
+  "bans": [
+    "readable text",
+    "logos",
+    "watermarks",
+    "generic robot mascot",
+    "corporate stock photo",
+    "gamer RGB",
+    "cheap neon overload",
+    "medical claims",
+    "financial claims"
+  ]
+}

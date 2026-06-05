@@ -5,7 +5,17 @@
 
 import express from 'express';
 import { BacktestEngine, SMAStrategy, RSIStrategy, MomentumStrategy } from './BacktestEngine.js';
-import binanceService from './BinanceService.js';
+import marketDataService from './marketDataService.js';
+
+function normalizeTimeframe(t) {
+    const s = String(t || '1h').toLowerCase();
+    if (s === '1m' || s === '1min') return '1Min';
+    if (s === '5m' || s === '5min') return '5Min';
+    if (s === '15m' || s === '15min') return '15Min';
+    if (s === '1h' || s === '1hour') return '1H';
+    if (s === '1d' || s === '1day') return '1D';
+    return '1H'; // Default to 1H
+}
 
 const router = express.Router();
 
@@ -86,15 +96,20 @@ router.post('/run', async (req, res) => {
         // Create session
         const sessionId = `bt_${Date.now()}`;
 
-        // Fetch historical data from Binance
+        // Fetch historical data using SOMA MarketDataService (handles routing and fallbacks)
         console.log(`[Backtest] Fetching data for ${symbol} (${interval})...`);
 
         let candles;
         try {
-            candles = await binanceService.getKlines(symbol.toUpperCase(), interval, 1000);
-            if (!candles || candles.length === 0) {
-                throw new Error('No candle data returned from Binance');
+            const rawBars = await marketDataService.getBars(symbol.toUpperCase(), normalizeTimeframe(interval), 1000);
+            if (!rawBars || rawBars.length === 0) {
+                throw new Error('No candle data returned from MarketDataService');
             }
+            // Add openTime alias for backtesting filter checks
+            candles = rawBars.map(bar => ({
+                ...bar,
+                openTime: bar.timestamp
+            }));
         } catch (e) {
             console.error(`[Backtest] Data fetch failed for ${symbol}:`, e.message);
             throw new Error(`Backtest Failed: Could not retrieve real historical data for ${symbol}. Reason: ${e.message}`);

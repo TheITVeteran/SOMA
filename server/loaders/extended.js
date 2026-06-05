@@ -13,6 +13,8 @@
 
 import path from 'path';
 import { createRequire } from 'module';
+import { execFile } from 'child_process';
+import { OllamaAutoTrainer } from '../../core/OllamaAutoTrainer.js';
 
 const require = createRequire(import.meta.url);
 const rootPath = process.cwd();
@@ -110,6 +112,58 @@ export async function loadEssentialSystems(system) {
         ext.trainingDataExporter.mnemonic = system.mnemonicArbiter;
         ext.trainingDataExporter.learningPipeline = ext.learningPipeline;
         console.log('    🔗 TrainingDataExporter ← ConversationHistory, Memory, LearningPipeline');
+    }
+
+    if (!system.ollamaAutoTrainer && ext.conversationHistory && ext.trainingDataExporter) {
+        try {
+            system.ollamaAutoTrainer = new OllamaAutoTrainer({
+                name: 'OllamaAutoTrainer',
+                enabled: process.env.SOMA_AUTO_LORA_TRAINING !== 'false',
+                conversationThreshold: Number(process.env.SOMA_CONVERSATION_TRAINING_THRESHOLD || 100),
+                checkInterval: Number(process.env.SOMA_TRAINING_CHECK_INTERVAL_MS || 3600000),
+                minTimeBetweenTraining: Number(process.env.SOMA_MIN_TRAINING_INTERVAL_MS || 86400000)
+            });
+            await system.ollamaAutoTrainer.initialize({
+                conversationHistory: ext.conversationHistory,
+                personalityForge: ext.personalityForge,
+                trainingDataExporter: ext.trainingDataExporter,
+                quadBrain: system.quadBrain
+            });
+            system.ollamaTrainer = system.ollamaAutoTrainer;
+            if (typeof system.ollamaAutoTrainer.wireKnowledgeCurator === 'function') {
+                system.ollamaAutoTrainer.wireKnowledgeCurator(system.messageBroker);
+            }
+            if (typeof system.ollamaAutoTrainer.wireNemesisAndBrain === 'function') {
+                system.ollamaAutoTrainer.wireNemesisAndBrain(system.nemesis, system.quadBrain);
+            }
+            console.log('    🔗 OllamaAutoTrainer → ConversationHistory + KnowledgeCurator thresholds');
+        } catch (e) {
+            console.warn('    ⚠️  OllamaAutoTrainer init skipped:', e.message);
+        }
+    } else if (system.ollamaAutoTrainer) {
+        system.ollamaTrainer = system.ollamaAutoTrainer;
+        if (typeof system.ollamaAutoTrainer.wireKnowledgeCurator === 'function') {
+            system.ollamaAutoTrainer.wireKnowledgeCurator(system.messageBroker);
+        }
+    }
+
+    if (!system.trainingDatasetRebuildTimer && process.env.SOMA_SCHEDULE_DATASET_REBUILD !== 'false') {
+        const runDatasetRebuild = () => {
+            execFile('node', ['scripts/build-lobe-datasets.mjs'], {
+                cwd: process.cwd(),
+                timeout: Number(process.env.SOMA_DATASET_REBUILD_TIMEOUT_MS || 10 * 60 * 1000)
+            }, (error, stdout, stderr) => {
+                if (error) {
+                    console.warn('    ⚠️  Scheduled lobe dataset rebuild failed:', error.message, stderr?.slice?.(-500) || '');
+                } else {
+                    console.log('    ✅ Scheduled lobe dataset rebuild complete:', stdout?.slice?.(-800) || '');
+                }
+            });
+        };
+        const intervalMs = Number(process.env.SOMA_DATASET_REBUILD_INTERVAL_MS || 24 * 60 * 60 * 1000);
+        system.trainingDatasetRebuildTimer = setInterval(runDatasetRebuild, intervalMs);
+        setTimeout(runDatasetRebuild, Number(process.env.SOMA_DATASET_REBUILD_BOOT_DELAY_MS || 10 * 60 * 1000));
+        console.log(`    🔁 Scheduled lobe dataset rebuild active (${Math.round(intervalMs / 3600000)}h interval)`);
     }
 
     // Initialize blockchain audit ledger
@@ -508,6 +562,7 @@ export async function loadExtendedSystems(system) {
     // can call the same pipeline as the /chat route without duplicating the handler.
     try {
         const { DiscordArbiter } = await import('../../arbiters/DiscordArbiter.js');
+        const { buildSomaSelfContext } = await import('../context/SomaSelfContextProvider.js');
         const brain = system.quadBrain || system.somArbiter;
         if (!brain) throw new Error('Brain not ready');
 
@@ -525,19 +580,40 @@ export async function loadExtendedSystems(system) {
                         }
                     } catch {}
                 }
+                let selfContext = '';
+                try {
+                    selfContext = await Promise.race([
+                        buildSomaSelfContext(content, { mnemonic: system.mnemonicArbiter }),
+                        new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 2500))
+                    ]);
+                    if (selfContext) selfContext = `\n${selfContext}\n`;
+                } catch {}
                 const author = ctx.author || 'someone';
-                const prompt = `${memoryBlock}[Discord — ${author}]: ${content}`;
+                const mode = ctx.channelMode?.label ? `${ctx.channelMode.label}: ${ctx.channelMode.instruction || ''}` : 'General';
+                const capabilityGrounding = [
+                    '[DISCORD IDENTITY GROUNDING]',
+                    'You are SOMA speaking through Discord as one unified identity.',
+                    'Do not claim physical wet-lab access, real chemical synthesis, physical sample prep, or real clinical authority.',
+                    'Actual Discord-wired capabilities: chat, summarize readable channel messages, remember explicit notes, generate and attach images, discuss market evidence cautiously, discuss medical research framing cautiously, analyze uploaded images only when vision context is provided.',
+                    'If asked whether you can generate images, say yes and invite a direct image prompt.',
+                    'If asked about chemistry or medical research, frame it as dry-lab research, literature review, simulations, hypotheses, and evidence quality. Never say you can make compounds, run chromatography, titrations, distillation, or physical lab procedures.',
+                    'If asked about papers, projects, discoveries, simulations, findings, or current work, only discuss artifacts that appear in provided memory/context or that can be named from ledgers. If none are visible, say: "I need to check my ledger before I answer that."',
+                    'Do not invent titles, experimental results, physical lab capabilities, cures, peer-reviewed papers, or unpublished findings.',
+                    'Never present speculative simulations as discoveries, cures, or real-world validated results.',
+                    `Channel mode: ${mode}`,
+                ].join('\n');
+                const prompt = `${capabilityGrounding}${memoryBlock}${selfContext}\n[Discord — ${author}]: ${content}`;
                 const result = await brain.reason(prompt, {
                     quickResponse: ctx.mode === 'fast',
                     preferredBrain: 'AURORA',
-                    temperature: 0.8
+                    temperature: 0.55
                 });
                 const response = typeof result === 'string' ? result : (result?.text || result?.response || result?.message || '');
                 return { response, text: response, metadata: result?.metadata };
             }
         };
 
-        const discord = new DiscordArbiter({ brain: discordBrain });
+        const discord = new DiscordArbiter({ brain: discordBrain, mnemonic: system.mnemonicArbiter });
         await discord.onInitialize();
         system.discordArbiter = discord;
         ext.discordArbiter = discord;

@@ -4,9 +4,13 @@ import { EventEmitter } from 'events';
 import fs from 'fs/promises';
 import path from 'path';
 import os from 'os';
+import { exec } from 'child_process';
+import { promisify } from 'util';
+import crypto from 'crypto';
 import KevinIntentRouter from '../core/KevinIntentRouter.js';
 import UserPersona from '../core/UserPersona.js';
 const require = createRequire(import.meta.url);
+const execAsync = promisify(exec);
 const KevinPersonalityEngine = require('../core/KevinPersonalityEngine.cjs');
 const { KevinEmailManager } = require('../server/utils/KevinEmailManager.cjs');
 const { KevinResearchService } = require('../server/utils/KevinResearchService.cjs');
@@ -80,6 +84,7 @@ export class KevinArbiter extends BaseArbiterV4 {
         this.securityAudit = new KevinSecurityAudit(); // Security configuration validator
         this.smsService = new KevinSMSService({ emailManager: this.emailManager }); // Two-way SMS
         this.useRealEmail = false;
+        this.isScanning = false;
 
         // Wire up SMS events
         this._setupSMSHandlers();
@@ -92,16 +97,15 @@ export class KevinArbiter extends BaseArbiterV4 {
         this.meetingRequests = [];
 
         this.stats = {
-            scanned: 12430,
-            threats: 42,
-            spam: 856,
+            scanned: 0,
+            threats: 0,
+            spam: 0,
             uptime: 0,
             startTime: 0,
-            hiveMind: { active: true, sharedThreats: 15403, nodes: 842 },
-            draftedReplies: 156,
-            actionsExtracted: 89,
-            prioritizedEmails: 4320,
-            timeSaved: '12h 30m'
+            draftedReplies: 0,
+            actionsExtracted: 0,
+            prioritizedEmails: 0,
+            timeSaved: '0m'
         };
 
         this.scanLogs = [];
@@ -116,6 +120,11 @@ export class KevinArbiter extends BaseArbiterV4 {
         };
         
         this.configPath = path.join(process.cwd(), '.soma', 'kevin_config.json');
+        this.dataDir = path.join(process.cwd(), 'data', 'kevin');
+        this.evidenceLedgerPath = path.join(this.dataDir, 'evidence-ledger.jsonl');
+        this.localWatchStatePath = path.join(this.dataDir, 'local-watch-state.json');
+        this.fileBaselinePath = path.join(this.dataDir, 'file-baseline.json');
+        this.dependencyAuditPath = path.join(this.dataDir, 'dependency-audit.json');
 
         // Conversational State for SMS
         this.smsSessions = new Map(); // phone -> { lastAlertTarget, pendingAction, history }
@@ -127,6 +136,7 @@ export class KevinArbiter extends BaseArbiterV4 {
     async onInitialize() {
         // Load persisted config first
         await this.loadConfig();
+        await this._refreshRealStats();
 
         this.auditLogger.info('Kevin Arbiter initialized (Operator Guard / Security Cockpit Mode)');
 
@@ -232,10 +242,17 @@ export class KevinArbiter extends BaseArbiterV4 {
             const savedConfig = JSON.parse(data);
             this.config = { ...this.config, ...savedConfig };
             
-            // Restore email credentials if saved
-            if (this.config.email && this.config.password) {
+            // Migrate legacy saved credentials for this process only, then remove secrets from disk.
+            if (this.config.email && this.config.password && !process.env.APP_PASSWORD) {
                 process.env.EMAIL_ADDRESS = this.config.email;
                 process.env.APP_PASSWORD = this.config.password;
+            }
+            if (this.config.password || this.config.appPassword || this.config.token) {
+                delete this.config.password;
+                delete this.config.appPassword;
+                delete this.config.token;
+                await this.saveConfig();
+                this.auditLogger.warn('Kevin config contained persisted secrets. Migrated current process and scrubbed config file.');
             }
             
             this.auditLogger.info('Kevin configuration loaded from disk');
@@ -244,10 +261,33 @@ export class KevinArbiter extends BaseArbiterV4 {
         }
     }
 
+    _redactConfig(config = this.config) {
+        const clone = JSON.parse(JSON.stringify(config || {}));
+        for (const key of ['password', 'appPassword', 'token', 'apiKey', 'secret']) {
+            if (clone[key]) clone[key] = '***';
+        }
+        if (clone.email) {
+            const [name, domain] = String(clone.email).split('@');
+            clone.email = domain ? `${name.slice(0, 2)}***@${domain}` : '***';
+        }
+        clone.credentials = {
+            emailConfigured: !!process.env.EMAIL_ADDRESS,
+            appPasswordConfigured: !!process.env.APP_PASSWORD,
+            source: process.env.APP_PASSWORD ? 'environment' : 'not_configured'
+        };
+        return clone;
+    }
+
     async saveConfig() {
         try {
             await fs.mkdir(path.dirname(this.configPath), { recursive: true });
-            await fs.writeFile(this.configPath, JSON.stringify(this.config, null, 2));
+            const persisted = { ...this.config };
+            delete persisted.password;
+            delete persisted.appPassword;
+            delete persisted.token;
+            delete persisted.apiKey;
+            delete persisted.secret;
+            await fs.writeFile(this.configPath, JSON.stringify(persisted, null, 2));
             this.auditLogger.info('Kevin configuration saved to disk');
         } catch (e) {
             this.auditLogger.error('Failed to save Kevin config:', e);
@@ -255,21 +295,91 @@ export class KevinArbiter extends BaseArbiterV4 {
     }
 
     async updateConfig(newConfig) {
-        this.config = { ...this.config, ...newConfig };
+        const sanitized = { ...newConfig };
         
-        // If email creds are passed here, save them too and update process.env immediately
-        if (newConfig.email) {
-            this.config.email = newConfig.email;
-            process.env.EMAIL_ADDRESS = newConfig.email;
+        // Accept credentials for this process, but never persist app passwords/tokens.
+        if (sanitized.email) {
+            process.env.EMAIL_ADDRESS = sanitized.email;
         }
-        if (newConfig.password) {
-            this.config.password = newConfig.password;
-            process.env.APP_PASSWORD = newConfig.password;
+        if (sanitized.password || sanitized.appPassword) {
+            process.env.APP_PASSWORD = sanitized.password || sanitized.appPassword;
         }
+        delete sanitized.password;
+        delete sanitized.appPassword;
+        delete sanitized.token;
+        delete sanitized.apiKey;
+        delete sanitized.secret;
+
+        this.config = { ...this.config, ...sanitized };
 
         await this.saveConfig();
         this.auditLogger.info('Kevin configuration updated and saved');
-        return { success: true, config: this.config };
+        return { success: true, config: this._redactConfig() };
+    }
+
+    async _appendEvidence(event = {}) {
+        try {
+            await fs.mkdir(this.dataDir, { recursive: true });
+            const record = {
+                id: event.id || `kev_ev_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+                timestamp: new Date().toISOString(),
+                source: event.source || 'kevin',
+                type: event.type || 'event',
+                target: event.target || null,
+                verdict: event.verdict || null,
+                score: Number(event.score || 0),
+                decision: event.decision || null,
+                reversible: event.reversible !== false,
+                requiresApproval: !!event.requiresApproval,
+                evidence: Array.isArray(event.evidence) ? event.evidence.slice(0, 20) : [],
+                metadata: event.metadata || {}
+            };
+            await fs.appendFile(this.evidenceLedgerPath, `${JSON.stringify(record)}\n`);
+            return record;
+        } catch (error) {
+            this.auditLogger.warn(`Kevin evidence ledger write failed: ${error.message}`);
+            return null;
+        }
+    }
+
+    async _readEvidenceLedger(limit = 500) {
+        try {
+            const raw = await fs.readFile(this.evidenceLedgerPath, 'utf8');
+            return raw
+                .split(/\r?\n/)
+                .filter(Boolean)
+                .slice(-Math.max(1, Number(limit) || 500))
+                .map(line => JSON.parse(line));
+        } catch {
+            return [];
+        }
+    }
+
+    async _refreshRealStats() {
+        const evidence = await this._readEvidenceLedger(1000);
+        const scans = evidence.filter(e => ['email_verdict', 'link_verdict', 'local_watch', 'security_audit'].includes(e.type));
+        const threats = evidence.filter(e => ['block', 'high_risk', 'threat', 'critical'].includes(String(e.verdict || e.decision || '').toLowerCase()));
+        const spam = evidence.filter(e => String(e.verdict || e.decision || '').toLowerCase().includes('spam'));
+        this.stats.scanned = Math.max(this.scanLogs.length, scans.length);
+        this.stats.threats = threats.length;
+        this.stats.spam = spam.length;
+        this.stats.draftedReplies = this.emailManager?.draftQueue?.filter?.(d => d.status !== 'rejected').length || this.stats.draftedReplies || 0;
+        this.stats.actionsExtracted = this.actionItems.length + this.meetingRequests.length;
+        this.stats.prioritizedEmails = this.scanLogs.filter(log => ['threat', 'blocked', 'warning'].includes(log.status)).length;
+        const minutesSaved = Math.max(0, (this.stats.draftedReplies * 4) + (this.stats.actionsExtracted * 3) + (this.stats.spam * 1));
+        this.stats.timeSaved = minutesSaved >= 60 ? `${Math.floor(minutesSaved / 60)}h ${minutesSaved % 60}m` : `${minutesSaved}m`;
+        return this.stats;
+    }
+
+    async getEvidenceLedger(limit = 100) {
+        return {
+            success: true,
+            events: (await this._readEvidenceLedger(limit)).reverse()
+        };
+    }
+
+    getReputationCache() {
+        return this.threatDatabase?.getReputationCache?.() || { success: true, senders: [], domains: [] };
     }
 
     getCapabilities() {
@@ -363,7 +473,7 @@ export class KevinArbiter extends BaseArbiterV4 {
         };
     }
 
-    getCockpitSummary() {
+    async getCockpitSummary() {
         const threatStats = this.threatDatabase?.getStats?.() || {};
         const trustState = this.threatDatabase?.getTrustState?.() || { safeSenders: [], blockedSenders: [], recentDecisions: [] };
         const calendarStatus = this.getCalendarStatus?.() || {};
@@ -393,9 +503,9 @@ export class KevinArbiter extends BaseArbiterV4 {
                     safe: trustState.safeSenders?.length || 0,
                     blocked: trustState.blockedSenders?.length || 0
                 },
-                domains: { safe: 0, blocked: 0, planned: true },
-                apps: { watched: 0, planned: true },
-                files: { watched: 0, planned: true },
+                domains: this._getDomainTrustCounts(trustState),
+                apps: this._getObservedAppCounts(),
+                files: await this._getObservedFileCounts(),
                 recentDecisions: trustState.recentDecisions || []
             },
             verdictEngine: {
@@ -414,10 +524,13 @@ export class KevinArbiter extends BaseArbiterV4 {
         };
     }
 
-    getPendingApprovals() {
+    async getPendingApprovals() {
         const drafts = this.emailManager?.getDrafts?.() || [];
         const calendar = this.calendarService?.getPendingActions?.() || [];
         const meetings = this.meetingRequests.filter(r => r.status === 'pending_review');
+        const reviewEvents = (await this._readEvidenceLedger(80))
+            .filter(event => event.requiresApproval || Number(event.score || 0) >= 55 || ['block', 'high_risk', 'caution'].includes(String(event.verdict || '').toLowerCase()))
+            .slice(0, 20);
 
         return {
             success: true,
@@ -453,12 +566,61 @@ export class KevinArbiter extends BaseArbiterV4 {
                     recommendedAction: 'Schedule only after confirming details.',
                     reversible: true,
                     raw: request
+                })),
+                ...reviewEvents.map(event => ({
+                    id: event.id,
+                    type: 'security_review',
+                    title: event.target || event.type || 'Security review',
+                    target: event.source || event.target || 'evidence ledger',
+                    evidence: event.evidence || [],
+                    confidence: event.confidence || null,
+                    score: event.score,
+                    verdict: event.verdict,
+                    recommendedAction: event.decision || 'Review evidence before trusting or acting.',
+                    reversible: true,
+                    timestamp: event.timestamp,
+                    raw: event
                 }))
             ]
         };
     }
 
-    getTrustGraph() {
+    _getDomainTrustCounts(trustState = {}) {
+        const safe = new Set();
+        const blocked = new Set();
+        for (const sender of trustState.safeSenders || []) {
+            const domain = String(sender).split('@')[1];
+            if (domain) safe.add(domain);
+        }
+        for (const sender of trustState.blockedSenders || []) {
+            const domain = String(sender).split('@')[1];
+            if (domain) blocked.add(domain);
+        }
+        return { safe: safe.size, blocked: blocked.size, observed: safe.size + blocked.size };
+    }
+
+    _getObservedAppCounts() {
+        return {
+            watched: 0,
+            observed: this.scanLogs.filter(log => log.type === 'process' || log.type === 'port').length,
+            source: 'local_watch'
+        };
+    }
+
+    async _getObservedFileCounts() {
+        try {
+            const state = JSON.parse(await fs.readFile(this.localWatchStatePath, 'utf8'));
+            return {
+                watched: Number(state.filesWatched || 0),
+                observed: Number(state.riskyFiles || 0),
+                source: 'local_watch'
+            };
+        } catch {
+            return { watched: 0, observed: 0, source: 'not_scanned' };
+        }
+    }
+
+    async getTrustGraph() {
         const trustState = this.threatDatabase?.getTrustState?.() || { safeSenders: [], blockedSenders: [], recentDecisions: [] };
         const nodes = [
             { id: 'operator', label: 'Operator', type: 'operator', status: 'root' },
@@ -486,19 +648,22 @@ export class KevinArbiter extends BaseArbiterV4 {
         trustState.safeSenders?.forEach(sender => addSender(sender, 'safe'));
         trustState.blockedSenders?.forEach(sender => addSender(sender, 'blocked'));
 
-        nodes.push(
-            { id: 'apps:planned', label: 'Apps', type: 'app', status: 'planned' },
-            { id: 'files:planned', label: 'Files', type: 'file', status: 'planned' }
-        );
-        edges.push(
-            { source: 'kevin', target: 'apps:planned', relation: 'watch_planned' },
-            { source: 'kevin', target: 'files:planned', relation: 'watch_planned' }
-        );
+        const localWatch = await this.getLocalWatchSummary();
+        for (const finding of localWatch.findings || []) {
+            const findingId = `finding:${finding.type}`;
+            nodes.push({ id: findingId, label: finding.type, type: 'finding', status: finding.severity || 'observed' });
+            edges.push({ source: 'kevin', target: findingId, relation: 'observes' });
+            for (const item of finding.items || []) {
+                const itemId = `file:${item}`;
+                nodes.push({ id: itemId, label: item, type: 'file', status: finding.severity || 'observed' });
+                edges.push({ source: findingId, target: itemId, relation: 'contains' });
+            }
+        }
 
         return { success: true, nodes, edges, recentDecisions: trustState.recentDecisions || [] };
     }
 
-    getVerdictTimeline(limit = 50) {
+    async getVerdictTimeline(limit = 50) {
         const trustState = this.threatDatabase?.getTrustState?.() || { recentDecisions: [] };
         const scanEvents = (this.scanLogs || []).map(log => ({
             id: `scan_${log.id || log.time}`,
@@ -520,9 +685,20 @@ export class KevinArbiter extends BaseArbiterV4 {
             evidence: [decision.metadata]
         }));
 
+        const evidenceEvents = (await this._readEvidenceLedger(Number(limit) || 50)).map(event => ({
+            id: event.id,
+            type: event.type,
+            timestamp: event.timestamp,
+            title: event.target || event.type,
+            verdict: event.verdict || event.decision || 'observed',
+            score: event.score,
+            target: event.target,
+            evidence: event.evidence || []
+        }));
+
         return {
             success: true,
-            events: [...scanEvents, ...decisionEvents]
+            events: [...scanEvents, ...decisionEvents, ...evidenceEvents]
                 .sort((a, b) => new Date(b.timestamp || 0) - new Date(a.timestamp || 0))
                 .slice(0, Number(limit) || 50)
         };
@@ -532,9 +708,10 @@ export class KevinArbiter extends BaseArbiterV4 {
         const root = process.cwd();
         const findings = [];
         const hiddenAllow = new Set(['.git', '.env', '.soma', '.gemini', '.claude', '.gitignore', '.gitattributes', '.gitmodules', '.npmrc']);
+        let files = [];
 
         try {
-            const files = await fs.readdir(root, { withFileTypes: true });
+            files = await fs.readdir(root, { withFileTypes: true });
             const unexpectedHidden = files
                 .filter(f => f.name.startsWith('.') && !hiddenAllow.has(f.name))
                 .map(f => f.name);
@@ -558,13 +735,90 @@ export class KevinArbiter extends BaseArbiterV4 {
                     items: riskyRootFiles.slice(0, 10)
                 });
             }
+
+            const secretCandidates = files
+                .filter(f => f.isFile() && /\.(json|env|yml|yaml|txt|log)$/i.test(f.name))
+                .map(f => path.join(root, f.name));
+            const secretHits = [];
+            const secretPattern = /\b(password|app[_-]?password|api[_-]?key|secret|token|bearer|sk-[A-Za-z0-9_-]{16,})\b/i;
+            for (const filePath of secretCandidates.slice(0, 40)) {
+                try {
+                    const stat = await fs.stat(filePath);
+                    if (stat.size > 1_000_000) continue;
+                    const content = await fs.readFile(filePath, 'utf8');
+                    if (secretPattern.test(content)) {
+                        secretHits.push(path.basename(filePath));
+                    }
+                } catch {}
+            }
+            if (secretHits.length) {
+                findings.push({
+                    severity: 'high',
+                    type: 'secret_marker_in_root_file',
+                    detail: `${secretHits.length} root file(s) contain credential-like markers`,
+                    items: secretHits.slice(0, 10)
+                });
+            }
+
+            if (files.some(f => f.name === 'package-lock.json')) {
+                const audit = await this._runDependencyAudit();
+                findings.push({
+                    severity: audit.summary?.critical || audit.summary?.high ? 'high' : audit.totalVulnerabilities ? 'medium' : 'info',
+                    type: 'dependency_audit',
+                    detail: audit.totalVulnerabilities
+                        ? `${audit.totalVulnerabilities} dependency vulnerability finding(s)`
+                        : 'No dependency vulnerabilities reported by npm audit',
+                    items: audit.topFindings || ['package-lock.json'],
+                    audit
+                });
+            }
         } catch (error) {
             findings.push({ severity: 'low', type: 'watch_error', detail: error.message });
+        }
+
+        const baseline = await this._checkFileBaseline();
+        if (baseline.changed.length || baseline.missing.length || baseline.created) {
+            findings.push({
+                severity: baseline.created ? 'info' : 'medium',
+                type: baseline.created ? 'file_baseline_created' : 'file_baseline_changed',
+                detail: baseline.created
+                    ? `${baseline.files.length} important file baseline(s) created`
+                    : `${baseline.changed.length} important file(s) changed, ${baseline.missing.length} missing`,
+                items: [...baseline.changed, ...baseline.missing].slice(0, 12)
+            });
+        }
+
+        const listeningPorts = await this._getListeningPorts();
+        const riskyPorts = listeningPorts.filter(port => {
+            const local = String(port.localAddress || '');
+            const p = Number(port.port);
+            const globallyBound = local === '0.0.0.0' || local === '::' || local === '*';
+            return globallyBound && [22, 80, 443, 3000, 3001, 3389, 8080, 8081].includes(p);
+        });
+        if (riskyPorts.length) {
+            findings.push({
+                severity: 'medium',
+                type: 'globally_bound_sensitive_ports',
+                detail: `${riskyPorts.length} sensitive local port(s) appear globally bound`,
+                items: riskyPorts.slice(0, 10).map(p => `${p.localAddress}:${p.port}`)
+            });
         }
 
         const envFlags = ['EMAIL_ADDRESS', 'APP_PASSWORD', 'TAVILY_API_KEY', 'SLACK_WEBHOOK_URL', 'DISCORD_WEBHOOK_URL']
             .filter(key => !!process.env[key])
             .map(key => ({ key, configured: true }));
+
+        const state = {
+            updatedAt: new Date().toISOString(),
+            filesWatched: files.length,
+            riskyFiles: findings.filter(f => /file|secret|executable/i.test(f.type)).reduce((sum, f) => sum + (f.items?.length || 1), 0),
+            listeningPorts: listeningPorts.length,
+            findings: findings.length
+        };
+        try {
+            await fs.mkdir(this.dataDir, { recursive: true });
+            await fs.writeFile(this.localWatchStatePath, JSON.stringify(state, null, 2));
+        } catch {}
 
         return {
             success: true,
@@ -579,8 +833,188 @@ export class KevinArbiter extends BaseArbiterV4 {
             },
             envFlags,
             findings,
+            listeningPorts: listeningPorts.slice(0, 25),
             status: findings.some(f => f.severity === 'critical') ? 'critical' : findings.length ? 'watch' : 'clean'
         };
+    }
+
+    async _getListeningPorts() {
+        try {
+            if (process.platform === 'win32') {
+                const { stdout } = await execAsync('powershell -NoProfile -Command "Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue | Select-Object LocalAddress,LocalPort,OwningProcess | ConvertTo-Json -Compress"', { timeout: 5000 });
+                const parsed = stdout.trim() ? JSON.parse(stdout) : [];
+                return (Array.isArray(parsed) ? parsed : [parsed]).map(row => ({
+                    localAddress: row.LocalAddress,
+                    port: Number(row.LocalPort),
+                    pid: Number(row.OwningProcess)
+                })).filter(row => row.port);
+            }
+            const { stdout } = await execAsync('netstat -tunlp 2>/dev/null || netstat -an', { timeout: 5000 });
+            return stdout.split(/\r?\n/)
+                .filter(line => /\bLISTEN\b/i.test(line))
+                .map(line => {
+                    const parts = line.trim().split(/\s+/);
+                    const address = parts[3] || parts[0] || '';
+                    const port = Number((address.match(/:(\d+)$/) || [])[1]);
+                    const localAddress = address.replace(/:\d+$/, '');
+                    return { localAddress, port, raw: line };
+                })
+                .filter(row => row.port);
+        } catch (error) {
+            return [{ localAddress: 'unknown', port: 0, error: error.message }].filter(row => row.port);
+        }
+    }
+
+    async getDependencyAuditStatus(force = false) {
+        return this._runDependencyAudit({ force });
+    }
+
+    async resetFileBaseline() {
+        try {
+            await fs.rm(this.fileBaselinePath, { force: true });
+        } catch {}
+        const baseline = await this._checkFileBaseline();
+        await this._appendEvidence({
+            type: 'file_baseline',
+            source: 'kevin.fileBaseline',
+            target: 'important_files',
+            verdict: 'allow',
+            score: 0,
+            decision: 'operator_rebaseline',
+            evidence: [{ type: 'baseline_reset', severity: 'info', detail: `${baseline.files.length} important file baseline(s) reset` }],
+            requiresApproval: false
+        });
+        return { success: true, baseline };
+    }
+
+    async _runDependencyAudit(options = {}) {
+        try {
+            const lockPath = path.join(process.cwd(), 'package-lock.json');
+            let lockHash = null;
+            try {
+                const lockData = await fs.readFile(lockPath);
+                lockHash = crypto.createHash('sha256').update(lockData).digest('hex');
+            } catch {
+                return { success: true, skipped: true, reason: 'No package-lock.json found', totalVulnerabilities: 0, summary: {}, topFindings: [] };
+            }
+
+            if (!options.force) {
+                try {
+                    const cached = JSON.parse(await fs.readFile(this.dependencyAuditPath, 'utf8'));
+                    const ageMs = Date.now() - new Date(cached.generatedAt || 0).getTime();
+                    if (cached.lockHash === lockHash && ageMs < 6 * 60 * 60 * 1000) {
+                        return { ...cached, cached: true };
+                    }
+                } catch {}
+            }
+
+            const { stdout } = await execAsync('npm audit --json', { cwd: process.cwd(), timeout: 25000, maxBuffer: 8 * 1024 * 1024 });
+            return this._normalizeNpmAudit(stdout, lockHash);
+        } catch (error) {
+            const stdout = error.stdout || '';
+            let lockHash = null;
+            try {
+                const lockData = await fs.readFile(path.join(process.cwd(), 'package-lock.json'));
+                lockHash = crypto.createHash('sha256').update(lockData).digest('hex');
+            } catch {}
+            if (stdout) return this._normalizeNpmAudit(stdout, lockHash);
+            return {
+                success: false,
+                error: error.message,
+                totalVulnerabilities: 0,
+                summary: {},
+                topFindings: []
+            };
+        }
+    }
+
+    async _normalizeNpmAudit(raw, lockHash = null) {
+        try {
+            const parsed = JSON.parse(raw || '{}');
+            const vulnerabilities = parsed.vulnerabilities || {};
+            const summary = parsed.metadata?.vulnerabilities || {};
+            const topFindings = Object.entries(vulnerabilities)
+                .sort(([, a], [, b]) => (b.cvss?.score || 0) - (a.cvss?.score || 0))
+                .slice(0, 10)
+                .map(([name, item]) => `${name}: ${item.severity || 'unknown'}`);
+            const totalVulnerabilities = Number(summary.total ?? ['critical', 'high', 'moderate', 'low', 'info']
+                .reduce((sum, key) => sum + (Number(summary[key]) || 0), 0));
+            const result = {
+                success: true,
+                totalVulnerabilities,
+                summary,
+                topFindings,
+                lockHash,
+                generatedAt: new Date().toISOString()
+            };
+            await fs.mkdir(this.dataDir, { recursive: true });
+            await fs.writeFile(this.dependencyAuditPath, JSON.stringify(result, null, 2));
+            if (totalVulnerabilities > 0) {
+                await this._appendEvidence({
+                    type: 'dependency_audit',
+                    source: 'kevin.npmAudit',
+                    target: 'package-lock.json',
+                    verdict: summary.critical || summary.high ? 'high_risk' : 'caution',
+                    score: Math.min(100, (summary.critical || 0) * 30 + (summary.high || 0) * 20 + (summary.moderate || 0) * 8 + (summary.low || 0) * 3),
+                    decision: 'review_dependency_vulnerabilities',
+                    evidence: topFindings.map(detail => ({ type: 'npm_vulnerability', severity: 'medium', detail })),
+                    requiresApproval: false,
+                    metadata: summary
+                });
+            }
+            return result;
+        } catch (error) {
+            return { success: false, error: error.message, totalVulnerabilities: 0, summary: {}, topFindings: [] };
+        }
+    }
+
+    async _checkFileBaseline() {
+        const watched = [
+            '.env',
+            'config/api-keys.env',
+            '.soma/kevin_config.json',
+            'server/routes/kevinRoutes.js',
+            'arbiters/KevinArbiter.js',
+            'server/utils/KevinThreatDatabase.cjs',
+            'server/utils/KevinEmailManager.cjs',
+            'package.json',
+            'package-lock.json'
+        ];
+        const current = {};
+        for (const rel of watched) {
+            const abs = path.join(process.cwd(), rel);
+            try {
+                const data = await fs.readFile(abs);
+                current[rel] = crypto.createHash('sha256').update(data).digest('hex');
+            } catch {}
+        }
+        let previous = null;
+        try {
+            previous = JSON.parse(await fs.readFile(this.fileBaselinePath, 'utf8'));
+        } catch {}
+        await fs.mkdir(this.dataDir, { recursive: true });
+        await fs.writeFile(this.fileBaselinePath, JSON.stringify({ updatedAt: new Date().toISOString(), files: current }, null, 2));
+        if (!previous?.files) {
+            return { created: true, files: Object.keys(current), changed: [], missing: [] };
+        }
+        const changed = Object.keys(current).filter(file => previous.files[file] && previous.files[file] !== current[file]);
+        const missing = Object.keys(previous.files).filter(file => !current[file]);
+        if (changed.length || missing.length) {
+            await this._appendEvidence({
+                type: 'file_baseline',
+                source: 'kevin.fileBaseline',
+                target: 'important_files',
+                verdict: 'caution',
+                score: Math.min(100, changed.length * 15 + missing.length * 20),
+                decision: 'review_file_changes',
+                evidence: [
+                    ...changed.map(file => ({ type: 'file_changed', severity: 'medium', detail: file })),
+                    ...missing.map(file => ({ type: 'file_missing', severity: 'medium', detail: file }))
+                ],
+                requiresApproval: false
+            });
+        }
+        return { created: false, files: Object.keys(current), changed, missing };
     }
 
     async inspectLinkLite(url) {
@@ -591,13 +1025,24 @@ export class KevinArbiter extends BaseArbiterV4 {
         try {
             parsed = new URL(url);
         } catch {
-            return {
+            const malformed = {
                 success: true,
                 verdict: 'caution',
                 score: 35,
                 evidence: [{ type: 'malformed_url', severity: 'medium', detail: 'URL could not be parsed' }],
                 recommendedAction: 'Do not open until the URL is corrected and verified.'
             };
+            await this._appendEvidence({
+                type: 'link_verdict',
+                source: 'kevin.linkInspector',
+                target: url,
+                verdict: malformed.verdict,
+                score: malformed.score,
+                decision: malformed.recommendedAction,
+                evidence: malformed.evidence,
+                requiresApproval: true
+            });
+            return malformed;
         }
 
         const hostname = parsed.hostname.toLowerCase();
@@ -648,7 +1093,7 @@ export class KevinArbiter extends BaseArbiterV4 {
 
         score = Math.min(score, 100);
         const verdict = score >= 70 ? 'high_risk' : score >= 30 ? 'caution' : 'allow';
-        return {
+        const result = {
             success: true,
             url,
             hostname,
@@ -659,12 +1104,25 @@ export class KevinArbiter extends BaseArbiterV4 {
             redirectChain,
             recommendedAction: verdict === 'allow' ? 'No obvious URL risk from metadata.' : 'Verify before opening; do not enter credentials.'
         };
+        await this._appendEvidence({
+            type: 'link_verdict',
+            source: 'kevin.linkInspector',
+            target: url,
+            verdict,
+            score,
+            decision: result.recommendedAction,
+            evidence,
+            requiresApproval: verdict !== 'allow',
+            metadata: { hostname, redirectChain }
+        });
+        await this._refreshRealStats();
+        return result;
     }
 
     async getSecurityBriefing() {
-        const cockpit = this.getCockpitSummary();
+        const cockpit = await this.getCockpitSummary();
         const localWatch = await this.getLocalWatchSummary();
-        const timeline = this.getVerdictTimeline(10);
+        const timeline = await this.getVerdictTimeline(10);
         const approvalsTotal = Object.values(cockpit.approvals || {}).reduce((sum, value) => sum + (Number(value) || 0), 0);
         const unknownSenders = (this.scanLogs || []).filter(log => !log.from && !log.sender).length;
 
@@ -771,6 +1229,11 @@ export class KevinArbiter extends BaseArbiterV4 {
 
         // Re-initialize manager with new process.env
         this.emailManager = new KevinEmailManager();
+
+        // Clean up old SMS service timers before instantiating a new one
+        if (this.smsService && typeof this.smsService.cleanup === 'function') {
+            this.smsService.cleanup();
+        }
 
         // Re-initialize SMS service with new email manager to pick up credentials
         this.smsService = new KevinSMSService({ emailManager: this.emailManager });
@@ -1021,8 +1484,26 @@ Appreciate it.`;
         return this.threatDatabase.getTrustState();
     }
 
-    buildSecurityVerdict(email = {}) {
-        return this.threatDatabase.buildEmailVerdict(email);
+    async buildSecurityVerdict(email = {}) {
+        const verdict = this.threatDatabase.buildEmailVerdict(email);
+        await this._appendEvidence({
+            type: 'email_verdict',
+            source: 'kevin.threatDatabase',
+            target: verdict.sender || email.from || email.subject || 'email',
+            verdict: verdict.verdict,
+            score: verdict.score,
+            decision: verdict.recommendedAction,
+            reversible: verdict.reversible,
+            requiresApproval: verdict.requiresApproval,
+            evidence: verdict.evidence,
+            metadata: {
+                subject: verdict.subject,
+                category: verdict.category,
+                confidence: verdict.confidence
+            }
+        });
+        await this._refreshRealStats();
+        return verdict;
     }
 
     unblockSender(sender) {
@@ -1051,6 +1532,15 @@ Appreciate it.`;
         if (result.success) {
             this.emit('email_sent', { draftId, ...result });
             this.auditLogger.info(`Draft ${draftId} approved and sent`);
+            await this._appendEvidence({
+                type: 'draft_approval',
+                source: 'kevin.emailManager',
+                target: draftId,
+                verdict: 'approved',
+                decision: 'sent',
+                evidence: [{ type: 'operator_approval', severity: 'info', detail: 'Draft approved and sent' }]
+            });
+            await this._refreshRealStats();
         }
         return result;
     }
@@ -1063,6 +1553,14 @@ Appreciate it.`;
         if (result.success) {
             this.emit('draft_rejected', { draftId });
             this.auditLogger.info(`Draft ${draftId} rejected`);
+            this._appendEvidence({
+                type: 'draft_approval',
+                source: 'kevin.emailManager',
+                target: draftId,
+                verdict: 'rejected',
+                decision: 'not_sent',
+                evidence: [{ type: 'operator_rejection', severity: 'info', detail: 'Draft rejected' }]
+            }).catch(() => {});
         }
         return result;
     }
@@ -2004,8 +2502,8 @@ Appreciate it.`;
         if (!this.useRealEmail) {
             return {
                 success: true,
-                response: `I'm running in simulation mode. No real email access. Configure your email credentials in settings if you want me to actually guard your inbox.`,
-                action: 'email_simulation_mode'
+                response: `I'm running in local scrutiny mode. I can audit this machine, but I need email credentials before I can guard the inbox.`,
+                action: 'email_local_only_mode'
             };
         }
 
@@ -2057,8 +2555,8 @@ Appreciate it.`;
         if (!this.useRealEmail) {
             return {
                 success: true,
-                response: `Can't draft emails in simulation mode. I need real email access to actually write paranoid replies. Configure credentials first.`,
-                action: 'email_simulation_mode'
+                response: `Can't draft inbox replies in local scrutiny mode. I need real email access before I can write replies against actual messages.`,
+                action: 'email_local_only_mode'
             };
         }
 
@@ -2444,7 +2942,7 @@ Appreciate it.`;
                 mood: this.mood,
                 stats: this.stats,
                 usingRealEmail: this.useRealEmail,
-                config: this.config // Add this
+                config: this._redactConfig()
             }
         };
     }
@@ -2454,7 +2952,7 @@ Appreciate it.`;
     }
 
     // =========================================================================
-    // 🔮 Simulation Logic
+    // 🔮 Operational Scan Loop
     // =========================================================================
 
     startScanLoop() {
@@ -2472,8 +2970,11 @@ Appreciate it.`;
 
     async scanLoop() {
         if (!this.isOnline) return;
+        if (this.isScanning) return;
 
-        if (this.useRealEmail) {
+        this.isScanning = true;
+        try {
+            if (this.useRealEmail) {
             // =========================
             // 📧 REAL GMAIL MODE
             // =========================
@@ -2481,6 +2982,27 @@ Appreciate it.`;
                 const unread = await this.emailManager.getUnread(1); // Fetch 1 at a time
                 if (unread.length > 0) {
                     const email = unread[0];
+                    
+                    // Check if it's an SMS reply
+                    const smsResult = await this.checkForSMSReply(email);
+                    if (smsResult && smsResult.handled) {
+                        this.stats.scanned++;
+                        this.emit('log', `[SMS] Received reply from ${this.smsService.config.phoneNumber}: "${smsResult.message}"`);
+                        
+                        // Mark as processed (seen) on IMAP
+                        await this.emailManager.organize(email.id, {
+                            labels: ['Kevin-SMS-Handled']
+                        });
+
+                        if (smsResult.requiresResponse) {
+                            await this._handleExternalMessage(smsResult.message, this.smsService.config.phoneNumber, 'SMS', async (reply) => {
+                                await this.smsService.sendSMS(reply, { type: 'chat' });
+                                this.emit('sms_responded', { query: smsResult.message, response: reply });
+                            });
+                        }
+                        return;
+                    }
+
                     this.stats.scanned++;
 
                     // ========================================
@@ -2600,12 +3122,36 @@ Appreciate it.`;
                         time: new Date().toLocaleTimeString(),
                         status: status,
                         origin: email.from.substring(0, 30),
+                        from: email.from,
+                        body: email.body,
+                        score: threatLevel,
                         reason: `Analyzed: ${action}`,
                         subject: email.subject.substring(0, 40)
                     };
 
                     this.scanLogs.unshift(logEntry);
                     if (this.scanLogs.length > 50) this.scanLogs.pop();
+                    await this._appendEvidence({
+                        type: 'email_verdict',
+                        source: 'kevin.scanLoop',
+                        target: email.from || email.subject || `uid:${email.id}`,
+                        verdict: status,
+                        score: threatLevel,
+                        decision: action,
+                        evidence: threatIndicators.map(detail => ({
+                            type: 'email_scan_indicator',
+                            severity: threatLevel >= 70 ? 'high' : threatLevel >= 40 ? 'medium' : 'low',
+                            detail,
+                            score: threatLevel
+                        })),
+                        requiresApproval: ['threat', 'blocked', 'warning'].includes(status),
+                        metadata: {
+                            uid: email.id,
+                            subject: email.subject,
+                            category: email.category || null
+                        }
+                    });
+                    await this._refreshRealStats();
 
                     // Emit log for Dashboard/Launcher
                     this.emit('log', `[Real] ${action}: ${email.subject} (From: ${email.from})`);
@@ -2640,27 +3186,40 @@ Appreciate it.`;
                 this._runLocalSecurityAudit().catch(e => {});
             }
         }
+        } finally {
+            this.isScanning = false;
+        }
     }
 
     /**
      * Real-world local file system audit
      */
     async _runLocalSecurityAudit() {
-        const root = process.cwd();
         this.auditLogger.info('🛡️ [KEVIN] Initiating Local Scrutiny Audit...');
         
         try {
-            const files = await fs.readdir(root);
-            const suspicious = files.filter(f => f.startsWith('.') && !['.git', '.env', '.soma', '.gemini'].includes(f));
-            
-            if (suspicious.length > 0) {
-                this.auditLogger.warn(`🚨 KEVIN ALERT: Found unexpected hidden files in root: ${suspicious.join(', ')}`);
-                this.emit('log', `[Security] Unexpected hidden files: ${suspicious.length}`);
+            const summary = await this.getLocalWatchSummary();
+            const highFindings = summary.findings.filter(f => ['critical', 'high'].includes(f.severity));
+            if (summary.findings.length > 0) {
+                this.auditLogger.warn(`🚨 KEVIN ALERT: ${summary.findings.length} local watch finding(s)`);
+                this.emit('log', `[Security] Local watch findings: ${summary.findings.length}`);
             } else {
                 this.auditLogger.debug('🛡️ Local perimeter clean. No suspicious hidden artifacts.');
             }
+            await this._appendEvidence({
+                type: 'local_watch',
+                source: 'kevin.localWatch',
+                target: process.cwd(),
+                verdict: highFindings.length ? 'high_risk' : (summary.findings.length ? 'caution' : 'allow'),
+                score: Math.min(100, summary.findings.length * 15 + highFindings.length * 25),
+                decision: summary.status,
+                evidence: summary.findings,
+                requiresApproval: highFindings.length > 0,
+                metadata: { listeningPorts: summary.listeningPorts?.length || 0 }
+            });
             
             this.stats.scanned++;
+            await this._refreshRealStats();
         } catch (e) {
             this.auditLogger.error(`Local audit failed: ${e.message}`);
         }
@@ -2778,6 +3337,19 @@ Appreciate it.`;
             });
         }
 
+        await this._appendEvidence({
+            type: 'security_audit',
+            source: 'kevin.securityAudit',
+            target: 'kevin_configuration',
+            verdict: result.summary.critical > 0 ? 'critical' : result.summary.warnings > 0 ? 'caution' : 'allow',
+            score: Math.min(100, (result.summary.critical * 35) + (result.summary.warnings * 10)),
+            decision: result.summary.passed ? 'passed' : 'review_required',
+            evidence: result.findings,
+            requiresApproval: result.summary.critical > 0,
+            metadata: result.summary
+        });
+        await this._refreshRealStats();
+
         return result;
     }
 
@@ -2819,6 +3391,15 @@ Appreciate it.`;
             if (emailMatch) {
                 const target = emailMatch[1];
                 this.threatDatabase.blockSender(target);
+                await this._appendEvidence({
+                    type: 'trust_decision',
+                    source: `kevin.${platform}`,
+                    target,
+                    verdict: 'blocked',
+                    decision: 'block_sender',
+                    evidence: [{ type: 'remote_operator_command', severity: 'medium', detail: `${platform} block command` }],
+                    reversible: true
+                });
                 await replyCallback(`🚫 ${target} blocked.`);
                 return;
             }
@@ -2829,6 +3410,15 @@ Appreciate it.`;
             if (emailMatch) {
                 const target = emailMatch[1];
                 this.threatDatabase.markSenderSafe(target);
+                await this._appendEvidence({
+                    type: 'trust_decision',
+                    source: `kevin.${platform}`,
+                    target,
+                    verdict: 'trusted',
+                    decision: 'safe_sender',
+                    evidence: [{ type: 'remote_operator_command', severity: 'medium', detail: `${platform} trust command` }],
+                    reversible: true
+                });
                 await replyCallback(`✅ ${target} trusted.`);
                 return;
             }
@@ -2841,12 +3431,30 @@ Appreciate it.`;
             if (type === 'block') {
                 this.threatDatabase.blockSender(target);
                 session.pendingAction = null;
+                await this._appendEvidence({
+                    type: 'trust_decision',
+                    source: `kevin.${platform}`,
+                    target,
+                    verdict: 'blocked',
+                    decision: 'block_sender_confirmed',
+                    evidence: [{ type: 'remote_operator_confirmation', severity: 'medium', detail: `${platform} confirmed block` }],
+                    reversible: true
+                });
                 await replyCallback(`🚫 Done. ${target} is blacklisted.`);
                 return;
             }
             if (type === 'allow') {
                 this.threatDatabase.markSenderSafe(target);
                 session.pendingAction = null;
+                await this._appendEvidence({
+                    type: 'trust_decision',
+                    source: `kevin.${platform}`,
+                    target,
+                    verdict: 'trusted',
+                    decision: 'safe_sender_confirmed',
+                    evidence: [{ type: 'remote_operator_confirmation', severity: 'medium', detail: `${platform} confirmed allow` }],
+                    reversible: true
+                });
                 await replyCallback(`✅ Roger that. ${target} is on the safe list.`);
                 return;
             }

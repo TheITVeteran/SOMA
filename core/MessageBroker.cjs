@@ -414,21 +414,54 @@ class MessageBroker extends EventEmitter {
     }
 
     // If arbiter has instance, deliver directly
-    if (arbiter.instance && typeof arbiter.instance.handleMessage === 'function') {
-      try {
-        const response = await arbiter.instance.handleMessage(envelope);
-        this.metrics.messagesDelivered++;
-        return response;
-      } catch (error) {
-        console.error(`[MessageBroker] Error delivering to ${to}:`, error);
-        this.metrics.messagesFailed++;
-        return null;
+    if (arbiter.instance) {
+      if (message.type === 'reason' && typeof arbiter.instance.reason === 'function') {
+        try {
+          const query = message.payload?.query || message.payload || '';
+          const context = message.payload?.context || {};
+          const response = await arbiter.instance.reason(query, context);
+          this.metrics.messagesDelivered++;
+          return response;
+        } catch (error) {
+          console.error(`[MessageBroker] Error calling reason on target ${to}:`, error);
+          this.metrics.messagesFailed++;
+          return null;
+        }
+      } else if (typeof arbiter.instance.handleMessage === 'function') {
+        try {
+          const response = await arbiter.instance.handleMessage(envelope);
+          this.metrics.messagesDelivered++;
+          return response;
+        } catch (error) {
+          console.error(`[MessageBroker] Error delivering to ${to}:`, error);
+          this.metrics.messagesFailed++;
+          return null;
+        }
       }
     }
 
     // Otherwise publish to arbiter-specific topic
     const delivered = await this.publish(`arbiter/${to}`, envelope);
     return delivered > 0;
+  }
+
+  async request(to, typeOrMsg, payload = {}) {
+    let message;
+    if (typeOrMsg && typeof typeOrMsg === 'object') {
+      message = {
+        from: 'system',
+        to,
+        ...typeOrMsg
+      };
+    } else {
+      message = {
+        from: 'system',
+        to,
+        type: typeOrMsg,
+        payload
+      };
+    }
+    return await this.sendMessage(message);
   }
 
   async broadcast(topic, message) {

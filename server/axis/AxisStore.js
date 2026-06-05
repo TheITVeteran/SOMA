@@ -153,6 +153,18 @@ class AxisStore {
                 content TEXT NOT NULL,
                 created_at INTEGER NOT NULL
             );
+            CREATE TABLE IF NOT EXISTS project_activity (
+                id TEXT PRIMARY KEY,
+                project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+                actor_id TEXT DEFAULT '',
+                actor_name TEXT DEFAULT '',
+                action TEXT NOT NULL,
+                target_type TEXT DEFAULT '',
+                target_id TEXT DEFAULT '',
+                summary TEXT DEFAULT '',
+                metadata TEXT DEFAULT '{}',
+                created_at INTEGER NOT NULL
+            );
             CREATE TABLE IF NOT EXISTS communities (
                 id TEXT PRIMARY KEY,
                 name TEXT NOT NULL,
@@ -212,6 +224,7 @@ class AxisStore {
             CREATE INDEX IF NOT EXISTS idx_project_members    ON project_members(project_id);
             CREATE INDEX IF NOT EXISTS idx_tasks_project      ON tasks(project_id, status);
             CREATE INDEX IF NOT EXISTS idx_task_comments      ON task_comments(task_id);
+            CREATE INDEX IF NOT EXISTS idx_project_activity   ON project_activity(project_id, created_at);
             CREATE INDEX IF NOT EXISTS idx_community_posts    ON community_posts(community_id, created_at);
             CREATE INDEX IF NOT EXISTS idx_community_members  ON community_members(community_id);
         `);
@@ -264,6 +277,35 @@ class AxisStore {
                 console.warn('[AxisStore] FTS backfill failed:', e.message);
             }
         }
+
+        this.db.exec(`
+            CREATE TABLE IF NOT EXISTS portal_tabs (
+                id TEXT PRIMARY KEY,
+                title TEXT NOT NULL,
+                is_active INTEGER DEFAULT 0,
+                sort_order INTEGER DEFAULT 0,
+                tab_state TEXT NOT NULL,
+                updated_at INTEGER NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS portal_history (
+                id TEXT PRIMARY KEY,
+                title TEXT NOT NULL,
+                address TEXT NOT NULL,
+                kind TEXT NOT NULL,
+                query TEXT DEFAULT '',
+                created_at INTEGER NOT NULL
+            );
+            CREATE TABLE IF NOT EXISTS portal_bookmarks (
+                id TEXT PRIMARY KEY,
+                title TEXT NOT NULL,
+                address TEXT NOT NULL,
+                kind TEXT NOT NULL,
+                query TEXT DEFAULT '',
+                created_at INTEGER NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_portal_history ON portal_history(created_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_portal_bookmarks ON portal_bookmarks(created_at DESC);
+        `);
 
         if (this.db.prepare('SELECT COUNT(*) as n FROM workspaces').get().n === 0) this._seed();
         this._seedDefaultCommunities();
@@ -319,7 +361,31 @@ class AxisStore {
 
     // ── Workspaces ───────────────────────────────────────────────────────────
     getWorkspaces()  { return this.db.prepare('SELECT * FROM workspaces ORDER BY created_at ASC').all(); }
-    deleteWorkspace(id) { this.db.prepare('DELETE FROM workspaces WHERE id = ?').run(id); }
+    deleteWorkspace(id) {
+        const workspace = this.db.prepare('SELECT * FROM workspaces WHERE id = ?').get(id);
+        if (!workspace) return false;
+        if (workspace.name === 'Directs') return false;
+
+        const snapshotDir = path.join(DATA_DIR, 'axis', 'deleted-workspaces');
+        mkdirSync(snapshotDir, { recursive: true });
+        const snapshot = {
+            deletedAt: Date.now(),
+            workspace,
+            channels: this.db.prepare('SELECT * FROM channels WHERE workspace_id = ? ORDER BY created_at ASC').all(id),
+            projects: this.db.prepare('SELECT * FROM projects WHERE workspace_id = ? ORDER BY created_at ASC').all(id),
+            tasks: this.db.prepare('SELECT * FROM tasks WHERE workspace_id = ? ORDER BY created_at ASC').all(id),
+            messages: this.db.prepare('SELECT * FROM messages WHERE workspace_id = ? ORDER BY created_at ASC').all(id),
+        };
+        const safeName = String(workspace.name || id).replace(/[^a-z0-9_-]+/gi, '-').replace(/^-+|-+$/g, '') || id;
+        writeFileSync(
+            path.join(snapshotDir, `${Date.now()}-${safeName}.json`),
+            JSON.stringify(snapshot, null, 2),
+            'utf8'
+        );
+
+        this.db.prepare('DELETE FROM workspaces WHERE id = ?').run(id);
+        return true;
+    }
     updateWorkspace(id, { name, icon, color, type, description, is_public, avatar_url } = {}) {
         const fields = [], vals = [];
         if (name        !== undefined) { fields.push('name = ?');        vals.push(name);        }
@@ -633,6 +699,7 @@ class AxisStore {
 
     // ── Project Members ──────────────────────────────────────────────────────
     getProjectMembers(projectId) { return this.db.prepare('SELECT * FROM project_members WHERE project_id = ? ORDER BY joined_at ASC').all(projectId); }
+    getProjectMember(projectId, userId) { return this.db.prepare('SELECT * FROM project_members WHERE project_id = ? AND user_id = ?').get(projectId, userId); }
     addProjectMember(projectId, { userId, userName, userAvatar = '', userColor = '', role = 'contributor' }) {
         if (!userColor) userColor = colorFor(userId);
         this.db.prepare('INSERT OR IGNORE INTO project_members (project_id,user_id,user_name,user_avatar,user_color,role,joined_at) VALUES (?,?,?,?,?,?,?)').run(projectId, userId, userName, userAvatar, userColor, role, Date.now());
@@ -683,6 +750,17 @@ class AxisStore {
         const id = `tc-${uid()}`, now = Date.now();
         this.db.prepare('INSERT INTO task_comments (id,task_id,author_id,author_name,content,created_at) VALUES (?,?,?,?,?,?)').run(id, taskId, authorId, authorName, content, now);
         return this.db.prepare('SELECT * FROM task_comments WHERE id = ?').get(id);
+    }
+
+    addProjectActivity({ projectId, actorId = '', actorName = '', action, targetType = '', targetId = '', summary = '', metadata = {} }) {
+        const id = `pa-${uid()}`, now = Date.now();
+        this.db.prepare('INSERT INTO project_activity (id,project_id,actor_id,actor_name,action,target_type,target_id,summary,metadata,created_at) VALUES (?,?,?,?,?,?,?,?,?,?)')
+            .run(id, projectId, actorId, actorName, action, targetType, targetId, summary, JSON.stringify(metadata || {}), now);
+        return this.db.prepare('SELECT * FROM project_activity WHERE id = ?').get(id);
+    }
+    getProjectActivity(projectId, limit = 50) {
+        return this.db.prepare('SELECT * FROM project_activity WHERE project_id = ? ORDER BY created_at DESC LIMIT ?').all(projectId, limit)
+            .map(row => ({ ...row, metadata: JSON.parse(row.metadata || '{}') }));
     }
 
     // ── Communities ──────────────────────────────────────────────────────────

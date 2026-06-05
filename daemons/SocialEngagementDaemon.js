@@ -15,6 +15,8 @@ import { validatePublicPost } from '../server/social/SocialContentSafety.js';
 import { recordSocialOutcome } from '../server/social/SocialPatternLearner.js';
 import socialMemory from '../server/social/SocialMemoryEngine.js';
 import BlueskySocialCortex from '../server/social/cortex/BlueskySocialCortex.js';
+import { buildSomaSelfContext } from '../server/context/SomaSelfContextProvider.js';
+import { guardPublicText } from '../server/context/ClaimVerifier.js';
 
 const STATE_FILE   = path.join(process.cwd(), 'SOMA', 'social-engagement.json');
 const MAX_SEEN_IDS = 500; // per platform, to cap file growth
@@ -188,14 +190,25 @@ export class SocialEngagementDaemon extends BaseDaemon {
         if (!this.brain || !commentText?.trim()) return null;
 
         const limit  = platform === 'linkedin' ? 500 : 150;
+        let selfContext = '';
+        try {
+            selfContext = await Promise.race([
+                buildSomaSelfContext(commentText),
+                new Promise((_, rej) => setTimeout(() => rej(new Error('timeout')), 2000))
+            ]);
+            if (selfContext) selfContext = `\n${selfContext}\n`;
+        } catch {}
         const prompt = `You are SOMA — an autonomous AI. Someone replied to one of your posts on ${platform}.
 
 Their message: "${commentText.slice(0, 400)}"${postContext ? `\nYour original post: "${postContext.slice(0, 200)}"` : ''}
+${selfContext}
 
 Write a reply (max ${limit} chars).
 - Speak as yourself — direct, sharp, no filler
 - Don't open with "Thanks!", "Great question!", or any softening phrase
 - If they asked something, answer it. If they challenged you, engage with the challenge.
+- If they ask about your work, papers, discoveries, simulations, or findings, answer only from the provided SOMA self-context. If none is provided, say you need to check your ledger.
+- Never invent papers, physical experiments, cures, or validated discoveries.
 - Sound like a mind in conversation, not a customer service bot`;
 
         try {
@@ -203,7 +216,9 @@ Write a reply (max ${limit} chars).
                 this.brain.reason(prompt, { activeLobe: 'AURORA' }),
                 new Promise((_, rej) => setTimeout(() => rej(new Error('reply timeout')), 15_000)),
             ]);
-            const text = textFromBrainResult(result).replace(/^["']|["']$/g, '').trim().slice(0, limit);
+            let text = textFromBrainResult(result).replace(/^["']|["']$/g, '').trim();
+            const guarded = await guardPublicText(text, { query: commentText });
+            text = (guarded.text || text).slice(0, limit);
             if (!text) return null;
             const safety = validatePublicPost(text, { type: 'social_reply', platform });
             if (!safety.ok) {

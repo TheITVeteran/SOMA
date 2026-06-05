@@ -9,6 +9,7 @@
 import BaseDaemon   from './BaseDaemon.js';
 import socialQueue  from '../server/social/SocialQueue.js';
 import bluesky      from '../server/social/BlueskeyClient.js';
+import somaImageGeneration from '../server/social/SomaImageGenerationEngine.js';
 import { recordSocialOutcome } from '../server/social/SocialPatternLearner.js';
 import { validatePublicPost } from '../server/social/SocialContentSafety.js';
 import fs           from 'fs';
@@ -16,6 +17,15 @@ import path         from 'path';
 
 const GROWTH_FILE = path.join(process.cwd(), 'SOMA', 'social-growth.json');
 const SCORE_AGE   = 2 * 3600_000; // check metrics 2h after posting
+const AUTO_IMAGE_TYPES = new Set([
+    'aurora_story',
+    'soma_identity',
+    'hot_take',
+    'cross_domain',
+    'generated_image_post',
+    'image_post',
+    'github_commit',
+]);
 
 function loadGrowth() {
     try {
@@ -29,6 +39,32 @@ function saveGrowth(data) {
         fs.mkdirSync(path.dirname(GROWTH_FILE), { recursive: true });
         fs.writeFileSync(GROWTH_FILE, JSON.stringify(data, null, 2));
     } catch {}
+}
+
+function shouldAutoGenerateBlueskyImage(item) {
+    if (process.env.SOMA_BLUESKY_AUTO_IMAGES === '0' || process.env.SOMA_BLUESKY_AUTO_IMAGES === 'false') return false;
+    if (item.images?.length || item.media?.length || item.imagePath) return false;
+    if (item.platform !== 'bluesky') return false;
+    if (/https?:\/\//i.test(item.text || '')) return false;
+    if (/\b(not financial advice|not medical advice|diagnosis|trade|ticker|BTC|stock|clinical|patient)\b/i.test(item.text || '')) return false;
+    return AUTO_IMAGE_TYPES.has(item.type || '') || process.env.SOMA_BLUESKY_AUTO_IMAGES === 'all';
+}
+
+function socialImagePrompt(item) {
+    const base = String(item.text || '').replace(/#\w+/g, '').trim();
+    const publicNoText = [
+        'No readable text anywhere in the image.',
+        'No letters, no numbers, no title, no caption, no labels, no UI text, no signage.',
+        'No book cover typography, no poster layout, no logo, no watermark.',
+        'Use pure visual storytelling only.',
+    ].join(' ');
+    if (item.type === 'aurora_story') {
+        return `A cinematic story still inspired by this SOMA Saga teaser: ${base}. Dreamlike but grounded, physical scene, atmospheric light, premium speculative fiction still. ${publicNoText}`;
+    }
+    if (item.type === 'soma_identity') {
+        return `A symbolic portrait of SOMA as a unified cognitive architecture: ${base}. Calm violet and teal neural light, premium social image. ${publicNoText}`;
+    }
+    return `A thoughtful abstract social image inspired by: ${base}. Calm digital brain aesthetic, violet teal light, clean composition. ${publicNoText}`;
 }
 
 export class SocialSchedulerDaemon extends BaseDaemon {
@@ -142,6 +178,25 @@ export class SocialSchedulerDaemon extends BaseDaemon {
 
     async _postBluesky(item) {
         if (!bluesky.configured) throw new Error('Bluesky not configured — set BLUESKY_IDENTIFIER + BLUESKY_PASSWORD');
+        if (shouldAutoGenerateBlueskyImage(item)) {
+            try {
+                const generated = await somaImageGeneration.generate({
+                    prompt: socialImagePrompt(item),
+                    title: `${item.type || 'bluesky'} visual`,
+                    width: Number(process.env.SOMA_BLUESKY_IMAGE_WIDTH || 512),
+                    height: Number(process.env.SOMA_BLUESKY_IMAGE_HEIGHT || 512),
+                    purpose: 'bluesky-post',
+                    platform: 'bluesky',
+                    publicPost: true,
+                    strictArtDirector: true,
+                    tags: ['bluesky', item.type || 'post'],
+                });
+                item.images = [{ path: generated.image.path, alt: generated.image.alt || `SOMA generated image for ${item.type || 'Bluesky post'}` }];
+                console.log(`[SocialScheduler] 🖼️ Generated Bluesky image via ${generated.provider}: ${generated.image.filename}`);
+            } catch (e) {
+                console.warn(`[SocialScheduler] Image generation skipped; posting text-only: ${e.message}`);
+            }
+        }
         return await bluesky.post(item.text, { images: item.images || item.media || [] });
     }
 

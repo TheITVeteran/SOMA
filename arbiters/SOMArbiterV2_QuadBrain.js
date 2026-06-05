@@ -178,7 +178,10 @@ export class SOMArbiterV2_QuadBrain extends BaseArbiterV4 {
 
       let response;
       // 🔱 ODIN UNIVERSAL GATE: Determine depth based on complexity/intent
-      const isComplex = context.deepThinking || this._scoreLobe('LOGOS', query) > 0.5 || query.length > 200;
+      const isComplex = !context.bypassOdin && 
+                        context.role !== 'creative' && 
+                        !context.quickResponse && 
+                        (context.deepThinking || this._scoreLobe('LOGOS', query) > 0.5 || query.length > 200);
       const complexity = isComplex ? 'high' : 'simple';
 
       if (context.activeLobe) {
@@ -420,7 +423,7 @@ INTEGRATED RESPONSE:`;
                 // Regular chat: cap at 20s so local fallback gets a real shot within the 50s wall.
                 // Deep thinking requests use the full 45s (they have a 110s wall).
                 const dsTimeout = context.deepThinking ? 45000 : 20000;
-                const result = await this._callDeepSeek(prompt, temperature, maxTokens, systemPrompt, context.tools, history, dsTimeout);
+                const result = await this._callDeepSeek(prompt, temperature, maxTokens, systemPrompt, context.tools, history, dsTimeout, context.onToken || null, context.signal || null);
                 this._recordProviderResult('deepseek', true);
                 const cleanText = (result.text || '').replace(/—/g, ': ');
                 return { ...result, text: cleanText, brain: 'DEEPSEEK' };
@@ -443,7 +446,7 @@ INTEGRATED RESPONSE:`;
             this.auditLogger.info(`[${this.name}] 🦙 Fallback Local: ${modelToUse}...`);
         }
         
-        const result = await this._callOllama(prompt, modelToUse, temperature, maxTokens, systemPrompt, history);
+        const result = await this._callOllama(prompt, modelToUse, temperature, maxTokens, systemPrompt, history, context.signal || null);
         const cleanText = (result.text || '').replace(/—/g, ': ');
         return { ...result, text: cleanText, brain: requestedLobe || 'LOCAL_HEARTBEAT', provider: 'local', lobeModel: !!lobeModel };
     } catch (e) {
@@ -451,7 +454,7 @@ INTEGRATED RESPONSE:`;
         if (canUseDeepSeek) {
             try {
                 this.auditLogger.warn(`[${this.name}] ☁️ Local failed; escalating to DeepSeek fallback.`);
-                const result = await this._callDeepSeek(prompt, temperature, maxTokens, systemPrompt, context.tools, history);
+                const result = await this._callDeepSeek(prompt, temperature, maxTokens, systemPrompt, context.tools, history, 45000, null, context.signal || null);
                 this._recordProviderResult('deepseek', true);
                 const cleanText = (result.text || '').replace(/—/g, ': ');
                 return { ...result, text: cleanText, brain: 'DEEPSEEK_FALLBACK', provider: 'deepseek', localFallbackReason: e.message };
@@ -492,7 +495,7 @@ INTEGRATED RESPONSE:`;
     return { text, provider: 'gemini' };
   }
 
-  async _callOllama(prompt, model, temperature, maxTokens, systemPrompt, history = []) {
+  async _callOllama(prompt, model, temperature, maxTokens, systemPrompt, history = [], signal = null) {
     const messages = [];
     if (systemPrompt) messages.push({ role: 'system', content: systemPrompt });
     if (history?.length) history.forEach(h => messages.push({ role: h.role, content: h.content }));
@@ -506,7 +509,8 @@ INTEGRATED RESPONSE:`;
             messages: messages,
             stream: false,
             options: { temperature, num_predict: maxTokens }
-        })
+        }),
+        ...(signal ? { signal } : {})
     });
 
     if (!response.ok) throw new Error(`Ollama HTTP ${response.status}`);
@@ -533,7 +537,7 @@ INTEGRATED RESPONSE:`;
     return { type: 'object', properties, ...(required.length ? { required } : {}) };
   }
 
-  async _callDeepSeek(prompt, temperature, maxTokens, systemPrompt, tools = null, history = [], timeoutMs = 45000) {
+  async _callDeepSeek(prompt, temperature, maxTokens, systemPrompt, tools = null, history = [], timeoutMs = 45000, onToken = null, signal = null) {
     const messages = [];
     if (systemPrompt) messages.push({ role: 'system', content: systemPrompt });
     if (history?.length) history.forEach(h => messages.push({ role: h.role, content: h.content }));
@@ -551,11 +555,48 @@ INTEGRATED RESPONSE:`;
           }))
         : undefined;
 
+    // Streaming path: only when onToken provided and no tools (tools need full JSON back)
+    if (onToken && !openAITools?.length) {
+        const fetchSignal = signal ? AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]) : AbortSignal.timeout(timeoutMs);
+        const response = await fetch('https://api.deepseek.com/v1/chat/completions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${this.deepseekApiKey}` },
+            body: JSON.stringify(body),
+            signal: fetchSignal
+        });
+        if (!response.ok) {
+            const err = await response.json().catch(() => ({}));
+            throw new Error(err.error?.message || `HTTP ${response.status}`);
+        }
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let fullText = '';
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            const chunk = decoder.decode(value, { stream: true });
+            for (const line of chunk.split('\n')) {
+                const trimmed = line.trim();
+                if (!trimmed.startsWith('data:')) continue;
+                const raw = trimmed.slice(5).trim();
+                if (raw === '[DONE]') continue;
+                try {
+                    const parsed = JSON.parse(raw);
+                    const token = parsed.choices?.[0]?.delta?.content || '';
+                    if (token) { fullText += token; onToken(token); }
+                } catch {}
+            }
+        }
+        if (!fullText) throw new Error('DeepSeek streaming returned empty content');
+        return { text: fullText, provider: 'deepseek' };
+    }
+
     // Function-calling loop — max 5 rounds so a runaway tool chain can't spin forever
     for (let round = 0; round < 5; round++) {
         const body = { model: 'deepseek-chat', messages, temperature, max_tokens: maxTokens };
         if (openAITools?.length) body.tools = openAITools;
 
+        const fetchSignal = signal ? AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]) : AbortSignal.timeout(timeoutMs);
         const response = await fetch('https://api.deepseek.com/v1/chat/completions', {
             method: 'POST',
             headers: {
@@ -563,7 +604,7 @@ INTEGRATED RESPONSE:`;
                 'Authorization': `Bearer ${this.deepseekApiKey}`
             },
             body: JSON.stringify(body),
-            signal: AbortSignal.timeout(timeoutMs) // hard cap — prevents indefinite hangs
+            signal: fetchSignal // hard cap — prevents indefinite hangs
         });
 
         if (!response.ok) {

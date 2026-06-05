@@ -3,7 +3,7 @@ import {
   Shield, Activity, Lock, Power, Terminal, AlertTriangle,
   Cpu, Zap, Eye, Database, Network, Server, Unlock, Plus, Mail, Key, X,
   CheckCircle, ChevronRight, Settings, Radio, RefreshCw, Filter, Globe, Map, Target, Send, Bell,
-  Info, ExternalLink, Copy, ArrowRight, HelpCircle, Cloud, AtSign, Inbox, MailOpen
+  Info, ExternalLink, Copy, ArrowRight, HelpCircle, Cloud, AtSign, Inbox, MailOpen, MessageSquare
 } from 'lucide-react';
 import { toast } from 'react-toastify';
 import { KEVIN_QUOTES } from './data/kevinQuotes';
@@ -68,6 +68,7 @@ const KevinInterface = () => {
     const [chatInput, setChatInput] = useState('');
     const [isKevinThinking, setIsKevinThinking] = useState(false);
     const [messages, setMessages] = useState([]); // { role: 'user' | 'assistant', content: string }
+    const messagesEndRef = useRef(null);
   
     const [scanLog, setScanLog] = useState([]);
     
@@ -78,10 +79,11 @@ const KevinInterface = () => {
     const [approvals, setApprovals] = useState([]);
     const [trustGraph, setTrustGraph] = useState({ nodes: [], edges: [], recentDecisions: [] });
     const [timeline, setTimeline] = useState([]);
+    const [evidenceLedger, setEvidenceLedger] = useState([]);
     const [localWatch, setLocalWatch] = useState(null);
     const [briefing, setBriefing] = useState(null);
     const [reputation, setReputation] = useState([]);
-    const [activeTool, setActiveTool] = useState('link');
+    const [activeTool, setActiveTool] = useState('dashboard');
     const [linkUrl, setLinkUrl] = useState('');
     const [linkResult, setLinkResult] = useState(null);
     const [rewriteText, setRewriteText] = useState('');
@@ -89,122 +91,455 @@ const KevinInterface = () => {
     const [pairingSender, setPairingSender] = useState('');
     const [pairingResult, setPairingResult] = useState(null);
 
-  // Fetch Kevin Data - REAL DATA ONLY
-  useEffect(() => {
-    const fetchKevinData = async () => {
+    // Sandbox Threat & Inbox States
+    const [sandboxSender, setSandboxSender] = useState('');
+    const [sandboxSubject, setSandboxSubject] = useState('');
+    const [sandboxBody, setSandboxBody] = useState('');
+    const [sandboxVerdict, setSandboxVerdict] = useState(null);
+    const [isSandboxScanning, setIsSandboxScanning] = useState(false);
+
+    // Sandbox History State & Fetch
+    const [sandboxHistory, setSandboxHistory] = useState([]);
+    const fetchSandboxHistory = async () => {
       try {
-        const statusRes = await fetch('/api/kevin/status');
-        const logRes = await fetch('/api/kevin/scan-log');
-        const capabilitiesRes = await fetch('/api/kevin/capabilities');
-        const cockpitRes = await fetch('/api/kevin/cockpit');
-        const approvalsRes = await fetch('/api/kevin/approvals');
-        const graphRes = await fetch('/api/kevin/trust-graph');
-        const timelineRes = await fetch('/api/kevin/verdict-timeline?limit=30');
-        const localWatchRes = await fetch('/api/kevin/local-watch');
-        const briefingRes = await fetch('/api/kevin/briefing');
-        const reputationRes = await fetch('/api/kevin/reputation');
-
-        if (statusRes.ok) {
-          const data = await statusRes.json();
-          if (data.success) {
-            // Update UI state based on Backend state
-            setIsOnline(data.status.online);
-            setUsingRealEmail(data.status.usingRealEmail || false);
-            if (data.status.stats) {
-              setStats(data.status.stats);
-            }
-
-            // Sync with real config from backend
-            if (data.status.config) {
-                const cfg = data.status.config;
-                setSensitivity(cfg.sensitivity || 85);
-                if (cfg.protocols) setProtocols(prev => ({ ...prev, ...cfg.protocols }));
-                
-                // Map monitored_accounts to our UI list format
-                if (cfg.monitored_accounts) {
-                    setAccounts(cfg.monitored_accounts.map((email, idx) => ({
-                        id: idx + 1,
-                        email,
-                        status: 'secure',
-                        lastScan: 'Active'
-                    })));
-                }
-            }
-
-            if (Math.random() > 0.8 && !isKevinThinking) {
-                setKevinMood(data.status.mood);
-            }
-          }
-        }
-
-        if (logRes.ok) {
-          const data = await logRes.json();
-          if (data.success) {
-            setScanLog(data.logs);
-          }
-        }
-
-        if (capabilitiesRes.ok) {
-          const data = await capabilitiesRes.json();
-          if (data.success) {
-            setCapabilities(data);
-          }
-        }
-
-        if (cockpitRes.ok) {
-          const data = await cockpitRes.json();
-          if (data.success) {
-            setCockpit(data);
-          }
-        }
-
-        if (approvalsRes.ok) {
-          const data = await approvalsRes.json();
-          if (data.success) setApprovals(data.approvals || []);
-        }
-
-        if (graphRes.ok) {
-          const data = await graphRes.json();
-          if (data.success) setTrustGraph({ nodes: data.nodes || [], edges: data.edges || [], recentDecisions: data.recentDecisions || [] });
-        }
-
-        if (timelineRes.ok) {
-          const data = await timelineRes.json();
-          if (data.success) setTimeline(data.events || []);
-        }
-
-        if (localWatchRes.ok) {
-          const data = await localWatchRes.json();
-          if (data.success) setLocalWatch(data);
-        }
-
-        if (briefingRes.ok) {
-          const data = await briefingRes.json();
-          if (data.success) setBriefing(data);
-        }
-
-        if (reputationRes.ok) {
-          const data = await reputationRes.json();
-          if (data.success) setReputation(data.reputation || []);
+        const res = await fetch('/api/kevin/sandbox/history');
+        if (res.ok) {
+          const data = await res.json();
+          if (data.success) setSandboxHistory(data.history || []);
         }
       } catch (e) {
-        console.error("Kevin connection failed", e);
+        console.error('Failed to fetch sandbox history:', e);
       }
     };
 
+    // Rewrite Tone Profile States
+    const [selectedTone, setSelectedTone] = useState('professional');
+
+    const toneProfiles = [
+      { id: 'professional', label: 'Professional', guidance: 'make it formal, professional, polite, and clear.' },
+      { id: 'refusal', label: 'Firm Refusal', guidance: 'make it a firm, polite, but direct refusal. decline the request clearly.' },
+      { id: 'sarcastic', label: 'Sarcastic', guidance: 'rewrite it with sarcastic security operator humor, pointing out potential risks or laziness, but keeping it professional enough to send.' },
+      { id: 'brief', label: 'Brief', guidance: 'make it extremely short, concise, and straight to the point.' }
+    ];
+
+    // Cute folder mascot is used by default
+
+  // Fetch Kevin Data - REAL DATA ONLY
+  const loadKevinData = async () => {
+    try {
+      const statusRes = await fetch('/api/kevin/status');
+      const logRes = await fetch('/api/kevin/scan-log');
+      const capabilitiesRes = await fetch('/api/kevin/capabilities');
+      const cockpitRes = await fetch('/api/kevin/cockpit');
+      const approvalsRes = await fetch('/api/kevin/approvals');
+      const graphRes = await fetch('/api/kevin/trust-graph');
+      const timelineRes = await fetch('/api/kevin/verdict-timeline?limit=30');
+      const evidenceRes = await fetch('/api/kevin/evidence-ledger?limit=80');
+      const localWatchRes = await fetch('/api/kevin/local-watch');
+      const briefingRes = await fetch('/api/kevin/briefing');
+      const reputationRes = await fetch('/api/kevin/reputation');
+
+      if (statusRes.ok) {
+        const data = await statusRes.json();
+        if (data.success) {
+          // Update UI state based on Backend state
+          setIsOnline(data.status.online);
+          setUsingRealEmail(data.status.usingRealEmail || false);
+          if (data.status.stats) {
+            setStats(data.status.stats);
+          }
+
+          // Sync with real config from backend
+          if (data.status.config) {
+              const cfg = data.status.config;
+              setSensitivity(cfg.sensitivity || 85);
+              if (cfg.protocols) setProtocols(prev => ({ ...prev, ...cfg.protocols }));
+              
+              // Map monitored_accounts to our UI list format
+              if (cfg.monitored_accounts) {
+                  setAccounts(cfg.monitored_accounts.map((email, idx) => ({
+                      id: idx + 1,
+                      email,
+                      status: 'secure',
+                      lastScan: 'Active'
+                  })));
+              }
+          }
+
+          if (Math.random() > 0.8 && !isKevinThinking) {
+              setKevinMood(data.status.mood);
+          }
+        }
+      }
+
+      if (logRes.ok) {
+        const data = await logRes.json();
+        if (data.success) {
+          setScanLog(data.logs);
+        }
+      }
+
+      if (capabilitiesRes.ok) {
+        const data = await capabilitiesRes.json();
+        if (data.success) {
+          setCapabilities(data);
+        }
+      }
+
+      if (cockpitRes.ok) {
+        const data = await cockpitRes.json();
+        if (data.success) {
+          setCockpit(data);
+        }
+      }
+
+      if (approvalsRes.ok) {
+        const data = await approvalsRes.json();
+        if (data.success) setApprovals(data.approvals || []);
+      }
+
+      if (graphRes.ok) {
+        const data = await graphRes.json();
+        if (data.success) setTrustGraph({ nodes: data.nodes || [], edges: data.edges || [], recentDecisions: data.recentDecisions || [] });
+      }
+
+      if (timelineRes.ok) {
+        const data = await timelineRes.json();
+        if (data.success) setTimeline(data.events || []);
+      }
+
+      if (evidenceRes.ok) {
+        const data = await evidenceRes.json();
+        if (data.success) setEvidenceLedger(data.events || []);
+      }
+
+      if (localWatchRes.ok) {
+        const data = await localWatchRes.json();
+        if (data.success) setLocalWatch(data);
+      }
+
+      if (briefingRes.ok) {
+        const data = await briefingRes.json();
+        if (data.success) setBriefing(data);
+      }
+
+      if (reputationRes.ok) {
+        const data = await reputationRes.json();
+        if (data.success) setReputation(data.reputation || []);
+      }
+    } catch (e) {
+      console.error("Kevin connection failed", e);
+    }
+  };
+
+  useEffect(() => {
     // Fetch immediately on mount
-    fetchKevinData();
+    loadKevinData();
+    fetchSandboxHistory();
     
     // Poll regardless of local isOnline state so we can detect if backend starts/stops
-    const interval = setInterval(fetchKevinData, 3000);
+    // Using a 15-second interval as a fallback since SSE handles real-time push events.
+    const interval = setInterval(loadKevinData, 15000);
 
     return () => clearInterval(interval);
   }, [isKevinThinking]); // Removed isOnline from dependency so it runs always
 
   useEffect(() => {
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [messages, isKevinThinking]);
+
+  // Real-time Event Stream (SSE) Subscription
+  useEffect(() => {
+    const sseUrl = `${window.location.protocol}//${window.location.host}/api/kevin/events`;
+    const eventSource = new EventSource(sseUrl);
+
+    eventSource.onopen = () => {
+      console.log('[KevinSSE] Stream connected successfully');
+    };
+
+    eventSource.onerror = (err) => {
+      console.error('[KevinSSE] Stream connection error:', err);
+    };
+
+    eventSource.addEventListener('scan', (e) => {
+      try {
+        const newLog = JSON.parse(e.data);
+        setScanLog(prev => {
+          // Check if log already exists to avoid duplicates
+          if (prev.some(l => l.id === newLog.id || (l.time === newLog.time && l.subject === newLog.subject))) {
+            return prev;
+          }
+          return [newLog, ...prev];
+        });
+
+        const score = newLog.score ?? (newLog.status === 'phish' || newLog.status === 'threat' ? 85 : newLog.status === 'spam' ? 45 : 10);
+        if (score >= 55) {
+          playKevinSound('threat');
+          toast.error(`SECURITY THREAT DETECTED: "${newLog.subject}" from ${newLog.origin || newLog.from || 'unknown sender'}`, {
+            position: "top-right",
+            autoClose: 8000
+          });
+          setKevinMood('threat');
+        } else {
+          playKevinSound('scan');
+          toast.info(`Email scanned: "${newLog.subject}"`);
+        }
+        
+        // Instant sync stats/timeline
+        loadKevinData();
+      } catch (err) {
+        console.error('[KevinSSE] Failed to parse scan event:', err);
+      }
+    });
+
+    eventSource.addEventListener('security_alert', (e) => {
+      try {
+        const alert = JSON.parse(e.data);
+        playKevinSound('threat');
+        toast.warning(`ALERT: ${alert.title || 'Security Warning'} - ${alert.message}`);
+        loadKevinData();
+      } catch (err) {
+        console.error('[KevinSSE] Failed to parse security alert:', err);
+      }
+    });
+
+    eventSource.addEventListener('status', (e) => {
+      try {
+        const data = JSON.parse(e.data);
+        setIsOnline(data.online);
+        if (data.online) {
+          setQuote("I'm awake! Let's protect some emails. 🛡️");
+          setKevinMood('idle');
+        } else {
+          setQuote("Going to sleep... stay safe! 💤");
+          setKevinMood('offline');
+        }
+      } catch (err) {
+        console.error('[KevinSSE] Failed to parse status event:', err);
+      }
+    });
+
+    eventSource.addEventListener('draft', (e) => {
+      try {
+        const draft = JSON.parse(e.data);
+        toast.info(`New secure reply draft created for: ${draft.recipient || 'Operator Review'}`);
+        loadKevinData();
+      } catch (err) {
+        console.error('[KevinSSE] Failed to parse draft event:', err);
+      }
+    });
+
+    return () => {
+      eventSource.close();
+      console.log('[KevinSSE] Stream connection closed');
+    };
+  }, []);
+
+  // Threat Action Integrations
+  const inspectEmail = async (overrideEmail = null) => {
+    const emailPayload = overrideEmail || {
+      from: sandboxSender,
+      subject: sandboxSubject,
+      body: sandboxBody
+    };
+
+    if (!emailPayload.subject && !emailPayload.body) return;
+    setIsSandboxScanning(true);
+    playKevinSound('scan');
+    try {
+      const res = await fetch('/api/kevin/verdict/email', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: emailPayload })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setSandboxVerdict(data);
+        setKevinMood('scanning');
+        
+        // If manual sandbox scan (no override email), save to history
+        if (!overrideEmail) {
+          try {
+            await fetch('/api/kevin/sandbox/history', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                item: {
+                  from: emailPayload.from || sandboxSender || 'manual-sandbox',
+                  subject: emailPayload.subject || sandboxSubject || '(No Subject)',
+                  body: emailPayload.body || sandboxBody || '',
+                  verdict: data.verdict,
+                  score: data.score,
+                  analysis: data.analysis
+                }
+              })
+            });
+            fetchSandboxHistory();
+          } catch (e) {
+            console.error('History save error:', e);
+          }
+        }
+        
+        if (data.score >= 55) {
+          setTimeout(() => playKevinSound('threat'), 1500);
+        }
+        setTimeout(() => {
+          setKevinMood(data.verdict === 'block' || data.verdict === 'high_risk' ? 'threat' : 'idle');
+        }, 1500);
+      } else {
+        toast.error(data.error || 'Failed to inspect email');
+      }
+    } catch (error) {
+      toast.error('Network error during threat scanning');
+      console.error(error);
+    } finally {
+      setIsSandboxScanning(false);
+    }
+  };
+
+  const executeThreatAction = async (endpoint, senderEmail, successMsg) => {
+    if (!senderEmail) return;
+    playKevinSound('click');
+    setIsKevinThinking(true);
+    try {
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sender: senderEmail })
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast.success(successMsg);
+        setSandboxSender('');
+        setSandboxSubject('');
+        setSandboxBody('');
+        setSandboxVerdict(null);
+        await loadKevinData();
+      } else {
+        toast.error(data.error || 'Operation failed');
+      }
+    } catch (error) {
+      toast.error('Network error during operation');
+      console.error(error);
+    } finally {
+      setIsKevinThinking(false);
+    }
+  };
+
+  const getVerdictDetails = (score) => {
+    if (score >= 80) {
+      return {
+        label: 'BLOCK',
+        color: '#f43f5e',
+        glowColor: 'rgba(244,63,94,0.4)',
+        textTone: 'text-rose-400',
+        borderTone: 'border-rose-500/30',
+        bgTone: 'bg-rose-500/10'
+      };
+    } else if (score >= 55) {
+      return {
+        label: 'HIGH RISK',
+        color: '#fb923c',
+        glowColor: 'rgba(251,146,60,0.4)',
+        textTone: 'text-orange-400',
+        borderTone: 'border-orange-500/30',
+        bgTone: 'bg-orange-500/10'
+      };
+    } else if (score >= 30) {
+      return {
+        label: 'CAUTION',
+        color: '#fbbf24',
+        glowColor: 'rgba(251,191,36,0.4)',
+        textTone: 'text-amber-400',
+        borderTone: 'border-amber-500/30',
+        bgTone: 'bg-amber-500/10'
+      };
+    } else {
+      return {
+        label: 'SAFE',
+        color: '#10b981',
+        glowColor: 'rgba(16,185,129,0.4)',
+        textTone: 'text-emerald-400',
+        borderTone: 'border-emerald-500/30',
+        bgTone: 'bg-emerald-500/10'
+      };
+    }
+  };
+
+  const playKevinSound = (type) => {
+    try {
+      const AudioContext = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContext) return;
+      const ctx = new AudioContext();
+      
+      if (type === 'scan') {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(150, ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(800, ctx.currentTime + 1.0);
+        
+        gain.gain.setValueAtTime(0.05, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 1.0);
+        
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        
+        osc.start();
+        osc.stop(ctx.currentTime + 1.0);
+      } else if (type === 'threat') {
+        const osc1 = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc1.type = 'sawtooth';
+        
+        const lfo = ctx.createOscillator();
+        const lfoGain = ctx.createGain();
+        lfo.frequency.value = 6;
+        lfoGain.gain.value = 50;
+        
+        osc1.frequency.value = 440;
+        
+        lfo.connect(lfoGain);
+        lfoGain.connect(osc1.frequency);
+        
+        gain.gain.setValueAtTime(0.06, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.8);
+        
+        osc1.connect(gain);
+        gain.connect(ctx.destination);
+        
+        lfo.start();
+        osc1.start();
+        osc1.stop(ctx.currentTime + 0.8);
+        lfo.stop(ctx.currentTime + 0.8);
+      } else if (type === 'click') {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(600, ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(100, ctx.currentTime + 0.15);
+        
+        gain.gain.setValueAtTime(0.03, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.15);
+        
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        
+        osc.start();
+        osc.stop(ctx.currentTime + 0.15);
+      }
+    } catch (err) {
+      console.warn('AudioContext playback blocked or failed', err);
+    }
+  };
+
+  useEffect(() => {
     const onKeyDown = (event) => {
       if (event.target?.tagName === 'INPUT' || event.target?.tagName === 'TEXTAREA') return;
       const key = event.key.toLowerCase();
+      if (key === 'i') setActiveTool('inbox');
       if (key === 'v') setActiveTool('link');
       if (key === 'a') setActiveTool('approvals');
       if (key === 'r') setActiveTool('timeline');
@@ -365,10 +700,10 @@ const KevinInterface = () => {
 
   const getStatusBadge = (status) => {
     switch (status) {
-      case 'safe': return <span className="px-2 py-1 bg-fuchsia-500/10 text-fuchsia-400 rounded-full text-[10px] font-bold border border-fuchsia-500/20">SAFE</span>;
+      case 'safe': return <span className="px-2 py-1 bg-indigo-500/10 text-indigo-400 rounded-full text-[10px] font-bold border border-indigo-500/20">SAFE</span>;
       case 'threat': return <span className="px-2 py-1 bg-rose-500/10 text-rose-400 rounded-full text-[10px] font-bold border border-rose-500/20 animate-pulse">THREAT</span>;
-      case 'spam': return <span className="px-2 py-1 bg-fuchsia-500/10 text-fuchsia-400 rounded-full text-[10px] font-bold border border-fuchsia-500/20">SPAM</span>;
-      default: return <span className="px-2 py-1 bg-zinc-800 text-zinc-500 rounded-full text-[10px] font-bold border border-white/5">{status.toUpperCase()}</span>;
+      case 'spam': return <span className="px-2 py-1 bg-amber-500/10 text-amber-400 rounded-full text-[10px] font-bold border border-amber-500/20">SPAM</span>;
+      default: return <span className="px-2 py-1 bg-zinc-800 text-zinc-500 rounded-full text-[10px] font-bold border border-zinc-800/80">{status.toUpperCase()}</span>;
     }
   };
 
@@ -391,7 +726,7 @@ const KevinInterface = () => {
 
   const pendingApprovalCount = approvals.length;
   const blockedCount = Number(stats?.threats) || cockpit?.trustGraph?.people?.blocked || 0;
-  const decisionCount = cockpit?.verdictEngine?.decisions || timeline.length || 0;
+  const decisionCount = cockpit?.verdictEngine?.decisions || timeline.length || evidenceLedger.length || 0;
   const trustNodeCount = trustGraph.nodes.length || ((cockpit?.trustGraph?.people?.safe || 0) + (cockpit?.trustGraph?.people?.blocked || 0));
   const cockpitReadiness = Math.min(100, Math.round(
     (isOnline ? 25 : 0) +
@@ -436,11 +771,14 @@ const KevinInterface = () => {
   const rewriteAsUser = async () => {
     if (!rewriteText.trim()) return;
     setIsKevinThinking(true);
+    const toneObj = toneProfiles.find(t => t.id === selectedTone) || toneProfiles[0];
+    const guidanceText = toneObj.guidance || 'keep it concise and natural';
+    
     try {
       const res = await fetch('/api/kevin/rewrite-user-style', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: rewriteText.trim(), guidance: 'keep it concise and natural' })
+        body: JSON.stringify({ text: rewriteText.trim(), guidance: guidanceText })
       });
       const data = await res.json();
       setRewriteResult(data.rewritten || data.error || '');
@@ -469,1083 +807,1229 @@ const KevinInterface = () => {
   };
 
   return (
-    <div className="h-full flex flex-col bg-[#09090b] text-zinc-200 font-sans p-5 rounded-xl border border-white/5 relative overflow-hidden">
+    <div className="h-full flex bg-[#09090b] text-[#d4d4d8] font-sans rounded-xl border border-zinc-800 relative overflow-hidden">
       <style>{`
-        @keyframes slowWobble {
-          0%, 100% { transform: rotate(-3deg) translateY(0px); }
-          50% { transform: rotate(3deg) translateY(-2px); }
+        .custom-scrollbar::-webkit-scrollbar {
+          width: 6px;
+          height: 6px;
         }
-        @keyframes kevinSweep {
-          0% { transform: translateX(-120%); opacity: 0; }
-          12% { opacity: .45; }
-          45% { opacity: .12; }
-          100% { transform: translateX(140%); opacity: 0; }
+        .custom-scrollbar::-webkit-scrollbar-track {
+          background: transparent;
         }
-        .kevin-wobble {
-          animation: slowWobble 6s ease-in-out infinite;
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+          background: rgba(255, 255, 255, 0.08);
+          border-radius: 99px;
         }
-        .kevin-sweep::after {
-          content: "";
-          position: absolute;
-          inset: 0;
-          background: linear-gradient(90deg, transparent, rgba(34,211,238,.14), transparent);
-          animation: kevinSweep 4.5s ease-in-out infinite;
-          pointer-events: none;
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+          background: rgba(255, 255, 255, 0.15);
         }
-        .kevin-glass {
-          background: linear-gradient(145deg, rgba(24,24,27,.86), rgba(9,9,11,.68));
-          box-shadow: inset 0 1px 0 rgba(255,255,255,.04), 0 18px 40px rgba(0,0,0,.22);
+        @keyframes kevinRock {
+          0%, 100% { transform: rotate(-3deg); }
+          50% { transform: rotate(3deg); }
         }
-        .kevin-chip {
-          background: rgba(255,255,255,.045);
-          border: 1px solid rgba(255,255,255,.075);
+        .animate-kevin-rock {
+          animation: kevinRock 5s ease-in-out infinite;
+          transform-origin: bottom center;
         }
       `}</style>
-      <div className="absolute inset-0 pointer-events-none opacity-40 bg-[linear-gradient(rgba(255,255,255,.035)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,.035)_1px,transparent_1px)] bg-[size:42px_42px]" />
-      <div className="absolute inset-x-0 top-0 h-48 pointer-events-none bg-[linear-gradient(180deg,rgba(14,165,233,.10),transparent)]" />
 
-      {showSettings && (
-        <div className="absolute inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="w-full max-w-lg max-h-[90vh] bg-[#151518] border border-white/10 rounded-2xl shadow-2xl flex flex-col">
-            <div className="flex justify-between items-center p-6 pb-4 border-b border-white/5">
-              <h2 className="text-xl font-bold text-white flex items-center"><Settings className="w-5 h-5 mr-2 text-zinc-400" /> Kevin Settings</h2>
-              <button onClick={() => setShowSettings(false)} className="p-2 hover:bg-white/5 rounded-full transition-colors"><X className="w-5 h-5" /></button>
+      {/* Left Navigation Sidebar */}
+      <div className="w-64 bg-zinc-900 border-r border-zinc-800 flex flex-col justify-between p-5 flex-shrink-0 select-none">
+        <div className="space-y-6">
+          {/* Header */}
+          <div className="flex items-center gap-2">
+            <div className="p-1.5 bg-indigo-600/10 border border-indigo-500/20 rounded-lg text-indigo-400">
+              <Shield className="w-5 h-5" />
             </div>
-            <div className="space-y-6 overflow-y-auto flex-1 p-6 custom-scrollbar">
-              <div>
-                <h3 className="text-xs font-bold text-zinc-500 mb-3 uppercase tracking-widest flex items-center justify-between">
-                  <span>Active Protocols</span>
-                  <span className="text-[9px] text-zinc-600 font-normal normal-case tracking-normal">Security + Productivity</span>
-                </h3>
-                <div className="grid grid-cols-2 gap-3">
-                  {[
-                    // Security Protocols
-                    { id: 'heuristics', label: 'Hyper-Heuristics', desc: 'Predictive pattern matching', type: 'security' },
-                    { id: 'zeroTrust', label: 'Zero-Trust Auth', desc: 'Verify every header', type: 'security' },
-                    { id: 'toneAnalysis', label: 'Tone Analysis', desc: 'Detect social engineering', type: 'security' },
-                    { id: 'linkDetonation', label: 'Link Detonation', desc: 'Sandbox URL execution', type: 'security' },
-                    // Productivity Protocols
-                    { id: 'autoDraft', label: 'Auto-Draft', desc: 'Generate smart replies', type: 'productivity' },
-                    { id: 'smartPriority', label: 'Smart Priority', desc: 'AI-based inbox sorting', type: 'productivity' },
-                    { id: 'actionExtract', label: 'Action Extraction', desc: 'Find tasks & deadlines', type: 'productivity' },
-                    { id: 'styleLearn', label: 'Style Learning', desc: 'Adapt to your tone', type: 'productivity' },
-                  ].map(p => {
-                    const isActive = protocols[p.id];
-                    const isSecurity = p.type === 'security';
+            <div>
+              <div className="font-bold text-white tracking-tight leading-tight text-sm">K.E.V.I.N.</div>
+              <div className="text-[10px] text-zinc-500 font-medium">Security Assistant</div>
+            </div>
+          </div>
 
+          {/* Mascot Section */}
+          <div className="p-4 bg-zinc-950 rounded-xl border border-zinc-800 flex flex-col items-center justify-center text-center select-none">
+            <div 
+              className={`w-16 h-16 rounded-xl border overflow-hidden flex items-center justify-center transition-all duration-300 ${
+                isOnline 
+                  ? (kevinMood === 'threat' ? 'border-rose-500' : 'border-zinc-700') 
+                  : 'border-zinc-800 opacity-60 grayscale'
+              }`}
+            >
+              <img
+                src="/a_kevin_icon.png"
+                alt="Kevin Mascot"
+                className={`w-full h-full object-cover ${
+                  isOnline ? 'animate-kevin-rock' : ''
+                } ${
+                  kevinMood === 'scanning' 
+                    ? 'animate-pulse' 
+                    : kevinMood === 'threat' 
+                      ? 'animate-bounce' 
+                      : ''
+                }`}
+                onError={(e) => { e.target.src = '/a_kevin_icon.png'; }}
+              />
+            </div>
+          </div>
+
+          {/* Nav Links */}
+          <nav className="space-y-1">
+            {[
+              { id: 'dashboard', label: 'Dashboard', icon: Activity },
+              { id: 'evidence', label: 'Evidence Ledger', icon: Database },
+              { id: 'chat', label: 'Chat Console', icon: MessageSquare },
+              { id: 'inbox', label: 'Threat Inbox', icon: Inbox },
+              { id: 'sandbox', label: 'Security Sandbox', icon: Shield },
+              { id: 'rewrite', label: 'Tone Stylist', icon: MailOpen },
+              { id: 'settings', label: 'Integrations', icon: Settings }
+            ].map(tab => {
+              const IconComponent = tab.icon;
+              const isActive = activeTool === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => {
+                    setActiveTool(tab.id);
+                    playKevinSound('click');
+                  }}
+                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-xs font-semibold transition-all ${
+                    isActive 
+                      ? 'bg-zinc-800 text-white border border-zinc-700' 
+                      : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800/40 border border-transparent'
+                  }`}
+                >
+                  <IconComponent className={`w-4 h-4 ${isActive ? 'text-indigo-400' : 'text-zinc-500'}`} />
+                  <span>{tab.label}</span>
+                  {tab.id === 'inbox' && scanLog.length > 0 && (
+                    <span className="ml-auto px-1.5 py-0.2 bg-indigo-500/10 text-indigo-400 rounded-full text-[9px] font-bold border border-indigo-500/10">
+                      {scanLog.length}
+                    </span>
+                  )}
+                  {tab.id === 'evidence' && evidenceLedger.length > 0 && (
+                    <span className="ml-auto px-1.5 py-0.2 bg-cyan-500/10 text-cyan-400 rounded-full text-[9px] font-bold border border-cyan-500/10">
+                      {evidenceLedger.length}
+                    </span>
+                  )}
+                  {tab.id === 'sandbox' && approvals.length > 0 && (
+                    <span className="ml-auto px-1.5 py-0.2 bg-amber-500/10 text-amber-400 rounded-full text-[9px] font-bold border border-amber-500/10 animate-pulse">
+                      {approvals.length}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </nav>
+        </div>
+
+        {/* Sidebar Footer Controls */}
+        <div className="space-y-3 border-t border-zinc-800 pt-4">
+          <div className="flex items-center justify-between text-[10px] font-medium text-zinc-500 px-1">
+            <span>Perimeter Alert</span>
+            <span className={`h-2 w-2 rounded-full ${isOnline ? 'bg-emerald-500' : 'bg-zinc-700'}`} />
+          </div>
+          <button
+            onClick={togglePower}
+            className={`w-full flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-xs font-bold transition-all border ${
+              isOnline
+                ? 'bg-zinc-800 text-zinc-400 border-zinc-700 hover:bg-zinc-750'
+                : 'bg-indigo-600 hover:bg-indigo-500 text-white border-transparent shadow-sm'
+            }`}
+          >
+            <Power className="w-3.5 h-3.5" />
+            <span>{isOnline ? 'Disengage Engine' : 'Activate Engine'}</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Main Panel Content Area */}
+      <div className="flex-1 flex flex-col bg-zinc-950 min-w-0 h-full overflow-hidden">
+        {/* Top bar header info */}
+        <header className="h-14 border-b border-zinc-800 flex justify-between items-center px-6 flex-shrink-0 select-none">
+          <div>
+            <h1 className="text-sm font-bold text-white capitalize">{activeTool === 'rewrite' ? 'Tone Stylist' : activeTool === 'settings' ? 'Integrations & Settings' : activeTool === 'evidence' ? 'Evidence Ledger' : `${activeTool} Console`}</h1>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-bold border ${headerState.tone}`}>
+              {headerState.label}
+            </span>
+            {cockpit && (
+              <span className="text-[10px] text-zinc-500 font-mono hidden md:inline">
+                Mode: {usingRealEmail ? 'Email Edge' : 'Local Sandbox'}
+              </span>
+            )}
+          </div>
+        </header>
+
+        {/* View panel layout selector */}
+        <div className="flex-1 overflow-y-auto custom-scrollbar p-6">
+          <div className={`h-full transition-opacity duration-300 ${isOnline ? 'opacity-100' : 'opacity-35 pointer-events-none'}`}>
+            
+            {/* 1. DASHBOARD VIEW */}
+            {activeTool === 'dashboard' && (
+              <div className="space-y-6">
+                {/* Stats Grid */}
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+                  {[
+                    { label: 'Scanned Emails', value: (Number(stats?.scanned) || 0).toLocaleString(), color: 'text-white' },
+                    { label: 'Blocked Threats', value: Number(stats?.threats) || 0, color: 'text-rose-500' },
+                    { label: 'Operator Approvals', value: approvals.length, color: 'text-amber-500' },
+                    { label: 'Audited Decisions', value: cockpit?.verdictEngine?.decisions || 0, color: 'text-indigo-400' }
+                  ].map(stat => (
+                    <div key={stat.label} className="p-4 bg-zinc-900 border border-zinc-800 rounded-xl">
+                      <div className="text-zinc-500 text-[10px] font-bold uppercase tracking-wider mb-1">{stat.label}</div>
+                      <div className={`text-2xl font-semibold ${stat.color}`}>{stat.value}</div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {/* Briefing Feed */}
+                  <div className="p-5 bg-zinc-900 border border-zinc-800 rounded-xl flex flex-col h-[320px]">
+                    <div className="flex items-center gap-2 mb-4">
+                      <Bell className="w-4 h-4 text-indigo-400" />
+                      <h3 className="text-xs font-bold text-white uppercase tracking-wider">Perimeter Security Briefing</h3>
+                    </div>
+                    <div className="flex-1 overflow-y-auto custom-scrollbar space-y-2 pr-1">
+                      {(briefing?.summary || ['Loading security briefing data...']).map((line, idx) => (
+                        <div key={idx} className="text-xs text-zinc-400 bg-zinc-950 border border-zinc-800 rounded-lg p-3">
+                          {line}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Verdict Activity Feed */}
+                  <div className="p-5 bg-zinc-900 border border-zinc-800 rounded-xl flex flex-col h-[320px]">
+                    <div className="flex items-center gap-2 mb-4">
+                      <Activity className="w-4 h-4 text-indigo-400" />
+                      <h3 className="text-xs font-bold text-white uppercase tracking-wider">Recent Verdict Feed</h3>
+                    </div>
+                    <div className="flex-1 overflow-y-auto custom-scrollbar space-y-2 pr-1">
+                      {timeline.slice(0, 15).map(event => (
+                        <div key={event.id} className="p-3 bg-zinc-950 border border-zinc-800 rounded-lg flex items-center justify-between gap-4">
+                          <div className="min-w-0">
+                            <div className="text-xs font-semibold text-zinc-300 truncate">{event.title}</div>
+                            <div className="text-[10px] text-zinc-500 font-mono mt-0.5">{event.target || event.type}</div>
+                          </div>
+                          <span className={`px-2 py-0.5 rounded text-[9px] font-bold border uppercase flex-shrink-0 ${verdictTone(event.verdict)}`}>
+                            {event.verdict}
+                          </span>
+                        </div>
+                      ))}
+                      {timeline.length === 0 && (
+                        <div className="h-full flex items-center justify-center text-xs text-zinc-600 italic">
+                          No diagnostic decisions generated yet.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* System Status Metrics */}
+                <div className="p-5 bg-zinc-900 border border-zinc-800 rounded-xl">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Server className="w-4 h-4 text-indigo-400" />
+                    <h3 className="text-xs font-bold text-white uppercase tracking-wider">Engine Process Statistics</h3>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+                    <div className="bg-zinc-950 border border-zinc-800 p-3 rounded-lg flex justify-between items-center">
+                      <span className="text-zinc-500">Security Target Rating</span>
+                      <span className="font-semibold text-emerald-400">{cockpitReadiness}%</span>
+                    </div>
+                    <div className="bg-zinc-950 border border-zinc-800 p-3 rounded-lg flex justify-between items-center">
+                      <span className="text-zinc-500">Local Sandbox Memory</span>
+                      <span className="font-semibold text-zinc-300 font-mono">{localWatch?.process?.memoryMb || 0} MB</span>
+                    </div>
+                    <div className="bg-zinc-950 border border-zinc-800 p-3 rounded-lg flex justify-between items-center">
+                      <span className="text-zinc-500">Active Integrity Scans</span>
+                      <span className="font-semibold text-zinc-300 font-mono">{localWatch?.findings?.length || 0} alerts</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* 2. EVIDENCE LEDGER VIEW */}
+            {activeTool === 'evidence' && (
+              <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 h-full min-h-[520px]">
+                <div className="xl:col-span-8 bg-zinc-900 border border-zinc-800 rounded-xl p-5 flex flex-col min-h-0">
+                  <div className="flex items-center justify-between border-b border-zinc-800 pb-3 mb-4">
+                    <div>
+                      <h3 className="text-xs font-bold text-white uppercase tracking-wider">Evidence Ledger</h3>
+                      <p className="text-[10px] text-zinc-500 mt-1">Every meaningful Kevin verdict is recorded with target, action, score, and proof.</p>
+                    </div>
+                    <button
+                      onClick={loadKevinData}
+                      className="px-3 py-1.5 bg-zinc-950 hover:bg-zinc-850 border border-zinc-800 rounded-lg text-[10px] font-bold uppercase text-zinc-400 transition-colors flex items-center gap-1.5"
+                    >
+                      <RefreshCw className="w-3 h-3" />
+                      Refresh
+                    </button>
+                  </div>
+
+                  <div className="flex-1 overflow-y-auto custom-scrollbar space-y-3 pr-1 min-h-0">
+                    {evidenceLedger.map(event => {
+                      const score = Number(event.score || 0);
+                      const evidence = Array.isArray(event.evidence) ? event.evidence : [];
+                      return (
+                        <div key={event.id} className="bg-zinc-950 border border-zinc-800 rounded-xl p-4 space-y-3">
+                          <div className="flex flex-col md:flex-row md:items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2 mb-1">
+                                <span className={`px-2 py-0.5 rounded text-[9px] font-bold border uppercase ${verdictTone(event.verdict || event.decision)}`}>
+                                  {event.verdict || event.decision || 'observed'}
+                                </span>
+                                {event.requiresApproval && (
+                                  <span className="px-2 py-0.5 rounded text-[9px] font-bold border uppercase text-amber-400 border-amber-500/20 bg-amber-500/10">
+                                    review
+                                  </span>
+                                )}
+                              </div>
+                              <div className="text-sm font-semibold text-zinc-100 truncate">{event.target || event.type || 'Security event'}</div>
+                              <div className="text-[10px] text-zinc-500 font-mono mt-0.5 truncate">{event.source || event.type}</div>
+                            </div>
+                            <div className="text-right flex-shrink-0">
+                              <div className={`text-xl font-mono font-bold ${score >= 55 ? 'text-rose-400' : score >= 30 ? 'text-amber-400' : 'text-emerald-400'}`}>
+                                {Number.isFinite(score) ? score : 0}
+                              </div>
+                              <div className="text-[9px] text-zinc-600 uppercase tracking-wider">risk score</div>
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2 text-[11px]">
+                            <div className="bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2">
+                              <span className="text-zinc-600 uppercase font-bold tracking-wider block mb-0.5">Action</span>
+                              <span className="text-zinc-300">{event.decision || event.recommendedAction || 'Record and monitor'}</span>
+                            </div>
+                            <div className="bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2">
+                              <span className="text-zinc-600 uppercase font-bold tracking-wider block mb-0.5">Timestamp</span>
+                              <span className="text-zinc-400 font-mono">{event.timestamp ? new Date(event.timestamp).toLocaleString() : 'unknown'}</span>
+                            </div>
+                          </div>
+
+                          <div className="space-y-1.5">
+                            {evidence.slice(0, 6).map((item, idx) => (
+                              <div key={idx} className="flex items-start gap-2 text-[11px] text-zinc-400 bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2">
+                                <span className={`mt-1 h-1.5 w-1.5 rounded-full flex-shrink-0 ${String(item.severity || '').includes('high') || String(item.severity || '').includes('critical') ? 'bg-rose-400' : String(item.severity || '').includes('medium') ? 'bg-amber-400' : 'bg-cyan-400'}`} />
+                                <span className="min-w-0">
+                                  <span className="font-semibold text-zinc-500 mr-1">{item.type || item.severity || 'evidence'}:</span>
+                                  {item.detail || item.reason || JSON.stringify(item)}
+                                </span>
+                              </div>
+                            ))}
+                            {evidence.length > 6 && (
+                              <div className="text-[10px] text-zinc-600 px-1">+{evidence.length - 6} additional evidence item(s)</div>
+                            )}
+                            {evidence.length === 0 && (
+                              <div className="text-[11px] text-zinc-600 italic px-1">No detailed evidence attached to this record.</div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                    {evidenceLedger.length === 0 && (
+                      <div className="h-full min-h-[320px] flex flex-col items-center justify-center text-center text-zinc-600">
+                        <Database className="w-8 h-8 mb-3" />
+                        <div className="text-sm font-bold text-zinc-500">No evidence recorded yet</div>
+                        <div className="text-xs max-w-sm mt-1">Run a sandbox scan, inspect a link, or let Kevin process mail to populate the ledger.</div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="xl:col-span-4 space-y-6 min-h-0">
+                  <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
+                    <div className="flex items-center gap-2 mb-4">
+                      <Lock className="w-4 h-4 text-amber-400" />
+                      <h3 className="text-xs font-bold text-white uppercase tracking-wider">Unified Review Queue</h3>
+                    </div>
+                    <div className="space-y-2 max-h-64 overflow-y-auto custom-scrollbar pr-1">
+                      {approvals.slice(0, 10).map(item => (
+                        <div key={item.id} className="bg-zinc-950 border border-zinc-800 rounded-lg p-3">
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="text-xs font-semibold text-zinc-200 truncate">{item.title}</div>
+                            <span className={`px-2 py-0.5 rounded text-[8px] font-bold uppercase border ${verdictTone(item.verdict || item.type)}`}>
+                              {item.type}
+                            </span>
+                          </div>
+                          <div className="text-[10px] text-zinc-500 font-mono truncate mt-1">{item.target}</div>
+                          <div className="text-[10px] text-zinc-500 mt-2">{item.recommendedAction}</div>
+                        </div>
+                      ))}
+                      {approvals.length === 0 && (
+                        <div className="text-xs text-zinc-600 italic py-8 text-center">No items awaiting review.</div>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5">
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center gap-2">
+                        <Server className="w-4 h-4 text-cyan-400" />
+                        <h3 className="text-xs font-bold text-white uppercase tracking-wider">Local Watch</h3>
+                      </div>
+                      <button
+                        onClick={async () => {
+                          try {
+                            const res = await fetch('/api/kevin/local-watch/rebaseline', { method: 'POST' });
+                            const data = await res.json();
+                            if (data.success) {
+                              toast.success('File baseline reset.');
+                              loadKevinData();
+                            } else {
+                              toast.error(data.error || 'Baseline reset failed');
+                            }
+                          } catch (error) {
+                            toast.error(error.message);
+                          }
+                        }}
+                        className="text-[9px] text-zinc-500 hover:text-zinc-200 uppercase font-bold"
+                      >
+                        Rebaseline
+                      </button>
+                    </div>
+                    <div className="space-y-2 max-h-72 overflow-y-auto custom-scrollbar pr-1">
+                      {(localWatch?.findings || []).map((finding, idx) => (
+                        <div key={idx} className="bg-zinc-950 border border-zinc-800 rounded-lg p-3">
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="text-xs font-semibold text-zinc-300">{finding.type}</div>
+                            <span className={`px-2 py-0.5 rounded text-[8px] font-bold uppercase border ${verdictTone(finding.severity)}`}>
+                              {finding.severity}
+                            </span>
+                          </div>
+                          <div className="text-[10px] text-zinc-500 mt-1">{finding.detail}</div>
+                        </div>
+                      ))}
+                      {(!localWatch?.findings || localWatch.findings.length === 0) && (
+                        <div className="text-xs text-zinc-600 italic py-8 text-center">No local watch findings.</div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* 2. THREAT INBOX VIEW */}
+            {activeTool === 'inbox' && (
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 h-full min-h-[500px]">
+                {/* Email Logs List (5 Cols) */}
+                <div className="lg:col-span-5 bg-zinc-900 border border-zinc-800 rounded-xl p-4 flex flex-col min-h-0">
+                  <h3 className="text-xs font-bold text-white uppercase tracking-wider mb-3 px-1">Security Audit Log</h3>
+                  <div className="flex-1 overflow-y-auto custom-scrollbar space-y-2 pr-1">
+                    {scanLog.map((log, idx) => {
+                      const score = log.score ?? (log.status === 'phish' || log.status === 'threat' ? 85 : log.status === 'spam' ? 45 : 10);
+                      const badge = getVerdictDetails(score);
+                      return (
+                        <div 
+                          key={idx}
+                          onClick={() => {
+                            setSandboxSender(log.from || log.origin || '');
+                            setSandboxSubject(log.subject || '');
+                            setSandboxBody(log.body || log.reason || '');
+                            inspectEmail({
+                              from: log.from || log.origin || '',
+                              subject: log.subject || '',
+                              body: log.body || log.reason || ''
+                            });
+                          }}
+                          className="p-3 bg-zinc-950 border border-zinc-800 rounded-lg hover:border-zinc-700 transition-all cursor-pointer flex justify-between items-start gap-3"
+                        >
+                          <div className="min-w-0 flex-1">
+                            <div className="text-[10px] text-zinc-500 font-mono mb-1 truncate">
+                              {log.from || log.origin || 'unknown sender'}
+                            </div>
+                            <div className="text-xs font-semibold text-zinc-200 truncate">{log.subject || log.reason || '(No Subject)'}</div>
+                            <div className="text-[9px] text-zinc-600 mt-1">{log.time || log.timestamp}</div>
+                          </div>
+                          <span className={`px-2 py-0.5 rounded text-[8px] font-bold border uppercase flex-shrink-0 ${badge.borderTone} ${badge.textTone} ${badge.bgTone}`}>
+                            {badge.label}
+                          </span>
+                        </div>
+                      );
+                    })}
+                    {scanLog.length === 0 && (
+                      <div className="h-full flex items-center justify-center text-xs text-zinc-600 italic py-16">
+                        No email transaction logs generated yet.
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Verdict Detail Analysis (7 Cols) */}
+                <div className="lg:col-span-7 bg-zinc-900 border border-zinc-800 rounded-xl p-5 flex flex-col justify-between min-h-0">
+                  {sandboxVerdict ? (
+                    <div className="space-y-5 flex-1 flex flex-col justify-between">
+                      <div className="space-y-4">
+                        <div className="border-b border-zinc-800 pb-3">
+                          <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider block mb-1">Inspected Target</span>
+                          <h4 className="text-sm font-semibold text-white truncate">{sandboxSubject || '(No Subject)'}</h4>
+                          <span className="text-xs text-zinc-400 font-mono block mt-1">From: {sandboxSender}</span>
+                          {sandboxVerdict.analysis && (
+                            <div className={`mt-2.5 p-3 rounded-lg border text-xs leading-relaxed ${
+                              sandboxVerdict.score >= 55
+                                ? 'bg-rose-500/10 border-rose-500/20 text-rose-300'
+                                : 'bg-emerald-500/10 border-emerald-500/20 text-emerald-300'
+                            }`}>
+                              <span className="font-bold block text-[10px] uppercase tracking-wider mb-1">
+                                {sandboxVerdict.score >= 55 ? '⚠️ Risk Verdict Explanation' : '✅ Safety Verdict Explanation'}
+                              </span>
+                              {sandboxVerdict.analysis}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Flat Verdict Gauge Dial and Details */}
+                        <div className="p-4 bg-zinc-950 border border-zinc-800 rounded-xl grid grid-cols-1 sm:grid-cols-[auto_1fr] gap-4 items-center">
+                          {/* Clean SVG Flat Circle Gauge */}
+                          <div className="flex flex-col items-center justify-center p-2 bg-zinc-900 border border-zinc-800 rounded-xl relative w-20 h-20 mx-auto sm:mx-0">
+                            {(() => {
+                              const scoreVal = sandboxVerdict.score || 0;
+                              const details = getVerdictDetails(scoreVal);
+                              const circleRadius = 30;
+                              const circ = 2 * Math.PI * circleRadius;
+                              const fillOffset = circ - (Math.min(100, Math.max(0, scoreVal)) / 100) * circ;
+                              return (
+                                <>
+                                  <svg className="w-16 h-16 transform -rotate-90" viewBox="0 0 80 80">
+                                    <circle cx="40" cy="40" r={circleRadius} stroke="#27272a" strokeWidth="6" fill="transparent" />
+                                    <circle cx="40" cy="40" r={circleRadius} stroke={details.color} strokeWidth="6" fill="transparent" strokeDasharray={circ} strokeDashoffset={fillOffset} strokeLinecap="round" />
+                                  </svg>
+                                  <div className="absolute inset-0 flex flex-col items-center justify-center">
+                                    <span className="text-xs font-mono font-bold text-white leading-none">{scoreVal}%</span>
+                                    <span className={`text-[7px] font-bold uppercase tracking-wider mt-0.5 ${details.textTone}`}>{details.label}</span>
+                                  </div>
+                                </>
+                              );
+                            })()}
+                          </div>
+
+                          <div className="min-w-0 text-center sm:text-left">
+                            <div className="text-[9px] text-zinc-500 font-bold uppercase tracking-wider mb-0.5">Automated Risk Analysis</div>
+                            <div className="text-xs text-zinc-300 leading-relaxed font-medium">
+                              {sandboxVerdict.analysis || 'Analysis output complete.'}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Email Body Payload Preview */}
+                        {sandboxBody && (
+                          <div className="space-y-1">
+                            <span className="text-[9px] text-zinc-500 font-bold uppercase tracking-wider block px-1">Email Content Preview</span>
+                            <div className="p-3 bg-zinc-950 border border-zinc-850 rounded-lg text-zinc-300 font-sans text-xs leading-relaxed max-h-32 overflow-y-auto custom-scrollbar whitespace-pre-wrap select-text">
+                              {sandboxBody}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Risk Factors List */}
+                        <div className="max-h-48 overflow-y-auto custom-scrollbar space-y-2 pr-1">
+                          {sandboxVerdict.riskFactors && sandboxVerdict.riskFactors.length > 0 && (
+                            <div className="space-y-1">
+                              <span className="text-[9px] text-zinc-500 font-bold uppercase tracking-wider block px-1">Detected Risks</span>
+                              {sandboxVerdict.riskFactors.map((risk, idx) => (
+                                <div key={idx} className="flex items-start gap-2 text-xs text-rose-400 bg-rose-950/20 border border-rose-900/30 rounded-lg p-2.5">
+                                  <AlertTriangle className="w-4 h-4 text-rose-500 flex-shrink-0 mt-0.5" />
+                                  <span>{risk}</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          {sandboxVerdict.mitigations && sandboxVerdict.mitigations.length > 0 && (
+                            <div className="space-y-1 pt-2">
+                              <span className="text-[9px] text-zinc-500 font-bold uppercase tracking-wider block px-1">Verification Mitigations</span>
+                              {sandboxVerdict.mitigations.map((mit, idx) => (
+                                <div key={idx} className="flex items-start gap-2 text-xs text-emerald-400 bg-emerald-950/20 border border-emerald-900/30 rounded-lg p-2.5">
+                                  <CheckCircle className="w-4 h-4 text-emerald-500 flex-shrink-0 mt-0.5" />
+                                  <span>{mit}</span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Control Actions */}
+                      <div className="flex flex-col gap-2 border-t border-zinc-800 pt-4">
+                        <div className="flex gap-3">
+                          <button
+                            onClick={() => executeThreatAction('/api/kevin/threats/block-sender', sandboxSender, `Blocked ${sandboxSender}`)}
+                            className="flex-1 py-2 bg-rose-950/40 hover:bg-rose-950/70 text-rose-400 border border-rose-900/40 rounded-lg text-xs font-bold uppercase transition-colors"
+                          >
+                            Block Sender
+                          </button>
+                          <button
+                            onClick={() => executeThreatAction('/api/kevin/threats/safe-sender', sandboxSender, `Trusted ${sandboxSender}`)}
+                            className="flex-1 py-2 bg-emerald-950/40 hover:bg-emerald-950/70 text-emerald-400 border border-emerald-900/40 rounded-lg text-xs font-bold uppercase transition-colors"
+                          >
+                            Trust Sender
+                          </button>
+                        </div>
+                        
+                        <div className="flex gap-3">
+                          <button
+                            onClick={() => {
+                              setActiveTool('rewrite');
+                              setSelectedTone('refusal');
+                              setRewriteText(`Decline request from sender ${sandboxSender} regarding subject "${sandboxSubject}".\n\nBriefly explain that our security logs flagged this request due to:\n${sandboxVerdict.riskFactors?.map(rf => `- ${rf}`).join('\n') || '- Suspicious metadata verification failure'}`);
+                              playKevinSound('click');
+                            }}
+                            className="flex-1 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border border-zinc-700 rounded-lg text-xs font-bold uppercase transition-colors flex items-center justify-center gap-1.5"
+                          >
+                            <MailOpen className="w-3.5 h-3.5" />
+                            Reply with Stylist
+                          </button>
+                          
+                          <button
+                            onClick={() => {
+                              const reportContent = `# K.E.V.I.N. Threat Verdict Report\n\n* **Date/Time**: ${new Date().toLocaleString()}\n* **Inspected Sender**: ${sandboxSender}\n* **Subject Header**: ${sandboxSubject}\n* **Verdict Score**: ${sandboxVerdict.score}% (${sandboxVerdict.verdict || 'ANALYZED'})\n\n## Automated Threat Assessment\n${sandboxVerdict.analysis || 'Analysis output complete.'}\n\n## Detected Risk Factors\n${sandboxVerdict.riskFactors?.map(risk => `- [!] ${risk}`).join('\n') || '- None flagged'}\n\n## Mitigations & Verifications\n${sandboxVerdict.mitigations?.map(mit => `- [x] ${mit}`).join('\n') || '- None applied'}\n\n---\n*Report generated by K.E.V.I.N. Operator Guard*`;
+                              
+                              const blob = new Blob([reportContent], { type: 'text/markdown' });
+                              const url = URL.createObjectURL(blob);
+                              const link = document.createElement('a');
+                              link.href = url;
+                              link.download = `kevin-threat-report-${sandboxSender.replace(/[^a-zA-Z0-9]/g, '_')}.md`;
+                              document.body.appendChild(link);
+                              link.click();
+                              document.body.removeChild(link);
+                              URL.revokeObjectURL(url);
+                              toast.success('Security report downloaded!');
+                              playKevinSound('click');
+                            }}
+                            className="flex-1 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 border border-zinc-700 rounded-lg text-xs font-bold uppercase transition-colors flex items-center justify-center gap-1.5"
+                          >
+                            <ExternalLink className="w-3.5 h-3.5" />
+                            Export Audit Report
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex-1 flex flex-col items-center justify-center text-center p-8">
+                      <Inbox className="w-8 h-8 text-zinc-600 mb-2" />
+                      <h4 className="text-sm font-bold text-zinc-400">No Target Inspected</h4>
+                      <p className="text-xs text-zinc-600 max-w-xs mt-1">Select an item from the security log on the left to review threat evidence.</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* 3. SECURITY SANDBOX & TOOLS VIEW */}
+            {activeTool === 'sandbox' && (
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 h-full min-h-[500px]">
+                {/* Left Side: Scrutiny Sandbox & URL detonation (7 Cols) */}
+                <div className="lg:col-span-7 space-y-6 flex flex-col min-h-0">
+                  {/* Scrutiny Sandbox Form */}
+                  <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 space-y-4">
+                    <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+                      <h3 className="text-xs font-bold text-white uppercase tracking-wider">Email Scrutiny Sandbox</h3>
+                      <span className="text-[10px] text-zinc-500 font-medium">Verify payload logic</span>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-1">
+                        <label className="text-[9px] text-zinc-500 font-bold uppercase">Sender Address</label>
+                        <input 
+                          type="text" 
+                          value={sandboxSender} 
+                          onChange={(e) => setSandboxSender(e.target.value)} 
+                          placeholder="e.g. billing@amazon-support.ru" 
+                          className="w-full bg-zinc-950 border border-zinc-850 rounded-lg px-3 py-2 text-xs text-zinc-300 focus:outline-none focus:border-indigo-500 font-mono"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[9px] text-zinc-500 font-bold uppercase">Email Subject</label>
+                        <input 
+                          type="text" 
+                          value={sandboxSubject} 
+                          onChange={(e) => setSandboxSubject(e.target.value)} 
+                          placeholder="e.g. ACTION REQUIRED: Account Locked" 
+                          className="w-full bg-zinc-950 border border-zinc-850 rounded-lg px-3 py-2 text-xs text-zinc-300 focus:outline-none focus:border-indigo-500"
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <label className="text-[9px] text-zinc-500 font-bold uppercase">Headers & Message Content</label>
+                      <textarea 
+                        value={sandboxBody} 
+                        onChange={(e) => setSandboxBody(e.target.value)} 
+                        placeholder="Paste suspect email content or headers..." 
+                        className="w-full h-28 bg-zinc-950 border border-zinc-850 rounded-lg px-3 py-2 text-xs text-zinc-300 focus:outline-none focus:border-indigo-500 resize-none font-mono custom-scrollbar"
+                      />
+                    </div>
+                    <div className="flex gap-2">
+                      <button 
+                        onClick={() => inspectEmail()}
+                        disabled={isSandboxScanning || (!sandboxSender && !sandboxSubject && !sandboxBody)}
+                        className="flex-1 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:bg-zinc-800 disabled:text-zinc-650 text-white rounded-lg text-xs font-bold uppercase flex items-center justify-center gap-1.5 transition-colors"
+                      >
+                        {isSandboxScanning ? (
+                          <>
+                            <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                            <span>Executing Security Scan...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Shield className="w-3.5 h-3.5" />
+                            <span>Evaluate Security Status</span>
+                          </>
+                        )}
+                      </button>
+                      <button
+                        onClick={() => {
+                          setSandboxSender('');
+                          setSandboxSubject('');
+                          setSandboxBody('');
+                          setSandboxVerdict(null);
+                          playKevinSound('click');
+                        }}
+                        className="px-4 py-2 bg-zinc-850 hover:bg-zinc-800 text-zinc-400 border border-zinc-800 rounded-lg text-xs font-bold uppercase transition-colors"
+                      >
+                        Reset
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* URL Detonation Sandbox */}
+                  <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 space-y-4">
+                    <div className="border-b border-zinc-800 pb-3 flex items-center justify-between">
+                      <h3 className="text-xs font-bold text-white uppercase tracking-wider">URL Detonation Sandbox</h3>
+                    </div>
+                    <div className="flex gap-2">
+                      <input 
+                        value={linkUrl} 
+                        onChange={(e) => setLinkUrl(e.target.value)} 
+                        placeholder="https://suspect-auth-link.com" 
+                        className="flex-1 bg-zinc-950 border border-zinc-850 rounded-lg px-3 py-2 text-xs text-zinc-300 focus:outline-none focus:border-indigo-500 font-mono" 
+                      />
+                      <button 
+                        onClick={inspectLink} 
+                        className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-bold uppercase transition-colors"
+                      >
+                        Detonate Link
+                      </button>
+                    </div>
+                    {linkResult && (
+                      <div className="p-3 bg-zinc-950 border border-zinc-850 rounded-lg space-y-2 text-xs">
+                        <div className="flex justify-between items-center">
+                          <span className="font-semibold text-zinc-300 truncate max-w-[200px]">{linkResult.hostname || linkResult.url}</span>
+                          <span className={`px-2 py-0.5 rounded text-[9px] font-bold border uppercase ${verdictTone(linkResult.verdict)}`}>
+                            {linkResult.verdict || 'error'} {linkResult.score ?? ''}
+                          </span>
+                        </div>
+                        <p className="text-zinc-500 text-[11px]">{linkResult.recommendedAction || linkResult.error}</p>
+                        {(linkResult.evidence || []).map((ev, idx) => (
+                          <div key={idx} className="text-[10px] text-zinc-400 bg-zinc-900 border border-zinc-800 rounded px-2.5 py-1">
+                            <span className="font-semibold text-zinc-500 mr-1">{ev.type}:</span> {ev.detail}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Right Side: Verification Challenge & History (5 Cols) */}
+                <div className="lg:col-span-5 space-y-6 flex flex-col min-h-0">
+                  {/* Identity Verification Challenge */}
+                  <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 space-y-4">
+                    <div className="border-b border-zinc-800 pb-3">
+                      <h3 className="text-xs font-bold text-white uppercase tracking-wider">Identity Verification Challenge</h3>
+                    </div>
+                    <div className="space-y-3">
+                      <input 
+                        value={pairingSender} 
+                        onChange={(e) => setPairingSender(e.target.value)} 
+                        placeholder="sender@unverified.org" 
+                        className="w-full bg-zinc-950 border border-zinc-850 rounded-lg px-3 py-2 text-xs text-zinc-300 focus:outline-none focus:border-indigo-500" 
+                      />
+                      <button 
+                        onClick={createPairing} 
+                        className="w-full py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-bold uppercase transition-colors"
+                      >
+                        Generate Challenge
+                      </button>
+                    </div>
+                    {pairingResult && (
+                      <div className="p-3 bg-zinc-950 border border-zinc-850 rounded-lg text-xs">
+                        <div className="text-lg font-mono font-bold text-indigo-400">{pairingResult.code || 'None'}</div>
+                        <div className="text-zinc-500 mt-1">{pairingResult.message || pairingResult.error}</div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Sandbox Scan History */}
+                  <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 space-y-4 flex flex-col h-[280px] min-h-0">
+                    <div className="flex items-center justify-between border-b border-zinc-800 pb-3 flex-shrink-0">
+                      <h3 className="text-xs font-bold text-white uppercase tracking-wider">Sandbox Scan History</h3>
+                      {sandboxHistory.length > 0 && (
+                        <button
+                          onClick={async () => {
+                            try {
+                              const res = await fetch('/api/kevin/sandbox/history', { method: 'DELETE' });
+                              if (res.ok) {
+                                setSandboxHistory([]);
+                                toast.success('Sandbox history cleared.');
+                                playKevinSound('click');
+                              }
+                            } catch (e) {
+                              toast.error('Clear failed');
+                            }
+                          }}
+                          className="text-[10px] text-rose-400 hover:text-rose-350 font-bold uppercase transition-colors"
+                        >
+                          Clear All
+                        </button>
+                      )}
+                    </div>
+                    <div className="flex-1 overflow-y-auto custom-scrollbar space-y-2 pr-1 min-h-0">
+                      {sandboxHistory.map(item => {
+                        const badge = getVerdictDetails(item.score);
+                        return (
+                          <div
+                            key={item.id}
+                            onClick={() => {
+                              setSandboxSender(item.from || '');
+                              setSandboxSubject(item.subject || '');
+                              setSandboxBody(item.body || '');
+                              setSandboxVerdict({
+                                success: true,
+                                verdict: item.verdict,
+                                score: item.score,
+                                analysis: item.analysis,
+                                riskFactors: item.verdict === 'safe' ? [] : ['Suspicious header validation'],
+                                mitigations: item.verdict === 'safe' ? ['Valid safe sender list match'] : []
+                              });
+                              setActiveTool('inbox');
+                              toast.info('Loaded manual scan audit details.');
+                              playKevinSound('click');
+                            }}
+                            className="p-2.5 bg-zinc-950 border border-zinc-850 rounded-lg hover:border-zinc-700 transition-all cursor-pointer flex justify-between items-center gap-3"
+                          >
+                            <div className="min-w-0 flex-1">
+                              <div className="text-[9px] text-zinc-500 font-mono truncate">{item.from}</div>
+                              <div className="text-xs font-semibold text-zinc-300 truncate">{item.subject || '(No Subject)'}</div>
+                            </div>
+                            <span className={`px-2 py-0.5 rounded text-[8px] font-bold border uppercase flex-shrink-0 ${badge.borderTone} ${badge.textTone} ${badge.bgTone}`}>
+                              {item.score}%
+                            </span>
+                          </div>
+                        );
+                      })}
+                      {sandboxHistory.length === 0 && (
+                        <div className="h-full flex items-center justify-center text-xs text-zinc-600 italic">
+                          No manual scans performed yet.
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* 4. TONE STYLIST VIEW */}
+            {activeTool === 'rewrite' && (
+              <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 space-y-5">
+                <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+                  <h3 className="text-xs font-bold text-white uppercase tracking-wider">Operator Style Rewriter</h3>
+                  <span className="text-[10px] text-zinc-500 font-medium">Adapt drafts to your style signature</span>
+                </div>
+
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  {toneProfiles.map((profile) => {
+                    const isActive = selectedTone === profile.id;
                     return (
                       <button
-                        key={p.id}
-                        onClick={() => setProtocols(prev => ({ ...prev, [p.id]: !prev[p.id] }))}
-                        className={`text-left p-3 rounded-lg border transition-all ${isActive
-                          ? isSecurity
-                            ? 'bg-fuchsia-500/10 border-fuchsia-500/30'
-                            : 'bg-emerald-500/10 border-emerald-500/30'
-                          : 'bg-zinc-900 border-white/5 opacity-50'
-                          }`}
+                        key={profile.id}
+                        onClick={() => {
+                          setSelectedTone(profile.id);
+                          playKevinSound('click');
+                        }}
+                        className={`p-3 rounded-xl border text-left text-xs transition-all ${
+                          isActive
+                            ? 'bg-indigo-600/10 text-indigo-400 border-indigo-500'
+                            : 'bg-zinc-950 text-zinc-500 border-zinc-850 hover:border-zinc-700 hover:text-zinc-300'
+                        }`}
                       >
-                        <div className={`text-sm font-bold ${isActive
-                          ? isSecurity
-                            ? 'text-fuchsia-400'
-                            : 'text-emerald-400'
-                          : 'text-zinc-400'
-                          }`}>
-                          {p.label}
-                        </div>
-                        <div className="text-[10px] text-zinc-500">{p.desc}</div>
+                        <div className="font-bold mb-0.5">{profile.label}</div>
+                        <div className="text-[9px] text-zinc-500 leading-tight truncate">{profile.guidance}</div>
                       </button>
                     );
                   })}
                 </div>
-              </div>
-              <div>
-                <h3 className="text-xs font-bold text-zinc-500 mb-3 uppercase tracking-widest flex items-center justify-between">
-                  <span>Email Connection</span>
-                  <div className="flex items-center gap-2">
-                    {usingRealEmail && <span className="text-[9px] text-emerald-500 font-bold">CONNECTED</span>}
-                    <button
-                      onClick={() => setShowEmailSetup(true)}
-                      className="text-[9px] text-blue-400 hover:text-blue-300 flex items-center gap-1"
-                      title="Setup Help"
-                    >
-                      <HelpCircle className="w-3 h-3" />
-                      Setup Guide
-                    </button>
-                  </div>
-                </h3>
-                <div className="space-y-3 bg-black/20 p-3 rounded-lg border border-white/5">
-                  {/* Provider Selector */}
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-1">
-                    <label className="text-[10px] text-zinc-500 font-bold uppercase">Email Provider</label>
-                    <div className="grid grid-cols-3 gap-2">
-                      {Object.entries(emailProviders).slice(0, 6).map(([key, provider]) => (
+                    <label className="text-[9px] text-zinc-500 font-bold uppercase">Original Draft Text</label>
+                    <textarea 
+                      value={rewriteText} 
+                      onChange={(e) => setRewriteText(e.target.value)} 
+                      placeholder="Paste your quick notes or email draft here..." 
+                      className="w-full h-48 bg-zinc-950 border border-zinc-850 rounded-lg px-3 py-2 text-xs text-zinc-300 focus:outline-none focus:border-indigo-500 resize-none font-sans custom-scrollbar" 
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[9px] text-zinc-500 font-bold uppercase">Polished Output</label>
+                    <div className="w-full h-48 bg-zinc-950 border border-zinc-850 rounded-lg px-3 py-2 text-xs text-zinc-300 overflow-y-auto font-sans custom-scrollbar select-text whitespace-pre-wrap relative group">
+                      {rewriteResult || <span className="text-zinc-600 italic">Rewritten output will render here...</span>}
+                      {rewriteResult && (
                         <button
-                          key={key}
-                          onClick={() => { setSelectedProvider(key); setShowEmailSetup(true); }}
-                          className={`p-2 rounded-lg border text-center transition-all hover:border-white/20 ${
-                            selectedProvider === key
-                              ? 'border-fuchsia-500/50 bg-fuchsia-500/10'
-                              : 'border-white/5 bg-black/20'
-                          }`}
+                          onClick={() => {
+                            navigator.clipboard.writeText(rewriteResult);
+                            toast.success('Polished text copied!');
+                          }}
+                          className="absolute right-2 top-2 px-2 py-1 bg-zinc-900 border border-zinc-800 text-[10px] text-zinc-400 rounded hover:text-white transition-colors"
                         >
-                          <div className="flex items-center justify-center w-8 h-8 rounded-lg bg-black/30 border border-white/10">
-                            {renderProviderIcon(provider.iconType, 'md', provider.color)}
-                          </div>
-                          <div className="text-[9px] text-zinc-400 truncate">{provider.name.split('/')[0].trim()}</div>
+                          Copy
                         </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <button 
+                  onClick={rewriteAsUser} 
+                  disabled={!rewriteText.trim()}
+                  className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:bg-zinc-800 disabled:text-zinc-650 text-white rounded-lg text-xs font-bold uppercase transition-colors"
+                >
+                  Rewrite Draft Styling
+                </button>
+              </div>
+            )}
+
+            {/* 5. INTEGRATIONS & SETTINGS VIEW */}
+            {activeTool === 'settings' && (
+              <div className="space-y-6">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {/* Account Monitored configuration */}
+                  <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 space-y-4">
+                    <h3 className="text-xs font-bold text-white uppercase tracking-wider border-b border-zinc-800 pb-3">Monitored Accounts</h3>
+                    <div className="space-y-2 max-h-48 overflow-y-auto custom-scrollbar pr-1">
+                      {accounts.map(acc => (
+                        <div key={acc.id} className="flex justify-between items-center p-3 bg-zinc-950 rounded-lg border border-zinc-850">
+                          <div className="flex items-center space-x-3">
+                            <Mail className="w-4 h-4 text-zinc-500" />
+                            <span className="text-xs text-zinc-300 font-mono">{acc.email}</span>
+                          </div>
+                          <button 
+                            onClick={async () => {
+                              const updatedAccounts = accounts.filter(a => a.id !== acc.id);
+                              try {
+                                const res = await fetch('/api/kevin/config', {
+                                  method: 'POST',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({
+                                    monitored_accounts: updatedAccounts.map(a => a.email),
+                                    protocols
+                                  })
+                                });
+                                if (res.ok) {
+                                  setAccounts(updatedAccounts);
+                                  toast.success(`${acc.email} monitoring stopped.`);
+                                }
+                              } catch (e) {
+                                toast.error('Failed to remove: ' + e.message);
+                              }
+                            }}
+                            className="text-rose-400 hover:text-rose-350 text-[10px] font-bold uppercase"
+                          >
+                            Stop Monitoring
+                          </button>
+                        </div>
                       ))}
                     </div>
-                  </div>
-                  <div className="space-y-1">
-                    <label className="text-[10px] text-zinc-500 font-bold uppercase">Email Address</label>
-                    <input
-                      type="email"
-                      value={agentEmail}
-                      onChange={(e) => setAgentEmail(e.target.value)}
-                      placeholder={usingRealEmail ? "Connected (Enter to update)" : "your-email@provider.com"}
-                      className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-fuchsia-500/30 text-zinc-300"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <div className="flex items-center justify-between">
-                      <label className="text-[10px] text-zinc-500 font-bold uppercase">App Password</label>
-                      <button
-                        onClick={() => { if (!selectedProvider) setSelectedProvider('gmail'); setShowEmailSetup(true); }}
-                        className="text-[9px] text-blue-400 hover:text-blue-300 flex items-center gap-0.5"
+                    <div className="flex gap-2 pt-2">
+                      <input 
+                        type="email" 
+                        value={newEmail} 
+                        onChange={(e) => setNewEmail(e.target.value)} 
+                        placeholder="new-address@google-domain.com" 
+                        className="flex-1 bg-zinc-950 border border-zinc-850 rounded-lg px-3 py-2 text-xs text-zinc-300 focus:outline-none focus:border-indigo-500" 
+                      />
+                      <button 
+                        onClick={handleAddAccount} 
+                        className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-bold uppercase transition-colors"
                       >
-                        <Info className="w-3 h-3" />
-                        How to get this?
+                        Monitor
                       </button>
                     </div>
-                    <input
-                      type="password"
-                      value={agentPassword}
-                      onChange={(e) => setAgentPassword(e.target.value)}
-                      placeholder={usingRealEmail ? "••••••••••••" : "xxxx xxxx xxxx xxxx"}
-                      className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-fuchsia-500/30 text-zinc-300 font-mono"
-                    />
                   </div>
-                  
-                  {/* Direct Save/Test Button for Credentials */}
-                  <div className="pt-2">
-                    <button
-                      onClick={async () => {
-                        if (!agentEmail || !agentPassword) {
-                          toast.error('Enter email and app password first');
-                          return;
-                        }
-                        setIsKevinThinking(true);
-                        try {
-                          // Ensure it's in monitored list
-                          let finalMonitoredEmails = accounts.map(a => a.email);
-                          if (!finalMonitoredEmails.includes(agentEmail)) {
-                              finalMonitoredEmails.push(agentEmail);
-                          }
 
-                          // Save credentials
-                          const envRes = await fetch('/api/setup/env', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                              EMAIL_ADDRESS: agentEmail,
-                              APP_PASSWORD: agentPassword
-                            })
-                          });
+                  {/* Sensitivity settings */}
+                  <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 space-y-4">
+                    <h3 className="text-xs font-bold text-white uppercase tracking-wider border-b border-zinc-800 pb-3">Security Sensitivity Slider</h3>
+                    <div className="p-4 bg-zinc-950 border border-zinc-850 rounded-xl space-y-4">
+                      <div className="flex justify-between items-center">
+                        <span className="text-xs text-zinc-400 font-semibold">Evaluation Threshold</span>
+                        <span className="text-indigo-400 font-mono text-xs font-bold">{sensitivity}%</span>
+                      </div>
+                      <div className="flex items-center space-x-4">
+                        <span className="text-[10px] text-zinc-500 font-bold uppercase">Relaxed</span>
+                        <input 
+                          type="range" 
+                          min="0" 
+                          max="100" 
+                          value={sensitivity} 
+                          onChange={(e) => setSensitivity(parseInt(e.target.value))} 
+                          className="flex-1 h-1 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-indigo-500" 
+                        />
+                        <span className="text-[10px] text-zinc-500 font-bold uppercase">Paranoid</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
 
-                          const envData = await envRes.json();
-                          if (envRes.ok && envData.success) {
-                            // Also update monitored list
-                            await fetch('/api/kevin/config', {
+                {/* SMS settings card */}
+                <div>
+                  <KevinSMSSettings isConnected={isOnline} />
+                </div>
+
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  {/* Alert notification settings */}
+                  <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 space-y-4">
+                    <h3 className="text-xs font-bold text-white uppercase tracking-wider border-b border-zinc-800 pb-3">Incident Webhooks</h3>
+                    <div className="space-y-4 bg-zinc-950 p-4 border border-zinc-850 rounded-xl">
+                      {/* Slack */}
+                      <div className="space-y-1">
+                        <label className="text-[9px] text-zinc-500 font-bold uppercase">Slack Incoming Webhook URL</label>
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            value={notificationSettings.slackWebhook}
+                            onChange={(e) => setNotificationSettings(prev => ({ ...prev, slackWebhook: e.target.value }))}
+                            placeholder="https://hooks.slack.com/services/..."
+                            className="flex-1 bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2 text-xs text-zinc-300 focus:outline-none focus:border-indigo-500 font-mono text-[11px]"
+                          />
+                          <button
+                            onClick={async () => {
+                              try {
+                                const res = await fetch('/api/kevin/notifications/configure', {
+                                  method: 'POST',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({
+                                    channel: 'slack',
+                                    config: { webhookUrl: notificationSettings.slackWebhook, enabled: true }
+                                  })
+                                });
+                                if (res.ok) toast.success('Slack integration updated.');
+                              } catch (e) {
+                                toast.error('Slack config error: ' + e.message);
+                              }
+                            }}
+                            className="px-3 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-lg text-xs font-bold uppercase transition-colors"
+                          >
+                            Save
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Discord */}
+                      <div className="space-y-1">
+                        <label className="text-[9px] text-zinc-500 font-bold uppercase">Discord Webhook URL</label>
+                        <div className="flex gap-2">
+                          <input
+                            type="text"
+                            value={notificationSettings.discordWebhook}
+                            onChange={(e) => setNotificationSettings(prev => ({ ...prev, discordWebhook: e.target.value }))}
+                            placeholder="https://discord.com/api/webhooks/..."
+                            className="flex-1 bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2 text-xs text-zinc-300 focus:outline-none focus:border-indigo-500 font-mono text-[11px]"
+                          />
+                          <button
+                            onClick={async () => {
+                              try {
+                                const res = await fetch('/api/kevin/notifications/configure', {
+                                  method: 'POST',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({
+                                    channel: 'discord',
+                                    config: { webhookUrl: notificationSettings.discordWebhook, enabled: true }
+                                  })
+                                });
+                                if (res.ok) toast.success('Discord integration updated.');
+                              } catch (e) {
+                                toast.error('Discord config error: ' + e.message);
+                              }
+                            }}
+                            className="px-3 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 rounded-lg text-xs font-bold uppercase transition-colors"
+                          >
+                            Save
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Webhook test triggers */}
+                      <div className="flex gap-2 pt-2 border-t border-zinc-800">
+                        <button
+                          onClick={async () => {
+                            const res = await fetch('/api/kevin/notifications/test', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ channel: 'slack' })
+                            });
+                            if (res.ok) toast.success('Slack ping request queued.');
+                          }}
+                          className="flex-1 py-1.5 bg-zinc-900 border border-zinc-800 text-zinc-400 rounded text-[10px] font-bold uppercase hover:text-white transition-colors"
+                        >
+                          Ping Slack
+                        </button>
+                        <button
+                          onClick={async () => {
+                            const res = await fetch('/api/kevin/notifications/test', {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({ channel: 'discord' })
+                            });
+                            if (res.ok) toast.success('Discord ping request queued.');
+                          }}
+                          className="flex-1 py-1.5 bg-zinc-900 border border-zinc-800 text-zinc-400 rounded text-[10px] font-bold uppercase hover:text-white transition-colors"
+                        >
+                          Ping Discord
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Mail Provider setup instructions */}
+                  <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 space-y-4">
+                    <h3 className="text-xs font-bold text-white uppercase tracking-wider border-b border-zinc-800 pb-3">Email Link Setup</h3>
+                    <div className="bg-zinc-950 p-4 border border-zinc-850 rounded-xl space-y-4 text-xs text-zinc-400">
+                      <p className="leading-relaxed">
+                        To interface Kevin with your real inbox, specify your credentials to initiate IMAP network monitoring.
+                      </p>
+                      <div className="space-y-3">
+                        <div className="space-y-1">
+                          <label className="text-[9px] text-zinc-500 font-bold uppercase">Connection Email Address</label>
+                          <input
+                            type="email"
+                            value={agentEmail}
+                            onChange={(e) => setAgentEmail(e.target.value)}
+                            placeholder="your-email@gmail.com"
+                            className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2 text-xs text-zinc-300 focus:outline-none focus:border-indigo-500"
+                          />
+                        </div>
+                        <div className="space-y-1">
+                          <label className="text-[9px] text-zinc-500 font-bold uppercase">Secure App Password</label>
+                          <input
+                            type="password"
+                            value={agentPassword}
+                            onChange={(e) => setAgentPassword(e.target.value)}
+                            placeholder="•••• •••• •••• ••••"
+                            className="w-full bg-zinc-900 border border-zinc-800 rounded-lg px-3 py-2 text-xs text-zinc-300 focus:outline-none focus:border-indigo-500 font-mono"
+                          />
+                        </div>
+                        <button
+                          onClick={async () => {
+                            if (!agentEmail || !agentPassword) return;
+                            setIsKevinThinking(true);
+                            try {
+                              const envRes = await fetch('/api/setup/env', {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({
-                                  sensitivity,
-                                  monitored_accounts: finalMonitoredEmails,
-                                  protocols
-                                })
-                            });
-                            
-                            toast.success('Connection Verified & Saved!');
-                            setUsingRealEmail(true);
-                            setAgentPassword(''); // Clear from UI state for safety
-                          } else {
-                            toast.error('Verification failed: ' + (envData.error || 'Check credentials'));
-                          }
-                        } catch (e) {
-                          toast.error('Connection failed: ' + e.message);
-                        } finally {
-                          setIsKevinThinking(false);
-                        }
-                      }}
-                      disabled={isKevinThinking || !agentEmail || !agentPassword}
-                      className="w-full py-2 bg-blue-600/20 hover:bg-blue-600/30 text-blue-400 border border-blue-500/30 rounded-lg text-[10px] font-bold uppercase transition-all flex items-center justify-center gap-2"
-                    >
-                      {isKevinThinking ? (
-                        <>
-                          <RefreshCw className="w-3 h-3 animate-spin" />
-                          Verifying Link...
-                        </>
-                      ) : (
-                        <>
-                          <Zap className="w-3 h-3" />
-                          Verify & Save Connection
-                        </>
-                      )}
-                    </button>
-                  </div>
-                </div>
-              </div>
-              <div>
-                <h3 className="text-xs font-bold text-zinc-500 mb-3 uppercase tracking-widest">Monitored Accounts</h3>
-                <div className="space-y-2 max-h-40 overflow-y-auto custom-scrollbar pr-2">
-                  {accounts.map(acc => (
-                    <div key={acc.id} className="flex justify-between items-center p-2.5 bg-[#09090b]/60 rounded-lg border border-white/5">
-                      <div className="flex items-center space-x-3"><Mail className="w-3.5 h-3.5 text-zinc-500" /><span className="text-sm text-zinc-300">{acc.email}</span></div>
-                      <button 
-                        onClick={async () => {
-                          const updatedAccounts = accounts.filter(a => a.id !== acc.id);
-                          try {
-                            const res = await fetch('/api/kevin/config', {
-                              method: 'POST',
-                              headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify({
-                                thresholds: {
-                                  spam: (100 - sensitivity) / 100,
-                                  phishing: (100 - (sensitivity * 0.9)) / 100
-                                },
-                                monitored_accounts: updatedAccounts.map(a => a.email),
-                                protocols
-                              })
-                            });
-                            if (res.ok) {
-                              setAccounts(updatedAccounts);
-                              toast.success(`${acc.email} removed and saved!`);
-                            } else {
-                              toast.error('Failed to remove account');
-                            }
-                          } catch (e) {
-                            toast.error('Failed to remove: ' + e.message);
-                          }
-                        }}
-                        className="text-rose-400 hover:text-rose-300 text-[10px] font-bold uppercase"
-                      >
-                        Remove
-                      </button>
-                    </div>
-                  ))}
-                </div>
-                <div className="mt-3 flex gap-2">
-                  <input type="email" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} placeholder="new-email@soma.dev" className="flex-1 bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-fuchsia-500/30" />
-                  <button onClick={handleAddAccount} className="px-4 py-2 bg-fuchsia-600/20 text-fuchsia-400 border border-fuchsia-500/30 rounded-lg text-xs font-bold uppercase hover:bg-fuchsia-600/30 transition-all">Add</button>
-                </div>
-              </div>
-              <div>
-                <h3 className="text-xs font-bold text-zinc-500 mb-3 uppercase tracking-widest flex items-center justify-between">
-                  <span>Alert Notifications</span>
-                  <span className="text-[9px] text-zinc-600 font-normal normal-case tracking-normal">Slack / Telegram / Discord</span>
-                </h3>
-                <div className="space-y-3 bg-black/20 p-3 rounded-lg border border-white/5">
-                  {/* Slack */}
-                  <div className="space-y-1">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-1">
-                        <label className="text-[10px] text-zinc-500 font-bold uppercase">Slack Webhook URL</label>
-                        <div className="group relative">
-                          <Info className="w-3 h-3 text-zinc-600 hover:text-blue-400 cursor-help" />
-                          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-zinc-900 border border-white/10 rounded-lg text-[10px] text-zinc-300 w-56 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 shadow-xl">
-                            <div className="font-bold text-white mb-1">How to get this:</div>
-                            <ol className="list-decimal list-inside space-y-0.5">
-                              <li>Go to your Slack workspace</li>
-                              <li>Apps → Incoming Webhooks</li>
-                              <li>Add New Webhook to Workspace</li>
-                              <li>Choose channel & copy URL</li>
-                            </ol>
-                            <a href="https://api.slack.com/messaging/webhooks" target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline mt-1 inline-block">Slack Docs →</a>
-                            <div className="absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-1/2 w-2 h-2 bg-zinc-900 border-r border-b border-white/10 rotate-45"></div>
-                          </div>
-                        </div>
-                      </div>
-                      {notificationStatus.slack?.enabled && <span className="text-[9px] text-emerald-500 font-bold">ACTIVE</span>}
-                    </div>
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        value={notificationSettings.slackWebhook}
-                        onChange={(e) => setNotificationSettings(prev => ({ ...prev, slackWebhook: e.target.value }))}
-                        placeholder="https://hooks.slack.com/services/..."
-                        className="flex-1 bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-fuchsia-500/30 text-zinc-300 font-mono text-[11px]"
-                      />
-                      <button
-                        onClick={async () => {
-                          if (!notificationSettings.slackWebhook) {
-                            toast.error('Enter a Slack webhook URL first');
-                            return;
-                          }
-                          try {
-                            const res = await fetch('/api/kevin/notifications/configure', {
-                              method: 'POST',
-                              headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify({
-                                channel: 'slack',
-                                config: { webhookUrl: notificationSettings.slackWebhook, enabled: true }
-                              })
-                            });
-                            const data = await res.json();
-                            if (data.success) {
-                              toast.success('Slack webhook saved!');
-                              // Refresh status
-                              const statusRes = await fetch('/api/kevin/notifications/status');
-                              const statusData = await statusRes.json();
-                              setNotificationStatus(statusData);
-                            } else {
-                              toast.error('Failed to save: ' + (data.error || 'Unknown error'));
-                            }
-                          } catch (e) {
-                            toast.error('Save failed: ' + e.message);
-                          }
-                        }}
-                        className="px-4 py-2 bg-fuchsia-600/20 text-fuchsia-400 border border-fuchsia-500/30 rounded-lg text-xs font-bold uppercase hover:bg-fuchsia-600/30 transition-all"
-                      >
-                        Save
-                      </button>
-                    </div>
-                  </div>
-                  {/* Telegram */}
-                  <div className="space-y-1">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-1">
-                        <label className="text-[10px] text-zinc-500 font-bold uppercase">Telegram Bot</label>
-                        <div className="group relative">
-                          <Info className="w-3 h-3 text-zinc-600 hover:text-blue-400 cursor-help" />
-                          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-zinc-900 border border-white/10 rounded-lg text-[10px] text-zinc-300 w-52 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 shadow-xl">
-                            <div className="font-bold text-white mb-1">Setup:</div>
-                            <ol className="list-decimal list-inside space-y-0.5">
-                              <li>Message @BotFather on Telegram</li>
-                              <li>Send /newbot and follow prompts</li>
-                              <li>Copy bot token</li>
-                              <li>Add bot to your channel/group</li>
-                              <li>Get chat ID from getUpdates API</li>
-                            </ol>
-                            <a href="https://core.telegram.org/bots#botfather" target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline mt-1 inline-block">Docs →</a>
-                            <div className="absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-1/2 w-2 h-2 bg-zinc-900 border-r border-b border-white/10 rotate-45"></div>
-                          </div>
-                        </div>
-                      </div>
-                      {notificationStatus.telegram?.enabled && <span className="text-[9px] text-emerald-500 font-bold">ACTIVE</span>}
-                    </div>
-                    <div className="grid grid-cols-2 gap-2">
-                      <input
-                        type="text"
-                        value={notificationSettings.telegramBotToken}
-                        onChange={(e) => setNotificationSettings(prev => ({ ...prev, telegramBotToken: e.target.value }))}
-                        placeholder="Bot Token: 123456:ABC..."
-                        className="bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-fuchsia-500/30 text-zinc-300 font-mono text-[11px]"
-                      />
-                      <input
-                        type="text"
-                        value={notificationSettings.telegramChatId}
-                        onChange={(e) => setNotificationSettings(prev => ({ ...prev, telegramChatId: e.target.value }))}
-                        placeholder="Chat ID: -1001234..."
-                        className="bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-fuchsia-500/30 text-zinc-300 font-mono text-[11px]"
-                      />
-                    </div>
-                    <button
-                      onClick={async () => {
-                        if (!notificationSettings.telegramBotToken || !notificationSettings.telegramChatId) {
-                          toast.error('Enter both bot token and chat ID');
-                          return;
-                        }
-                        try {
-                          const res = await fetch('/api/kevin/notifications/configure', {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify({
-                              channel: 'telegram',
-                              config: {
-                                botToken: notificationSettings.telegramBotToken,
-                                chatId: notificationSettings.telegramChatId,
-                                enabled: true
+                                body: JSON.stringify({ EMAIL_ADDRESS: agentEmail, APP_PASSWORD: agentPassword })
+                              });
+                              if (envRes.ok) {
+                                toast.success('Imap configuration cached.');
+                                setUsingRealEmail(true);
                               }
-                            })
-                          });
-                          const data = await res.json();
-                          if (data.success) {
-                            toast.success('Telegram bot saved!');
-                            const statusRes = await fetch('/api/kevin/notifications/status');
-                            const statusData = await statusRes.json();
-                            setNotificationStatus(statusData);
-                          } else {
-                            toast.error('Failed to save: ' + (data.error || 'Unknown error'));
-                          }
-                        } catch (e) {
-                          toast.error('Save failed: ' + e.message);
-                        }
-                      }}
-                      className="w-full px-4 py-2 bg-fuchsia-600/20 text-fuchsia-400 border border-fuchsia-500/30 rounded-lg text-xs font-bold uppercase hover:bg-fuchsia-600/30 transition-all"
-                    >
-                      Save Telegram Bot
-                    </button>
-                  </div>
-                  {/* Discord */}
-                  <div className="space-y-1">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-1">
-                        <label className="text-[10px] text-zinc-500 font-bold uppercase">Discord Webhook URL</label>
-                        <div className="group relative">
-                          <Info className="w-3 h-3 text-zinc-600 hover:text-blue-400 cursor-help" />
-                          <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 bg-zinc-900 border border-white/10 rounded-lg text-[10px] text-zinc-300 w-56 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 shadow-xl">
-                            <div className="font-bold text-white mb-1">How to get this:</div>
-                            <ol className="list-decimal list-inside space-y-0.5">
-                              <li>Open Discord channel settings</li>
-                              <li>Integrations → Webhooks</li>
-                              <li>New Webhook → Copy URL</li>
-                            </ol>
-                            <a href="https://support.discord.com/hc/en-us/articles/228383668" target="_blank" rel="noopener noreferrer" className="text-blue-400 hover:underline mt-1 inline-block">Discord Docs →</a>
-                            <div className="absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-1/2 w-2 h-2 bg-zinc-900 border-r border-b border-white/10 rotate-45"></div>
-                          </div>
-                        </div>
-                      </div>
-                      {notificationStatus.discord?.enabled && <span className="text-[9px] text-emerald-500 font-bold">ACTIVE</span>}
-                    </div>
-                    <div className="flex gap-2">
-                      <input
-                        type="text"
-                        value={notificationSettings.discordWebhook}
-                        onChange={(e) => setNotificationSettings(prev => ({ ...prev, discordWebhook: e.target.value }))}
-                        placeholder="https://discord.com/api/webhooks/..."
-                        className="flex-1 bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-fuchsia-500/30 text-zinc-300 font-mono text-[11px]"
-                      />
-                      <button
-                        onClick={async () => {
-                          if (!notificationSettings.discordWebhook) {
-                            toast.error('Enter a Discord webhook URL first');
-                            return;
-                          }
-                          try {
-                            const res = await fetch('/api/kevin/notifications/configure', {
-                              method: 'POST',
-                              headers: { 'Content-Type': 'application/json' },
-                              body: JSON.stringify({
-                                channel: 'discord',
-                                config: { webhookUrl: notificationSettings.discordWebhook, enabled: true }
-                              })
-                            });
-                            const data = await res.json();
-                            if (data.success) {
-                              toast.success('Discord webhook saved!');
-                              const statusRes = await fetch('/api/kevin/notifications/status');
-                              const statusData = await statusRes.json();
-                              setNotificationStatus(statusData);
-                            } else {
-                              toast.error('Failed to save: ' + (data.error || 'Unknown error'));
+                            } catch (e) {
+                              toast.error('Caching failed: ' + e.message);
+                            } finally {
+                              setIsKevinThinking(false);
                             }
-                          } catch (e) {
-                            toast.error('Save failed: ' + e.message);
-                          }
-                        }}
-                        className="px-4 py-2 bg-fuchsia-600/20 text-fuchsia-400 border border-fuchsia-500/30 rounded-lg text-xs font-bold uppercase hover:bg-fuchsia-600/30 transition-all"
-                      >
-                        Save
-                      </button>
-                    </div>
-                  </div>
-                  <div className="flex gap-2 mt-2 pt-2 border-t border-white/5">
-                    <button
-                      onClick={async () => {
-                        const res = await fetch('/api/kevin/notifications/test', {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ channel: 'slack' })
-                        });
-                        const data = await res.json();
-                        if (data.success) toast.success('Slack test sent!');
-                        else toast.error('Slack test failed: ' + (data.error || 'Not configured'));
-                      }}
-                      className="flex-1 px-3 py-1.5 bg-[#4A154B]/20 text-[#E01E5A] border border-[#4A154B]/30 rounded text-[10px] font-bold uppercase hover:bg-[#4A154B]/30 transition-all"
-                    >
-                      Test Slack
-                    </button>
-                    <button
-                      onClick={async () => {
-                        const res = await fetch('/api/kevin/notifications/test', {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ channel: 'telegram' })
-                        });
-                        const data = await res.json();
-                        if (data.success) toast.success('Telegram test sent!');
-                        else toast.error('Telegram test failed: ' + (data.error || 'Not configured'));
-                      }}
-                      className="flex-1 px-3 py-1.5 bg-[#0088cc]/20 text-[#0088cc] border border-[#0088cc]/30 rounded text-[10px] font-bold uppercase hover:bg-[#0088cc]/30 transition-all"
-                    >
-                      Test Telegram
-                    </button>
-                    <button
-                      onClick={async () => {
-                        const res = await fetch('/api/kevin/notifications/test', {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json' },
-                          body: JSON.stringify({ channel: 'discord' })
-                        });
-                        const data = await res.json();
-                        if (data.success) toast.success('Discord test sent!');
-                        else toast.error('Discord test failed: ' + (data.error || 'Not configured'));
-                      }}
-                      className="flex-1 px-3 py-1.5 bg-[#5865F2]/20 text-[#5865F2] border border-[#5865F2]/30 rounded text-[10px] font-bold uppercase hover:bg-[#5865F2]/30 transition-all"
-                    >
-                      Test Discord
-                    </button>
-                  </div>
-                  <p className="text-[9px] text-zinc-600 mt-2">Click Save after entering webhook URLs. Kevin will send threat alerts to all configured channels.</p>
-                </div>
-              </div>
-
-              {/* SMS Settings Section */}
-              <div>
-                <KevinSMSSettings isConnected={isOnline} />
-              </div>
-
-              <div>
-                <div className="flex justify-between items-center mb-3">
-                  <h3 className="text-xs font-bold text-zinc-500 uppercase tracking-widest">Security Sensitivity</h3>
-                  <span className="text-fuchsia-400 font-mono text-xs font-bold">{sensitivity}%</span>
-                </div>
-                <div className="flex items-center space-x-4">
-                  <span className="text-[10px] text-zinc-600 font-bold uppercase">Relaxed</span>
-                  <input type="range" min="0" max="100" value={sensitivity} onChange={(e) => setSensitivity(parseInt(e.target.value))} className="flex-1 h-1 bg-zinc-800 rounded-lg appearance-none cursor-pointer accent-fuchsia-500" />
-                  <span className="text-[10px] text-zinc-600 font-bold uppercase">Paranoid</span>
-                </div>
-              </div>
-            </div>
-            <div className="p-6 pt-4 border-t border-white/5 flex justify-end">
-              <button onClick={handleSaveSettings} className="px-8 py-2.5 bg-fuchsia-600 hover:bg-fuchsia-500 text-white font-bold text-xs uppercase tracking-widest rounded-lg transition-all shadow-lg shadow-fuchsia-900/20">Apply Configuration</button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Email Setup Wizard Modal */}
-      {showEmailSetup && (
-        <div className="absolute inset-0 z-[60] bg-black/90 backdrop-blur-md flex items-center justify-center p-4">
-          <div className="w-full max-w-2xl bg-[#151518] border border-white/10 rounded-2xl shadow-2xl overflow-hidden">
-            {/* Header */}
-            <div className="p-4 border-b border-white/10 flex items-center justify-between" style={{ backgroundColor: selectedProvider ? emailProviders[selectedProvider]?.color + '10' : '#1a1a1a' }}>
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-black/30 border border-white/10 flex items-center justify-center">
-                  {selectedProvider ? renderProviderIcon(emailProviders[selectedProvider]?.iconType, 'lg', emailProviders[selectedProvider]?.color) : <Mail className="w-6 h-6 text-zinc-400" />}
-                </div>
-                <div>
-                  <h2 className="text-lg font-bold text-white">
-                    {selectedProvider ? `${emailProviders[selectedProvider]?.name} Setup` : 'Email Setup Guide'}
-                  </h2>
-                  <p className="text-xs text-zinc-400">Follow these steps to connect Kevin to your email</p>
-                </div>
-              </div>
-              <button onClick={() => setShowEmailSetup(false)} className="p-2 hover:bg-white/10 rounded-full transition-colors">
-                <X className="w-5 h-5 text-zinc-400" />
-              </button>
-            </div>
-
-            {/* Provider Selection (if none selected) */}
-            {!selectedProvider && (
-              <div className="p-6">
-                <h3 className="text-sm font-bold text-zinc-300 mb-4">Select your email provider:</h3>
-                <div className="grid grid-cols-2 gap-3">
-                  {Object.entries(emailProviders).map(([key, provider]) => (
-                    <button
-                      key={key}
-                      onClick={() => setSelectedProvider(key)}
-                      className="p-4 rounded-xl border border-white/10 bg-black/20 hover:border-white/30 hover:bg-black/40 transition-all flex items-center gap-3 text-left"
-                    >
-                      <div className="w-10 h-10 rounded-lg bg-black/40 border border-white/10 flex items-center justify-center flex-shrink-0">
-                        {renderProviderIcon(provider.iconType, 'lg', provider.color)}
+                          }}
+                          className="w-full py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-bold uppercase transition-colors"
+                        >
+                          Verify & Cache Credentials
+                        </button>
                       </div>
-                      <div>
-                        <div className="font-bold text-white">{provider.name}</div>
-                        <div className="text-[10px] text-zinc-500">IMAP: {provider.imapServer}</div>
-                      </div>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Step by Step Guide */}
-            {selectedProvider && (
-              <div className="p-6 max-h-[60vh] overflow-y-auto custom-scrollbar">
-                {/* Steps */}
-                <div className="space-y-4">
-                  {emailProviders[selectedProvider]?.steps.map((step, idx) => (
-                    <div key={idx} className="flex gap-4">
-                      <div className="flex-shrink-0 w-8 h-8 rounded-full bg-fuchsia-500/20 border border-fuchsia-500/30 flex items-center justify-center text-fuchsia-400 font-bold text-sm">
-                        {idx + 1}
-                      </div>
-                      <div className="flex-1 pt-1">
-                        <h4 className="font-bold text-white text-sm mb-1">{step.title}</h4>
-                        <p className="text-xs text-zinc-400 mb-2">{step.desc}</p>
-                        {step.link && (
-                          <a
-                            href={step.link}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-blue-500/10 text-blue-400 border border-blue-500/30 rounded-lg text-xs font-medium hover:bg-blue-500/20 transition-all"
-                          >
-                            <ExternalLink className="w-3 h-3" />
-                            {step.linkText || 'Open Link'}
-                            <Copy
-                              className="w-3 h-3 ml-1 opacity-50 hover:opacity-100 cursor-pointer"
-                              onClick={(e) => {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                navigator.clipboard.writeText(step.link);
-                                toast.success('Link copied!');
-                              }}
-                            />
-                          </a>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                {/* Notes Section */}
-                {emailProviders[selectedProvider]?.notes && (
-                  <div className="mt-6 p-4 bg-amber-500/10 border border-amber-500/20 rounded-xl">
-                    <div className="flex items-start gap-2">
-                      <Info className="w-4 h-4 text-amber-400 flex-shrink-0 mt-0.5" />
-                      <p className="text-xs text-amber-200">{emailProviders[selectedProvider].notes}</p>
-                    </div>
-                  </div>
-                )}
-
-                {/* Technical Details */}
-                <div className="mt-6 p-4 bg-black/30 border border-white/5 rounded-xl">
-                  <h4 className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest mb-2">Technical Details</h4>
-                  <div className="grid grid-cols-2 gap-2 text-xs">
-                    <div className="flex justify-between">
-                      <span className="text-zinc-500">IMAP Server:</span>
-                      <span className="text-zinc-300 font-mono">{emailProviders[selectedProvider]?.imapServer}</span>
-                    </div>
-                    <div className="flex justify-between">
-                      <span className="text-zinc-500">Port:</span>
-                      <span className="text-zinc-300 font-mono">{emailProviders[selectedProvider]?.imapPort}</span>
                     </div>
                   </div>
                 </div>
-              </div>
-            )}
 
-            {/* Footer */}
-            <div className="p-4 border-t border-white/10 flex items-center justify-between bg-black/20">
-              {selectedProvider ? (
-                <>
-                  <button
-                    onClick={() => setSelectedProvider(null)}
-                    className="px-4 py-2 text-zinc-400 hover:text-white text-xs font-bold uppercase transition-colors"
+                {/* System Settings Apply */}
+                <div className="flex justify-end pt-2">
+                  <button 
+                    onClick={handleSaveSettings} 
+                    className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs uppercase tracking-wider rounded-lg transition-colors"
                   >
-                    ← Back to Providers
+                    Apply Dashboard Configuration
                   </button>
-                  <button
-                    onClick={() => setShowEmailSetup(false)}
-                    className="px-6 py-2 bg-fuchsia-600 hover:bg-fuchsia-500 text-white font-bold text-xs uppercase rounded-lg transition-all"
-                  >
-                    Got it, Close
-                  </button>
-                </>
-              ) : (
-                <button
-                  onClick={() => setShowEmailSetup(false)}
-                  className="ml-auto px-4 py-2 text-zinc-400 hover:text-white text-xs font-bold uppercase transition-colors"
-                >
-                  Close
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Header Area */}
-      <div className="relative z-10 kevin-glass kevin-sweep overflow-hidden rounded-xl border border-white/10 p-4 mb-4">
-        <div className="flex items-start justify-between gap-4">
-          <div className="flex items-center gap-4 min-w-0">
-            <div className="relative shrink-0">
-              <div className={`w-20 h-20 rounded-xl bg-zinc-900 border overflow-hidden flex items-center justify-center transition-all duration-500 ${isOnline ? (kevinMood === 'threat' ? 'border-rose-500/60 shadow-[0_0_26px_rgba(244,63,94,0.25)]' : 'border-emerald-500/50 shadow-[0_0_26px_rgba(16,185,129,0.16)]') : 'border-zinc-700 opacity-60 grayscale'}`}>
-                <img
-                  src="/kevin_icon.png"
-                  alt="Kevin"
-                  className="w-full h-full object-cover kevin-wobble"
-                  onError={(e) => { e.target.src = '/kevin_profile.ico'; }}
-                />
-              </div>
-              <div className={`absolute -bottom-1 -right-1 px-2 py-1 rounded-md border text-[8px] font-bold uppercase tracking-widest ${headerState.tone}`}>
-                {isOnline ? 'LIVE' : 'IDLE'}
-              </div>
-            </div>
-            <div className="min-w-0">
-              <div className="flex flex-wrap items-center gap-2 mb-1">
-                <h2 className="text-2xl font-black text-white tracking-tight leading-none">K.E.V.I.N.</h2>
-                <span className={`px-2 py-1 rounded-md border text-[9px] font-bold uppercase tracking-widest ${headerState.tone}`}>{headerState.label}</span>
-              </div>
-              <div className="text-xs text-zinc-400 mb-2">Operator Guard / Personal Security Cockpit</div>
-              <div className="flex flex-wrap gap-1.5 max-w-2xl">
-                {capabilityBadges.map(capability => (
-                  <span
-                    key={capability.id}
-                    className={`px-2.5 py-1 rounded-md border text-[9px] font-bold uppercase tracking-wider ${
-                      capability.active
-                        ? 'bg-emerald-500/10 border-emerald-500/25 text-emerald-300'
-                        : 'bg-zinc-950/70 border-white/5 text-zinc-600'
-                    }`}
-                  >
-                    {capability.label}
-                  </span>
-                ))}
-              </div>
-              {cockpit && (
-                <div className="mt-3 flex flex-wrap gap-2 text-[10px] text-zinc-500 font-mono uppercase tracking-wider">
-                  <span className="kevin-chip rounded-md px-2 py-1">mode {usingRealEmail ? 'edge email' : 'local watch'}</span>
-                  <span className="kevin-chip rounded-md px-2 py-1">autonomy {cockpit.autonomy?.mode || 'guarded'}</span>
-                  <span className="kevin-chip rounded-md px-2 py-1">evidence {cockpit.verdictEngine?.evidenceTypes?.length || 0} types</span>
                 </div>
-              )}
-            </div>
-          </div>
-          <div className="flex items-center space-x-3 shrink-0">
-          <button
-            onClick={() => setShowSettings(true)}
-            className="p-3 bg-white/5 border border-white/10 hover:bg-white/10 rounded-lg transition-colors group"
-            title="Kevin settings"
-          >
-            <Settings className="w-5 h-5 text-zinc-400 group-hover:text-white" />
-          </button>
-          <button
-            onClick={togglePower}
-            className={`flex items-center space-x-3 px-5 py-3 rounded-lg font-bold transition-all border ${isOnline
-              ? 'bg-zinc-800/50 text-zinc-400 border-white/5 hover:bg-zinc-800'
-              : 'bg-emerald-500/10 text-emerald-300 border-emerald-500/25 hover:bg-emerald-500/20'
-              }`}
-          >
-            <Power className="w-5 h-5" />
-            <span className="text-xs uppercase tracking-widest">{isOnline ? 'Disengage' : 'Wake Kevin'}</span>
-          </button>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-4 gap-3 mt-4">
-          {topSignals.map(signal => {
-            const Icon = signal.icon;
-            return (
-              <div key={signal.label} className="kevin-chip rounded-lg p-3 min-w-0">
-                <div className="flex items-center justify-between gap-2 mb-2">
-                  <span className="text-[9px] text-zinc-500 font-bold uppercase tracking-widest truncate">{signal.label}</span>
-                  <Icon className={`w-4 h-4 ${signal.tone}`} />
-                </div>
-                <div className={`text-2xl font-mono leading-none ${signal.tone}`}>{signal.value}</div>
-                <div className="text-[10px] text-zinc-600 mt-1 truncate">{signal.detail}</div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Message Center (Replaced by Chat Column) */}
-      <div className="mb-4">
-        {/* Optional: Status ticker or system alerts can go here instead of the chat console */}
-      </div>
-
-      {/* Main Content Grid */}
-      <div className={`relative z-10 grid grid-cols-12 gap-4 flex-1 min-h-0 transition-opacity duration-500 ${isOnline ? 'opacity-100' : 'opacity-25 pointer-events-none'}`}>
-
-        <div className="col-span-3 flex flex-col gap-4 min-h-0">
-          <div className="grid grid-cols-2 gap-3">
-            {[
-              ['Scanned', (Number(stats?.scanned) || 0).toLocaleString(), 'text-white'],
-              ['Blocked', Number(stats?.threats) || 0, 'text-rose-400'],
-              ['Approvals', approvals.length, 'text-amber-400'],
-              ['Decisions', cockpit?.verdictEngine?.decisions || 0, 'text-emerald-400']
-            ].map(([label, value, tone]) => (
-              <div key={label} className="kevin-glass p-3 rounded-lg border border-white/10">
-                <div className="text-zinc-600 text-[9px] font-bold uppercase tracking-widest mb-1">{label}</div>
-                <div className={`text-xl font-mono ${tone}`}>{value}</div>
-              </div>
-            ))}
-          </div>
-
-          <div className="kevin-glass rounded-lg border border-white/10 p-4">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-widest flex items-center gap-2"><Bell className="w-4 h-4 text-amber-400" /> Briefing</h3>
-              <span className={`px-2 py-0.5 rounded border text-[9px] uppercase ${verdictTone(localWatch?.status)}`}>{localWatch?.status || 'idle'}</span>
-            </div>
-            <div className="space-y-2">
-              {(briefing?.summary || ['Waiting for briefing data']).map((line, idx) => (
-                <div key={idx} className="text-[11px] text-zinc-400 bg-black/20 border border-white/5 rounded px-2 py-1">{line}</div>
-              ))}
-            </div>
-          </div>
-
-          <div className="kevin-glass rounded-lg border border-white/10 p-4 flex-1 min-h-0 overflow-hidden">
-            <div className="flex items-center justify-between mb-3">
-              <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-widest flex items-center gap-2"><CheckCircle className="w-4 h-4 text-amber-400" /> Approvals</h3>
-              <button onClick={() => setActiveTool('approvals')} className="text-[9px] text-zinc-500 hover:text-white">A</button>
-            </div>
-            <div className="space-y-2 overflow-y-auto custom-scrollbar max-h-[220px] pr-1">
-              {approvals.map(item => (
-                <div key={`${item.type}-${item.id}`} className="p-2 bg-black/30 rounded border border-amber-500/10">
-                  <div className="flex justify-between gap-2">
-                    <div className="text-[11px] text-zinc-200 font-bold truncate">{item.title}</div>
-                    <span className="text-[9px] text-amber-400 uppercase">{item.type}</span>
-                  </div>
-                  <div className="text-[10px] text-zinc-500 truncate">{item.target}</div>
-                  <div className="text-[10px] text-zinc-600 mt-1">{item.recommendedAction}</div>
-                </div>
-              ))}
-              {approvals.length === 0 && <div className="py-8 text-center text-xs text-zinc-700 italic">No gated actions waiting.</div>}
-            </div>
-          </div>
-        </div>
-
-        <div className="col-span-5 grid grid-rows-[1fr_1fr] gap-4 min-h-0">
-          <div className="grid grid-cols-2 gap-4 min-h-0">
-            <div className="kevin-glass rounded-lg border border-white/10 p-4 min-h-0 overflow-hidden">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-widest flex items-center gap-2"><Network className="w-4 h-4 text-emerald-400" /> Trust Graph</h3>
-                <button onClick={() => setActiveTool('graph')} className="text-[9px] text-zinc-500 hover:text-white">G</button>
-              </div>
-              <div className="grid grid-cols-2 gap-2 mb-3">
-                <div className="bg-emerald-500/10 border border-emerald-500/20 rounded p-2">
-                  <div className="text-[9px] uppercase text-emerald-500">Safe</div>
-                  <div className="text-lg font-mono text-emerald-300">{cockpit?.trustGraph?.people?.safe || 0}</div>
-                </div>
-                <div className="bg-rose-500/10 border border-rose-500/20 rounded p-2">
-                  <div className="text-[9px] uppercase text-rose-500">Blocked</div>
-                  <div className="text-lg font-mono text-rose-300">{cockpit?.trustGraph?.people?.blocked || 0}</div>
-                </div>
-              </div>
-              <div className="space-y-1 overflow-y-auto custom-scrollbar max-h-[130px]">
-                {trustGraph.nodes.filter(n => n.type === 'person' || n.type === 'domain').slice(0, 12).map(node => (
-                  <div key={node.id} className="flex items-center justify-between text-[10px] bg-black/20 rounded px-2 py-1 border border-white/5">
-                    <span className="truncate text-zinc-300">{node.label}</span>
-                    <span className={`uppercase ${node.status === 'blocked' ? 'text-rose-400' : node.status === 'safe' ? 'text-emerald-400' : 'text-zinc-600'}`}>{node.status}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="kevin-glass rounded-lg border border-white/10 p-4 min-h-0 overflow-hidden">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-widest flex items-center gap-2"><Activity className="w-4 h-4 text-blue-400" /> Verdict Timeline</h3>
-                <button onClick={() => setActiveTool('timeline')} className="text-[9px] text-zinc-500 hover:text-white">R</button>
-              </div>
-              <div className="space-y-2 overflow-y-auto custom-scrollbar max-h-[210px] pr-1">
-                {timeline.slice(0, 10).map(event => (
-                  <div key={event.id} className="p-2 bg-black/25 border border-white/5 rounded">
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="text-[11px] text-zinc-300 truncate">{event.title}</div>
-                      <span className={`px-1.5 py-0.5 rounded border text-[8px] uppercase ${verdictTone(event.verdict)}`}>{event.verdict}</span>
-                    </div>
-                    <div className="text-[9px] text-zinc-600 font-mono mt-1">{event.target || event.type}</div>
-                  </div>
-                ))}
-                {timeline.length === 0 && <div className="py-8 text-center text-xs text-zinc-700 italic">No verdicts yet.</div>}
-              </div>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4 min-h-0">
-            <div className="kevin-glass rounded-lg border border-white/10 p-4 min-h-0">
-              <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-widest flex items-center gap-2 mb-3"><Eye className="w-4 h-4 text-cyan-400" /> Local Watch</h3>
-              <div className="grid grid-cols-2 gap-2 mb-3">
-                <div className="bg-black/20 border border-white/5 rounded p-2">
-                  <div className="text-[9px] text-zinc-600 uppercase">Memory</div>
-                  <div className="text-sm text-zinc-300 font-mono">{localWatch?.process?.memoryMb || 0}MB</div>
-                </div>
-                <div className="bg-black/20 border border-white/5 rounded p-2">
-                  <div className="text-[9px] text-zinc-600 uppercase">Findings</div>
-                  <div className="text-sm text-zinc-300 font-mono">{localWatch?.findings?.length || 0}</div>
-                </div>
-              </div>
-              <div className="space-y-2 overflow-y-auto custom-scrollbar max-h-[125px]">
-                {(localWatch?.findings || []).map((finding, idx) => (
-                  <div key={idx} className="text-[10px] text-zinc-400 bg-black/20 border border-white/5 rounded p-2">
-                    <span className="text-amber-400 uppercase">{finding.severity}</span> {finding.detail}
-                  </div>
-                ))}
-                {(!localWatch?.findings || localWatch.findings.length === 0) && <div className="text-xs text-zinc-700 italic text-center py-8">Local perimeter clean.</div>}
-              </div>
-            </div>
-
-            <div className="kevin-glass rounded-lg border border-white/10 p-4 min-h-0">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-widest flex items-center gap-2"><Database className="w-4 h-4 text-fuchsia-400" /> Reputation</h3>
-                <button onClick={() => setActiveTool('trust')} className="text-[9px] text-zinc-500 hover:text-white">T</button>
-              </div>
-              <div className="space-y-2 overflow-y-auto custom-scrollbar max-h-[190px]">
-                {reputation.slice(0, 8).map(row => (
-                  <div key={row.target} className="flex items-center justify-between text-[10px] bg-black/20 rounded px-2 py-1.5 border border-white/5">
-                    <span className="truncate text-zinc-300">{row.target}</span>
-                    <span className={row.confidenceTrend === 'blocked' ? 'text-rose-400' : row.confidenceTrend === 'trusted' ? 'text-emerald-400' : 'text-zinc-600'}>{row.confidenceTrend}</span>
-                  </div>
-                ))}
-                {reputation.length === 0 && <div className="text-xs text-zinc-700 italic text-center py-8">No reputation memory yet.</div>}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div className="col-span-4 bg-[#0c0c0e] rounded-xl border border-white/10 flex flex-col shadow-inner overflow-hidden relative min-h-0">
-          <div className="absolute inset-0 bg-[linear-gradient(transparent_50%,rgba(0,0,0,0.2)_50%)] bg-[length:100%_4px] pointer-events-none opacity-20" />
-
-          <div className="p-3 border-b border-white/5 bg-zinc-900/50 flex justify-between items-center">
-            <div className="flex items-center space-x-2">
-              <Terminal className={`w-4 h-4 ${isOnline ? 'text-fuchsia-400' : 'text-zinc-600'}`} />
-              <span className="text-xs font-mono font-bold text-zinc-400">COCKPIT_TOOLS</span>
-            </div>
-            <div className="flex gap-1 text-[9px] text-zinc-600 font-mono">
-              {['v','a','r','b','t','g'].map(k => <span key={k} className="px-1.5 py-0.5 rounded border border-white/5 bg-black/20">{k}</span>)}
-            </div>
-          </div>
-
-          <div className="p-3 border-b border-white/5 flex gap-1 overflow-x-auto custom-scrollbar">
-            {[
-              ['link', 'Verdict'],
-              ['approvals', 'Approvals'],
-              ['timeline', 'Timeline'],
-              ['pairing', 'Pairing'],
-              ['trust', 'Trust'],
-              ['rewrite', 'Rewrite'],
-              ['chat', 'Chat']
-            ].map(([id, label]) => (
-              <button key={id} onClick={() => setActiveTool(id)} className={`px-2 py-1 rounded border text-[10px] font-bold uppercase ${activeTool === id ? 'bg-fuchsia-500/15 text-fuchsia-300 border-fuchsia-500/30' : 'bg-black/20 text-zinc-500 border-white/5 hover:text-zinc-300'}`}>{label}</button>
-            ))}
-          </div>
-
-          <div className="flex-1 overflow-y-auto custom-scrollbar p-3 relative z-10">
-            {activeTool === 'link' && (
-              <div className="space-y-3">
-                <div className="text-xs text-zinc-400 font-bold uppercase tracking-widest">Link Detonation Lite</div>
-                <div className="flex gap-2">
-                  <input value={linkUrl} onChange={(e) => setLinkUrl(e.target.value)} placeholder="https://example.com" className="flex-1 bg-black/50 border border-white/10 rounded px-3 py-2 text-xs text-zinc-200 focus:outline-none focus:border-fuchsia-500/40" />
-                  <button onClick={inspectLink} className="px-3 py-2 bg-fuchsia-600/20 text-fuchsia-300 border border-fuchsia-500/30 rounded text-xs font-bold">Scan</button>
-                </div>
-                {linkResult && (
-                  <div className="p-3 bg-black/30 border border-white/10 rounded space-y-2">
-                    <div className="flex justify-between">
-                      <span className="text-xs text-zinc-300 truncate">{linkResult.hostname || linkResult.url || 'Result'}</span>
-                      <span className={`px-2 py-0.5 rounded border text-[9px] uppercase ${verdictTone(linkResult.verdict)}`}>{linkResult.verdict || 'error'} {linkResult.score ?? ''}</span>
-                    </div>
-                    <div className="text-[10px] text-zinc-500">{linkResult.recommendedAction || linkResult.error}</div>
-                    {(linkResult.evidence || []).map((e, idx) => <div key={idx} className="text-[10px] text-zinc-400 border border-white/5 rounded px-2 py-1">{e.type}: {e.detail}</div>)}
-                  </div>
-                )}
               </div>
             )}
 
-            {activeTool === 'approvals' && (
-              <div className="space-y-2">
-                <div className="text-xs text-zinc-400 font-bold uppercase tracking-widest">Approval Queue</div>
-                {approvals.map(item => (
-                  <div key={`${item.type}-${item.id}`} className="p-3 bg-black/30 border border-amber-500/10 rounded">
-                    <div className="text-sm text-zinc-200 font-bold">{item.title}</div>
-                    <div className="text-[10px] text-zinc-500">{item.target}</div>
-                    <div className="text-[10px] text-amber-400 mt-2">{item.recommendedAction}</div>
-                  </div>
-                ))}
-                {approvals.length === 0 && <div className="text-xs text-zinc-700 italic text-center py-10">No approvals pending.</div>}
-              </div>
-            )}
-
-            {activeTool === 'timeline' && (
-              <div className="space-y-2">
-                <div className="text-xs text-zinc-400 font-bold uppercase tracking-widest">Verdict Timeline</div>
-                {timeline.map(event => (
-                  <div key={event.id} className="p-2 bg-black/30 border border-white/5 rounded">
-                    <div className="flex justify-between gap-2">
-                      <span className="text-xs text-zinc-300 truncate">{event.title}</span>
-                      <span className={`px-1.5 py-0.5 rounded border text-[8px] uppercase ${verdictTone(event.verdict)}`}>{event.verdict}</span>
-                    </div>
-                    <div className="text-[9px] text-zinc-600">{event.timestamp}</div>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {activeTool === 'pairing' && (
-              <div className="space-y-3">
-                <div className="text-xs text-zinc-400 font-bold uppercase tracking-widest">Pairing Challenge</div>
-                <input value={pairingSender} onChange={(e) => setPairingSender(e.target.value)} placeholder="unknown@sender.com" className="w-full bg-black/50 border border-white/10 rounded px-3 py-2 text-xs text-zinc-200 focus:outline-none focus:border-fuchsia-500/40" />
-                <button onClick={createPairing} className="w-full px-3 py-2 bg-blue-600/20 text-blue-300 border border-blue-500/30 rounded text-xs font-bold uppercase">Generate Challenge</button>
-                {pairingResult && (
-                  <div className="p-3 bg-black/30 border border-white/10 rounded">
-                    <div className="text-lg text-blue-300 font-mono">{pairingResult.code || 'No Code'}</div>
-                    <div className="text-[10px] text-zinc-500">{pairingResult.message || pairingResult.error}</div>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {activeTool === 'trust' && (
-              <div className="space-y-2">
-                <div className="text-xs text-zinc-400 font-bold uppercase tracking-widest">Reputation Memory</div>
-                {reputation.map(row => (
-                  <div key={row.target} className="p-2 bg-black/30 border border-white/5 rounded">
-                    <div className="flex justify-between gap-2">
-                      <span className="text-xs text-zinc-300 truncate">{row.target}</span>
-                      <span className={row.confidenceTrend === 'blocked' ? 'text-rose-400' : row.confidenceTrend === 'trusted' ? 'text-emerald-400' : 'text-zinc-600'}>{row.confidenceTrend}</span>
-                    </div>
-                    <div className="text-[9px] text-zinc-600">safe {row.safeInteractions} / suspicious {row.suspiciousInteractions} / reversals {row.reversals}</div>
-                  </div>
-                ))}
-                {reputation.length === 0 && <div className="text-xs text-zinc-700 italic text-center py-10">No reputation memory yet.</div>}
-              </div>
-            )}
-
-            {activeTool === 'graph' && (
-              <div className="space-y-2">
-                <div className="text-xs text-zinc-400 font-bold uppercase tracking-widest">Graph Nodes</div>
-                {trustGraph.nodes.map(node => (
-                  <div key={node.id} className="flex items-center justify-between p-2 bg-black/30 border border-white/5 rounded text-xs">
-                    <span className="text-zinc-300 truncate">{node.label}</span>
-                    <span className="text-[9px] text-zinc-600 uppercase">{node.type}:{node.status}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            {activeTool === 'rewrite' && (
-              <div className="space-y-3">
-                <div className="text-xs text-zinc-400 font-bold uppercase tracking-widest">Operator Style Rewrite</div>
-                <textarea value={rewriteText} onChange={(e) => setRewriteText(e.target.value)} placeholder="Paste draft text..." className="w-full min-h-[110px] bg-black/50 border border-white/10 rounded px-3 py-2 text-xs text-zinc-200 focus:outline-none focus:border-fuchsia-500/40" />
-                <button onClick={rewriteAsUser} className="w-full px-3 py-2 bg-emerald-600/20 text-emerald-300 border border-emerald-500/30 rounded text-xs font-bold uppercase">Rewrite In My Style</button>
-                {rewriteResult && <div className="p-3 bg-black/30 border border-white/10 rounded text-xs text-zinc-300 whitespace-pre-wrap">{rewriteResult}</div>}
-              </div>
-            )}
-
+            {/* 6. CHAT CONSOLE VIEW */}
             {activeTool === 'chat' && (
-              <div className="flex flex-col h-full min-h-[360px]">
-                <div className="flex-1 overflow-y-auto custom-scrollbar space-y-3">
-                  {messages.length === 0 && isOnline && (
-                    <div className="flex flex-col items-start animate-in fade-in">
-                      <div className="max-w-[90%] rounded-lg p-2.5 text-xs bg-fuchsia-900/10 text-fuchsia-200 border border-fuchsia-500/20">{quote}</div>
-                      <span className="text-[9px] text-zinc-700 mt-1 uppercase font-mono">K.E.V.I.N.</span>
+              <div className="bg-zinc-900 border border-zinc-800 rounded-xl p-5 flex flex-col h-[600px] min-h-[500px]">
+                <div className="flex items-center justify-between border-b border-zinc-800 pb-3 flex-shrink-0">
+                  <div className="flex items-center gap-2">
+                    <Terminal className="w-4 h-4 text-indigo-400" />
+                    <h3 className="text-xs font-bold text-white uppercase tracking-wider">Direct Chat Terminal</h3>
+                  </div>
+                  <span className="text-[10px] text-zinc-500 font-medium font-mono">interfacing with kevin core</span>
+                </div>
+                
+                {/* Messages Area */}
+                <div className="flex-1 overflow-y-auto custom-scrollbar my-4 space-y-4 pr-1">
+                  {messages.length === 0 ? (
+                    <div className="h-full flex flex-col items-center justify-center text-center p-8">
+                      <MessageSquare className="w-8 h-8 text-zinc-700 mb-2" />
+                      <h4 className="text-xs font-bold text-zinc-400">No active transmission</h4>
+                      <p className="text-[11px] text-zinc-500 max-w-sm mt-1 leading-relaxed">
+                        Initiate connection by sending a message below. K.E.V.I.N. is ready to answer threat queries, system diagnostics, or draft security alerts.
+                      </p>
+                    </div>
+                  ) : (
+                    messages.map((msg, idx) => (
+                      <div
+                        key={idx}
+                        className={`flex flex-col max-w-[85%] rounded-xl p-3.5 text-xs border ${
+                          msg.role === 'user'
+                            ? 'bg-zinc-800 border-zinc-700 text-white ml-auto rounded-tr-none'
+                            : 'bg-indigo-950/40 border-indigo-900/30 text-zinc-100 mr-auto rounded-tl-none'
+                        }`}
+                      >
+                        <div className="font-bold text-[9px] uppercase tracking-wider text-zinc-500 mb-1">
+                          {msg.role === 'user' ? 'Operator' : 'K.E.V.I.N.'}
+                        </div>
+                        <div className="whitespace-pre-wrap leading-relaxed">{msg.content}</div>
+                      </div>
+                    ))
+                  )}
+                  {isKevinThinking && (
+                    <div className="flex flex-col max-w-[85%] rounded-xl p-3.5 text-xs border bg-indigo-950/40 border-indigo-900/30 text-zinc-100 mr-auto rounded-tl-none animate-pulse">
+                      <div className="font-bold text-[9px] uppercase tracking-wider text-indigo-400 mb-1">K.E.V.I.N. (THINKING)</div>
+                      <div className="flex items-center gap-1.5 text-zinc-400">
+                        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                        <span>Parsing intent & synthesizing response...</span>
+                      </div>
                     </div>
                   )}
-                  {messages.map((msg, idx) => (
-                    <div key={idx} className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
-                      <div className={`max-w-[90%] rounded-lg p-2.5 text-xs ${msg.role === 'user' ? 'bg-zinc-800 text-zinc-200 border border-white/5' : 'bg-fuchsia-900/10 text-fuchsia-200 border border-fuchsia-500/20'}`}>{msg.content}</div>
-                      <span className="text-[9px] text-zinc-700 mt-1 uppercase font-mono">{msg.role === 'user' ? 'YOU' : 'K.E.V.I.N.'}</span>
-                    </div>
-                  ))}
+                  <div ref={messagesEndRef} />
                 </div>
-                <form onSubmit={handleChatSubmit} className="flex gap-2 mt-3">
-                  <input type="text" value={chatInput} onChange={(e) => setChatInput(e.target.value)} placeholder={isOnline ? "Type command..." : "System offline"} disabled={!isOnline} className="flex-1 bg-black/50 border border-white/10 rounded-lg px-3 py-2 text-xs font-mono text-fuchsia-500 placeholder-zinc-700 focus:outline-none focus:border-fuchsia-500/50 disabled:opacity-50" />
-                  <button type="submit" disabled={!isOnline || isKevinThinking || !chatInput.trim()} className="p-2 bg-fuchsia-600/20 text-fuchsia-400 border border-fuchsia-500/30 rounded-lg hover:bg-fuchsia-600/30 disabled:opacity-50"><Send className="w-3 h-3" /></button>
+
+                {/* Input bar */}
+                <form onSubmit={handleChatSubmit} className="flex gap-2 border-t border-zinc-800 pt-4 flex-shrink-0">
+                  <input
+                    type="text"
+                    value={chatInput}
+                    onChange={(e) => setChatInput(e.target.value)}
+                    placeholder="Ask Kevin anything..."
+                    className="flex-1 bg-zinc-950 border border-zinc-850 rounded-lg px-3 py-2 text-xs text-zinc-300 focus:outline-none focus:border-indigo-500 font-sans"
+                  />
+                  <button
+                    type="submit"
+                    disabled={!chatInput.trim() || isKevinThinking}
+                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:bg-zinc-800 disabled:text-zinc-650 text-white rounded-lg text-xs font-bold uppercase transition-colors flex items-center gap-1.5"
+                  >
+                    <Send className="w-3.5 h-3.5" />
+                    <span>Send</span>
+                  </button>
                 </form>
               </div>
             )}
+
           </div>
         </div>
-
       </div>
     </div>
   );

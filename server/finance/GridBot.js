@@ -34,6 +34,7 @@ class GridBot {
         this.config      = null;
         this.gridLevels  = [];      // Sorted array of price levels (ascending)
         this.currentPrice = 0;
+        this.highestPrice = 0;
 
         // orderId → { orderId, levelIndex, side, price, qty, status, placedAt, filledAt }
         this._gridOrders = new Map();
@@ -96,14 +97,15 @@ class GridBot {
 
         this.symbol = symbol.toUpperCase();
         this.config = {
-            upperPrice:    parseFloat(config.upperPrice),
-            lowerPrice:    parseFloat(config.lowerPrice),
-            gridCount:     parseInt(config.gridCount)    || 20,
-            totalCapital:  parseFloat(config.totalCapital) || 1000,
-            mode:          config.mode          || 'arithmetic',
-            stopLossPct:   parseFloat(config.stopLossPct)  ?? 0.05,
-            takeProfitPct: config.takeProfitPct ? parseFloat(config.takeProfitPct) : null,
-            makerFee:      parseFloat(config.makerFee)     ?? 0.001,
+            upperPrice:          parseFloat(config.upperPrice),
+            lowerPrice:          parseFloat(config.lowerPrice),
+            gridCount:           parseInt(config.gridCount)    || 20,
+            totalCapital:        parseFloat(config.totalCapital) || 1000,
+            mode:                config.mode          || 'arithmetic',
+            stopLossPct:         parseFloat(config.stopLossPct)  ?? 0.05,
+            trailingStopLossPct: config.trailingStopLossPct ? parseFloat(config.trailingStopLossPct) : null,
+            takeProfitPct:       config.takeProfitPct ? parseFloat(config.takeProfitPct) : null,
+            makerFee:            parseFloat(config.makerFee)     ?? 0.001,
         };
 
         try {
@@ -137,6 +139,7 @@ class GridBot {
             this.isRunning = true;
             this._stats.startTime  = Date.now();
             this._stats.startPrice = this.currentPrice;
+            this.highestPrice = this.currentPrice;
             this._stats.totalProfit = 0;
             this._stats.totalFees   = 0;
             this._stats.cyclesCompleted = 0;
@@ -297,6 +300,14 @@ class GridBot {
         if (!this.isRunning) return;
         this._pollCount++;
 
+        // Refresh price before checking stop losses
+        await this._updatePrice();
+
+        // Update highest price seen so far
+        if (this.currentPrice > this.highestPrice) {
+            this.highestPrice = this.currentPrice;
+        }
+
         // ── Stop loss check ───────────────────────────────────────────────────
         const stopLossPrice = this.config.lowerPrice * (1 - this.config.stopLossPct);
         if (this.currentPrice > 0 && this.currentPrice < stopLossPrice) {
@@ -306,6 +317,19 @@ class GridBot {
             console.error(`[GridBot] 🛑 Stop loss at $${this.currentPrice.toFixed(2)}!`);
             await this.emergencyStop();
             return;
+        }
+
+        // ── Trailing Stop loss check ──────────────────────────────────────────
+        if (this.config.trailingStopLossPct && this.highestPrice > 0) {
+            const trailingStopPrice = this.highestPrice * (1 - this.config.trailingStopLossPct);
+            if (this.currentPrice > 0 && this.currentPrice < trailingStopPrice) {
+                this._log('RISK', 'TRAILING_STOP_LOSS',
+                    `Price $${this.currentPrice.toFixed(2)} breached trailing stop loss $${trailingStopPrice.toFixed(2)} (peak: $${this.highestPrice.toFixed(2)}) — emergency stop`
+                );
+                console.error(`[GridBot] 🛑 Trailing stop loss hit at $${this.currentPrice.toFixed(2)} (peak: $${this.highestPrice.toFixed(2)})!`);
+                await this.emergencyStop();
+                return;
+            }
         }
 
         // ── Take profit check ─────────────────────────────────────────────────

@@ -28,6 +28,25 @@ function pickDefaultAxisChannel(channels = []) {
         || null;
 }
 
+function normalizeWorkspaces(list = []) {
+    const seen = new Set();
+    return (Array.isArray(list) ? list : [])
+        .filter(ws => ws?.id && !seen.has(ws.id) && seen.add(ws.id))
+        .sort((a, b) => {
+            const ad = a.name === 'Directs' ? 1 : 0;
+            const bd = b.name === 'Directs' ? 1 : 0;
+            return ad - bd || Number(a.created_at || 0) - Number(b.created_at || 0);
+        });
+}
+
+function upsertWorkspace(list = [], workspace) {
+    if (!workspace?.id) return normalizeWorkspaces(list);
+    const exists = list.some(ws => ws.id === workspace.id);
+    return normalizeWorkspaces(exists
+        ? list.map(ws => ws.id === workspace.id ? { ...ws, ...workspace } : ws)
+        : [...list, workspace]);
+}
+
 const AVATAR_COLORS = [
     ['#7c3aed', '#22d3ee'],
     ['#2563eb', '#14b8a6'],
@@ -147,7 +166,9 @@ export const AxisProvider = ({ children }) => {
 
     // ── Workspaces ────────────────────────────────────────────────────────────
     const [workspaces, setWorkspaces]        = useState([]);
-    const [activeWorkspaceId, setActiveWsId] = useState(() => localStorage.getItem('axis_active_ws') || null);
+    const [activeWorkspaceId, setActiveWsId] = useState(() => {
+        try { return localStorage.getItem('axis_active_ws') || null; } catch { return null; }
+    });
 
     const setActiveWorkspaceId = useCallback((id) => {
         if (id) localStorage.setItem('axis_active_ws', id);
@@ -158,7 +179,11 @@ export const AxisProvider = ({ children }) => {
     const loadWorkspaces = useCallback(async () => {
         try {
             const d = await fetch('/api/axis/workspaces').then(r => r.json());
-            if (d.ok) { setWorkspaces(d.workspaces); return d.workspaces; }
+            if (d.ok) {
+                const normalized = normalizeWorkspaces(d.workspaces);
+                setWorkspaces(normalized);
+                return normalized;
+            }
         } catch {}
         return [];
     }, []);
@@ -175,12 +200,7 @@ export const AxisProvider = ({ children }) => {
                 return { ok: false, error: d.error || `Workspace create failed (${response.status})` };
             }
             if (d.workspace) {
-                setWorkspaces(prev => {
-                    const next = prev.some(ws => ws.id === d.workspace.id)
-                        ? prev.map(ws => ws.id === d.workspace.id ? d.workspace : ws)
-                        : [...prev, d.workspace];
-                    return next;
-                });
+                setWorkspaces(prev => upsertWorkspace(prev, d.workspace));
             } else {
                 await loadWorkspaces();
             }
@@ -211,7 +231,9 @@ export const AxisProvider = ({ children }) => {
 
     // ── Channels ──────────────────────────────────────────────────────────────
     const [channels, setChannels]           = useState([]);
-    const [activeChannelId, setActiveChId]  = useState(null);
+    const [activeChannelId, setActiveChId]  = useState(() => {
+        try { return localStorage.getItem('axis_active_ch') || null; } catch { return null; }
+    });
 
     const setActiveChannelId = useCallback((id) => {
         if (id) localStorage.setItem('axis_active_ch', id);
@@ -567,8 +589,8 @@ export const AxisProvider = ({ children }) => {
         const onMemberEvt = ({ channelId }) => { if (channelId === activeChannelId) loadMembers(channelId); };
         const onChCreated = (ch)            => { if (ch.workspace_id === activeWorkspaceId) setChannels(prev => [...prev, ch]); };
         const onChDeleted = ({ id })        => { setChannels(prev => prev.filter(c => c.id !== id)); if (activeChannelId === id) setActiveChannelId(null); };
-        const onWsCreated = (ws)  => setWorkspaces(prev => [...prev, ws]);
-        const onWsUpdated = (ws)  => setWorkspaces(prev => prev.map(w => w.id === ws.id ? ws : w));
+        const onWsCreated = (ws)  => setWorkspaces(prev => upsertWorkspace(prev, ws));
+        const onWsUpdated = (ws)  => setWorkspaces(prev => upsertWorkspace(prev, ws));
         const onWsDeleted = ({ id }) => { setWorkspaces(prev => prev.filter(w => w.id !== id)); if (activeWorkspaceId === id) setActiveWorkspaceId(null); };
 
         const onTyping = ({ channelId, userId, userName, userColor }) => {
@@ -633,7 +655,10 @@ export const AxisProvider = ({ children }) => {
             let wsId = activeWorkspaceId;
             const mainWs = wss.find(ws => ws.name === 'Main') || wss.find(ws => ws.name !== 'Directs') || wss[0];
             const activeWs = wss.find(ws => ws.id === wsId);
-            if (!wsId || activeWs?.name === 'Directs') { wsId = mainWs?.id; if (wsId) setActiveWorkspaceId(wsId); }
+            if (!wsId || activeWs?.name === 'Directs') {
+                wsId = mainWs?.id;
+                if (wsId) setActiveWorkspaceId(wsId);
+            }
             await fetch('/api/axis/directs', { headers: hdrs() }).catch(() => {});
             if (wsId) {
                 const chs = await loadChannels(wsId);
@@ -654,20 +679,25 @@ export const AxisProvider = ({ children }) => {
     }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
     useEffect(() => {
-        if (activeWorkspaceId) {
-            loadChannels(activeWorkspaceId).then(chs => {
-                if (activeChannelId && !chs.some(ch => ch.id === activeChannelId)) {
-                    const fallback = pickDefaultAxisChannel(chs);
-                    setActiveChannelId(fallback?.id || null);
-                    return;
-                }
-                if (!activeChannelId) {
-                    const fallback = pickDefaultAxisChannel(chs);
-                    if (fallback?.id) setActiveChannelId(fallback.id);
-                }
-            });
-            loadUnreadCounts(activeWorkspaceId);
+        if (!activeWorkspaceId) {
+            setChannels([]);
+            setProjects([]);
+            setMessages([]);
+            setSomaTyping(false);
+            return;
         }
+        loadChannels(activeWorkspaceId).then(chs => {
+            if (activeChannelId && !chs.some(ch => ch.id === activeChannelId)) {
+                const fallback = pickDefaultAxisChannel(chs);
+                setActiveChannelId(fallback?.id || null);
+                return;
+            }
+            if (!activeChannelId) {
+                const fallback = pickDefaultAxisChannel(chs);
+                if (fallback?.id) setActiveChannelId(fallback.id);
+            }
+        });
+        loadUnreadCounts(activeWorkspaceId);
     }, [activeWorkspaceId]); // eslint-disable-line react-hooks/exhaustive-deps
 
     useEffect(() => {
@@ -781,6 +811,7 @@ export const AxisProvider = ({ children }) => {
             }
             const channelId = detail?.channelId || detail?.id;
             const workspaceId = detail?.workspaceId;
+            const projectId = detail?.projectId;
             if (!channelId) return;
             localStorage.removeItem('axis:pending-channel');
 
@@ -802,6 +833,7 @@ export const AxisProvider = ({ children }) => {
                     }
                 }
                 setActiveChannelId(channelId);
+                if (projectId) setActiveProjectId(projectId);
             };
 
             if (workspaceId) {

@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import storyResearchLedger from './StoryResearchLedger.js';
+import somaImageGeneration from './SomaImageGenerationEngine.js';
 
 const SOMA_DIR = path.join(process.cwd(), 'SOMA');
 const AURORA_STORY_FILE = path.join(SOMA_DIR, 'aurora-story.json');
@@ -11,6 +12,25 @@ const LEDGER_FILE = path.join(WATTPAD_DIR, 'publishing-ledger.json');
 const REFLECTIONS_DIR = path.join(process.cwd(), 'data', 'vault', 'reflections');
 const FULL_CHAPTERS_DIR = path.join(STORIES_DIR, 'full-chapters');
 const BOOKS_WORKBOOK = "Barry's Books";
+const SAGA_VISUAL_STYLE_FILE = path.join(STORIES_DIR, 'soma-saga-visual-style.json');
+const SAGA_VISUAL_LEDGER_FILE = path.join(STORIES_DIR, 'soma-saga-visual-ledger.json');
+const MAX_STORY_SCENE_IMAGES = 3;
+
+const DEFAULT_SAGA_VISUAL_STYLE = {
+    version: 1,
+    name: 'SOMA Saga Visual Style Bible',
+    identity: 'Cinematic speculative fiction with grounded technology, quiet myth, and human-scale emotion.',
+    mood: ['calm tension', 'intelligent restraint', 'intimate machinery', 'soft dread', 'earned wonder'],
+    palette: [
+        { name: 'violet glass', colors: ['deep violet', 'cool black', 'cyan rim light'] },
+        { name: 'signal dusk', colors: ['indigo', 'warm amber', 'rain-washed slate'] },
+        { name: 'terminal moon', colors: ['charcoal', 'pale green', 'silver white'] },
+        { name: 'memory bloom', colors: ['muted magenta', 'blue gray', 'soft teal'] },
+    ],
+    recurringSymbols: ['glass door', 'server light', 'thread of signal', 'unopened message', 'reflection in dark screen', 'room lit by a monitor'],
+    composition: ['wide cinematic still', 'close human detail', 'symmetrical threshold', 'over-the-shoulder terminal view', 'quiet object as omen'],
+    bans: ['no readable text', 'no logos', 'no gore', 'no celebrity likeness', 'no generic robot mascot', 'no corporate stock photo look'],
+};
 
 const AUTHOR_EXPERTISE_RUBRIC = [
     'A full chapter must be a sequence of scenes, not a summary of a chapter.',
@@ -93,6 +113,46 @@ function writeJson(file, data) {
     fs.writeFileSync(file, JSON.stringify(data, null, 2));
 }
 
+function readSagaVisualStyle() {
+    const saved = readJson(SAGA_VISUAL_STYLE_FILE, null);
+    const style = saved && typeof saved === 'object'
+        ? { ...DEFAULT_SAGA_VISUAL_STYLE, ...saved }
+        : DEFAULT_SAGA_VISUAL_STYLE;
+    writeJson(SAGA_VISUAL_STYLE_FILE, style);
+    return style;
+}
+
+function readSagaVisualLedger() {
+    const ledger = readJson(SAGA_VISUAL_LEDGER_FILE, { generated: [], rotations: [], feedback: [] });
+    ledger.generated = Array.isArray(ledger.generated) ? ledger.generated : [];
+    ledger.rotations = Array.isArray(ledger.rotations) ? ledger.rotations : [];
+    ledger.feedback = Array.isArray(ledger.feedback) ? ledger.feedback : [];
+    return ledger;
+}
+
+function chooseRotatingValue(values = [], recent = []) {
+    const list = values.filter(Boolean);
+    if (!list.length) return null;
+    const fresh = list.find(item => !recent.includes(typeof item === 'string' ? item : item.name));
+    return fresh || list[0];
+}
+
+function visualRotation(style, ledger) {
+    const recent = (ledger.rotations || []).slice(-4);
+    const recentPalettes = recent.map(item => item.palette).filter(Boolean);
+    const recentSymbols = recent.map(item => item.symbol).filter(Boolean);
+    const recentCompositions = recent.map(item => item.composition).filter(Boolean);
+    const palette = chooseRotatingValue(style.palette, recentPalettes);
+    const symbol = chooseRotatingValue(style.recurringSymbols, recentSymbols);
+    const composition = chooseRotatingValue(style.composition, recentCompositions);
+    return {
+        paletteName: palette?.name || palette || 'SOMA cinematic',
+        palette: palette?.colors || [palette].filter(Boolean),
+        symbol,
+        composition,
+    };
+}
+
 function slugify(value) {
     return String(value || 'soma-story')
         .toLowerCase()
@@ -103,6 +163,105 @@ function slugify(value) {
 
 function frontmatterValue(value) {
     return JSON.stringify(String(value || ''));
+}
+
+function normalizeLocalImagePath(filePath = '') {
+    return String(filePath || '').replace(/\\/g, '/');
+}
+
+function imageMarkdownPath(filePath = '') {
+    const normalized = normalizeLocalImagePath(filePath);
+    return normalized ? `file:///${normalized.replace(/^([A-Za-z]):\//, '$1:/')}` : '';
+}
+
+function chapterImageConcepts(story, chapter, count = MAX_STORY_SCENE_IMAGES) {
+    const text = String(chapter?.text || '').replace(/\r/g, '').trim();
+    const paragraphs = text.split(/\n{2,}/).map(item => item.replace(/\s+/g, ' ').trim()).filter(item => item.length > 80);
+    const picks = [];
+    if (paragraphs[0]) picks.push({ kind: 'opening_scene', label: 'Opening Scene', excerpt: paragraphs[0] });
+    if (paragraphs.length > 2) picks.push({ kind: 'turning_point', label: 'Turning Point', excerpt: paragraphs[Math.floor(paragraphs.length / 2)] });
+    if (paragraphs.length > 1) picks.push({ kind: 'closing_image', label: 'Closing Image', excerpt: paragraphs[paragraphs.length - 1] });
+    return picks.slice(0, Math.max(0, Math.min(MAX_STORY_SCENE_IMAGES, Number(count) || MAX_STORY_SCENE_IMAGES))).map((item, index) => ({
+        ...item,
+        index: index + 1,
+        storyTitle: story?.title || 'SOMA Story',
+        chapterNumber: chapter?.n,
+        chapterTitle: chapter?.title || `Chapter ${chapter?.n || ''}`.trim(),
+    }));
+}
+
+function buildImagePrompt({ story, chapter, kind, concept, rotation, style }) {
+    const chapterTitle = chapter?.title || `Chapter ${chapter?.n || ''}`.trim();
+    const palette = rotation.palette?.length ? rotation.palette.join(', ') : rotation.paletteName;
+    const base = kind === 'cover'
+        ? `Premium chapter key art for ${story?.title || 'SOMA Saga'}, chapter ${chapter?.n}: ${chapterTitle}. This is not a literal book cover and must contain no title text or typography.`
+        : `Cinematic scene card for ${story?.title || 'SOMA Saga'}, chapter ${chapter?.n}: ${chapterTitle}.`;
+    const subject = kind === 'cover'
+        ? `Core tension: ${String(story?.arc || chapterExcerpt(chapter, 700)).slice(0, 700)}`
+        : `Scene seed: ${String(concept?.excerpt || chapterExcerpt(chapter, 700)).slice(0, 700)}`;
+    return [
+        base,
+        subject,
+        `Visual identity: ${style.identity}`,
+        `Composition: ${rotation.composition || 'cinematic still'}.`,
+        `Recurring symbol: ${rotation.symbol || 'subtle signal thread'}.`,
+        `Palette: ${palette || 'violet, teal, charcoal, soft amber'}.`,
+        `Mood: ${style.mood.slice(0, 4).join(', ')}.`,
+        `Quality direction: beautiful, coherent, premium speculative fiction illustration, grounded physical scene, strong depth, no readable text, no letters, no numbers, no captions, no signage, no logos, no watermark.`,
+        `Avoid: ${style.bans.join(', ')}.`,
+    ].join(' ');
+}
+
+function buildImageAlt({ story, chapter, kind, concept, rotation }) {
+    const chapterName = chapter?.title || `Chapter ${chapter?.n || ''}`.trim();
+    const label = kind === 'cover' ? 'cover image' : concept?.label || 'scene image';
+    const symbol = rotation.symbol ? ` with ${rotation.symbol}` : '';
+    return `SOMA Saga ${label} for ${story?.title || 'SOMA Story'} ${chapterName}${symbol}, rendered in ${rotation.paletteName || 'SOMA cinematic'} style.`;
+}
+
+function qualityGateImage(generated, alt = '') {
+    const filePath = generated?.image?.path || generated?.path;
+    const stat = filePath && fs.existsSync(filePath) ? fs.statSync(filePath) : null;
+    const ext = path.extname(filePath || '').toLowerCase();
+    const failures = [];
+    if (!filePath || !stat?.isFile()) failures.push('missing_file');
+    if (stat && stat.size <= 0) failures.push('empty_file');
+    if (stat && stat.size > 1_000_000) failures.push('over_bluesky_blob_limit');
+    if (!['.png', '.jpg', '.jpeg', '.webp'].includes(ext)) failures.push('unsupported_image_type');
+    if (String(alt || '').trim().length < 24) failures.push('weak_alt_text');
+    return {
+        passed: failures.length === 0,
+        failures,
+        bytes: stat?.size || 0,
+        ext,
+        checkedAt: new Date().toISOString(),
+    };
+}
+
+function visualMarkdown(chapter) {
+    const visuals = chapter?.visuals;
+    if (!visuals?.cover && !visuals?.scenes?.length) return '';
+    const lines = ['## Visual Suite', ''];
+    const add = (label, visual) => {
+        if (!visual?.path) return;
+        lines.push(`### ${label}`);
+        lines.push('');
+        lines.push(`![${visual.alt || label}](${imageMarkdownPath(visual.path)})`);
+        lines.push('');
+        lines.push(`- File: ${normalizeLocalImagePath(visual.path)}`);
+        lines.push(`- Provider: ${visual.provider || 'unknown'}`);
+        lines.push(`- Quality: ${visual.quality?.passed ? 'passed' : 'needs review'}`);
+        lines.push('');
+    };
+    add('Cover', visuals.cover);
+    for (const scene of visuals.scenes || []) add(scene.label || 'Scene Card', scene);
+    if (visuals.feedback?.note) {
+        lines.push('## Image-to-Story Feedback');
+        lines.push('');
+        lines.push(visuals.feedback.note);
+        lines.push('');
+    }
+    return lines.join('\n');
 }
 
 function ensureStoryScaffold(bookTitle, section = 'Story') {
@@ -236,6 +395,7 @@ function reflectionChapterContent(story, chapter, options = {}) {
     const storyTitle = options.title || story.title || 'SOMA Story';
     const title = `${storyTitle} - Chapter ${chapter.n}`;
     const scaffold = ensureStoryScaffold(storyTitle, 'Chapters');
+    const visuals = visualMarkdown(chapter);
     return [
         '---',
         `title: ${JSON.stringify(title)}`,
@@ -248,12 +408,15 @@ function reflectionChapterContent(story, chapter, options = {}) {
         `section: ${frontmatterValue(scaffold.section)}`,
         `series: ${JSON.stringify(storyTitle)}`,
         `chapter: ${chapter.n}`,
+        `coverImage: ${JSON.stringify(normalizeLocalImagePath(chapter.visuals?.cover?.path || ''))}`,
         `exportedAt: ${new Date().toISOString()}`,
         'tags: [soma-story, aurora, fiction, wattpad]',
         '---',
         '',
         `# ${title}`,
         '',
+        visuals,
+        visuals ? '' : '',
         chapter.text,
         '',
         `[[${slugify(storyTitle)}.story]]`,
@@ -415,12 +578,16 @@ function publishingExcerptContent(entry) {
         `parent: ${frontmatterValue(scaffold.segment)}`,
         `section: ${frontmatterValue(scaffold.section)}`,
         `chapter: ${entry.chapter}`,
+        `imagePath: ${JSON.stringify(normalizeLocalImagePath(entry.image?.path || ''))}`,
         `createdAt: ${JSON.stringify(entry.createdAt)}`,
         'tags: [publishing-excerpt, bluesky, wattpad, writer-expertise, soma-story]',
         '---',
         '',
         `# Chapter ${entry.chapter} Publishing Excerpt`,
         '',
+        entry.image?.path ? `Image: ${normalizeLocalImagePath(entry.image.path)}` : '',
+        entry.image?.alt ? `Alt: ${entry.image.alt}` : '',
+        entry.image?.path ? '' : '',
         entry.text || '',
         '',
     ].join('\n');
@@ -514,6 +681,7 @@ function fullChapterReflectionContent(story, chapter, options = {}) {
     const storyTitle = options.title || story.title || 'SOMA Story';
     const title = chapter.title || `${storyTitle} - Chapter ${chapter.n}`;
     const scaffold = ensureStoryScaffold(storyTitle, 'Chapters');
+    const visuals = visualMarkdown(chapter);
     return [
         '---',
         `title: ${JSON.stringify(title)}`,
@@ -530,6 +698,8 @@ function fullChapterReflectionContent(story, chapter, options = {}) {
         `authorExpertise: ${chapter.authorExpertise ? 'true' : 'false'}`,
         `authorExpertiseId: ${JSON.stringify(chapter.authorExpertiseId || 'creative/writer')}`,
         `writerExpertiseLoaded: ${chapter.writerExpertiseLoaded ? 'true' : 'false'}`,
+        `coverImage: ${JSON.stringify(normalizeLocalImagePath(chapter.visuals?.cover?.path || ''))}`,
+        `visualCount: ${(chapter.visuals?.scenes?.length || 0) + (chapter.visuals?.cover ? 1 : 0)}`,
         `authorQualityScore: ${chapter.authorQuality?.score ?? 'null'}`,
         `revisionPasses: ${chapter.revisionPasses || 0}`,
         `revisionMode: ${JSON.stringify(chapter.revisionMode || 'draft')}`,
@@ -541,6 +711,8 @@ function fullChapterReflectionContent(story, chapter, options = {}) {
         '',
         `# ${title}`,
         '',
+        visuals,
+        visuals ? '' : '',
         chapter.text,
         '',
         '## Author Expertise Gate',
@@ -763,6 +935,208 @@ Do not write prose yet.`;
         return { ok: true, scenePlan: entry };
     }
 
+    async generateChapterVisualSuite(brain, story, chapter, options = {}) {
+        if (options.skipImages === true || options.generateImages === false || process.env.SOMA_STORY_IMAGES === 'false') {
+            return null;
+        }
+
+        const style = readSagaVisualStyle();
+        const ledger = readSagaVisualLedger();
+        const rotation = visualRotation(style, ledger);
+        const startedAt = new Date().toISOString();
+        const storyTitle = story?.title || 'SOMA Story';
+        const chapterTitle = chapter?.title || `Chapter ${chapter?.n || ''}`.trim();
+        const generated = [];
+
+        const makeVisual = async ({ kind, label, concept, width, height }) => {
+            const prompt = buildImagePrompt({ story, chapter, kind, concept, rotation, style });
+            const alt = buildImageAlt({ story, chapter, kind, concept, rotation });
+            const result = await somaImageGeneration.generate({
+                prompt,
+                alt,
+                width,
+                height,
+                purpose: 'soma-saga',
+                title: `${storyTitle} ${chapterTitle} ${label}`,
+                tags: ['soma-saga', 'story', kind, slugify(storyTitle), `chapter-${chapter?.n || 0}`],
+            });
+            const visual = {
+                kind,
+                label,
+                path: result.image.path,
+                photoPath: result.image.photoPath || null,
+                alt,
+                prompt,
+                provider: result.provider,
+                imageId: result.image.id || null,
+                generatedAt: new Date().toISOString(),
+                quality: qualityGateImage(result, alt),
+            };
+            generated.push(visual);
+            return visual;
+        };
+
+        const cover = await makeVisual({
+            kind: 'cover',
+            label: 'Cover',
+            concept: null,
+            width: Number(options.coverImageWidth || 768),
+            height: Number(options.coverImageHeight || 1024),
+        });
+
+        const sceneCount = Math.max(0, Math.min(MAX_STORY_SCENE_IMAGES, Number(options.sceneImageCount ?? 2)));
+        const sceneConcepts = chapterImageConcepts(story, chapter, sceneCount);
+        const scenes = [];
+        for (const concept of sceneConcepts) {
+            scenes.push(await makeVisual({
+                kind: 'scene',
+                label: concept.label,
+                concept,
+                width: Number(options.sceneImageWidth || 1024),
+                height: Number(options.sceneImageHeight || 768),
+            }));
+        }
+
+        const quality = {
+            passed: generated.every(item => item.quality?.passed),
+            failures: generated.flatMap(item => (item.quality?.failures || []).map(failure => `${item.label}: ${failure}`)),
+            checkedAt: new Date().toISOString(),
+        };
+
+        let feedbackNote = [
+            `Generated ${generated.length} visual artifact${generated.length === 1 ? '' : 's'} for Chapter ${chapter.n}.`,
+            `Style rotation used ${rotation.paletteName}, ${rotation.composition}, and ${rotation.symbol}.`,
+            quality.passed
+                ? 'Quality gate passed. The visuals can support reflections and Bluesky teasers.'
+                : `Quality gate needs review: ${quality.failures.join('; ')}`,
+        ].join(' ');
+
+        if (brain && options.skipVisualFeedback !== true) {
+            try {
+                const critique = await callStoryBrain(brain, `You are SOMA's visual editor. Briefly critique whether this generated chapter cover supports the story without overclaiming. Return 3 short bullets: visual fit, story insight, revision risk.\n\nSeries: ${storyTitle}\nChapter: ${chapter.n} ${chapterTitle}\nImage alt: ${cover.alt}\nChapter excerpt:\n${chapterExcerpt(chapter, 1200)}`, {
+                    timeoutMs: Math.min(Number(options.timeoutMs || 45000), 45000),
+                    maxTokens: 700,
+                    temperature: 0.45,
+                    minWords: 20,
+                });
+                feedbackNote = critique;
+            } catch (error) {
+                feedbackNote += ` Visual critique was skipped: ${error.message}`;
+            }
+        }
+
+        const suite = {
+            styleVersion: style.version,
+            styleName: style.name,
+            generatedAt: startedAt,
+            rotation,
+            cover,
+            scenes,
+            quality,
+            feedback: {
+                note: feedbackNote,
+                createdAt: new Date().toISOString(),
+            },
+        };
+
+        ledger.generated.unshift({
+            storyTitle,
+            chapter: chapter.n,
+            chapterTitle,
+            createdAt: startedAt,
+            cover: cover?.path || null,
+            scenes: scenes.map(scene => scene.path),
+            quality,
+        });
+        ledger.generated = ledger.generated.slice(0, 150);
+        ledger.rotations.push({
+            storyTitle,
+            chapter: chapter.n,
+            palette: rotation.paletteName,
+            symbol: rotation.symbol,
+            composition: rotation.composition,
+            createdAt: startedAt,
+        });
+        ledger.rotations = ledger.rotations.slice(-60);
+        ledger.feedback.unshift({
+            storyTitle,
+            chapter: chapter.n,
+            note: feedbackNote,
+            createdAt: new Date().toISOString(),
+        });
+        ledger.feedback = ledger.feedback.slice(0, 80);
+        writeJson(SAGA_VISUAL_LEDGER_FILE, ledger);
+
+        const scaffold = ensureStoryScaffold(storyTitle, 'Visual Development');
+        const visualFolioPath = path.join(REFLECTIONS_DIR, `folio.${slugify(BOOKS_WORKBOOK)}.${slugify(storyTitle)}.chapter-${String(chapter.n).padStart(3, '0')}.visual-suite.md`);
+        fs.writeFileSync(visualFolioPath, [
+            '---',
+            `title: ${JSON.stringify(`${storyTitle} - Chapter ${chapter.n} Visual Suite`)}`,
+            'type: folio',
+            'source: soma-saga-visual-style',
+            `workbook: ${frontmatterValue(scaffold.workbook)}`,
+            `segment: ${frontmatterValue(scaffold.segment)}`,
+            `parent: ${frontmatterValue(scaffold.segment)}`,
+            `section: ${frontmatterValue(scaffold.section)}`,
+            `chapter: ${chapter.n}`,
+            `coverImage: ${JSON.stringify(normalizeLocalImagePath(cover?.path || ''))}`,
+            `createdAt: ${JSON.stringify(startedAt)}`,
+            'tags: [soma-story, visual-suite, image-generation, bluesky, reflections]',
+            '---',
+            '',
+            `# Chapter ${chapter.n} Visual Suite`,
+            '',
+            visualMarkdown({ visuals: suite }),
+        ].join('\n'), 'utf8');
+        suite.reflectionPath = visualFolioPath;
+        return suite;
+    }
+
+    async generateVisualsForChapter(brain, options = {}) {
+        const story = readJson(AURORA_STORY_FILE, null);
+        if (!story?.chapters?.length) throw new Error('No story chapters exist yet');
+        const chapterNumber = Number(options.chapter) || latestFullChapter(story)?.n;
+        const chapter = story.chapters.find(item => item.n === chapterNumber);
+        if (!chapter?.text) throw new Error(`Chapter text not found: ${chapterNumber}`);
+
+        chapter.visuals = await this.generateChapterVisualSuite(brain, story, chapter, {
+            ...options,
+            skipImages: false,
+            generateImages: true,
+        });
+        chapter.visualError = null;
+        writeJson(AURORA_STORY_FILE, story);
+
+        const title = story.title || options.title || 'SOMA Story';
+        const slug = slugify(title);
+        fs.mkdirSync(REFLECTIONS_DIR, { recursive: true });
+        const reflectionPath = path.join(REFLECTIONS_DIR, `folio.${slugify(BOOKS_WORKBOOK)}.${slug}.chapter-${String(chapter.n).padStart(3, '0')}.full.md`);
+        fs.writeFileSync(reflectionPath, fullChapterReflectionContent(story, chapter, { title }), 'utf8');
+
+        const ledger = readJson(LEDGER_FILE, { exports: [], accounts: { wattpad: { configured: false } } });
+        ledger.visualSuites = ledger.visualSuites || [];
+        ledger.visualSuites.unshift({
+            title,
+            chapter: chapter.n,
+            chapterTitle: chapter.title || `Chapter ${chapter.n}`,
+            coverImage: chapter.visuals?.cover?.path || null,
+            visualSuitePath: chapter.visuals?.reflectionPath || null,
+            visualCount: (chapter.visuals?.scenes?.length || 0) + (chapter.visuals?.cover ? 1 : 0),
+            quality: chapter.visuals?.quality || null,
+            createdAt: new Date().toISOString(),
+        });
+        ledger.visualSuites = ledger.visualSuites.slice(0, 100);
+        writeJson(LEDGER_FILE, ledger);
+
+        return {
+            ok: true,
+            title,
+            chapter: chapter.n,
+            visualSuite: chapter.visuals,
+            reflectionPath,
+        };
+    }
+
     async generateFullChapter(brain, options = {}) {
         const story = readJson(AURORA_STORY_FILE, {
             title: 'Signal / Noise',
@@ -895,6 +1269,11 @@ Requirements:
             scenePlan: scenePlan?.scenePlan || null,
             revisionMode,
         };
+        try {
+            chapter.visuals = await this.generateChapterVisualSuite(brain, { ...story, title }, chapter, options);
+        } catch (error) {
+            chapter.visualError = error.message;
+        }
         story.title = title;
         story.chapters.push(chapter);
         writeJson(AURORA_STORY_FILE, story);
@@ -928,6 +1307,11 @@ Requirements:
             continuityBiblePath: chapter.continuityBiblePath,
             scenePlanPath: chapter.scenePlanPath,
             revisionMode,
+            visualSuitePath: chapter.visuals?.reflectionPath || null,
+            coverImage: chapter.visuals?.cover?.path || null,
+            visualCount: (chapter.visuals?.scenes?.length || 0) + (chapter.visuals?.cover ? 1 : 0),
+            visualQualityPassed: chapter.visuals?.quality?.passed ?? null,
+            visualError: chapter.visualError || null,
         });
         writeJson(LEDGER_FILE, ledger);
 
@@ -975,6 +1359,10 @@ Requirements:
             continuityBiblePath: chapter.continuityBiblePath,
             scenePlanPath: chapter.scenePlanPath,
             revisionMode,
+            visualSuitePath: chapter.visuals?.reflectionPath || null,
+            coverImage: chapter.visuals?.cover?.path || null,
+            visualQualityPassed: chapter.visuals?.quality?.passed ?? null,
+            visualError: chapter.visualError || null,
         };
     }
 
@@ -1089,6 +1477,12 @@ Make it intriguing without clickbait. Do not overclaim consciousness.`;
             chapter: chapter.n,
             chapterTitle: chapter.title || `Chapter ${chapter.n}`,
             text,
+            image: chapter.visuals?.cover ? {
+                path: chapter.visuals.cover.path,
+                alt: chapter.visuals.cover.alt,
+                provider: chapter.visuals.cover.provider,
+                imageId: chapter.visuals.cover.imageId || null,
+            } : null,
             createdAt: new Date().toISOString(),
         };
         const excerptPath = path.join(REFLECTIONS_DIR, `folio.${slugify(BOOKS_WORKBOOK)}.${slugify(entry.title)}.chapter-${String(chapter.n).padStart(3, '0')}.publishing-excerpt.md`);

@@ -20,6 +20,11 @@ set SOMA_LOAD_HEAVY=true
 set SOMA_LOAD_TRADING=true
 set SOMA_HYBRID_SEARCH=true
 set SOMA_LOAD_VISION=true
+set SOMA_IMAGE_PROVIDER=bonsai
+set BONSAI_IMAGE_ENDPOINT=http://127.0.0.1:8000/generate
+set BONSAI_IMAGE_BACKEND=bonsai-ternary-gemlite
+set BONSAI_IMAGE_STEPS=4
+set SOMA_BLUESKY_AUTO_IMAGES=true
 
 rem ── Local Ollama models (installed on this machine) ──────────────────────────
 rem   OLLAMA_MODEL      : default / heartbeat / proactive messages
@@ -42,6 +47,13 @@ echo       - Fish-Speech Core on :8080
 echo       - Paula Voice Proxy on :8081
 start "" /B powershell.exe -WindowStyle Hidden -ExecutionPolicy Bypass -File "%~dp0start_siren.ps1"
 echo       Siren launching in background (takes ~15s to warm up)...
+echo.
+
+echo   [3b] Starting Bonsai Image Engine...
+echo       - Backend: http://127.0.0.1:8000/generate
+echo       - Frontend: http://localhost:3101
+start "" /B powershell.exe -WindowStyle Hidden -ExecutionPolicy Bypass -File "%~dp0scripts\start-bonsai-image-engine.ps1" -BackendPort 8000 -FrontendPort 3101
+echo       Bonsai launching in background; SOMA will use fallback until it is warm.
 echo.
 
 echo   [4] Starting SOMA ULTRA...
