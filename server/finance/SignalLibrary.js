@@ -27,6 +27,7 @@ export class SignalLibrary {
             macd:           1.0,
             breakout:       1.0,
             microstructure: 0.8,   // Noisier — lower initial weight
+            volumeSurge:    0.9,   // Abnormal volume on directional candles
             optionsIV:      0.7,   // IV/VIX regime signal (async, scored externally)
         };
         this._lastIVScore = null; // set by AutonomousTrader after each IV fetch
@@ -90,6 +91,7 @@ export class SignalLibrary {
             macd:           this._macdSignal(bars),
             breakout:       this._breakoutSignal(bars, currentPrice),
             microstructure: this._microstructureSignal(bars),
+            volumeSurge:    this._volumeSurgeSignal(bars),
         };
 
         return this._ensemble(signals);
@@ -284,6 +286,26 @@ export class SignalLibrary {
             reason: `Micro: body=${(bodyConv*100).toFixed(0)}% dir=${bodyDir.toFixed(2)} wickBias=${wickBias.toFixed(2)}`,
             meta: { bodyDir, bodyConv, wickBias }
         };
+    }
+
+    /** Signal 9: Volume Surge — high-volume directional candles */
+    _volumeSurgeSignal(bars) {
+        if (bars.length < 20) return { score: 0, reason: 'Insufficient data', meta: {} };
+        const last20 = bars.slice(-20);
+        const avgVol = last20.reduce((s, b) => s + (b.volume || 0), 0) / 20 || 1;
+        const curr = bars[bars.length - 1];
+        const currVol = curr.volume || 0;
+        const volRatio = currVol / avgVol;
+        if (volRatio < 0.5) return { score: 0, reason: `Thin volume (${volRatio.toFixed(1)}x avg)`, meta: { volRatio } };
+        const bodySize = Math.abs(curr.close - curr.open);
+        const barRange = (curr.high - curr.low) || 1;
+        const directionStrength = bodySize / barRange;
+        const isBullish = curr.close > curr.open;
+        const surgeBonus = Math.max(0, (volRatio - 1.0) / 2.0);
+        const rawScore = surgeBonus * directionStrength;
+        const score = this._clamp(isBullish ? rawScore : -rawScore);
+        const reason = `VolSurge ${volRatio.toFixed(1)}x avg ${isBullish ? '▲' : '▼'} dir=${(directionStrength * 100).toFixed(0)}%`;
+        return { score, reason, meta: { volRatio, directionStrength, isBullish } };
     }
 
     // ── Ensemble ──────────────────────────────────────────────────────────────

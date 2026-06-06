@@ -210,6 +210,62 @@ router.put('/config', (req, res) => {
 });
 
 /**
+ * POST /api/autonomous/start-portfolio
+ * Start multiple symbols concurrently with capital split evenly across them.
+ * Body: { symbols: ['BTC/USD','ETH/USD','SPY'], preset?, totalCapital?, config? }
+ * Already-running symbols are skipped (not restarted).
+ */
+router.post('/start-portfolio', async (req, res) => {
+    try {
+        const { symbols, preset, totalCapital = 100000, config = {} } = req.body;
+        if (!Array.isArray(symbols) || symbols.length === 0) {
+            return res.status(400).json({ success: false, error: 'symbols array is required' });
+        }
+
+        const perSymbolCapital = Math.floor(totalCapital / symbols.length);
+        const results = [];
+        const errors = [];
+
+        for (const raw of symbols) {
+            const sym = raw.toUpperCase();
+            const existing = _registry.get(sym);
+            if (existing?.isRunning) {
+                results.push({ symbol: sym, status: 'skipped', reason: 'already running' });
+                continue;
+            }
+            try {
+                const instance = getOrCreateInstance(sym);
+                const result = await instance.start(sym, preset, {
+                    ...config,
+                    initialBalance: perSymbolCapital,
+                    // Tighten position size so each symbol can't blow the whole allocation
+                    maxPositionPct: Math.min(config.maxPositionPct || 0.10, 0.10),
+                });
+                flushCache(sym);
+                results.push({ symbol: sym, status: result.success ? 'started' : 'error', ...result });
+                if (!result.success) errors.push(sym);
+            } catch (err) {
+                results.push({ symbol: sym, status: 'error', error: err.message });
+                errors.push(sym);
+            }
+        }
+
+        const runningSymbols = [..._registry.keys()].filter(k => _registry.get(k).isRunning);
+        res.json({
+            success: errors.length < symbols.length,
+            perSymbolCapital,
+            totalCapital,
+            results,
+            runningSymbols,
+            errors: errors.length > 0 ? errors : undefined,
+        });
+    } catch (error) {
+        console.error('[Autonomous API] start-portfolio error:', error.message);
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+/**
  * GET /api/autonomous/registry
  * List all registered symbols and their running state
  */

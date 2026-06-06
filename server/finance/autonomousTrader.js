@@ -65,6 +65,8 @@ class AutonomousTrader {
         this._runtimeProfile = null;     // Learned Mission Control execution profile
         this._runtimeSessionId = null;   // Lifecycle journal session id
         this._lastStreamPrice = 0;       // Real-time price from WebSocket
+        this._positionHighWater = new Map(); // symbol → peak pnlPct for trailing stop
+        this._currentInterval = 0;       // Active cycle interval (adaptive)
         this._analysisTimeoutMs = 15_000; // 15s timeout for AI analysis
         this._signalScoresAtEntry = new Map(); // symbol → signal scores at open (for adaptive learning)
         this._abTestArmAtEntry = new Map();   // symbol → { arm } for A/B outcome tracking
@@ -164,8 +166,10 @@ class AutonomousTrader {
             console.warn(`[AutonomousTrader] 🔒 Broker connected, but tier ${this._runtimeProfile.activeTier} is not live-enabled. Forcing PAPER MODE.`);
         }
         if (this.paperMode && this._paperPortfolio) {
-            this._paperPortfolio.balance = this._runtimeProfile.paperCapital || 1000;
-            this._paperPortfolio.initialBalance = this._paperPortfolio.balance;
+            // config.initialBalance overrides runtime profile (used by portfolio multi-symbol splits)
+            const paperCap = this.config.initialBalance || this._runtimeProfile.paperCapital || 1000;
+            this._paperPortfolio.balance = paperCap;
+            this._paperPortfolio.initialBalance = paperCap;
         }
         this._runtimeSessionId = missionControlRuntime.startSession({
             symbol,
@@ -206,19 +210,25 @@ class AutonomousTrader {
             }
         }
 
+        // Adaptive cycle: recursive setTimeout so interval can shrink/grow after each cycle
+        this._currentInterval = this.config.analysisIntervalMs;
+        const scheduleNext = () => {
+            if (!this.isRunning) return;
+            this._loopTimer = setTimeout(() => {
+                this._runCycle()
+                    .catch(err => {
+                        console.error('[AutonomousTrader] Cycle error:', err.message);
+                        this._stats.errors++;
+                    })
+                    .finally(() => scheduleNext());
+            }, this._currentInterval);
+        };
+
         // Fire first cycle immediately (don't await — return to caller fast)
         this._runCycle().catch(err => {
             console.error('[AutonomousTrader] First cycle error (non-fatal):', err.message);
             this._stats.errors++;
-        });
-
-        // Schedule recurring cycles
-        this._loopTimer = setInterval(() => {
-            this._runCycle().catch(err => {
-                console.error('[AutonomousTrader] Cycle error:', err.message);
-                this._stats.errors++;
-            });
-        }, this.config.analysisIntervalMs);
+        }).finally(() => scheduleNext());
 
         // Watchdog: detect stalled trading loop
         this._watchdogTimer = setInterval(() => {
@@ -234,7 +244,7 @@ class AutonomousTrader {
     stop() {
         if (!this.isRunning) return { success: false, error: 'Not running.' };
 
-        clearInterval(this._loopTimer);
+        clearTimeout(this._loopTimer);
         clearInterval(this._watchdogTimer);
         this._loopTimer = null;
         this._watchdogTimer = null;
@@ -365,6 +375,7 @@ class AutonomousTrader {
 
             const latestBar = bars[bars.length - 1];
             const currentPrice = latestBar.close;
+            this._adjustInterval(bars); // shorten in high volatility, lengthen when flat
             this._recordRuntimeLifecycle('data_quality', 'passed', {
                 bars: bars.length,
                 price: currentPrice,
@@ -405,6 +416,24 @@ class AutonomousTrader {
                 agents: signal.agents,
                 runtime: signal.runtime
             });
+
+            // 6.5. Multi-timeframe confirmation — reject if 1h/15m disagree with 5m signal
+            if (signal.action !== 'HOLD') {
+                try {
+                    const mtf = await multiTimeframeFilter.confirmSignal(this.symbol, signal.action);
+                    if (!mtf.confirmed) {
+                        this._stats.signalsHold++;
+                        this._stats.totalDecisions++;
+                        this._logDecision('MTF', 'HOLD', `Higher timeframes disagree: ${mtf.reason}`, {
+                            votes: mtf.votes, signal: signal.action, confidence: signal.confidence
+                        });
+                        return;
+                    }
+                } catch (mtfErr) {
+                    console.warn('[AutonomousTrader] MTF check failed (non-fatal):', mtfErr.message);
+                    // Continue without MTF if data unavailable — don't block trading
+                }
+            }
 
             // 7. Act on signal
             if (signal.action === 'HOLD') {
@@ -601,7 +630,9 @@ class AutonomousTrader {
                 signalLibrary._lastIVScore = ivResult.score; // stored for recordOutcome enrichment
             }
 
-            const recommendation = composite >= 0.18 ? 'BUY' : composite <= -0.18 ? 'SELL' : 'HOLD';
+            // Lowered from ±0.18: typical BTC ranging days produce composites in ±0.10–0.17
+            // range and the old threshold starved the engine of any signals entirely
+            const recommendation = composite >= 0.10 ? 'BUY' : composite <= -0.10 ? 'SELL' : 'HOLD';
 
             // Compute RSI for risk score (reuse from signal library internals)
             const closes = bars.map(b => b.close);
@@ -610,10 +641,18 @@ class AutonomousTrader {
             const avgLoss = changes.filter(c => c < 0).map(Math.abs).reduce((s, v) => s + v, 0) / 14;
             const rsi     = avgLoss === 0 ? 100 : 100 - (100 / (1 + avgGain / avgLoss));
 
+            // Confidence = composite strength + signal agreement bonus
+            // At composite=0.10, inAgreement=4 → conf≈0.20 → compositeConfidence≈0.58 (fires at minConf 0.55)
+            // At composite=0.10, inAgreement=6 → conf≈0.40 → compositeConfidence≈0.66 (fires at BALANCED 0.60)
+            const agreementBonus = techResult.inAgreement >= 6 ? 0.25
+                : techResult.inAgreement >= 5 ? 0.15
+                : techResult.inAgreement >= 4 ? 0.05 : 0;
+            const signalConfidence = Math.min(0.95, Math.abs(composite) * 1.5 + agreementBonus);
+
             return {
                 strategy:  {
                     recommendation,
-                    confidence:   Math.abs(composite) * 1.5,  // scale to 0-1 for _generateSignal
+                    confidence:   signalConfidence,
                     thesis:       techResult.reason,
                     signals:      techResult.signals,
                     inAgreement:  techResult.inAgreement,
@@ -670,15 +709,17 @@ class AutonomousTrader {
     async _getRegime() {
         const detector = global.SOMA_TRADING?.regimeDetector;
         if (detector && typeof detector.getRegime === 'function') {
-             try {
-                 // Use a short timeout so we don't block
-                 return await Promise.race([
-                     detector.getRegime(this.symbol),
-                     new Promise(r => setTimeout(() => r(null), 2000))
-                 ]);
-             } catch (e) { return null; }
+            try {
+                const result = await Promise.race([
+                    detector.getRegime(this.symbol),
+                    new Promise(r => setTimeout(() => r(null), 2000))
+                ]);
+                // getRegime returns { regime: 'RANGING', confidence: 0.8, ... } — extract string
+                return typeof result === 'string' ? result : (result?.regime || null);
+            } catch (e) { return null; }
         }
-        return detector?.currentRegime || null;
+        const raw = detector?.currentRegime;
+        return typeof raw === 'string' ? raw : (raw?.regime || null);
     }
 
     /**
@@ -709,13 +750,21 @@ class AutonomousTrader {
             }
         }
 
-        // Composite confidence = weighted average of all agents
-        const compositeConfidence = (
-            strategyConfidence * 0.35 +
-            riskScore * 0.20 +
-            sentimentScore * 0.25 +
-            (this._getTechnicalSignal(bars, currentPrice) * 0.20)
-        );
+        // Composite confidence — base-anchored formula:
+        // Any BUY/SELL recommendation already passed a blended signal filter, so we
+        // start at 0.50 and scale up by signal quality rather than diluting with
+        // neutral-ish risk/sentiment terms. Risk is inverted for SELL signals (overbought
+        // RSI is bad for buys but good for sells).
+        const technicalScore = this._getTechnicalSignal(bars, currentPrice);
+        const isLong = ['BUY', 'STRONG BUY', 'LONG'].includes(recommendation);
+        const riskMod = isLong ? (riskScore - 0.5) * 0.30 : (0.5 - riskScore) * 0.30;
+        const compositeConfidence = Math.min(0.97, Math.max(0,
+            0.50 +
+            strategyConfidence * 0.40 +
+            riskMod +
+            (sentimentScore - 0.5) * 0.20 +
+            (technicalScore - 0.5) * 0.20
+        ));
 
         // Determine action
         let action = 'HOLD';
@@ -903,6 +952,30 @@ class AutonomousTrader {
         } catch (error) {
             console.error('[AutonomousTrader] Position sizing error:', error.message);
             return null;
+        }
+    }
+
+    /**
+     * Adaptive interval: shorten during high volatility, extend during flat markets
+     * Called once per cycle after bars are fetched.
+     */
+    _adjustInterval(bars) {
+        if (!bars || bars.length < 20) return;
+        const ranges = bars.slice(-20).map(b => (b.high - b.low) / (b.close || 1));
+        const avgRange = ranges.reduce((s, v) => s + v, 0) / ranges.length || 0.001;
+        const currRange = ranges[ranges.length - 1];
+        const atrRatio = currRange / avgRange;
+
+        const base = this.config.analysisIntervalMs;
+        let next;
+        if (atrRatio > 2.0)      next = Math.max(15_000, base * 0.25);  // spike: floor 15s
+        else if (atrRatio > 1.5) next = Math.max(30_000, base * 0.50);  // elevated: floor 30s
+        else if (atrRatio < 0.5) next = Math.min(300_000, base * 3.0);  // dead: cap 5min
+        else                     next = base;
+
+        if (next !== this._currentInterval) {
+            console.log(`[AutonomousTrader] ⏱️ Interval → ${Math.round(next/1000)}s (ATR ratio: ${atrRatio.toFixed(2)})`);
+            this._currentInterval = next;
         }
     }
 
@@ -1329,22 +1402,51 @@ class AutonomousTrader {
             pnlPct = position.unrealizedPnlPct / 100;
         }
 
-        // Take profit hit
+        const sym = position.symbol;
+        const trailingStopPct = this.config.trailingStopPct || 0.03;
+
+        // Update high-water mark when position is profitable
+        if (pnlPct > 0) {
+            const prev = this._positionHighWater.get(sym) || 0;
+            if (pnlPct > prev) this._positionHighWater.set(sym, pnlPct);
+        }
+        const highWater = this._positionHighWater.get(sym) || 0;
+
+        // Breakeven stop: once we've hit 50% of the take-profit target, protect principal
+        const breakevenThreshold = this.config.takeProfitPct * 0.5;
+        if (highWater >= breakevenThreshold && pnlPct <= 0.001) {
+            this._logDecision('MANAGE', 'TRAILING_STOP',
+                `Breakeven stop: gave back gains from peak +${(highWater*100).toFixed(1)}%`, { position, currentPrice, highWater });
+            this._positionHighWater.delete(sym);
+            await this._closePosition(position, 'TRAILING_STOP');
+            return true;
+        }
+
+        // Trailing stop: fell more than trailingStopPct from the high-water mark
+        if (highWater > trailingStopPct && pnlPct < highWater - trailingStopPct) {
+            this._logDecision('MANAGE', 'TRAILING_STOP',
+                `Trailing stop: peak +${(highWater*100).toFixed(1)}% → now +${(pnlPct*100).toFixed(1)}% (trail ${(trailingStopPct*100).toFixed(0)}%)`, {
+                    position, currentPrice, highWater, drop: highWater - pnlPct
+                });
+            this._positionHighWater.delete(sym);
+            await this._closePosition(position, 'TRAILING_STOP');
+            return true;
+        }
+
+        // Hard take-profit (still useful as a ceiling)
         if (pnlPct >= this.config.takeProfitPct) {
             this._logDecision('MANAGE', 'TAKE_PROFIT',
-                `Taking profit on ${position.symbol}: +${(pnlPct * 100).toFixed(1)}% ($${position.unrealizedPnl.toFixed(2)})`, {
-                    position, currentPrice
-                });
+                `Take profit: +${(pnlPct * 100).toFixed(1)}%`, { position, currentPrice });
+            this._positionHighWater.delete(sym);
             await this._closePosition(position, 'TAKE_PROFIT');
             return true;
         }
 
-        // Stop loss hit
+        // Hard stop loss
         if (pnlPct <= -this.config.stopLossPct) {
             this._logDecision('MANAGE', 'STOP_LOSS',
-                `Stop loss triggered on ${position.symbol}: ${(pnlPct * 100).toFixed(1)}% ($${position.unrealizedPnl.toFixed(2)})`, {
-                    position, currentPrice
-                });
+                `Stop loss: ${(pnlPct * 100).toFixed(1)}%`, { position, currentPrice });
+            this._positionHighWater.delete(sym);
             await this._closePosition(position, 'STOP_LOSS');
             return true;
         }
@@ -1356,6 +1458,7 @@ class AutonomousTrader {
      * Close a position
      */
     async _closePosition(position, reason) {
+        this._positionHighWater.delete(position.symbol); // always clean up trailing stop state
         // Handle paper mode close
         if (this.paperMode) {
             const pos = this._paperPortfolio.positions[position.symbol];
