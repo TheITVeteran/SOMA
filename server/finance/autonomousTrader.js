@@ -417,8 +417,11 @@ class AutonomousTrader {
                 runtime: signal.runtime
             });
 
-            // 6.5. Multi-timeframe confirmation — reject if 1h/15m disagree with 5m signal
-            if (signal.action !== 'HOLD') {
+            // 6.5. Multi-timeframe confirmation — skip in RANGING regime (mean-reversion context)
+            // In RANGING, bearish higher-TF just means "near bottom of range" — that IS the trade.
+            // MTF is anti-trend logic; irrelevant when there's no trend.
+            const isRanging = currentRegime === 'RANGING' || currentRegime?.includes?.('RANGING');
+            if (signal.action !== 'HOLD' && !isRanging) {
                 try {
                     const mtf = await multiTimeframeFilter.confirmSignal(this.symbol, signal.action);
                     if (!mtf.confirmed) {
@@ -630,9 +633,11 @@ class AutonomousTrader {
                 signalLibrary._lastIVScore = ivResult.score; // stored for recordOutcome enrichment
             }
 
-            // Lowered from ±0.18: typical BTC ranging days produce composites in ±0.10–0.17
-            // range and the old threshold starved the engine of any signals entirely
-            const recommendation = composite >= 0.10 ? 'BUY' : composite <= -0.10 ? 'SELL' : 'HOLD';
+            // In RANGING regime use ±0.06 (mean-reversion — small directional edge is enough)
+            // In trending/volatile regimes use ±0.10 (need clearer directional conviction)
+            const rangingNow = this._lastKnownRegime === 'RANGING';
+            const dirThreshold = rangingNow ? 0.06 : 0.10;
+            const recommendation = composite >= dirThreshold ? 'BUY' : composite <= -dirThreshold ? 'SELL' : 'HOLD';
 
             // Compute RSI for risk score (reuse from signal library internals)
             const closes = bars.map(b => b.close);
