@@ -27,7 +27,7 @@ const FOMC_DATES_2026 = [
 // Major macro events (add NFP, CPI, PPI release dates here as desired)
 const MACRO_EVENTS = [
     // Format: { date: 'YYYY-MM-DD', name: string, blockHours: number }
-    ...FOMC_DATES_2026.map(d => ({ date: d, name: 'FOMC Rate Decision', blockHours: 48 }))
+    ...FOMC_DATES_2026.map(d => ({ date: d, name: 'FOMC Rate Decision', blockHours: 24 }))
 ];
 
 class CalendarGuard {

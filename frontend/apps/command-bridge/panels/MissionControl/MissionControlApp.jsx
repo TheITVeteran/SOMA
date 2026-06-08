@@ -444,7 +444,6 @@ const MissionControlApp = ({ somaBackend, isConnected }) => {
 
     const mapDecisionsToTradeStream = useCallback((decisions = []) => {
         return decisions
-            .filter(d => d.category === 'TRADE' || d.category === 'MANAGE' || d.category === 'SIGNAL' || d.category === 'PAPER')
             .map(d => ({
                 id: d.id,
                 timestamp: d.timestamp,
@@ -452,10 +451,11 @@ const MissionControlApp = ({ somaBackend, isConnected }) => {
                 side: d.action === 'BUY' || d.action === 'TAKE_PROFIT' ? 'BUY'
                     : d.action === 'SELL' || d.action === 'STOP_LOSS' ? 'SELL'
                     : d.action === 'HOLD' ? 'HOLD'
+                    : d.action === 'BLOCKED' || d.action === 'SKIP' ? 'SKIP'
                     : d.action,
                 price: d.price || d.fillPrice || 0,
                 quantity: d.qty || 0,
-                reason: d.reason?.slice(0, 90) || d.category,
+                reason: `[${d.category}] ${d.reason?.slice(0, 80) || d.category}`,
                 riskScore: d.confidence ? Math.round(d.confidence * 100) : 0,
                 pnl: d.pnl || 0,
                 status: d.category === 'TRADE' || d.category === 'PAPER' ? 'FILLED'

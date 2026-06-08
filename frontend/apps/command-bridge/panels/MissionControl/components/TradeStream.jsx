@@ -13,6 +13,7 @@ export const TradeStream = ({ trades, embedded = false }) => {
         if (side === 'BUY') return 'text-soma-success';
         if (side === 'SELL') return 'text-soma-danger';
         if (side === 'HOLD') return 'text-blue-400';
+        if (side === 'SKIP') return 'text-amber-500';
         return 'text-slate-400';
     };
 

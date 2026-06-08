@@ -14,6 +14,30 @@ export const RiskPanel = ({ metrics, onUpdateAllocation, onUpdateWallet, autonom
     const lastSignal = autonomousStatus?.lastSignal || null;
     const minConfidence = autonomousStatus?.config?.minConfidence || autonomousStatus?.guardrailsState?.config?.minConfidence || null;
     const lastConfidence = lastSignal?.confidence ?? null;
+    const lastBlock = autonomousStatus?.lastBlockReason || null;
+
+    // Synthesize Sharpe/Sortino from session stats when not yet available from PerformanceCalculator
+    const stats = autonomousStatus?.stats || {};
+    const synthSharpe = (() => {
+        if (metrics.sharpeRatio != null) return metrics.sharpeRatio;
+        const { wins = 0, losses = 0, grossWins = 0, grossLosses = 0 } = stats;
+        const total = wins + losses;
+        if (total < 5) return null;
+        const avgReturn = (grossWins - grossLosses) / total;
+        const variance = ((wins * Math.pow(grossWins / Math.max(wins, 1) - avgReturn, 2) +
+                          losses * Math.pow(-(grossLosses / Math.max(losses, 1)) - avgReturn, 2)) / total);
+        const stdDev = Math.sqrt(variance);
+        return stdDev > 0 ? parseFloat((avgReturn / stdDev).toFixed(2)) : null;
+    })();
+    const synthSortino = (() => {
+        if (metrics.sortinoRatio != null) return metrics.sortinoRatio;
+        const { wins = 0, losses = 0, grossWins = 0, grossLosses = 0 } = stats;
+        const total = wins + losses;
+        if (total < 5) return null;
+        const avgReturn = (grossWins - grossLosses) / total;
+        const downside = losses > 0 ? Math.sqrt(Math.pow(grossLosses / losses, 2)) : 1;
+        return downside > 0 ? parseFloat((avgReturn / downside).toFixed(2)) : null;
+    })();
 
     // Calculate unallocated funds
     const unallocated = metrics.walletBalance - metrics.initialBalance;
@@ -178,7 +202,9 @@ export const RiskPanel = ({ metrics, onUpdateAllocation, onUpdateWallet, autonom
                             <PnlSummaryCard summary={pnlSummary} compact title="Unified P&L" />
                             <div className="mt-2 text-[9px] leading-snug text-zinc-500">
                                 {tradeCount === 0
-                                    ? `Waiting for first paper entry. Last signal: ${lastSignal?.action || 'NONE'}${lastConfidence != null && minConfidence != null ? ` (${Math.round(lastConfidence * 100)}% vs ${Math.round(minConfidence * 100)}% gate)` : ''}. Holds: ${holdCount}.`
+                                    ? lastBlock
+                                        ? `Blocked: [${lastBlock.category}] ${lastBlock.reason?.slice(0, 80)}`
+                                        : `Waiting for first entry. Signal: ${lastSignal?.action || 'NONE'}${lastConfidence != null && minConfidence != null ? ` (${Math.round(lastConfidence * 100)}% vs ${Math.round(minConfidence * 100)}% gate)` : ''}. Holds: ${holdCount}.`
                                     : positions.length > 0
                                         ? 'Position is open. Unrealized P&L moves with live price; realized P&L updates after exit.'
                                         : 'No open position. Realized P&L reflects closed paper trades.'}
@@ -227,20 +253,23 @@ export const RiskPanel = ({ metrics, onUpdateAllocation, onUpdateWallet, autonom
                         </div>
 
                         {/* Sharpe / Sortino — shows once we have ≥5 closed trades */}
-                        {(metrics.sharpeRatio != null || metrics.sortinoRatio != null) && (
+                        {(synthSharpe != null || synthSortino != null) && (
                             <div className="p-2 rounded bg-black/40 border border-white/5">
-                                <div className="text-[9px] text-slate-500 uppercase mb-2">Risk-Adjusted Returns</div>
+                                <div className="flex justify-between items-center mb-2">
+                                    <div className="text-[9px] text-slate-500 uppercase">Risk-Adjusted Returns</div>
+                                    {metrics.sharpeRatio == null && <div className="text-[8px] text-zinc-600 italic">est.</div>}
+                                </div>
                                 <div className="grid grid-cols-2 gap-2">
                                     <div>
                                         <div className="text-[9px] text-slate-500 mb-0.5">SHARPE</div>
-                                        <div className={`text-base font-mono font-bold ${metrics.sharpeRatio == null ? 'text-slate-600' : metrics.sharpeRatio >= 1 ? 'text-emerald-400' : metrics.sharpeRatio >= 0 ? 'text-amber-400' : 'text-red-400'}`}>
-                                            {metrics.sharpeRatio != null ? metrics.sharpeRatio.toFixed(2) : '--'}
+                                        <div className={`text-base font-mono font-bold ${synthSharpe == null ? 'text-slate-600' : synthSharpe >= 1 ? 'text-emerald-400' : synthSharpe >= 0 ? 'text-amber-400' : 'text-red-400'}`}>
+                                            {synthSharpe != null ? synthSharpe.toFixed(2) : '--'}
                                         </div>
                                     </div>
                                     <div>
                                         <div className="text-[9px] text-slate-500 mb-0.5">SORTINO</div>
-                                        <div className={`text-base font-mono font-bold ${metrics.sortinoRatio == null ? 'text-slate-600' : metrics.sortinoRatio >= 1 ? 'text-emerald-400' : metrics.sortinoRatio >= 0 ? 'text-amber-400' : 'text-red-400'}`}>
-                                            {metrics.sortinoRatio != null ? metrics.sortinoRatio.toFixed(2) : '--'}
+                                        <div className={`text-base font-mono font-bold ${synthSortino == null ? 'text-slate-600' : synthSortino >= 1 ? 'text-emerald-400' : synthSortino >= 0 ? 'text-amber-400' : 'text-red-400'}`}>
+                                            {synthSortino != null ? synthSortino.toFixed(2) : '--'}
                                         </div>
                                     </div>
                                 </div>

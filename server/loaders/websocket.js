@@ -14,6 +14,7 @@ import { buildSystemSnapshot, buildPulsePayload } from '../utils/systemState.js'
 import { executeCommand } from '../utils/commandRouter.js';
 import { reasonGrounded, guardSomaText, buildGroundedPrompt } from '../context/GroundedReasoning.js';
 import autonomousTrader from '../finance/autonomousTrader.js';
+import { getAggregateStatus, getAggregateDecisions } from '../finance/autonomousRoutes.js';
 import scalpingEngine from '../finance/scalpingEngine.js';
 import missionControlRuntime from '../finance/MissionControlRuntime.js';
 import marketEvidenceStore from '../finance/MarketEvidenceStore.js';
@@ -113,10 +114,10 @@ function safeSection(errors, key, compute, fallback = null) {
 function buildMissionControlPulse() {
     const errors = {};
     const autonomous = safeSection(errors, 'autonomous', () => {
-        const status = autonomousTrader.getStatus();
-        const decisions = autonomousTrader.getDecisions(30);
+        // Always read from the per-symbol registry — the singleton default export is never started.
+        const status = getAggregateStatus();
+        const decisions = getAggregateDecisions(30);
         return {
-            success: true,
             ...status,
             decisions,
             decisionCount: decisions.length

@@ -284,4 +284,33 @@ router.get('/registry', (req, res) => {
     }
 });
 
+/**
+ * WebSocket bridge helpers — read from the registry, not the singleton.
+ * The singleton (autonomousTrader default export) is never started; all active
+ * traders live in _registry. These exports let websocket.js stay current.
+ */
+export function getAggregateStatus() {
+    if (_registry.size === 0) return { success: true, isRunning: false };
+    const instances = [..._registry.entries()].map(([sym, inst]) => ({
+        symbol: sym, ...inst.getStatus()
+    }));
+    const primary = instances.find(i => i.isRunning) || instances[0];
+    return {
+        success: true,
+        ...(primary || { isRunning: false }),
+        instances,
+        runningCount: instances.filter(i => i.isRunning).length,
+        runningSymbols: instances.filter(i => i.isRunning).map(i => i.symbol),
+    };
+}
+
+export function getAggregateDecisions(limit = 30) {
+    const all = [];
+    for (const [sym, inst] of _registry) {
+        inst.getDecisions(limit).forEach(d => all.push({ ...d, symbol: d.symbol || sym }));
+    }
+    all.sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+    return all.slice(0, limit);
+}
+
 export default router;

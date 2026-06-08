@@ -62,6 +62,7 @@ class AutonomousTrader {
         this._positionCacheTTL = 30_000; // 30s TTL for position cache
 
         this._lastSignal = null;         // Latest signal with agent confidences
+        this._lastBlockReason = null;    // Latest reason a trade was blocked (for UI)
         this._runtimeProfile = null;     // Learned Mission Control execution profile
         this._runtimeSessionId = null;   // Lifecycle journal session id
         this._lastStreamPrice = 0;       // Real-time price from WebSocket
@@ -557,23 +558,26 @@ class AutonomousTrader {
                 }
             }
 
-            // 14a. Calendar Guard — block entries within 24h of FOMC/earnings
-            try {
-                const calCheck = await calendarGuard.isEventRisk(this.symbol);
-                if (calCheck.blocked) {
-                    this._logDecision('CALENDAR', 'BLOCKED', calCheck.reason, { event: calCheck.event, hoursUntil: calCheck.hoursUntil });
-                    return;
-                }
-            } catch { /* non-fatal */ }
-
-            // 14b. Multi-timeframe confirmation — 1h + 15m must agree with signal direction
-            try {
-                const mtfCheck = await multiTimeframeFilter.confirmSignal(this.symbol, signal.action);
-                if (!mtfCheck.confirmed) {
-                    this._logDecision('MTF', 'SKIP', `Multi-TF disagreement: ${mtfCheck.reason}`, { votes: mtfCheck.votes });
-                    return;
-                }
-            } catch { /* non-fatal */ }
+            // 14a. Calendar Guard — block live entries near FOMC/earnings.
+            // Paper mode: use a tight 2h window (don't suppress learning sessions over FOMC weeks).
+            // Live mode:  use 24h window (conserve capital before major macro events).
+            if (!this.paperMode) {
+                try {
+                    const calCheck = await calendarGuard.isEventRisk(this.symbol, 24);
+                    if (calCheck.blocked) {
+                        this._logDecision('CALENDAR', 'BLOCKED', calCheck.reason, { event: calCheck.event, hoursUntil: calCheck.hoursUntil });
+                        return;
+                    }
+                } catch { /* non-fatal */ }
+            } else {
+                // Paper mode: only block within 2h of the announcement (let the engine learn)
+                try {
+                    const calCheck = await calendarGuard.isEventRisk(this.symbol, 2);
+                    if (calCheck.blocked) {
+                        this._logDecision('CALENDAR', 'WARN', `${calCheck.reason} (paper mode — continuing)`, { event: calCheck.event, hoursUntil: calCheck.hoursUntil });
+                    }
+                } catch { /* non-fatal */ }
+            }
 
             // 14c. Correlation Guard — block if new position is too correlated with existing ones
             const openSymbols = this._openPositions.map(p => p.symbol).filter(s => s !== this.symbol);
@@ -1825,6 +1829,10 @@ class AutonomousTrader {
         this._decisions[this._decisionHead] = decision;
         this._decisionHead = (this._decisionHead + 1) % this._decisions.length;
         this._decisionCount++;
+        // Track last non-HOLD blocking reason for UI status display
+        if (['SKIP', 'BLOCKED', 'FAIL', 'WARN'].includes(action) && category !== 'SYSTEM') {
+            this._lastBlockReason = { category, action, reason, timestamp: decision.timestamp };
+        }
         try {
             const evidence = marketEvidenceStore.append('autonomous_decision', decision, {
                 source: 'AutonomousTrader',
@@ -1878,8 +1886,10 @@ class AutonomousTrader {
                 confidence: this._lastSignal.confidence,
                 recommendation: this._lastSignal.recommendation,
                 regime: this._lastSignal.regime || this._lastKnownRegime,
+                reason: this._lastSignal.reason,
                 timestamp: this._lastSignal.timestamp
             } : null,
+            lastBlockReason: this._lastBlockReason || null,
             // Full per-signal breakdown from SignalLibrary (9 signals with scores + reasons)
             signalBreakdown: this._lastSignalBreakdown,
             // Adaptive signal weights (learned from outcomes)
