@@ -110,7 +110,24 @@ class AutonomousTrader {
         }
 
         const forcePaper = config?.forcePaper === true || config?.paperMode === true;
-        const brokerConnected = !!alpacaService.isConnected && !forcePaper;
+        let brokerConnected = !!alpacaService.isConnected && !forcePaper;
+
+        // If not connected but credentials exist, try to connect now (fixes startup race condition
+        // where _autoConnect fires async and hasn't finished by the time the user hits Run)
+        if (!brokerConnected && !forcePaper) {
+            const savedCreds = alpacaService.loadCredentials();
+            if (savedCreds?.apiKey && savedCreds?.apiSecret) {
+                try {
+                    console.log('[AutonomousTrader] Alpaca not connected but credentials exist — attempting connect...');
+                    await alpacaService.connect(savedCreds.apiKey, savedCreds.apiSecret, savedCreds.paperTrading, false);
+                    brokerConnected = true;
+                    console.log('[AutonomousTrader] ✅ Pre-start Alpaca connect succeeded');
+                } catch (e) {
+                    console.warn('[AutonomousTrader] Pre-start connect failed, falling back to paper:', e.message);
+                }
+            }
+        }
+
         if (!brokerConnected) {
             this.paperMode = true;
             this._paperPortfolio = { balance: 100000, positions: {}, trades: [] };

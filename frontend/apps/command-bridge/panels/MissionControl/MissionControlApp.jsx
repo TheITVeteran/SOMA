@@ -1644,6 +1644,31 @@ const MissionControlApp = ({ somaBackend, isConnected }) => {
                         }
 
                         // StrategyBrain reads live scores directly from autonomousStatus — no mutation needed
+
+                        // Keep credential status badge in sync with actual Alpaca connection state
+                        if (statusData.paperMode === false) {
+                            // Alpaca is live — ensure badge reflects this
+                            setExchangeCredentialStatus(prev => ({
+                                ...(prev || {}),
+                                alpaca_paper: true
+                            }));
+                        }
+                    }
+                }
+
+                // Refresh Alpaca credential status every ~30s so the "Internal Paper" badge
+                // clears as soon as Alpaca auto-connects after a server restart
+                if (!missionPulseConnected) {
+                    const alpacaRes = await fetch('/api/alpaca/status').catch(() => null);
+                    if (alpacaRes?.ok) {
+                        const alpacaData = await alpacaRes.json();
+                        if (alpacaData?.status) {
+                            setExchangeCredentialStatus(prev => ({
+                                ...(prev || {}),
+                                alpaca_paper: alpacaData.status.hasPaperCredentials || false,
+                                alpaca_live: alpacaData.status.hasLiveCredentials || false,
+                            }));
+                        }
                     }
                 }
             } catch (e) {
