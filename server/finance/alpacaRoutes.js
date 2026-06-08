@@ -127,6 +127,17 @@ router.get('/status', (req, res) => {
             return res.json(_statusCache);
         }
         const status = alpacaService.getStatus();
+
+        // Auto-reconnect if credentials are saved but connection dropped (e.g. startup race)
+        if (!status.connected && (status.hasPaperCredentials || status.hasLiveCredentials)) {
+            const creds = alpacaService.loadCredentials();
+            if (creds?.apiKey && creds?.apiSecret) {
+                alpacaService.connect(creds.apiKey, creds.apiSecret, creds.paperTrading, false)
+                    .then(() => { flushAlpacaStatusCache(); })
+                    .catch(e => console.warn('[Alpaca] Auto-reconnect failed:', e.message));
+            }
+        }
+
         _statusCache   = { success: true, status };
         _statusCacheTs = now;
         res.json(_statusCache);
