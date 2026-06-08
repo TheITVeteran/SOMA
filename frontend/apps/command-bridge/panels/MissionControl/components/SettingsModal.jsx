@@ -200,49 +200,20 @@ export const SettingsModal = ({ isOpen, onClose, onSaveKeys }) => {
         onClose();
     };
 
-    const clearCredentials = async (exchange) => {
-        try {
-            // Use Alpaca-specific endpoint for Alpaca variants, generic endpoint for others
-            const isAlpaca = exchange === 'alpaca_paper' || exchange === 'alpaca_live';
-            const endpoint = isAlpaca
-                ? '/api/alpaca/clear-credentials'
-                : '/api/exchange/clear-credentials';
-
-            const body = isAlpaca
-                ? { credentialType: exchange }
-                : { exchange };
-
-            const response = await fetch(endpoint, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(body)
-            });
-
-            const result = await response.json();
-            if (result.success) {
-                setSavedCredentials(prev => ({ ...prev, [exchange]: false }));
-                setEditMode(prev => ({ ...prev, [exchange]: true }));
-                onSaveKeys?.({ status: { ...savedCredentials, [exchange]: false } });
-
-                // Reset keys based on exchange
-                const defaultKeys = {
-                    alpaca_paper: { apiKey: '', secretKey: '' },
-                    alpaca_live: { apiKey: '', secretKey: '' },
-                    binance: { apiKey: '', secretKey: '', testnet: true },
-        coinbase: { apiKey: '', secretKey: '', sandbox: true },
-        kraken: { apiKey: '', secretKey: '' },
-        notifications: { discordWebhookUrl: '' }
-    };
-
-                setKeys(prev => ({
-                    ...prev,
-                    [exchange]: defaultKeys[exchange]
-                }));
-                setTestStatus({ type: 'success', message: '🔓 Credentials cleared. Enter new API keys.' });
-            }
-        } catch (error) {
-            setTestStatus({ type: 'error', message: `❌ Failed to clear credentials: ${error.message}` });
-        }
+    const startEditMode = (exchange) => {
+        // Enter edit mode locally — existing credentials stay on disk until new ones are saved.
+        // This prevents accidental key loss if the modal is closed without saving.
+        const defaultKeys = {
+            alpaca_paper: { apiKey: '', secretKey: '' },
+            alpaca_live: { apiKey: '', secretKey: '' },
+            binance: { apiKey: '', secretKey: '', testnet: true },
+            coinbase: { apiKey: '', secretKey: '', sandbox: true },
+            kraken: { apiKey: '', secretKey: '' },
+            notifications: { discordWebhookUrl: '' },
+        };
+        setEditMode(prev => ({ ...prev, [exchange]: true }));
+        setKeys(prev => ({ ...prev, [exchange]: defaultKeys[exchange] }));
+        setTestStatus({ type: 'info', message: '✏️ Enter new API keys. Old keys remain until you save.' });
     };
 
     if (!isOpen) return null;
@@ -346,7 +317,7 @@ export const SettingsModal = ({ isOpen, onClose, onSaveKeys }) => {
                                                 </div>
                                             </div>
                                             <button
-                                                onClick={() => clearCredentials(exchange.id)}
+                                                onClick={() => startEditMode(exchange.id)}
                                                 className="flex items-center space-x-2 px-3 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/30 rounded-lg text-amber-300 text-xs font-medium transition-all"
                                             >
                                                 <RefreshCw className="w-3 h-3" />

@@ -26,6 +26,8 @@ import { join, dirname } from 'path';
 const require = createRequire(import.meta.url);
 const workLedger = require('../../core/AutonomousWorkLedger.cjs');
 const provenanceGuard = require('../../core/AutonomousProvenanceGuard.cjs');
+const cognitiveThreadState = require('../../core/CognitiveThreadState.cjs');
+const presenceAwareness = require('../../core/PresenceAwarenessState.cjs');
 
 /**
  * Fast heuristic: does the text make specific concrete claims that could be hallucinated?
@@ -426,6 +428,25 @@ export function setupWebSocket(server, wss, system) {
         broker.on('alert.triggered', (envelope) => broadcast('alert_triggered', envelope.payload || envelope));
     } catch { /* non-fatal */ }
 
+    // Trade close notifications → frontend toast/banner
+    try {
+        const broker = require('../../core/MessageBroker.cjs');
+        broker.subscribe('WebSocketLoader.tradeClosed', 'trade.closed');
+        broker.on('trade.closed', (envelope) => {
+            const p = envelope.payload || envelope;
+            broadcast('trade_notification', {
+                symbol: p.symbol,
+                side: p.side,
+                pnl: p.pnl,
+                pnlPct: p.pnlPct,
+                reason: p.reason,
+                balance: p.balance,
+                mode: p.mode || 'paper',
+                timestamp: p.timestamp || Date.now(),
+            });
+        });
+    } catch { /* non-fatal */ }
+
     // Forward autonomous activity feed → frontend for live notification strip
     try {
         const broker = require('../../core/MessageBroker.cjs');
@@ -489,6 +510,14 @@ export function setupWebSocket(server, wss, system) {
     try {
         const broker = require('../../core/MessageBroker.cjs');
         broker.subscribe('WebSocketLoader.vision', 'vision.perceived');
+        broker.subscribe('WebSocketLoader.presenceIdentity', 'person_recognized');
+        broker.on('person_recognized', (envelope) => {
+            try {
+                presenceAwareness.recordIdentity(envelope.payload || envelope);
+            } catch (e) {
+                logger.warn('[PresenceAwareness] identity update failed:', e.message);
+            }
+        });
         broker.on('vision.perceived', (envelope) => {
             const p = envelope.payload || envelope;
             const analysis = p.analysis || {};
@@ -512,6 +541,19 @@ export function setupWebSocket(server, wss, system) {
                 ghostCursor: system.visionContext.ghostCursor,
                 timestamp: system.visionContext.timestamp
             });
+
+            // Presence probes are separate from normal proactive speech:
+            // one short greeting after a real return signal, with its own long cooldown.
+            try {
+                const presence = presenceAwareness.recordVision({
+                    channel: system.visionContext.channel,
+                    objects: system.visionContext.objects,
+                    timestamp: system.visionContext.timestamp
+                });
+                if (presence.probe) broadcast('soma_presence_probe', presence.probe);
+            } catch (e) {
+                logger.warn('[PresenceAwareness] vision update failed:', e.message);
+            }
 
             // ── 3. Proactive visual commentary on error dialogs ──
             // SOMA notices errors and speaks about them unprompted — only if
@@ -563,12 +605,12 @@ export function setupWebSocket(server, wss, system) {
     }, 30000);
 
     // ── Proactive Speech: SOMA speaks from her own drives ─────────────────────
-    // Every 20 minutes, checks SoulArbiter reflections + CuriosityEngine queue.
+    // Every 8 minutes, checks SoulArbiter reflections + CuriosityEngine queue.
     // Asks the brain if anything is genuinely worth saying. If not, stays quiet.
     // Never interrupts a live conversation. Rate-limited by cooldown.
     // This is the ONLY mechanism for unsolicited speech — no forced greetings.
-    const PROACTIVE_COOLDOWN_MS = 20 * 60 * 1000; // 20 min between proactive messages
-    const PROACTIVE_BOOT_DELAY_MS = 10 * 60 * 1000; // wait 10 min after boot for systems to load
+    const PROACTIVE_COOLDOWN_MS = 8 * 60 * 1000; // 8 min between autonomous thought attempts
+    const PROACTIVE_BOOT_DELAY_MS = 2 * 60 * 1000; // wait briefly after boot for systems to load
 
     const AutonomousLoop = require('../../cognitive/AutonomousLoop.cjs');
     const autonomousLoop = new AutonomousLoop({ system });
@@ -579,12 +621,52 @@ export function setupWebSocket(server, wss, system) {
 
     // Rolling window of recent proactive message fingerprints — prevents near-duplicate sends
     const _recentProactiveFingerprints = [];
+    const _recentProactiveTopics = [];
+    const _topicStopwords = new Set([
+        'about', 'after', 'again', 'better', 'between', 'circling',
+        'coming', 'could', 'doing', 'explore', 'feel',
+        'feels', 'from', 'going', 'keep', 'keeps', 'more', 'really', 'still',
+        'that', 'them', 'there', 'this', 'turning', 'understand',
+        'want', 'what', 'when', 'where', 'whether', 'with', 'without'
+    ]);
+
+    function _contentTokens(text) {
+        return new Set(
+            String(text || '').toLowerCase()
+                .match(/[a-z][a-z0-9-]{3,}/g)
+                ?.filter(token => !_topicStopwords.has(token)) || []
+        );
+    }
+
+    function _jaccard(a, b) {
+        if (!a.size || !b.size) return 0;
+        let intersection = 0;
+        for (const token of a) {
+            if (b.has(token)) intersection++;
+        }
+        return intersection / (a.size + b.size - intersection);
+    }
+
     function _isRepeat(text) {
         // Extract the first 6 words as a fingerprint
         const fp = (text || '').toLowerCase().replace(/[^a-z0-9 ]/g, '').split(/\s+/).slice(0, 6).join(' ');
         if (_recentProactiveFingerprints.includes(fp)) return true;
+        const tokens = _contentTokens(text);
+        const lower = String(text || '').toLowerCase();
+        const formulaTopic = [
+            /\bbackground tasks?\b/.test(lower) ? 'background_tasks' : '',
+            /\baurora\b/.test(lower) && /\bprometheus\b/.test(lower) ? 'aurora_prometheus' : '',
+            /\bknowledge graph\b/.test(lower) ? 'knowledge_graph' : '',
+            /\bsignal from the noise\b|\braw computation\b|\bgenuine comprehension\b/.test(lower) ? 'comprehension_gap' : ''
+        ].filter(Boolean).join('|');
+        if (_recentProactiveTopics.some(prev =>
+            _jaccard(tokens, prev.tokens) >= 0.5 ||
+            (formulaTopic && formulaTopic === prev.formulaTopic)
+        )) return true;
         _recentProactiveFingerprints.push(fp);
         if (_recentProactiveFingerprints.length > 5) _recentProactiveFingerprints.shift();
+        _recentProactiveTopics.push({ tokens, formulaTopic });
+        if (_recentProactiveTopics.length > 8) _recentProactiveTopics.shift();
         return false;
     }
 
@@ -664,6 +746,11 @@ export function setupWebSocket(server, wss, system) {
                     parts.unshift(`[RECENT VERIFIED WORK LEDGER]\n${recentWork}`);
                 }
 
+                const attentionThreadContext = cognitiveThreadState.buildContextBlock();
+                if (attentionThreadContext) {
+                    parts.unshift(attentionThreadContext);
+                }
+
                 // Items 1 & 6: Pull relationship + opinion memories so she speaks as a continuous entity
                 if (system.mnemonicArbiter?.recall) {
                     try {
@@ -672,7 +759,7 @@ export function setupWebSocket(server, wss, system) {
                             .map(x => x.content || x.text || '')
                             .filter(Boolean);
                         const [relMem, opMem] = await Promise.all([
-                            Promise.race([system.mnemonicArbiter.recall('Barry owner relationship permission told', 3), new Promise(r => setTimeout(() => r([]), 2000))]),
+                            Promise.race([system.mnemonicArbiter.recall(`${OWNER_NAME} owner relationship permission told`, 3), new Promise(r => setTimeout(() => r([]), 2000))]),
                             Promise.race([system.mnemonicArbiter.recall('opinion belief concluded view formed', 2),     new Promise(r => setTimeout(() => r([]), 2000))])
                         ]);
                         const hits = [..._norm(relMem), ..._norm(opMem)].slice(0, 4);
@@ -697,12 +784,27 @@ export function setupWebSocket(server, wss, system) {
 
                 if (!text || text.includes('[NOTHING]') || _isRepeat(text)) return;
 
+                const threadDecision = cognitiveThreadState.decide({
+                    rawText,
+                    groundedText: text,
+                    stimulus,
+                    personality
+                });
+                if (!threadDecision.shouldSpeak) return;
+
                 system._lastProactiveMs = Date.now();
                 workLedger.record({
                     type:     'proactive_update',
                     title:    'Autonomous chat update',
                     summary:  text,
-                    evidence: 'DeepSeek grounding pass',
+                    evidence: {
+                        grounding: 'DeepSeek grounding pass',
+                        threadId: threadDecision.thread?.id || null,
+                        novelty: Number((threadDecision.novelty || 0).toFixed(3)),
+                        affect: threadDecision.affect || null,
+                        possibleAction: threadDecision.actionHint || null
+                    },
+                    nextStep: threadDecision.actionHint?.label || null,
                     status:   'reported',
                     source:   'WebSocketProactiveLoop'
                 });
@@ -716,7 +818,18 @@ export function setupWebSocket(server, wss, system) {
                         system.curiosityEngine.explorationHistory.set(key, prior + 1);
                     }
                 }
-                broadcast('pulse', { type: 'soma_proactive', message: text });
+                broadcast('pulse', {
+                    type: 'soma_proactive',
+                    message: text,
+                    cognitiveThread: {
+                        id: threadDecision.thread?.id || null,
+                        focus: threadDecision.thread?.focus || null,
+                        decision: threadDecision.reason,
+                        novelty: Number((threadDecision.novelty || 0).toFixed(3)),
+                        affect: threadDecision.affect || null,
+                        possibleAction: threadDecision.actionHint || null
+                    }
+                });
                 console.log(`[SOMA] 💭 Proactive (RTC+Ground): "${text.substring(0, 80)}"`);
 
             } catch (err) {
@@ -818,7 +931,25 @@ export function setupWebSocket(server, wss, system) {
                     // User presence signal — lets SocialImpulseDaemon know the user is actively on-page
                     try {
                         const broker = require('../../core/MessageBroker.cjs');
-                        broker.publish('WebSocketLoader', 'user.interaction', { timestamp: payload?.timestamp || Date.now(), source: 'frontend' }).catch(() => {});
+                        const timestamp = payload?.timestamp || Date.now();
+                        broker.publish('user.interaction', { timestamp, source: 'frontend' }).catch(() => {});
+                        const presence = presenceAwareness.recordUserActivity({ timestamp });
+                        if (presence.probe) broadcast('soma_presence_probe', presence.probe);
+                    } catch { /* non-fatal */ }
+                    return;
+                }
+
+                if (type === 'presence_identity') {
+                    try {
+                        const name = String(payload?.name || '').trim().slice(0, 80);
+                        if (name && /^[\p{L}\s'-]{2,80}$/u.test(name)) {
+                            presenceAwareness.recordIdentity({
+                                name,
+                                confidence: Number(payload?.confidence || 0.8),
+                                source: payload?.source || 'frontend',
+                                timestamp: payload?.timestamp || Date.now()
+                            });
+                        }
                     } catch { /* non-fatal */ }
                     return;
                 }

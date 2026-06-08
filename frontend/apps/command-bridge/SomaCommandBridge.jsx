@@ -1233,6 +1233,8 @@ const SomaCommandBridge = () => {
   useEffect(() => { isTalkingRef.current = isTalking; }, [isTalking]);
   const isListeningRef = useRef(false);
   useEffect(() => { isListeningRef.current = isListening; }, [isListening]);
+  const lastTranscriptRef = useRef('');
+  useEffect(() => { lastTranscriptRef.current = lastTranscript; }, [lastTranscript]);
   const pendingGreetingRef = useRef(null); // queues greeting if orb not ready yet
 
   useEffect(() => {
@@ -1249,6 +1251,43 @@ const SomaCommandBridge = () => {
     somaBackend.on('soma_proactive', onProactiveSpeak);
     return () => somaBackend.off('soma_proactive', onProactiveSpeak);
   }, []);
+
+  // Presence probe — only when wake/presence mode is armed, and only for backend-gated return events.
+  useEffect(() => {
+    let localCooldownUntil = 0;
+    const onPresenceProbe = async (payload = {}) => {
+      const presenceArmed =
+        localStorage.getItem('soma_wakeword_enabled') === 'true' ||
+        localStorage.getItem('soma_presence_probe_enabled') === 'true';
+      if (!presenceArmed || activeModule !== 'orb') return;
+
+      const now = Date.now();
+      if (now < localCooldownUntil) return;
+      localCooldownUntil = now + Math.max(10 * 60 * 1000, Number(payload.listenWindowMs || 25000));
+
+      if (isTalkingRef.current || isListeningRef.current) return;
+
+      const wasConnected = isOrbConnectedRef.current;
+      if (!wasConnected) {
+        try { await connectOrb(); } catch { return; }
+      }
+
+      const beforeTranscript = lastTranscriptRef.current;
+      const text = payload.message || 'Hello? I thought someone was there. How are you?';
+      if (speakTextRef.current) await speakTextRef.current(text);
+
+      // If this probe opened the mic by itself and nobody answers, close it again.
+      if (!wasConnected) {
+        setTimeout(() => {
+          if (lastTranscriptRef.current === beforeTranscript && !isTalkingRef.current && !isListeningRef.current) {
+            disconnectOrb();
+          }
+        }, Number(payload.listenWindowMs || 25000));
+      }
+    };
+    somaBackend.on('soma_presence_probe', onPresenceProbe);
+    return () => somaBackend.off('soma_presence_probe', onPresenceProbe);
+  }, [activeModule, connectOrb, disconnectOrb]);
 
   // --- AUTO-ENGAGEMENT REMOVED (User Directive) ---
   // Disconnect audio pipeline when navigating away from orb tab — mic should not run in background
@@ -1716,6 +1755,22 @@ const SomaCommandBridge = () => {
         { id: Date.now(), type: 'success', message: summary, timestamp: Date.now() },
         ...prev.slice(0, 49)
       ]);
+    });
+
+    // Trade close P&L notifications
+    somaBackend.on('trade_notification', (payload) => {
+      const { symbol, side, pnl, pnlPct, reason, balance, mode } = payload || {};
+      if (!symbol) return;
+      const isWin = pnl >= 0;
+      const icon = isWin ? '📈' : '📉';
+      const sign = isWin ? '+' : '';
+      const modeTag = mode === 'paper' ? '[PAPER] ' : '';
+      const msg = `${icon} ${modeTag}${symbol} ${(side || '').toUpperCase()} closed: ${sign}$${Math.abs(pnl || 0).toFixed(2)} (${sign}${(pnlPct || 0).toFixed(2)}%) | ${reason}`;
+      if (isWin) {
+        toast.success(msg, { theme: 'dark', autoClose: 8000 });
+      } else {
+        toast.error(msg, { theme: 'dark', autoClose: 8000 });
+      }
     });
 
     // Repo file change — show contextual "Ask SOMA" prompt
@@ -2766,7 +2821,7 @@ const SomaCommandBridge = () => {
                     <div className="text-[11px] font-mono text-zinc-300">
                       {isTalking ? 'Speaking through voice chain'
                         : isThinking ? 'Reasoning on the last transmission'
-                        : isListening ? 'Listening for Barry'
+                        : isListening ? 'Listening for you'
                         : isOrbConnected ? 'Linked and waiting'
                         : 'Presence idle'}
                     </div>

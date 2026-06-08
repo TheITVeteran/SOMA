@@ -93,6 +93,12 @@ class AutonomousTrader {
             grossLosses: 0,
         };
         this._recentTrades = []; // rolling 20-trade buffer for alpha decay detection
+        this._lastSignalBreakdown = null; // full per-signal scores from last SignalLibrary run
+        this._activeTradeConfig = {  // ATR-based dynamic stops, updated each cycle
+            stopLossPct: 0.02,
+            takeProfitPct: 0.06,
+            trailingStopPct: 0.03,
+        };
     }
 
     /**
@@ -376,6 +382,9 @@ class AutonomousTrader {
             const latestBar = bars[bars.length - 1];
             const currentPrice = latestBar.close;
             this._adjustInterval(bars); // shorten in high volatility, lengthen when flat
+            // Update dynamic stop/target config from current ATR + regime (used by _managePosition)
+            const atrPct = this._computeATR(bars);
+            this._activeTradeConfig = this._getRegimeConfig(currentRegime || this._lastKnownRegime, atrPct);
             this._recordRuntimeLifecycle('data_quality', 'passed', {
                 bars: bars.length,
                 price: currentPrice,
@@ -654,6 +663,9 @@ class AutonomousTrader {
                 : techResult.inAgreement >= 4 ? 0.05 : 0;
             const signalConfidence = Math.min(0.95, Math.abs(composite) * 1.5 + agreementBonus);
 
+            // Store live per-signal scores so status endpoint can expose them to the UI
+            this._lastSignalBreakdown = techResult.signals || null;
+
             return {
                 strategy:  {
                     recommendation,
@@ -662,8 +674,8 @@ class AutonomousTrader {
                     signals:      techResult.signals,
                     inAgreement:  techResult.inAgreement,
                 },
-                risk:      { score: rsi > 70 ? 30 : rsi < 30 ? 75 : 55, assessment: recommendation.toLowerCase() },
-                sentiment: { score: sentimentScore, altData: altResult },
+                risk:      { score: rsi > 70 ? 30 : rsi < 30 ? 75 : 55, assessment: recommendation.toLowerCase(), rsi },
+                sentiment: { score: sentimentScore, altData: altResult, ivScore: ivResult?.score ?? null },
                 quant:     { strategy: 'SignalLibrary+AltData', composite, signals: techResult.signals },
             };
         } catch (e) {
@@ -985,6 +997,50 @@ class AutonomousTrader {
     }
 
     /**
+     * Compute True Average Range (ATR) as a fraction of current price.
+     * Returns e.g. 0.012 meaning 1.2% average true range.
+     */
+    _computeATR(bars, period = 14) {
+        if (!bars || bars.length < period + 1) return 0.015; // safe default ~1.5%
+        const trueRanges = [];
+        for (let i = bars.length - period; i < bars.length; i++) {
+            const high = bars[i].high, low = bars[i].low, prevClose = bars[i - 1].close;
+            trueRanges.push(Math.max(high - low, Math.abs(high - prevClose), Math.abs(low - prevClose)));
+        }
+        const atr = trueRanges.reduce((s, v) => s + v, 0) / trueRanges.length;
+        const price = bars[bars.length - 1].close || 1;
+        return atr / price;
+    }
+
+    /**
+     * Derive dynamic stop/target config from regime + current ATR.
+     * Multipliers are tuned per market structure:
+     *   RANGING:  tighter targets (mean-reversion — price returns to mean quickly)
+     *   TRENDING: wider stops (ride the wave, don't get shaken out)
+     *   VOLATILE: even tighter stops (spike protection)
+     */
+    _getRegimeConfig(regime, atrPct) {
+        const atr = atrPct || 0.015;
+        const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
+        let stop, target, trail;
+        if (regime && (regime.includes('TRENDING') || regime === 'TRENDING_BULL' || regime === 'TRENDING_BEAR')) {
+            stop  = clamp(2.0 * atr, 0.010, 0.050);
+            target = stop * 4.0;
+            trail  = stop * 1.5;
+        } else if (regime === 'VOLATILE' || regime?.includes?.('VOLATILE')) {
+            stop  = clamp(1.0 * atr, 0.008, 0.040);
+            target = stop * 2.0;
+            trail  = stop * 1.0;
+        } else {
+            // RANGING or unknown: tight mean-reversion targets
+            stop  = clamp(1.5 * atr, 0.005, 0.025);
+            target = stop * 2.5;
+            trail  = stop * 1.2;
+        }
+        return { stopLossPct: stop, takeProfitPct: target, trailingStopPct: trail };
+    }
+
+    /**
      * Record the result of a closed trade for Kelly + alpha decay tracking
      */
     _recordTradeResult(pnl) {
@@ -1224,7 +1280,7 @@ class AutonomousTrader {
                 } catch (logErr) {
                     console.warn('[AutonomousTrader] Paper SQLite entry failed:', logErr.message);
                 }
-                this._paperPortfolio.positions[this.symbol] = { side: 'long', qty: filledQty, entryPrice: fillPrice, tradeId, fees: fill.fee };
+                this._paperPortfolio.positions[this.symbol] = { side: 'long', qty: filledQty, entryPrice: fillPrice, tradeId, fees: fill.fee, openedAt: Date.now() };
                 this._recordRuntimeLifecycle('paper_order_fill', 'open', {
                     tradeId,
                     orderId: mockOrder.id,
@@ -1300,7 +1356,7 @@ class AutonomousTrader {
                 } catch (logErr) {
                     console.warn('[AutonomousTrader] Paper SQLite entry failed:', logErr.message);
                 }
-                this._paperPortfolio.positions[this.symbol] = { side: 'short', qty: filledQty, entryPrice: fillPrice, tradeId, fees: fill.fee };
+                this._paperPortfolio.positions[this.symbol] = { side: 'short', qty: filledQty, entryPrice: fillPrice, tradeId, fees: fill.fee, openedAt: Date.now() };
                 this._recordRuntimeLifecycle('paper_order_fill', 'open', {
                     tradeId,
                     orderId: mockOrder.id,
@@ -1339,7 +1395,8 @@ class AutonomousTrader {
             tradeId: pos.tradeId || null,
             entryPrice: pos.entryPrice, currentPrice: fillPrice,
             unrealizedPnl: 0, unrealizedPnlPct: 0,
-            marketValue: pos.qty * fillPrice
+            marketValue: pos.qty * fillPrice,
+            openedAt: pos.openedAt || null,
         }));
         this._positionCacheTime = 0;
 
@@ -1362,7 +1419,8 @@ class AutonomousTrader {
                 currentPrice: pos.entryPrice,  // Updated live by _onTradeUpdate when stream available
                 unrealizedPnl: 0,
                 unrealizedPnlPct: 0,
-                marketValue: pos.qty * pos.entryPrice
+                marketValue: pos.qty * pos.entryPrice,
+                openedAt: pos.openedAt || null,
             }));
             return;
         }
@@ -1408,7 +1466,20 @@ class AutonomousTrader {
         }
 
         const sym = position.symbol;
-        const trailingStopPct = this.config.trailingStopPct || 0.03;
+        const cfg = this._activeTradeConfig;
+        const trailingStopPct = cfg.trailingStopPct || 0.03;
+
+        // Time-based exit: close stale positions after maxPositionAgeMs (default 3h)
+        const maxAgeMs = this.config.maxPositionAgeMs || 3 * 60 * 60 * 1000;
+        const openedAt = position.openedAt || 0;
+        if (openedAt && (Date.now() - openedAt) > maxAgeMs) {
+            const ageMin = Math.round((Date.now() - openedAt) / 60000);
+            this._logDecision('MANAGE', 'TIME_EXIT',
+                `Time exit: position open ${ageMin}m (limit ${Math.round(maxAgeMs/60000)}m)`, { position, currentPrice, ageMin });
+            this._positionHighWater.delete(sym);
+            await this._closePosition(position, 'TIME_EXIT');
+            return true;
+        }
 
         // Update high-water mark when position is profitable
         if (pnlPct > 0) {
@@ -1418,7 +1489,7 @@ class AutonomousTrader {
         const highWater = this._positionHighWater.get(sym) || 0;
 
         // Breakeven stop: once we've hit 50% of the take-profit target, protect principal
-        const breakevenThreshold = this.config.takeProfitPct * 0.5;
+        const breakevenThreshold = cfg.takeProfitPct * 0.5;
         if (highWater >= breakevenThreshold && pnlPct <= 0.001) {
             this._logDecision('MANAGE', 'TRAILING_STOP',
                 `Breakeven stop: gave back gains from peak +${(highWater*100).toFixed(1)}%`, { position, currentPrice, highWater });
@@ -1439,7 +1510,7 @@ class AutonomousTrader {
         }
 
         // Hard take-profit (still useful as a ceiling)
-        if (pnlPct >= this.config.takeProfitPct) {
+        if (pnlPct >= cfg.takeProfitPct) {
             this._logDecision('MANAGE', 'TAKE_PROFIT',
                 `Take profit: +${(pnlPct * 100).toFixed(1)}%`, { position, currentPrice });
             this._positionHighWater.delete(sym);
@@ -1448,7 +1519,7 @@ class AutonomousTrader {
         }
 
         // Hard stop loss
-        if (pnlPct <= -this.config.stopLossPct) {
+        if (pnlPct <= -cfg.stopLossPct) {
             this._logDecision('MANAGE', 'STOP_LOSS',
                 `Stop loss: ${(pnlPct * 100).toFixed(1)}%`, { position, currentPrice });
             this._positionHighWater.delete(sym);
@@ -1525,6 +1596,19 @@ class AutonomousTrader {
                     });
                 console.log(`[AutonomousTrader] 📄 PAPER Closed ${position.symbol}: ${reason} (P&L: $${pnl.toFixed(2)}, Balance: $${this._paperPortfolio.balance.toFixed(2)})`);
                 flushPerformanceSummaryCache(); // dashboard reflects new P&L immediately
+                // Broadcast trade close for WS dashboard notifications
+                try {
+                    messageBroker.publish('trade.closed', {
+                        symbol: position.symbol,
+                        side: pos.side,
+                        pnl: parseFloat(pnl.toFixed(2)),
+                        pnlPct: parseFloat((pnlPct * 100).toFixed(2)),
+                        reason,
+                        balance: parseFloat(this._paperPortfolio.balance.toFixed(2)),
+                        mode: 'paper',
+                        timestamp: Date.now(),
+                    });
+                } catch (_) {}  // non-fatal
             }
             return;
         }
@@ -1769,8 +1853,16 @@ class AutonomousTrader {
                 action: this._lastSignal.action,
                 confidence: this._lastSignal.confidence,
                 recommendation: this._lastSignal.recommendation,
+                regime: this._lastSignal.regime || this._lastKnownRegime,
                 timestamp: this._lastSignal.timestamp
             } : null,
+            // Full per-signal breakdown from SignalLibrary (9 signals with scores + reasons)
+            signalBreakdown: this._lastSignalBreakdown,
+            // Adaptive signal weights (learned from outcomes)
+            signalWeights: signalLibrary.getWeights(),
+            signalLibraryStats: signalLibrary.getStats(),
+            // Active trade config (ATR-based, changes each cycle)
+            activeTradeConfig: this._activeTradeConfig,
             missionControlRuntime: missionControlRuntime.getStatus(),
             runtimeProfile: this._runtimeProfile,
             guardrailsState: global.SOMA_TRADING?.guardrails?.getStatus() || null

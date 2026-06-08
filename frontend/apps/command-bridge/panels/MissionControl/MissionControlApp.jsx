@@ -139,18 +139,53 @@ const PortfolioPanel = ({ riskMetrics, positions = [], orders = [], trades = [],
 
 const CAPITAL_PRESETS = [1000, 5000, 10000, 25000, 50000, 100000];
 
-const TradeStrategyGate = ({ symbol, presetId, isDemoMode, dataSource, running, onRun, onSkip, onSettings }) => {
+const TradeStrategyGate = ({ symbol, presetId, isDemoMode, dataSource, running, onRun, onSkip, onSettings, onPresetChange }) => {
     const [capital, setCapital] = React.useState(10000);
     const [positionPct, setPositionPct] = React.useState(10);
     const [customCapital, setCustomCapital] = React.useState('');
     const [useCustom, setUseCustom] = React.useState(false);
 
+    // Determine asset type from symbol for preset filtering
+    const symbolAssetType = React.useMemo(() => {
+        if (!symbol) return AssetType.CRYPTO;
+        if (symbol.includes('-PERP') || symbol.includes('1!')) return AssetType.FUTURES;
+        if (symbol.includes('-USD') || symbol.includes('-USDT') || symbol.includes('-BTC')) return AssetType.CRYPTO;
+        return AssetType.STOCKS;
+    }, [symbol]);
+
+    // Auto-select best preset for symbol type on mount
+    const autoPreset = React.useMemo(() => {
+        const compatible = STRATEGY_PRESETS.filter(p => p.assetTypes?.includes(symbolAssetType));
+        if (symbolAssetType === AssetType.CRYPTO) return compatible.find(p => p.id === 'BTC_NATIVE') || compatible[0];
+        if (symbolAssetType === AssetType.STOCKS) return compatible.find(p => p.id === 'BALANCED') || compatible[0];
+        return compatible.find(p => p.id === 'HIGH_PROBABILITY') || compatible[0];
+    }, [symbolAssetType]);
+
+    const [selectedPreset, setSelectedPreset] = React.useState(() =>
+        STRATEGY_PRESETS.find(p => p.id === presetId) || autoPreset
+    );
+
+    // Sync if parent changes presetId externally
+    React.useEffect(() => {
+        const match = STRATEGY_PRESETS.find(p => p.id === presetId);
+        if (match && match.id !== selectedPreset?.id) setSelectedPreset(match);
+    }, [presetId]);
+
+    const handleSelectPreset = (preset) => {
+        setSelectedPreset(preset);
+        onPresetChange?.(preset);
+    };
+
+    const compatiblePresets = STRATEGY_PRESETS.filter(p => p.assetTypes?.includes(symbolAssetType));
+
     const effectiveCapital = useCustom ? (parseFloat(customCapital) || 10000) : capital;
     const effectivePositionPct = Math.min(50, Math.max(1, positionPct));
 
+    const RISK_COLOR = { LOW: 'text-emerald-400', MED: 'text-amber-400', HIGH: 'text-orange-400', EXTREME: 'text-rose-400', ADAPTIVE: 'text-cyan-400' };
+
     return (
-    <div className="absolute inset-0 z-[260] flex items-center justify-center bg-black/82 backdrop-blur-md p-6">
-        <div className="w-full max-w-xl rounded-2xl border border-cyan-500/25 bg-[#101116]/95 shadow-2xl shadow-cyan-950/40 overflow-hidden">
+    <div className="absolute inset-0 z-[260] flex items-center justify-center bg-black/82 backdrop-blur-md p-4">
+        <div className="w-full max-w-2xl rounded-2xl border border-cyan-500/25 bg-[#101116]/95 shadow-2xl shadow-cyan-950/40 overflow-hidden max-h-[95vh] overflow-y-auto">
             <div className="border-b border-white/10 bg-cyan-500/8 p-5">
                 <div className="flex items-center gap-3">
                     <div className="h-10 w-10 rounded-xl border border-cyan-400/30 bg-cyan-400/10 flex items-center justify-center">
@@ -166,14 +201,10 @@ const TradeStrategyGate = ({ symbol, presetId, isDemoMode, dataSource, running, 
                 </p>
             </div>
             <div className="p-5">
-                <div className="grid grid-cols-2 gap-2 text-xs">
+                <div className="grid grid-cols-3 gap-2 text-xs">
                     <div className="rounded border border-white/5 bg-black/35 p-3">
                         <div className="text-[9px] uppercase tracking-wider text-zinc-600">Target</div>
                         <div className="mt-1 font-mono font-bold text-white">{symbol}</div>
-                    </div>
-                    <div className="rounded border border-white/5 bg-black/35 p-3">
-                        <div className="text-[9px] uppercase tracking-wider text-zinc-600">Strategy Pack</div>
-                        <div className="mt-1 font-mono font-bold text-white">{presetId}</div>
                     </div>
                     <div className="rounded border border-white/5 bg-black/35 p-3">
                         <div className="text-[9px] uppercase tracking-wider text-zinc-600">Execution</div>
@@ -183,6 +214,60 @@ const TradeStrategyGate = ({ symbol, presetId, isDemoMode, dataSource, running, 
                         <div className="text-[9px] uppercase tracking-wider text-zinc-600">Market Data</div>
                         <div className={`mt-1 font-bold ${dataSource === 'REAL' ? 'text-emerald-300' : dataSource === 'SIMULATION' ? 'text-amber-300' : 'text-zinc-400'}`}>{dataSource || 'CONNECTING'}</div>
                     </div>
+                </div>
+
+                {/* Protocol / Preset Selector */}
+                <div className="mt-3 rounded border border-cyan-500/15 bg-cyan-950/20 p-3">
+                    <div className="mb-2 flex items-center justify-between">
+                        <div className="text-[9px] font-bold uppercase tracking-widest text-cyan-600">Active Protocol</div>
+                        <div className="text-[9px] text-zinc-600 uppercase tracking-wider">{compatiblePresets.length} compatible with {symbolAssetType}</div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-1.5">
+                        {compatiblePresets.map(preset => (
+                            <button
+                                key={preset.id}
+                                onClick={() => handleSelectPreset(preset)}
+                                className={`rounded border px-2.5 py-2 text-left transition-all ${
+                                    selectedPreset?.id === preset.id
+                                        ? 'border-cyan-400/60 bg-cyan-400/10 ring-1 ring-cyan-400/30'
+                                        : 'border-white/5 bg-black/25 hover:border-white/15 hover:bg-black/40'
+                                }`}
+                            >
+                                <div className="flex items-center justify-between mb-0.5">
+                                    <span className={`text-[10px] font-bold ${selectedPreset?.id === preset.id ? 'text-cyan-300' : 'text-zinc-300'}`}>{preset.name}</span>
+                                    <span className={`text-[8px] font-bold uppercase ${RISK_COLOR[preset.riskProfile] || 'text-zinc-500'}`}>{preset.riskProfile}</span>
+                                </div>
+                                <div className="text-[9px] text-zinc-600 leading-tight">{preset.description}</div>
+                            </button>
+                        ))}
+                    </div>
+                    {selectedPreset?.config && (
+                        <div className="mt-2 grid grid-cols-4 gap-1">
+                            <div className="bg-black/30 rounded p-1.5 text-center border border-white/5">
+                                <div className="text-[8px] text-zinc-600 uppercase mb-0.5">Min Conf</div>
+                                <div className="text-[10px] font-mono text-cyan-300">{(selectedPreset.config.minConfidence * 100).toFixed(0)}%</div>
+                            </div>
+                            <div className="bg-black/30 rounded p-1.5 text-center border border-white/5">
+                                <div className="text-[8px] text-zinc-600 uppercase mb-0.5">Take Profit</div>
+                                <div className="text-[10px] font-mono text-emerald-400">{(selectedPreset.config.takeProfitPct * 100).toFixed(0)}%</div>
+                            </div>
+                            <div className="bg-black/30 rounded p-1.5 text-center border border-white/5">
+                                <div className="text-[8px] text-zinc-600 uppercase mb-0.5">Stop Loss</div>
+                                <div className="text-[10px] font-mono text-rose-400">{(selectedPreset.config.stopLossPct * 100).toFixed(0)}%</div>
+                            </div>
+                            <div className="bg-black/30 rounded p-1.5 text-center border border-white/5">
+                                <div className="text-[8px] text-zinc-600 uppercase mb-0.5">Cooldown</div>
+                                <div className="text-[10px] font-mono text-zinc-400">{selectedPreset.config.cooldownSec}s</div>
+                            </div>
+                        </div>
+                    )}
+                    {selectedPreset && (
+                        <div className="mt-1.5 flex flex-wrap gap-1">
+                            {selectedPreset.strategies?.map(s => (
+                                <span key={s.id} className="px-1.5 py-0.5 rounded text-[8px] bg-cyan-950/50 border border-cyan-500/20 text-cyan-400/80">{s.name}</span>
+                            ))}
+                        </div>
+                    )}
                 </div>
 
                 {/* Allocation Controls */}
@@ -237,7 +322,7 @@ const TradeStrategyGate = ({ symbol, presetId, isDemoMode, dataSource, running, 
                             Skip Strategy
                         </button>
                     </div>
-                    <button onClick={() => onRun({ capital: effectiveCapital, maxPositionPct: effectivePositionPct / 100 })} disabled={running}
+                    <button onClick={() => onRun({ capital: effectiveCapital, maxPositionPct: effectivePositionPct / 100, preset: selectedPreset })} disabled={running}
                         className="rounded-lg bg-cyan-400 px-5 py-2.5 text-sm font-black uppercase tracking-wide text-black hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-60">
                         {running ? 'Running Preflight...' : 'Run Trade Strategy'}
                     </button>
@@ -1558,60 +1643,7 @@ const MissionControlApp = ({ somaBackend, isConnected }) => {
                             }));
                         }
 
-                        // Update StrategyBrain cards with REAL position data from AutonomousTrader
-                        {
-                            const ac = statusData.agentConfidences || {};
-                            const openPos = statusData.openPositions || [];
-                            const decisions = statusData._latestDecisions || [];
-                            const totalEquity = riskMetrics.equity || riskMetrics.initialBalance || 1;
-
-                            setActiveStrategies(prev => prev.map(s => {
-                                // Find positions that belong to this strategy
-                                const stratPos = openPos.filter(p =>
-                                    p.strategy === s.id ||
-                                    p.strategy === s.name ||
-                                    (p.strategy || '').toLowerCase().includes((s.id || '').toLowerCase()) ||
-                                    (p.strategy || '').toLowerCase().includes((s.name || '').split(' ')[0].toLowerCase())
-                                );
-
-                                // Real allocation = market value of positions / total equity
-                                const stratMarketValue = stratPos.reduce((sum, p) => sum + (p.marketValue || 0), 0);
-                                const realAllocation = totalEquity > 0
-                                    ? Math.min(100, Math.round((stratMarketValue / totalEquity) * 100))
-                                    : s.allocation;
-
-                                // Real P&L = unrealized P&L on open positions for this strategy
-                                const stratPnl = stratPos.reduce((sum, p) => sum + (p.unrealizedPnl || 0), 0);
-
-                                // Is this strategy actively holding positions?
-                                const isActive = stratPos.length > 0;
-
-                                // Last execution: most recent decision for this strategy
-                                const lastDec = decisions.find(d =>
-                                    d.strategy === s.id || d.strategy === s.name ||
-                                    (d.strategy || '').toLowerCase().includes((s.id || '').toLowerCase())
-                                );
-                                const lastExec = lastDec
-                                    ? new Date(lastDec.timestamp).toLocaleTimeString()
-                                    : s.lastExecution;
-
-                                // Confidence from AI brain signals (keep existing logic)
-                                let conf = s.confidence;
-                                if (s.id === 'tech' || s.id === 'momentum' || s.id === 'market_structure') conf = Math.round((ac.technical || 0) * 100) || conf;
-                                else if (s.id === 'director' || s.id === 'strategist' || s.id === 'vol_regime') conf = Math.round((ac.strategy || 0) * 100) || conf;
-                                else if (s.id === 'risk') conf = Math.round((ac.risk || 0) * 100) || conf;
-                                else if (s.id === 'sentiment') conf = Math.round((ac.sentiment || 0) * 100) || conf;
-
-                                return {
-                                    ...s,
-                                    confidence: conf,
-                                    active: isActive || s.active, // keep active if preset says so
-                                    allocation: isActive ? Math.max(1, realAllocation) : s.allocation,
-                                    pnl: isActive ? Math.round(stratPnl * 100) / 100 : s.pnl,
-                                    lastExecution: lastExec
-                                };
-                            }));
-                        }
+                        // StrategyBrain reads live scores directly from autonomousStatus — no mutation needed
                     }
                 }
             } catch (e) {
@@ -1793,7 +1825,7 @@ const MissionControlApp = ({ somaBackend, isConnected }) => {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     symbol: selectedSymbol,
-                    preset: currentPresetId,
+                    preset: allocation?.preset?.id || currentPresetId,
                     thesisId: thesisForStart.id,
                     config: {
                         forcePaper: isDemoMode,
@@ -2150,11 +2182,13 @@ const MissionControlApp = ({ somaBackend, isConnected }) => {
                     dataSource={visibleMarketStatus?.source || dataSource}
                     running={isTrainingLoading}
                     onSettings={() => setIsSettingsOpen(true)}
+                    onPresetChange={handlePresetSelect}
                     onSkip={() => {
                         setTradeStrategyGateSkipped(true);
                         addToast('Strategy preflight skipped. Manual Mission Control buttons are available.', 'info');
                     }}
                     onRun={async (allocation) => {
+                        if (allocation?.preset) handlePresetSelect(allocation.preset);
                         const started = await startAutonomousSession({ requireBrokerCheck: true, source: 'run trade strategy', allocation });
                         if (started) setTradeStrategyGateSkipped(true);
                     }}
@@ -2349,7 +2383,7 @@ const MissionControlApp = ({ somaBackend, isConnected }) => {
                                         <LifecycleJournalPanel />
                                     </div>
                                 ) : (
-                                    <StrategyBrain strategies={activeStrategies} learnedPlaybook={learnedPlaybook} missionRuntime={missionRuntime} />
+                                    <StrategyBrain strategies={activeStrategies} autonomousStatus={autonomousStatus} learnedPlaybook={learnedPlaybook} missionRuntime={missionRuntime} />
                                 )}
                             </div>
                         </div>

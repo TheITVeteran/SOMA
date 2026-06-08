@@ -77,171 +77,213 @@ def generate_signal(row):
 
     return "FLAT"`;
 
+/**
+ * PRESET_CONFIGS — mirrors PRESET_CONFIGS in server/finance/autonomousTrader.js exactly.
+ * These are the REAL trading parameters the engine uses. Keep in sync.
+ */
+export const PRESET_CONFIGS = {
+    BALANCED:            { minConfidence: 0.60, maxPositionPct: 0.10, takeProfitPct: 0.06, stopLossPct: 0.02, cooldownSec: 120 },
+    BTC_NATIVE:          { minConfidence: 0.60, maxPositionPct: 0.15, takeProfitPct: 0.08, stopLossPct: 0.03, cooldownSec: 180 },
+    MICRO_CHALLENGE:     { minConfidence: 0.55, maxPositionPct: 0.05, takeProfitPct: 0.02, stopLossPct: 0.01, cooldownSec: 30 },
+    MICRO:               { minConfidence: 0.55, maxPositionPct: 0.05, takeProfitPct: 0.02, stopLossPct: 0.01, cooldownSec: 30 },
+    YOLO:                { minConfidence: 0.45, maxPositionPct: 0.30, takeProfitPct: 0.15, stopLossPct: 0.05, cooldownSec: 60 },
+    CONSERVATIVE:        { minConfidence: 0.80, maxPositionPct: 0.05, takeProfitPct: 0.04, stopLossPct: 0.01, cooldownSec: 300 },
+    HIGH_PROBABILITY:    { minConfidence: 0.85, maxPositionPct: 0.05, takeProfitPct: 0.05, stopLossPct: 0.01, cooldownSec: 300 },
+    STOCKS_EARNINGS:     { minConfidence: 0.70, maxPositionPct: 0.08, takeProfitPct: 0.10, stopLossPct: 0.03, cooldownSec: 240 },
+    STOCKS_SWING:        { minConfidence: 0.65, maxPositionPct: 0.10, takeProfitPct: 0.08, stopLossPct: 0.02, cooldownSec: 300 },
+    STOCKS_MEME:         { minConfidence: 0.50, maxPositionPct: 0.05, takeProfitPct: 0.20, stopLossPct: 0.05, cooldownSec: 60 },
+    FUTURES_GRID:        { minConfidence: 0.55, maxPositionPct: 0.10, takeProfitPct: 0.03, stopLossPct: 0.01, cooldownSec: 30 },
+    FUTURES_PERP:        { minConfidence: 0.60, maxPositionPct: 0.12, takeProfitPct: 0.05, stopLossPct: 0.02, cooldownSec: 90 },
+    FUTURES_ES:          { minConfidence: 0.65, maxPositionPct: 0.08, takeProfitPct: 0.04, stopLossPct: 0.01, cooldownSec: 60 },
+    FUTURES_COMMODITIES: { minConfidence: 0.65, maxPositionPct: 0.08, takeProfitPct: 0.05, stopLossPct: 0.02, cooldownSec: 180 },
+};
+
+/**
+ * Agent role definitions — each agent maps to a real data source in the live engine.
+ * `dataSource` tells StrategyBrain where to pull the live score for that agent.
+ *
+ * All agents are powered by the same 9-signal SignalLibrary ensemble. The engine
+ * doesn't run separate processes — instead, each agent "role" reads a specific
+ * slice of the ensemble output so the card shows real numbers, not stubs.
+ */
+const AGENTS = {
+    // Core roles present in every preset
+    SIGNAL_ENSEMBLE: {
+        id: 'ensemble', name: 'Signal Ensemble',
+        dataSource: 'agents.strategy',
+        description: 'Composite score from all 9 active signals (RSI, SMA, MACD, Bollinger, Momentum, Breakout, VPT, Microstructure, VolSurge). Score drives BUY/SELL/HOLD.',
+    },
+    RISK_GUARDIAN: {
+        id: 'risk', name: 'Risk Guardian',
+        dataSource: 'agents.risk',
+        description: 'Live RSI-based overbought/oversold gate + guardrail checks (max drawdown, position count, cooldown). Blocks trades that violate risk config.',
+    },
+    SENTIMENT: {
+        id: 'sentiment', name: 'Market Sentiment',
+        dataSource: 'agents.sentiment',
+        description: 'Alt-data feed (news, social, options flow) blended with Options IV signal. Shifts ensemble weight up to ±20% when external sentiment is strong.',
+    },
+    EXECUTION: {
+        id: 'strategist', name: 'Execution Engine',
+        dataSource: 'stats.execution',
+        description: 'Tracks live session outcomes: win rate, session P&L, gross wins/losses. Score = rolling win rate from last 20 closed trades.',
+    },
+    // Signal-group sub-roles
+    MEAN_REVERSION: {
+        id: 'mean_rev', name: 'Mean Reversion',
+        dataSource: 'signals.rsi+bollinger',
+        description: 'RSI oversold/overbought + Bollinger Band deviation. Scores highest when price is stretched and likely to snap back.',
+    },
+    TREND_FOLLOW: {
+        id: 'trend', name: 'Trend Follow',
+        dataSource: 'signals.sma+momentum+macd',
+        description: 'SMA crossover + momentum + MACD histogram. Scores highest during directional moves with SMA stack aligned.',
+    },
+    VOLUME_MICRO: {
+        id: 'volume', name: 'Volume + Microstructure',
+        dataSource: 'signals.volumeSurge+microstructure+vpt',
+        description: 'Volume surge vs 20-bar avg, VPT trend, bid/ask microstructure. Confirms breakouts are backed by real participation.',
+    },
+    BREAKOUT: {
+        id: 'breakout', name: 'Breakout Scanner',
+        dataSource: 'signals.breakout',
+        description: 'Price vs highest-high / lowest-low over lookback window. Fires when price breaks above recent resistance or below support.',
+    },
+    REGIME: {
+        id: 'regime', name: 'Regime Filter',
+        dataSource: 'regime',
+        description: 'Classifies market as TRENDING / RANGING / VOLATILE. Adjusts directional threshold (±0.06 in RANGING, ±0.10 in trending) and bypasses MTF filter when ranging.',
+    },
+};
+
 // Preset Configurations
 export const STRATEGY_PRESETS = [
     {
         id: 'BALANCED',
         name: 'Standard Portfolio',
-        description: 'Balanced mix of mean reversion and trend following.',
+        description: 'Runs all 9 signals equally weighted. Fires trades when 60%+ confidence with RSI + Bollinger mean-reversion or SMA trend alignment.',
         riskProfile: 'MED',
-        assetTypes: [AssetType.STOCKS, AssetType.CRYPTO], // Universal strategies
-        strategies: [
-            { id: 'S1', name: 'Alpha-MeanRevert', allocation: 40, pnl: 0, winRate: 0.65, confidence: 80, active: true, description: 'Standard mean reversion.' },
-            { id: 'S2', name: 'Trend-Flow', allocation: 40, pnl: 0, winRate: 0.55, confidence: 75, active: true, description: 'Multi-timeframe trend following.' },
-            { id: 'S3', name: 'Hedge-Guard', allocation: 20, pnl: 0, winRate: 0.90, confidence: 95, active: true, description: 'Risk mitigation hedging.' }
-        ]
+        assetTypes: [AssetType.STOCKS, AssetType.CRYPTO],
+        config: PRESET_CONFIGS.BALANCED,
+        strategies: [AGENTS.MEAN_REVERSION, AGENTS.TREND_FOLLOW, AGENTS.RISK_GUARDIAN],
     },
-    { // Added missing opening brace for BTC_NATIVE preset
+    {
         id: 'BTC_NATIVE',
         name: 'Swarm Architecture',
-        description: 'Autonomous multi-agent swarm (Director, Quant, Risk, Sentiment).',
+        description: 'Full 5-role swarm. All 9 signals active. ATR-based dynamic stops. MTF bypass in RANGING. Best for BTC/ETH where the engine was calibrated.',
         riskProfile: 'ADAPTIVE',
-        assetTypes: [AssetType.CRYPTO], // Crypto-specific
-        strategies: [
-            { id: 'director', name: 'Director (Thesis)', allocation: 20, pnl: 0, winRate: 0.0, confidence: 0, active: true, description: 'Orchestrates the trading thesis and strategy.' },
-            { id: 'tech', name: 'Tech (Technical)', allocation: 25, pnl: 0, winRate: 0.0, confidence: 0, active: true, description: 'Analyzes price action, pivots, and indicators.' },
-            { id: 'risk', name: 'Risk Guardian', allocation: 20, pnl: 0, winRate: 0.0, confidence: 0, active: true, description: 'Evaluates exposure and drawdown limits.' },
-            { id: 'sentiment', name: 'Sentiment (ToM)', allocation: 15, pnl: 0, winRate: 0.0, confidence: 0, active: true, description: 'Theory of Mind market psychology profiling.' },
-            { id: 'strategist', name: 'Strategist (Exec)', allocation: 20, pnl: 0, winRate: 0.0, confidence: 0, active: true, description: 'Final trade execution and routing.' }
-        ]
+        assetTypes: [AssetType.CRYPTO],
+        config: PRESET_CONFIGS.BTC_NATIVE,
+        strategies: [AGENTS.SIGNAL_ENSEMBLE, AGENTS.TREND_FOLLOW, AGENTS.RISK_GUARDIAN, AGENTS.SENTIMENT, AGENTS.EXECUTION],
     },
     {
         id: 'MICRO_CHALLENGE',
-        name: 'Micro Compounder ($5)',
-        description: 'Starts with $5. Aggressive compounding of small accounts.',
+        name: 'Micro Compounder',
+        description: 'Lowest threshold (55% confidence) to maximise trade frequency on small capital. Tight 2%/1% TP/SL to compound quickly and limit blowout.',
         riskProfile: 'EXTREME',
-        assetTypes: [AssetType.CRYPTO], // Crypto micro-cap focus
-        strategies: [
-            { id: 'MC1', name: 'Snowball-Auto', allocation: 70, pnl: 0, winRate: 0.55, confidence: 60, active: true, description: 'Reinvests 100% of PnL. No withdrawals.' },
-            { id: 'MC2', name: 'Dust-Sweeper', allocation: 30, pnl: 0, winRate: 0.65, confidence: 72, active: true, description: 'Collects micro-inefficiencies in low liquidity coins.' }
-        ]
+        assetTypes: [AssetType.CRYPTO],
+        config: PRESET_CONFIGS.MICRO_CHALLENGE,
+        strategies: [AGENTS.BREAKOUT, AGENTS.VOLUME_MICRO, AGENTS.EXECUTION],
     },
     {
         id: 'MICRO',
         name: 'Micro Scalper',
-        description: 'High-frequency trading targeting small spread inefficiencies.',
+        description: 'Same thresholds as Micro Compounder but 30s analysis interval for faster cycle time. Targets quick 2% flips on momentum.',
         riskProfile: 'HIGH',
-        assetTypes: [AssetType.STOCKS, AssetType.CRYPTO], // Universal HFT
-        strategies: [
-            { id: 'S4', name: 'HFT-Sniper', allocation: 80, pnl: 0, winRate: 0.72, confidence: 88, active: true, description: 'Micro-structure scalp on order flow.' },
-            { id: 'S5', name: 'Spread-Capture', allocation: 20, pnl: 0, winRate: 0.85, confidence: 92, active: true, description: 'Bid-ask spread harvesting.' }
-        ]
+        assetTypes: [AssetType.STOCKS, AssetType.CRYPTO],
+        config: PRESET_CONFIGS.MICRO,
+        strategies: [AGENTS.BREAKOUT, AGENTS.VOLUME_MICRO, AGENTS.RISK_GUARDIAN],
     },
     {
         id: 'YOLO',
         name: 'Full Aggression',
-        description: 'Concentrated bets on momentum breakouts. High risk.',
+        description: 'Fires at just 45% confidence. 30% max position. Chases breakouts and momentum — high blowout risk, high upside. Know what you\'re doing.',
         riskProfile: 'EXTREME',
-        assetTypes: [AssetType.STOCKS, AssetType.CRYPTO], // Universal YOLO
-        strategies: [
-            { id: 'S6', name: 'YOLO-Breakout', allocation: 100, pnl: 0, winRate: 0.40, confidence: 60, active: true, description: 'All-in momentum breakout chaser.' }
-        ]
+        assetTypes: [AssetType.STOCKS, AssetType.CRYPTO],
+        config: PRESET_CONFIGS.YOLO,
+        strategies: [AGENTS.BREAKOUT, AGENTS.MEAN_REVERSION, AGENTS.EXECUTION],
     },
     {
         id: 'CONSERVATIVE',
-        name: 'Yield Harvester',
-        description: 'Low-volatility delta-neutral strategies.',
+        name: 'High Conviction Only',
+        description: 'Requires 80% confidence before touching a trade. Very few signals qualify. 5-minute cooldown. Lowest drawdown profile.',
         riskProfile: 'LOW',
-        assetTypes: [AssetType.CRYPTO], // Crypto yield farming
-        strategies: [
-            { id: 'S7', name: 'Delta-Neutral', allocation: 60, pnl: 0, winRate: 0.95, confidence: 98, active: true, description: 'Funding rate arbitrage.' },
-            { id: 'S8', name: 'Market-Maker', allocation: 40, pnl: 0, winRate: 0.80, confidence: 85, active: true, description: 'Passive liquidity provision.' }
-        ]
+        assetTypes: [AssetType.CRYPTO],
+        config: PRESET_CONFIGS.CONSERVATIVE,
+        strategies: [AGENTS.SIGNAL_ENSEMBLE, AGENTS.RISK_GUARDIAN, AGENTS.REGIME],
     },
     {
         id: 'HIGH_PROBABILITY',
         name: 'High Swarm Consensus',
-        description: 'Enforces strict multi-agent voting gates (>=85% confidence).',
+        description: 'Strictest gate: 85% confidence required. All 9 signals must broadly agree before a trade fires. Very low trade frequency, highest expected precision.',
         riskProfile: 'LOW',
         assetTypes: [AssetType.STOCKS, AssetType.CRYPTO, AssetType.FUTURES],
-        strategies: [
-            { id: 'HP1', name: 'Swarm-Consensus', allocation: 70, pnl: 0, winRate: 0.85, confidence: 95, active: true, description: 'Aggregated agent consensus filter.' },
-            { id: 'HP2', name: 'Regime-Shield', allocation: 30, pnl: 0, winRate: 0.80, confidence: 90, active: true, description: 'Regime-locked low risk executions.' }
-        ]
+        config: PRESET_CONFIGS.HIGH_PROBABILITY,
+        strategies: [AGENTS.SIGNAL_ENSEMBLE, AGENTS.REGIME, AGENTS.RISK_GUARDIAN],
     },
     {
         id: 'STOCKS_EARNINGS',
         name: 'Earnings Momentum',
-        description: 'Pre/post-earnings volatility plays on high-volume stocks.',
+        description: 'Tuned for pre/post-earnings vol. 70% confidence. Wide 10%/3% TP/SL to capture the full earnings move. Use on single names, not ETFs.',
         riskProfile: 'HIGH',
         assetTypes: [AssetType.STOCKS],
-        strategies: [
-            { id: 'SE1', name: 'Earnings-Run', allocation: 50, pnl: 0, winRate: 0.62, confidence: 75, active: true, description: 'Momentum into earnings announcements.' },
-            { id: 'SE2', name: 'Post-ER-Snap', allocation: 30, pnl: 0, winRate: 0.70, confidence: 80, active: true, description: 'Captures post-earnings snap moves.' },
-            { id: 'SE3', name: 'IV-Crush', allocation: 20, pnl: 0, winRate: 0.85, confidence: 90, active: true, description: 'Profits from implied volatility collapse.' }
-        ]
+        config: PRESET_CONFIGS.STOCKS_EARNINGS,
+        strategies: [AGENTS.VOLUME_MICRO, AGENTS.SENTIMENT, AGENTS.RISK_GUARDIAN],
     },
     {
         id: 'STOCKS_SWING',
         name: 'Tech Swing Trader',
-        description: 'Multi-day swing trades on FAANG and semiconductor stocks.',
+        description: 'Long 5-minute analysis cycle (300s) for multi-day swing setups. Relies on SMA + momentum stack alignment before entering.',
         riskProfile: 'MED',
         assetTypes: [AssetType.STOCKS],
-        strategies: [
-            { id: 'SS1', name: 'FAANG-Momentum', allocation: 45, pnl: 0, winRate: 0.68, confidence: 78, active: true, description: 'Rides big tech momentum.' },
-            { id: 'SS2', name: 'Chip-Sector', allocation: 35, pnl: 0, winRate: 0.65, confidence: 75, active: true, description: 'NVDA/AMD/TSM sector rotation.' },
-            { id: 'SS3', name: 'Mean-Revert', allocation: 20, pnl: 0, winRate: 0.78, confidence: 85, active: true, description: 'Overbought/oversold reversals.' }
-        ]
+        config: PRESET_CONFIGS.STOCKS_SWING,
+        strategies: [AGENTS.TREND_FOLLOW, AGENTS.MEAN_REVERSION, AGENTS.EXECUTION],
     },
     {
         id: 'STOCKS_MEME',
-        name: 'Meme Stock Hunter',
-        description: 'Rides retail-driven momentum on high-volatility names (GME, AMC, BBBY).',
+        name: 'Meme / Retail Momentum',
+        description: 'Lowest stock confidence gate (50%). Wide 20%/5% TP/SL for high-volatility names. Volume surge and breakout signals weighted heaviest.',
         riskProfile: 'EXTREME',
         assetTypes: [AssetType.STOCKS],
-        strategies: [
-            { id: 'SM1', name: 'Gamma-Squeeze', allocation: 60, pnl: 0, winRate: 0.45, confidence: 60, active: true, description: 'Options gamma squeeze detection.' },
-            { id: 'SM2', name: 'WSB-Sentiment', allocation: 40, pnl: 0, winRate: 0.55, confidence: 65, active: true, description: 'Reddit sentiment analysis.' }
-        ]
+        config: PRESET_CONFIGS.STOCKS_MEME,
+        strategies: [AGENTS.VOLUME_MICRO, AGENTS.BREAKOUT, AGENTS.EXECUTION],
     },
     {
         id: 'FUTURES_GRID',
-        name: 'Futures Grid Master',
-        description: 'Multi-layer grid trading for perpetual futures with dynamic TP/SL.',
+        name: 'Futures Grid',
+        description: 'Fast 30s cycles. Tight 3%/1% TP/SL for scalping futures ranges. Bollinger band edges are entry signals.',
         riskProfile: 'MED',
-        assetTypes: [AssetType.FUTURES], // Futures only
-        strategies: [
-            { id: 'FG1', name: 'BB-Grid Long', allocation: 40, pnl: 0, winRate: 0.72, confidence: 82, active: true, description: 'Long grid entries at Bollinger lower band.' },
-            { id: 'FG2', name: 'BB-Grid Short', allocation: 40, pnl: 0, winRate: 0.68, confidence: 78, active: true, description: 'Short grid entries at Bollinger upper band.' },
-            { id: 'FG3', name: 'Funding Hedge', allocation: 20, pnl: 0, winRate: 0.88, confidence: 92, active: true, description: 'Captures funding rate arbitrage.' }
-        ]
+        assetTypes: [AssetType.FUTURES],
+        config: PRESET_CONFIGS.FUTURES_GRID,
+        strategies: [AGENTS.MEAN_REVERSION, AGENTS.VOLUME_MICRO, AGENTS.RISK_GUARDIAN],
     },
     {
         id: 'FUTURES_PERP',
         name: 'Perpetual Momentum',
-        description: 'High-leverage momentum trading on BTC/ETH perpetuals.',
+        description: '90s cooldown. Breakout + momentum signals drive entries on BTC/ETH perps. 5%/2% TP/SL for decent R:R.',
         riskProfile: 'HIGH',
-        assetTypes: [AssetType.FUTURES], // Crypto futures
-        strategies: [
-            { id: 'FP1', name: 'Perp-Breakout', allocation: 50, pnl: 0, winRate: 0.58, confidence: 70, active: true, description: 'Catches strong directional moves with 5-10x leverage.' },
-            { id: 'FP2', name: 'Liquidation-Hunter', allocation: 30, pnl: 0, winRate: 0.75, confidence: 85, active: true, description: 'Front-runs liquidation cascades.' },
-            { id: 'FP3', name: 'Funding-Sniper', allocation: 20, pnl: 0, winRate: 0.82, confidence: 88, active: true, description: 'Enters positions before funding rate resets.' }
-        ]
+        assetTypes: [AssetType.FUTURES],
+        config: PRESET_CONFIGS.FUTURES_PERP,
+        strategies: [AGENTS.BREAKOUT, AGENTS.TREND_FOLLOW, AGENTS.EXECUTION],
     },
     {
         id: 'FUTURES_ES',
         name: 'Index Futures (ES/NQ)',
-        description: 'Traditional futures on S&P 500 and Nasdaq indices.',
+        description: 'Moderate 65% confidence gate. 1-minute analysis for ES/NQ intraday. SMA trend + RSI reversion entries.',
         riskProfile: 'MED',
-        assetTypes: [AssetType.FUTURES], // Index futures
-        strategies: [
-            { id: 'FE1', name: 'ES-DayTrader', allocation: 45, pnl: 0, winRate: 0.65, confidence: 75, active: true, description: 'Intraday mean reversion on ES futures.' },
-            { id: 'FE2', name: 'NQ-Breakout', allocation: 35, pnl: 0, winRate: 0.60, confidence: 72, active: true, description: 'Tech momentum on Nasdaq futures.' },
-            { id: 'FE3', name: 'Spread-Arb', allocation: 20, pnl: 0, winRate: 0.85, confidence: 90, active: true, description: 'ES/NQ spread arbitrage.' }
-        ]
+        assetTypes: [AssetType.FUTURES],
+        config: PRESET_CONFIGS.FUTURES_ES,
+        strategies: [AGENTS.TREND_FOLLOW, AGENTS.MEAN_REVERSION, AGENTS.RISK_GUARDIAN],
     },
     {
         id: 'FUTURES_COMMODITIES',
         name: 'Commodity Futures',
-        description: 'Energy and metal futures (CL, GC) with macro trend following.',
+        description: '3-minute cooldown. Macro trend following on CL/GC. Momentum + SMA primary. Requires 65% confidence.',
         riskProfile: 'MED',
-        assetTypes: [AssetType.FUTURES], // Commodity futures
-        strategies: [
-            { id: 'FC1', name: 'Oil-Trend', allocation: 40, pnl: 0, winRate: 0.70, confidence: 80, active: true, description: 'Crude oil (CL) trend following.' },
-            { id: 'FC2', name: 'Gold-Safe', allocation: 35, pnl: 0, winRate: 0.68, confidence: 78, active: true, description: 'Gold (GC) safe haven momentum.' },
-            { id: 'FC3', name: 'Macro-Hedge', allocation: 25, pnl: 0, winRate: 0.80, confidence: 85, active: true, description: 'Multi-commodity basket hedging.' }
-        ]
-    }
+        assetTypes: [AssetType.FUTURES],
+        config: PRESET_CONFIGS.FUTURES_COMMODITIES,
+        strategies: [AGENTS.TREND_FOLLOW, AGENTS.SENTIMENT, AGENTS.REGIME],
+    },
 ];
 
 // Initial Data
