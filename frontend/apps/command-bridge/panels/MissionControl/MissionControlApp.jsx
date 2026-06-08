@@ -137,7 +137,18 @@ const PortfolioPanel = ({ riskMetrics, positions = [], orders = [], trades = [],
     );
 };
 
-const TradeStrategyGate = ({ symbol, presetId, isDemoMode, dataSource, running, onRun, onSkip, onSettings }) => (
+const CAPITAL_PRESETS = [1000, 5000, 10000, 25000, 50000, 100000];
+
+const TradeStrategyGate = ({ symbol, presetId, isDemoMode, dataSource, running, onRun, onSkip, onSettings }) => {
+    const [capital, setCapital] = React.useState(10000);
+    const [positionPct, setPositionPct] = React.useState(10);
+    const [customCapital, setCustomCapital] = React.useState('');
+    const [useCustom, setUseCustom] = React.useState(false);
+
+    const effectiveCapital = useCustom ? (parseFloat(customCapital) || 10000) : capital;
+    const effectivePositionPct = Math.min(50, Math.max(1, positionPct));
+
+    return (
     <div className="absolute inset-0 z-[260] flex items-center justify-center bg-black/82 backdrop-blur-md p-6">
         <div className="w-full max-w-xl rounded-2xl border border-cyan-500/25 bg-[#101116]/95 shadow-2xl shadow-cyan-950/40 overflow-hidden">
             <div className="border-b border-white/10 bg-cyan-500/8 p-5">
@@ -174,7 +185,45 @@ const TradeStrategyGate = ({ symbol, presetId, isDemoMode, dataSource, running, 
                     </div>
                 </div>
 
-                <div className="mt-4 rounded border border-white/5 bg-black/25 p-3 text-[11px] leading-relaxed text-zinc-400">
+                {/* Allocation Controls */}
+                <div className="mt-3 rounded border border-cyan-500/15 bg-cyan-950/20 p-3">
+                    <div className="mb-2 text-[9px] font-bold uppercase tracking-widest text-cyan-600">Trading Allocation</div>
+                    <div className="grid grid-cols-2 gap-3">
+                        <div>
+                            <div className="mb-1.5 text-[9px] uppercase tracking-wider text-zinc-500">{isDemoMode ? 'Paper Capital' : 'Capital'}</div>
+                            <div className="flex flex-wrap gap-1 mb-1.5">
+                                {CAPITAL_PRESETS.map(p => (
+                                    <button key={p} onClick={() => { setCapital(p); setUseCustom(false); }}
+                                        className={`rounded px-1.5 py-0.5 text-[9px] font-bold transition-colors ${!useCustom && capital === p ? 'bg-cyan-400 text-black' : 'bg-white/5 text-zinc-400 hover:bg-white/10'}`}>
+                                        ${p >= 1000 ? `${p/1000}k` : p}
+                                    </button>
+                                ))}
+                            </div>
+                            <input
+                                type="number"
+                                placeholder="Custom $"
+                                value={customCapital}
+                                onFocus={() => setUseCustom(true)}
+                                onChange={e => { setCustomCapital(e.target.value); setUseCustom(true); }}
+                                className="w-full rounded border border-white/10 bg-black/40 px-2 py-1 text-xs font-mono text-white placeholder-zinc-600 focus:border-cyan-500/50 focus:outline-none"
+                            />
+                        </div>
+                        <div>
+                            <div className="mb-1.5 text-[9px] uppercase tracking-wider text-zinc-500">Max Position Size</div>
+                            <div className="flex items-center gap-2 mb-2">
+                                <input type="range" min="1" max="50" value={positionPct}
+                                    onChange={e => setPositionPct(Number(e.target.value))}
+                                    className="flex-1 accent-cyan-400 h-1" />
+                                <span className="text-xs font-mono font-bold text-cyan-300 w-8 text-right">{effectivePositionPct}%</span>
+                            </div>
+                            <div className="text-[9px] text-zinc-600">
+                                Max trade: <span className="text-zinc-400">${Math.round(effectiveCapital * effectivePositionPct / 100).toLocaleString()}</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div className="mt-3 rounded border border-white/5 bg-black/25 p-3 text-[11px] leading-relaxed text-zinc-400">
                     <div className="mb-2 font-bold uppercase tracking-widest text-zinc-500 text-[9px]">Automatic sequence</div>
                     <div>1. Fresh market bars → 2. Thesis → 3. Deep Scan → 4. Backtest/simulation → 5. Execution validation → 6. Paper autonomous start</div>
                 </div>
@@ -188,14 +237,16 @@ const TradeStrategyGate = ({ symbol, presetId, isDemoMode, dataSource, running, 
                             Skip Strategy
                         </button>
                     </div>
-                    <button onClick={onRun} disabled={running} className="rounded-lg bg-cyan-400 px-5 py-2.5 text-sm font-black uppercase tracking-wide text-black hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-60">
+                    <button onClick={() => onRun({ capital: effectiveCapital, maxPositionPct: effectivePositionPct / 100 })} disabled={running}
+                        className="rounded-lg bg-cyan-400 px-5 py-2.5 text-sm font-black uppercase tracking-wide text-black hover:bg-cyan-300 disabled:cursor-not-allowed disabled:opacity-60">
                         {running ? 'Running Preflight...' : 'Run Trade Strategy'}
                     </button>
                 </div>
             </div>
         </div>
     </div>
-);
+    );
+};
 
 const MissionControlApp = ({ somaBackend, isConnected }) => {
     // --- STATE MANAGEMENT ---
@@ -745,30 +796,35 @@ const MissionControlApp = ({ somaBackend, isConnected }) => {
 
                         setBrokerPositions(positions);
 
-                        // Mark-to-market RiskPanel — only when broker is actually connected
                         if (acct.equity > 0) {
                             const totalMarketValue = positions.reduce((s, p) => s + (p.market_value || 0), 0);
-                            const totalUnrealizedPl = positions.reduce((s, p) => s + (p.unrealized_pl || 0), 0);
                             const portfolioValue = acct.portfolio_value || acct.equity;
                             const lastEquity = acct.last_equity || portfolioValue;
 
-                            // Daily drawdown: how far equity has fallen from day-open baseline
                             const rawDailyDrawdown = lastEquity > 0 && acct.equity < lastEquity
                                 ? ((lastEquity - acct.equity) / lastEquity) * 100
                                 : 0;
 
-                            setRiskMetrics(prev => ({
-                                ...prev,
-                                walletBalance: portfolioValue,
-                                equity: acct.equity,
-                                // initialBalance stays as user's manually set trading allocation
-                                // unless they haven't changed it from the demo default
-                                initialBalance: prev.initialBalance === 100000 && portfolioValue > 0
-                                    ? portfolioValue
-                                    : prev.initialBalance,
-                                netExposure: totalMarketValue,
-                                dailyDrawdown: Math.max(prev.dailyDrawdown, rawDailyDrawdown), // guardrails wins if higher
-                            }));
+                            setRiskMetrics(prev => {
+                                // In paper/demo mode, equity is owned by the autonomous status pulse
+                                // (initialBalance + sessionPnL + unrealizedPnl). Overwriting it here
+                                // with the Alpaca account balance causes the equity display to flip
+                                // between the two sources every 5s. Only update equity from broker
+                                // when trading live against a real Alpaca account.
+                                if (isDemoMode) {
+                                    return { ...prev, netExposure: totalMarketValue, dailyDrawdown: Math.max(prev.dailyDrawdown, rawDailyDrawdown) };
+                                }
+                                return {
+                                    ...prev,
+                                    walletBalance: portfolioValue,
+                                    equity: acct.equity,
+                                    initialBalance: prev.initialBalance === 100000 && portfolioValue > 0
+                                        ? portfolioValue
+                                        : prev.initialBalance,
+                                    netExposure: totalMarketValue,
+                                    dailyDrawdown: Math.max(prev.dailyDrawdown, rawDailyDrawdown),
+                                };
+                            });
                         }
                     }
                 }
@@ -787,7 +843,7 @@ const MissionControlApp = ({ somaBackend, isConnected }) => {
         fetchBrokerData();
         const interval = setInterval(fetchBrokerData, 5000); // 5s for near-real-time balance
         return () => clearInterval(interval);
-    }, [tradingActive]);
+    }, [tradingActive, isDemoMode]);
 
     // Fetch paper→live readiness report periodically
     useEffect(() => {
@@ -1673,7 +1729,7 @@ const MissionControlApp = ({ somaBackend, isConnected }) => {
         });
     };
 
-    const startAutonomousSession = async ({ requireBrokerCheck = false, source = 'autonomous' } = {}) => {
+    const startAutonomousSession = async ({ requireBrokerCheck = false, source = 'autonomous', allocation = null } = {}) => {
         setIsTrainingLoading(true);
         try {
             if (dataSource === 'SIMULATION') {
@@ -1742,7 +1798,9 @@ const MissionControlApp = ({ somaBackend, isConnected }) => {
                     config: {
                         forcePaper: isDemoMode,
                         thesisId: thesisForStart.id,
-                        launchSource: source
+                        launchSource: source,
+                        ...(allocation?.capital      && { initialBalance:  allocation.capital }),
+                        ...(allocation?.maxPositionPct && { maxPositionPct: allocation.maxPositionPct }),
                     }
                 })
             });
@@ -2096,8 +2154,8 @@ const MissionControlApp = ({ somaBackend, isConnected }) => {
                         setTradeStrategyGateSkipped(true);
                         addToast('Strategy preflight skipped. Manual Mission Control buttons are available.', 'info');
                     }}
-                    onRun={async () => {
-                        const started = await startAutonomousSession({ requireBrokerCheck: true, source: 'run trade strategy' });
+                    onRun={async (allocation) => {
+                        const started = await startAutonomousSession({ requireBrokerCheck: true, source: 'run trade strategy', allocation });
                         if (started) setTradeStrategyGateSkipped(true);
                     }}
                 />
