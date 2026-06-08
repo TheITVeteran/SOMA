@@ -550,7 +550,8 @@ Return JSON only: {"winner":"candidate|baseline|tie","reason":"short reason","ca
     // Domain distillation — includes MedLab manuscript/risk/citation lessons
     const domainDistillationPaths = [
       path.join(process.cwd(), 'data', 'training', 'medical_lora_distilled.jsonl'),
-      path.join(process.cwd(), 'data', 'training', 'soma_knowledge.jsonl')
+      path.join(process.cwd(), 'data', 'training', 'soma_knowledge.jsonl'),
+      path.join(process.cwd(), 'data', 'training', 'harvested_libraries_distilled.jsonl')
     ];
     for (const domainPath of domainDistillationPaths) {
       try {

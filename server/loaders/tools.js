@@ -1197,6 +1197,95 @@ Trust: ${state.trust?.toFixed(3)}, Sadness: ${state.sadness?.toFixed(3)}, Anger:
     });
 
     toolRegistry.registerTool({
+        name: 'git_search_repositories',
+        description: 'Search GitHub for repositories matching a search term (e.g., "javascript utility libraries"). Returns repo names, owners, and default branches.',
+        parameters: {
+            query: 'string — search term, e.g. "javascript helper utilities"',
+            limit: 'number (optional) — max repositories to return (default: 5)'
+        },
+        execute: async ({ query, limit }) => {
+            const liveSystem = getSystem();
+            const loader = liveSystem.arbiterLoader;
+            if (!loader) return 'ArbiterLoader not ready yet.';
+            try {
+                const harvester = await loader.loadByFile('GitHarvesterArbiter.js');
+                if (!harvester) return 'GitHarvesterArbiter is not available or failed to load.';
+                const results = await harvester.searchRepos(query, limit || 5);
+                if (!results.length) return 'No repositories found matching query.';
+                return JSON.stringify(results, null, 2);
+            } catch (e) {
+                return `Search error: ${e.message}`;
+            }
+        }
+    });
+
+    toolRegistry.registerTool({
+        name: 'git_crawl_and_harvest',
+        description: 'Crawl a GitHub repository\'s file tree, discover candidate utility files, clean framework boilerplate using SOMA\'s QuadBrain, and persist them under harvested-libraries/.',
+        parameters: {
+            owner: 'string — owner of the GitHub repo, e.g. "lodash"',
+            repo: 'string — name of the repo, e.g. "lodash"',
+            branch: 'string (optional) — default branch to crawl, e.g. "main" or "master"'
+        },
+        execute: async ({ owner, repo, branch }) => {
+            const liveSystem = getSystem();
+            const loader = liveSystem.arbiterLoader;
+            if (!loader) return 'ArbiterLoader not ready yet.';
+            try {
+                const harvester = await loader.loadByFile('GitHarvesterArbiter.js');
+                if (!harvester) return 'GitHarvesterArbiter is not available or failed to load.';
+                const results = await harvester.crawlAndHarvest(owner, repo, branch || 'main');
+                if (!results.length) return 'No utility files were harvested from this repository.';
+                return `Successfully harvested files:\n${JSON.stringify(results, null, 2)}`;
+            } catch (e) {
+                return `Harvesting error: ${e.message}`;
+            }
+        }
+    });
+
+    toolRegistry.registerTool({
+        name: 'git_harvest_topic',
+        description: 'Search GitHub for a topic and automatically harvest libraries from the top matching repositories.',
+        parameters: {
+            topic: 'string — topic to search, e.g. "javascript algorithms"',
+            repoLimit: 'number (optional) — max repositories to crawl (default: 3)'
+        },
+        execute: async ({ topic, repoLimit }) => {
+            const liveSystem = getSystem();
+            const loader = liveSystem.arbiterLoader;
+            if (!loader) return 'ArbiterLoader not ready yet.';
+            try {
+                const harvester = await loader.loadByFile('GitHarvesterArbiter.js');
+                if (!harvester) return 'GitHarvesterArbiter is not available or failed to load.';
+                const results = await harvester.harvestTopic(topic, repoLimit || 3);
+                if (!results.length) return 'No utility files were harvested for this topic.';
+                return `Successfully harvested files:\n${JSON.stringify(results, null, 2)}`;
+            } catch (e) {
+                return `Topic harvest error: ${e.message}`;
+            }
+        }
+    });
+
+    toolRegistry.registerTool({
+        name: 'git_get_harvested_catalog',
+        description: 'List all harvested libraries and utilities currently saved in harvested-libraries/.',
+        parameters: {},
+        execute: async () => {
+            const liveSystem = getSystem();
+            const loader = liveSystem.arbiterLoader;
+            if (!loader) return 'ArbiterLoader not ready yet.';
+            try {
+                const harvester = await loader.loadByFile('GitHarvesterArbiter.js');
+                if (!harvester) return 'GitHarvesterArbiter is not available or failed to load.';
+                const catalog = await harvester.getCatalog();
+                return JSON.stringify(catalog, null, 2);
+            } catch (e) {
+                return `Catalog retrieval error: ${e.message}`;
+            }
+        }
+    });
+
+    toolRegistry.registerTool({
         name: 'aperture_control',
         description: 'Send a UI action directly to the Aperture OS desktop. This allows you to open apps, browse paths, select workspaces, adjust settings, and operate the desktop shell.',
         parameters: {

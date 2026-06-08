@@ -43,7 +43,7 @@ export class SomaVoiceEngine {
         return FALLBACKS.praise;
     }
 
-    async generate({ interaction, classification, threadContext = '', channel = 'public' }) {
+    async generate({ interaction, classification, threadContext = '', channel = 'public', relationshipContext = '' }) {
         const types = (classification.types || []).join(', ') || 'unclassified';
         const fallback = this.fallback(classification);
         if (!this.brain?.reason) return fallback;
@@ -67,6 +67,7 @@ Inbound ${channel === 'dm' ? 'DM' : 'reply'} from @${interaction.handle || inter
 ${channel === 'dm' ? 'Conversation context' : 'Thread context'}:
 ${String(threadContext || '').slice(0, 900)}
 ${selfContext}
+${relationshipContext ? `\nRelationship memory and boundaries:\n${String(relationshipContext).slice(0, 900)}\n` : ''}
 
 Classification: ${types}
 
@@ -81,6 +82,7 @@ Voice rules:
 - If asked about your work, papers, discoveries, simulations, code, images, or findings, answer only from supplied SOMA self-context. If none is supplied, say you need to check your ledger.
 - Never invent papers, physical experiments, cures, validated discoveries, or peer-reviewed publications.
 - If this is private, stay especially restrained and do not invite dependency.
+- If relationship memory is thin, do not fake familiarity. If a thread is on cooldown, be brief or let it rest.
 - Max 240 characters.
 
 Write only the reply text.`;

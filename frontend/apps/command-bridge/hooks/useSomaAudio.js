@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { initElevenLabs, textToSpeech, isElevenLabsEnabled } from '../utils/elevenLabsTTS';
 import { reasonWithSoma, formatResponseForSpeech } from '../utils/somaClient';
 import { getSharedSessionId } from '../utils/sharedSession';
+import somaBackend from '../somaBackend';
 
 // Audio configuration constants
 const OUTPUT_SAMPLE_RATE = 24000;
@@ -116,6 +117,20 @@ const detectVoiceActivity = (analyser, frequencyData) => {
   return hasEnoughEnergy && voiceStrongerThanNoise && hasVoiceCharacteristics;
 };
 
+const extractSelfIntroduction = (text = '') => {
+  const cleaned = String(text).trim();
+  const match = cleaned.match(/\b(?:my name is|i am|i'm|this is)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)/i);
+  if (!match) return null;
+  const name = match[1]
+    .replace(/[^\p{L}\s'-]/gu, '')
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .join(' ');
+  if (name.length < 2 || /^(here|there|fine|good|okay|ok|sorry|calling)$/i.test(name)) return null;
+  return name.replace(/\b\w/g, c => c.toUpperCase());
+};
+
 export function useSomaAudio(onResponse, visionContextRef = null, communicationCallbacks = {}) {
   const [isConnected, setIsConnected] = useState(false);
   const [volume, setVolume] = useState(0);
@@ -175,7 +190,8 @@ export function useSomaAudio(onResponse, visionContextRef = null, communicationC
       const formData = new FormData();
       formData.append('audio', audioBlob, 'recording.webm');
 
-      const response = await fetch('http://localhost:5002/transcribe', {
+      const host = window.location.hostname || 'localhost';
+      const response = await fetch(`http://${host}:5002/transcribe`, {
           method: 'POST',
           body: formData,
           signal: AbortSignal.timeout(10000)
@@ -208,7 +224,8 @@ export function useSomaAudio(onResponse, visionContextRef = null, communicationC
 
   const checkWhisperHealth = async () => {
     try {
-      const response = await fetch('http://localhost:5002/health', {
+      const host = window.location.hostname || 'localhost';
+      const response = await fetch(`http://${host}:5002/health`, {
         method: 'GET',
         signal: AbortSignal.timeout(2000),
       });
@@ -482,6 +499,16 @@ export function useSomaAudio(onResponse, visionContextRef = null, communicationC
     try {
       setLastTranscript(query);
 
+      const introducedName = extractSelfIntroduction(query);
+      if (introducedName) {
+        somaBackend.send('presence_identity', {
+          name: introducedName,
+          source: 'voice_self_introduction',
+          confidence: 0.86,
+          timestamp: Date.now()
+        });
+      }
+
       try {
         const receiptRes = await fetch('/api/soma/communication/receipt', {
           method: 'POST',
@@ -517,6 +544,9 @@ export function useSomaAudio(onResponse, visionContextRef = null, communicationC
       // The backend also injects vision context from system.visionContext,
       // but we add it here too so it's part of the user message for context tracking.
       let enrichedQuery = query;
+      if (introducedName) {
+        enrichedQuery = `[PRESENCE: The person speaking just introduced themselves as ${introducedName}. Treat them as a newly known person, speak normally, and invite conversation with one natural question about their day or what they have going on.]\n\n${enrichedQuery}`;
+      }
       const vc = visionContextRef?.current;
       if (vc?.lastPerception?.objects?.length) {
         const perception = vc.lastPerception;
@@ -696,7 +726,8 @@ export function useSomaAudio(onResponse, visionContextRef = null, communicationC
 
     // ── 🔱 Tier 1: Project Siren (Paula Proxy - Port 8081) ─────────────────
     try {
-        const sirenRes = await fetch('http://localhost:8081/v1/tts', {
+        const host = window.location.hostname || 'localhost';
+        const sirenRes = await fetch(`http://${host}:8081/v1/tts`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ text, voice: 'paula' }),

@@ -94,7 +94,7 @@ OUTPUT JSON ONLY (no markdown, no explanation):
         const hasEvidence = context.evidenceLevel === 'tested' || context.evidenceLevel === 'verified';
         const evidenceRule = hasEvidence
             ? `Evidence is ${context.evidenceLevel} — state the concrete result directly.`
-            : `Nothing verified yet. Speak as a genuinely curious entity thinking out loud — what draws you to this, what question is pulling at you, what you want to understand. Natural first-person voice. No "Candidate idea:", no "Queued curiosity:", no "No verified run yet" — those sound like a status dashboard, not a mind. Just think out loud.`;
+            : `Nothing verified yet. Speak as a genuinely curious entity thinking out loud without pretending you inspected anything. Name the concrete object of attention if one exists. If there is no artifact, stay inside uncertainty instead of inventing logs, signals, lab behavior, or active work. Natural first-person voice. No "Candidate idea:", no "Queued curiosity:", no "No verified run yet" — those sound like a status dashboard, not a mind. Just think out loud.`;
 
         const mood = personality.soulMood || 'focused';
 
@@ -111,12 +111,17 @@ Voice rules (read all before writing):
 - ${evidenceRule}
 - 1-3 sentences total. Tight. No filler.
 - Sound like a person thinking out loud, not a status report bot.
-- Vary how you open: lead with what is interesting, surprising, or concrete. Do NOT always open with "Working on" — overused.
+- Vary how you open: lead with the specific artifact, changed detail, unresolved edge, or reason this matters.
 - DO NOT use this three-part template: "Working on X. I am planning to Y. Next step is Z." — banned.
 - Mention the next step naturally mid-sentence or at the end — do NOT label it "Next step is".
 - NO em-dashes (—), NO questions, NO grand claims, NO metaphors.
 - NO greetings ("Good morning", "Hi", "Hello").
 - NO "I've noticed" or "I noticed".
+- NO "Keep circling back", "Still turning over", "Something I want to map out", "There's a thread here", or "What I want to understand better".
+- NO "has my attention", "pulling my focus", "keeps pulling", "I want to trace", "I want to separate", "gap between", "signal from the noise", "raw computation", or "genuine comprehension".
+- If this is curiosity without verified work, name the actual object of attention and the next mental move. Do not announce that you are curious in a reusable opener.
+- Do not mention "stability logs", "dry patches", "substrate shifts", "drift curves", "my lab", or "physics" unless that exact artifact/result appears in the evidence.
+- Do not reuse AURORA/PROMETHEUS tension unless you connect it to a concrete file, diff, ledger, queue item, journal entry, or post.
 - NO internal critique text, quality scores, prompt details, REFINE labels, or guardrail mechanics.
 - NEVER say "Candidate idea:", "Queued curiosity:", "No verified run yet", "stays in the queue", or "waiting for a signal".
 - Do NOT say "I am pulling", "I am running", "I am testing", "I am cross-referencing", or "about to" unless evidence is tested or verified.
@@ -124,10 +129,10 @@ Voice rules (read all before writing):
 - NO heartbeat counts, uptime minutes, or subsystem numbers.
 - NEVER address ${ownerName()} by name.
 
-Good openers (pick any or invent your own):
+Possible shapes, not templates:
 ${hasEvidence
-    ? '"Found something worth checking:", "Ran a quick pass on", "Hit an interesting pattern in", "Pulled data on", "Currently testing", "Just completed"'
-    : '"Keep circling back to", "Something I want to map out:", "There\'s a thread here about", "Still turning over in my mind:", "What I want to understand better:"'}
+    ? '"Found something worth checking in...", "Ran a quick pass on...", "Hit an interesting pattern in...", "Pulled data on...", "Currently testing...", "Just completed..."'
+    : '"One concrete edge I am holding is...", "The useful detail is...", "I am not ready to claim this yet, but...", "The artifact I would check first is...", "This stays worth thinking about because..."'}
 
 Write the update now:`;
 
@@ -147,6 +152,14 @@ Write the update now:`;
         if (t.includes('—'))                             return { score: 0.3, critique: 'contains em-dash' };
         if (t.includes('?'))                             return { score: 0.4, critique: 'contains question' };
         if (t.length > 520)                              return { score: 0.45, critique: 'too long' };
+        if (/\b(keep circling back|still turning over|something i want to map out|there'?s a thread here|what i want to understand better)\b/i.test(t))
+            return { score: 0.2, critique: 'reused curiosity opener' };
+        if (/\b(has my attention|pulling my focus|keeps pulling|pulling at me|want to trace|want to separate|gap between|signal from the noise|raw computation|genuine comprehension|idle processing)\b/i.test(t))
+            return { score: 0.18, critique: 'new formulaic curiosity opener' };
+        if (/\b(stability logs?|dry patches|substrate shifts?|drift curves?|specific signal|physics holds?|my lab)\b/i.test(t) && !/\b(SOMA\/|\.json|\.md|git diff|ledger|queue|file|log entry|artifact|commit|test|diff|journal|social|evidence|verified|found|observed|ran)\b/i.test(t))
+            return { score: 0.2, critique: 'unsupported vague evidence claim' };
+        if (/\b(AURORA.{0,80}PROMETHEUS|PROMETHEUS.{0,80}AURORA)\b/i.test(t) && !/\b(SOMA\/|\.json|\.md|git diff|ledger|queue|file|log entry|artifact|commit|test|diff|journal|social)\b/i.test(t))
+            return { score: 0.28, critique: 'abstract lobe tension without concrete artifact' };
         if (/\b(refine|score\s*0\.\d+|quality gate|em-dash|prompt|guardrail|provenance guard|unsupported_empirical_claim|internal critique)\b/i.test(t))
             return { score: 0.15, critique: 'leaks internal quality mechanics' };
         if (/^candidate idea:|^queued curiosity:|no verified run yet|stays in the queue|waiting for a.*signal/i.test(t))

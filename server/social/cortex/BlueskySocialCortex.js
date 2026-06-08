@@ -6,6 +6,7 @@ import { SocialRateLimiter } from './rateLimiter.js';
 import { SomaVoiceEngine } from './somaVoiceEngine.js';
 import { ReflectionEngine } from './reflectionEngine.js';
 import socialMemory from '../SocialMemoryEngine.js';
+import socialRelationships from '../SocialRelationshipLedger.js';
 
 function normalizeNotification(notif = {}) {
     const post = notif.post || notif;
@@ -162,6 +163,7 @@ export class BlueskySocialCortex {
         const config = getSocialAutonomyConfig();
         const thread = await this.hydrateThread(interaction);
         const context = this.contextFromThread(thread.rows, interaction);
+        const relationship = socialRelationships.getRelationshipContext(interaction.handle, interaction.threadUri);
         const classification = replyClassifier.classify(interaction, context);
         const limiter = new SocialRateLimiter(this.store, config);
         const replyLimit = limiter.check({
@@ -172,9 +174,18 @@ export class BlueskySocialCortex {
         });
         const decision = decisionEngine.decide(classification, config, {
             ...context,
+            relationship,
             rateLimited: !replyLimit.ok,
             rateLimitReason: replyLimit.reason,
         });
+        if (!relationship.boundary.ok && /reply|draft/.test(decision.action)) {
+            decision.action = 'review';
+            decision.shouldLike = false;
+            decision.shouldReply = false;
+            decision.shouldDraft = false;
+            decision.shouldReview = true;
+            decision.reasons = [...(decision.reasons || []), `relationship_boundary:${relationship.boundary.reasons.join('|')}`];
+        }
 
         let responseText = '';
         let responseUri = '';
@@ -189,7 +200,7 @@ export class BlueskySocialCortex {
         }
 
         if (decision.shouldReply) {
-            responseText = await this.voice.generate({ interaction, classification, threadContext: thread.text });
+            responseText = await this.voice.generate({ interaction, classification, threadContext: thread.text, relationshipContext: relationship.text });
             const posted = await this.client.reply(responseText, interaction.parentRef, interaction.rootRef);
             responseUri = posted?.uri || '';
             limiter.record('reply', { handle: interaction.handle, threadUri: interaction.threadUri, isBot: classification.botLikelihood >= 0.55 });
@@ -206,7 +217,7 @@ export class BlueskySocialCortex {
         }
 
         if (decision.shouldDraft) {
-            responseText = await this.voice.generate({ interaction, classification, threadContext: thread.text });
+            responseText = await this.voice.generate({ interaction, classification, threadContext: thread.text, relationshipContext: relationship.text });
             this.store.enqueueReview({ ...interaction, classification, decision, reason: 'assisted draft', text: responseText });
         }
 
@@ -245,6 +256,20 @@ export class BlueskySocialCortex {
             responseText,
             reason: `${action}: ${(classification.types || []).join(', ')}`,
         });
+        socialRelationships.recordEvent({
+            platform: 'bluesky',
+            type: action.includes('reply') ? 'reply' : action,
+            intent: 'respond_to_person',
+            author: interaction.handle,
+            threadUri: interaction.threadUri,
+            sourceUri: interaction.uri,
+            responseUri,
+            inboundText: interaction.text,
+            responseText,
+            status: responseUri ? 'posted' : action,
+            reason: `${action}: ${(classification.types || []).join(', ')}`,
+            createdAt: interaction.createdAt,
+        });
 
         return { uri: interaction.uri, handle: interaction.handle, action, classification, responseUri };
     }
@@ -277,6 +302,7 @@ export class BlueskySocialCortex {
         };
         const selfDid = this.client.session?.did || '';
         const dmContext = this.dmContext(messages, selfDid);
+        const relationship = socialRelationships.getRelationshipContext(interaction.handle, interaction.threadUri);
         const classification = replyClassifier.classify(interaction, {
             threadReplyCount: dmContext.priorSomaReplies,
             sameBotThreadReplies: 0,
@@ -292,9 +318,18 @@ export class BlueskySocialCortex {
         });
         const decision = decisionEngine.decide(classification, config, {
             threadReplyCount: dmContext.priorSomaReplies,
+            relationship,
             rateLimited: !dmLimit.ok,
             rateLimitReason: dmLimit.reason,
         });
+        if (!relationship.boundary.ok && /reply|draft/.test(decision.action)) {
+            decision.action = 'review';
+            decision.shouldLike = false;
+            decision.shouldReply = false;
+            decision.shouldDraft = false;
+            decision.shouldReview = true;
+            decision.reasons = [...(decision.reasons || []), `relationship_boundary:${relationship.boundary.reasons.join('|')}`];
+        }
 
         let action = decision.action;
         let responseText = '';
@@ -311,6 +346,7 @@ export class BlueskySocialCortex {
                 classification,
                 threadContext: dmContext.text,
                 channel: 'dm',
+                relationshipContext: relationship.text,
             });
             const sent = await this.client.sendMessage(interaction.convoId, responseText);
             responseUri = sent?.message?.id || sent?.id || '';
@@ -323,6 +359,7 @@ export class BlueskySocialCortex {
                 classification,
                 threadContext: dmContext.text,
                 channel: 'dm',
+                relationshipContext: relationship.text,
             });
             this.store.enqueueReview({ ...interaction, classification, decision: { ...decision, action }, reason: 'dm assisted draft', text: responseText });
         } else if (action === 'review' || decision.shouldReview) {
@@ -360,6 +397,20 @@ export class BlueskySocialCortex {
             inboundText: interaction.text,
             responseText,
             reason: `${action}: ${(classification.types || []).join(', ')}`,
+        });
+        socialRelationships.recordEvent({
+            platform: 'bluesky_dm',
+            type: action === 'reply' ? 'dm_reply' : `dm_${action}`,
+            intent: 'respond_to_person',
+            author: interaction.handle,
+            threadUri: interaction.threadUri,
+            sourceUri: interaction.uri,
+            responseUri,
+            inboundText: interaction.text,
+            responseText,
+            status: responseUri ? 'posted' : action,
+            reason: `${action}: ${(classification.types || []).join(', ')}`,
+            createdAt: interaction.createdAt,
         });
 
         return { uri: interaction.uri, handle: interaction.handle, action, classification, responseUri };

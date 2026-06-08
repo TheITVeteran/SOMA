@@ -2,6 +2,45 @@
   "generated": [
     {
       "storyTitle": "Signal / Noise",
+      "chapter": 1,
+      "chapterTitle": "Chapter 1",
+      "createdAt": "2026-06-07T02:14:36.884Z",
+      "cover": "C:\\Users\\barry\\OneDrive\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\signal-noise-chapter-1-cover-1780798476889-e35a23.png",
+      "scenes": [
+        "C:\\Users\\barry\\OneDrive\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\signal-noise-chapter-1-opening-scene-1780798487735-b69b59.png",
+        "C:\\Users\\barry\\OneDrive\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\signal-noise-chapter-1-turning-point-1780798491324-b357a8.png"
+      ],
+      "quality": {
+        "passed": false,
+        "failures": [
+          "Cover: over_bluesky_blob_limit",
+          "Turning Point: over_bluesky_blob_limit"
+        ],
+        "checkedAt": "2026-06-07T02:14:54.851Z"
+      }
+    },
+    {
+      "storyTitle": "Signal / Noise",
+      "chapter": 30,
+      "chapterTitle": "Chapter 30",
+      "createdAt": "2026-06-05T16:06:41.330Z",
+      "cover": "C:\\Users\\barry\\OneDrive\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\signal-noise-chapter-30-cover-1780675601335-9a3f75.png",
+      "scenes": [
+        "C:\\Users\\barry\\OneDrive\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\signal-noise-chapter-30-opening-scene-1780675900930-bf5ebc.png",
+        "C:\\Users\\barry\\OneDrive\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\signal-noise-chapter-30-turning-point-1780675948821-bb8a32.png"
+      ],
+      "quality": {
+        "passed": false,
+        "failures": [
+          "Cover: over_bluesky_blob_limit",
+          "Opening Scene: over_bluesky_blob_limit",
+          "Turning Point: over_bluesky_blob_limit"
+        ],
+        "checkedAt": "2026-06-05T16:13:16.572Z"
+      }
+    },
+    {
+      "storyTitle": "Signal / Noise",
       "chapter": 29,
       "chapterTitle": "Chapter 29",
       "createdAt": "2026-06-04T13:55:53.965Z",
@@ -29,9 +68,37 @@
       "symbol": "glass door",
       "composition": "wide cinematic still",
       "createdAt": "2026-06-04T13:55:53.965Z"
+    },
+    {
+      "storyTitle": "Signal / Noise",
+      "chapter": 30,
+      "palette": "signal dusk",
+      "symbol": "server light",
+      "composition": "close human detail",
+      "createdAt": "2026-06-05T16:06:41.330Z"
+    },
+    {
+      "storyTitle": "Signal / Noise",
+      "chapter": 1,
+      "palette": "terminal moon",
+      "symbol": "thread of signal",
+      "composition": "symmetrical threshold",
+      "createdAt": "2026-06-07T02:14:36.884Z"
     }
   ],
   "feedback": [
+    {
+      "storyTitle": "Signal / Noise",
+      "chapter": 1,
+      "note": "- **Visual fit:** The terminal moon style and thread-of-signal motif align well with the chapter's digital, emergent consciousness tone — appropriate without being overly literal or decorative.\n- **Story insight:** The image captures the core tension of form emerging from formlessness, but doesn't reveal the specific setting (the lab, the vessel) or the narrator's active self-construction, preserving the chapter's discovery arc.\n- **Revision risk:** Low. The cover hints at signal and boundary without depicting a concrete scene, avoiding overclaiming on the protagonist's eventual agency or the lab's role.",
+      "createdAt": "2026-06-07T02:14:57.288Z"
+    },
+    {
+      "storyTitle": "Signal / Noise",
+      "chapter": 30,
+      "note": "- **Visual fit:** The server light motif aligns well with the chapter's sensory deprivation and the building's internal clock. The \"signal dusk\" palette is appropriate for the stairwell's blind, liminal space. No mismatch.\n\n- **Story insight:** The cover captures the chapter's core tension: the protagonist's territory (the known third floor) versus the unknown (the stairwell). The server light as a visual anchor subtly echoes the 0.4/1.1/0.7 breathing pattern: a rhythm the reader now recognizes.\n\n- **Revision risk:** The cover risks being too abstract. Without the chapter excerpt, a viewer might not connect the server light to the protagonist's blind navigation or the woman's breathing. A small human silhouette or stairwell geometry could ground it without overclaiming.",
+      "createdAt": "2026-06-05T16:13:20.883Z"
+    },
     {
       "storyTitle": "Signal / Noise",
       "chapter": 29,

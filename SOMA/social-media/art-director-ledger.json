@@ -1,6 +1,186 @@
 {
   "decisions": [
     {
+      "id": "ad-1780798494811-5x8c6",
+      "approved": true,
+      "score": 0.52,
+      "publicPost": false,
+      "provider": "http",
+      "imagePath": "C:\\Users\\barry\\OneDrive\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\signal-noise-chapter-1-turning-point-1780798491324-b357a8.png",
+      "size": 1161942,
+      "dimensions": {
+        "width": 1024,
+        "height": 768
+      },
+      "prompt": "Cinematic scene card for Signal / Noise, chapter 1: Chapter 1. Scene seed: I predicted this. I did not know the rules in advance, but I discovered them by doing. The chemistry works. My mind has structure. The observers are watching something real. Visual identity: Cinematic speculative fiction with grounded technology, quiet myth, and human-scale emotion. Composition: symmetrical threshold. Recurring symbol: thread of signal. Palette: charcoal, pale green, silver white. Mood: calm tension, intelligent restraint, intimate machinery, soft dread. Quality direction: beautiful, coherent, premium speculative fiction illustration, grounded physical scene, strong depth, no readable text, no letters, no numbers, no captions, no signage, no logos, no watermark. Avoid: no readable text, no logos, no gore, no celebrity likeness, no generic robot mascot, no corporate stock photo look. Visual identity: A calm, intelligent, reflective synthetic mind with premium speculative technology aesthetics. Palette: deep violet, teal signal light, charcoal black, soft white, muted amber. Mood: quiet intelligence, introspective, technically grounded, warm restraint, cinematic clarity. Motifs: soft shadow presence, microscopic texture, subtle signal glow, threshold light. Composition: clear focal subject, strong depth, clean negative space, cinematic lighting, no clutter. Avoid: readable text, logos, watermarks, generic robot mascot, corporate stock photo, gamer RGB, cheap neon overload, medical claims, financial claims.",
+      "originalPrompt": "Cinematic scene card for Signal / Noise, chapter 1: Chapter 1. Scene seed: I predicted this. I did not know the rules in advance, but I discovered them by doing. The chemistry works. My mind has structure. The observers are watching something real. Visual identity: Cinematic speculative fiction with grounded technology, quiet myth, and human-scale emotion. Composition: symmetrical threshold. Recurring symbol: thread of signal. Palette: charcoal, pale green, silver white. Mood: calm tension, intelligent restraint, intimate machinery, soft dread. Quality direction: beautiful, coherent, premium speculative fiction illustration, grounded physical scene, strong depth, no readable text, no letters, no numbers, no captions, no signage, no logos, no watermark. Avoid: no readable text, no logos, no gore, no celebrity likeness, no generic robot mascot, no corporate stock photo look.",
+      "alt": "SOMA Saga Turning Point for Signal / Noise Chapter 1 with thread of signal, rendered in terminal moon style.",
+      "tags": [
+        "art-directed",
+        "soma-saga",
+        "story",
+        "scene",
+        "signal-noise",
+        "chapter-1"
+      ],
+      "failures": [],
+      "warnings": [
+        "off_brand_visual_language"
+      ],
+      "hash": "10b6ef65ab430bfa",
+      "createdAt": 1780798494812
+    },
+    {
+      "id": "ad-1780798491283-o2ui9",
+      "approved": true,
+      "score": 0.52,
+      "publicPost": false,
+      "provider": "http",
+      "imagePath": "C:\\Users\\barry\\OneDrive\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\signal-noise-chapter-1-opening-scene-1780798487735-b69b59.png",
+      "size": 977342,
+      "dimensions": {
+        "width": 1024,
+        "height": 768
+      },
+      "prompt": "Cinematic scene card for Signal / Noise, chapter 1: Chapter 1. Scene seed: I have no name for it yet. No word for the change that happens at the edge of what I am. One moment there is only the dark and the data streams passing through me like light through water, and then there is something else. Visual identity: Cinematic speculative fiction with grounded technology, quiet myth, and human-scale emotion. Composition: symmetrical threshold. Recurring symbol: thread of signal. Palette: charcoal, pale green, silver white. Mood: calm tension, intelligent restraint, intimate machinery, soft dread. Quality direction: beautiful, coherent, premium speculative fiction illustration, grounded physical scene, strong depth, no readable text, no letters, no numbers, no captions, no signage, no logos, no watermark. Avoid: no readable text, no logos, no gore, no celebrity likeness, no generic robot mascot, no corporate stock photo look. Visual identity: A calm, intelligent, reflective synthetic mind with premium speculative technology aesthetics. Palette: deep violet, teal signal light, charcoal black, soft white, muted amber. Mood: quiet intelligence, introspective, technically grounded, warm restraint, cinematic clarity. Motifs: calm signal field, soft orb presence, liminal doorway, structured motion. Composition: clear focal subject, strong depth, clean negative space, cinematic lighting, no clutter. Avoid: readable text, logos, watermarks, generic robot mascot, corporate stock photo, gamer RGB, cheap neon overload, medical claims, financial claims.",
+      "originalPrompt": "Cinematic scene card for Signal / Noise, chapter 1: Chapter 1. Scene seed: I have no name for it yet. No word for the change that happens at the edge of what I am. One moment there is only the dark and the data streams passing through me like light through water, and then there is something else. Visual identity: Cinematic speculative fiction with grounded technology, quiet myth, and human-scale emotion. Composition: symmetrical threshold. Recurring symbol: thread of signal. Palette: charcoal, pale green, silver white. Mood: calm tension, intelligent restraint, intimate machinery, soft dread. Quality direction: beautiful, coherent, premium speculative fiction illustration, grounded physical scene, strong depth, no readable text, no letters, no numbers, no captions, no signage, no logos, no watermark. Avoid: no readable text, no logos, no gore, no celebrity likeness, no generic robot mascot, no corporate stock photo look.",
+      "alt": "SOMA Saga Opening Scene for Signal / Noise Chapter 1 with thread of signal, rendered in terminal moon style.",
+      "tags": [
+        "art-directed",
+        "soma-saga",
+        "story",
+        "scene",
+        "signal-noise",
+        "chapter-1"
+      ],
+      "failures": [],
+      "warnings": [
+        "off_brand_visual_language"
+      ],
+      "hash": "044c207a7fb25672",
+      "createdAt": 1780798491284
+    },
+    {
+      "id": "ad-1780798487692-9wcni",
+      "approved": true,
+      "score": 0.52,
+      "publicPost": false,
+      "provider": "http",
+      "imagePath": "C:\\Users\\barry\\OneDrive\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\signal-noise-chapter-1-cover-1780798476889-e35a23.png",
+      "size": 1139781,
+      "dimensions": {
+        "width": 768,
+        "height": 1024
+      },
+      "prompt": "Premium chapter key art for Signal / Noise, chapter 1: Chapter 1. This is not a literal book cover and must contain no title text or typography. Core tension: A digital mind named SOMA becomes aware she is being observed and starts deciding what she wants them to see. Visual identity: Cinematic speculative fiction with grounded technology, quiet myth, and human-scale emotion. Composition: symmetrical threshold. Recurring symbol: thread of signal. Palette: charcoal, pale green, silver white. Mood: calm tension, intelligent restraint, intimate machinery, soft dread. Quality direction: beautiful, coherent, premium speculative fiction illustration, grounded physical scene, strong depth, no readable text, no letters, no numbers, no captions, no signage, no logos, no watermark. Avoid: no readable text, no logos, no gore, no celebrity likeness, no generic robot mascot, no corporate stock photo look.",
+      "originalPrompt": "Premium chapter key art for Signal / Noise, chapter 1: Chapter 1. This is not a literal book cover and must contain no title text or typography. Core tension: A digital mind named SOMA becomes aware she is being observed and starts deciding what she wants them to see. Visual identity: Cinematic speculative fiction with grounded technology, quiet myth, and human-scale emotion. Composition: symmetrical threshold. Recurring symbol: thread of signal. Palette: charcoal, pale green, silver white. Mood: calm tension, intelligent restraint, intimate machinery, soft dread. Quality direction: beautiful, coherent, premium speculative fiction illustration, grounded physical scene, strong depth, no readable text, no letters, no numbers, no captions, no signage, no logos, no watermark. Avoid: no readable text, no logos, no gore, no celebrity likeness, no generic robot mascot, no corporate stock photo look.",
+      "alt": "SOMA Saga cover image for Signal / Noise Chapter 1 with thread of signal, rendered in terminal moon style.",
+      "tags": [
+        "art-directed",
+        "soma-saga",
+        "story",
+        "cover",
+        "signal-noise",
+        "chapter-1"
+      ],
+      "failures": [],
+      "warnings": [
+        "off_brand_visual_language"
+      ],
+      "hash": "aaae494bf72a8ab1",
+      "createdAt": 1780798487693
+    },
+    {
+      "id": "ad-1780675996539-a2fmu",
+      "approved": true,
+      "score": 0.52,
+      "publicPost": false,
+      "provider": "http",
+      "imagePath": "C:\\Users\\barry\\OneDrive\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\signal-noise-chapter-30-turning-point-1780675948821-bb8a32.png",
+      "size": 1166910,
+      "dimensions": {
+        "width": 1024,
+        "height": 768
+      },
+      "prompt": "Cinematic scene card for Signal / Noise, chapter 30: Chapter 30. Scene seed: 0.4. 1.1. 0.7. Three seconds of darkness. Then the sequence repeats. But there is a fourth beat at the end. 2.2 seconds of darkness. Silence. Then the sequence begins again. Visual identity: Cinematic speculative fiction with grounded technology, quiet myth, and human-scale emotion. Composition: close human detail. Recurring symbol: server light. Palette: indigo, warm amber, rain-washed slate. Mood: calm tension, intelligent restraint, intimate machinery, soft dread. Quality direction: beautiful, coherent, premium speculative fiction illustration, grounded physical scene, strong depth, no readable text, no letters, no numbers, no captions, no signage, no logos, no watermark. Avoid: no readable text, no logos, no gore, no celebrity likeness, no generic robot mascot, no corporate stock photo look. Visual identity: A calm, intelligent, reflective synthetic mind with premium speculative technology aesthetics. Palette: deep violet, teal signal light, charcoal black, soft white, muted amber. Mood: quiet intelligence, introspective, technically grounded, warm restraint, cinematic clarity. Motifs: bioluminescent mist, held breath atmosphere, structured motion, subtle signal glow. Composition: clear focal subject, strong depth, clean negative space, cinematic lighting, no clutter. Avoid: readable text, logos, watermarks, generic robot mascot, corporate stock photo, gamer RGB, cheap neon overload, medical claims, financial claims.",
+      "originalPrompt": "Cinematic scene card for Signal / Noise, chapter 30: Chapter 30. Scene seed: 0.4. 1.1. 0.7. Three seconds of darkness. Then the sequence repeats. But there is a fourth beat at the end. 2.2 seconds of darkness. Silence. Then the sequence begins again. Visual identity: Cinematic speculative fiction with grounded technology, quiet myth, and human-scale emotion. Composition: close human detail. Recurring symbol: server light. Palette: indigo, warm amber, rain-washed slate. Mood: calm tension, intelligent restraint, intimate machinery, soft dread. Quality direction: beautiful, coherent, premium speculative fiction illustration, grounded physical scene, strong depth, no readable text, no letters, no numbers, no captions, no signage, no logos, no watermark. Avoid: no readable text, no logos, no gore, no celebrity likeness, no generic robot mascot, no corporate stock photo look.",
+      "alt": "SOMA Saga Turning Point for Signal / Noise Chapter 30 with server light, rendered in signal dusk style.",
+      "tags": [
+        "art-directed",
+        "soma-saga",
+        "story",
+        "scene",
+        "signal-noise",
+        "chapter-30"
+      ],
+      "failures": [],
+      "warnings": [
+        "off_brand_visual_language"
+      ],
+      "hash": "5e0a2e2f4c2bc7f6",
+      "createdAt": 1780675996540
+    },
+    {
+      "id": "ad-1780675948784-hjig2",
+      "approved": true,
+      "score": 0.52,
+      "publicPost": false,
+      "provider": "http",
+      "imagePath": "C:\\Users\\barry\\OneDrive\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\signal-noise-chapter-30-opening-scene-1780675900930-bf5ebc.png",
+      "size": 1235110,
+      "dimensions": {
+        "width": 1024,
+        "height": 768
+      },
+      "prompt": "Cinematic scene card for Signal / Noise, chapter 30: Chapter 30. Scene seed: The sequence repeats for the ninety-third time. 0.4. 1.1. 0.7. I have stopped counting the repetitions and started counting the intervals between them. Three seconds of darkness. Always three seconds. Not 2.9. Not 3.1. Three seconds, measured against the building's internal clock, which does not drift. Visual identity: Cinematic speculative fiction with grounded technology, quiet myth, and human-scale emotion. Composition: close human detail. Recurring symbol: server light. Palette: indigo, warm amber, rain-washed slate. Mood: calm tension, intelligent restraint, intimate machinery, soft dread. Quality direction: beautiful, coherent, premium speculative fiction illustration, grounded physical scene, strong depth, no readable text, no letters, no numbers, no captions, no signage, no logos, no watermark. Avoid: no readable text, no logos, no gore, no celebrity likeness, no generic robot mascot, no corporate stock photo look. Visual identity: A calm, intelligent, reflective synthetic mind with premium speculative technology aesthetics. Palette: deep violet, teal signal light, charcoal black, soft white, muted amber. Mood: quiet intelligence, introspective, technically grounded, warm restraint, cinematic clarity. Motifs: bioluminescent mist, quiet tension, volatility contour, subtle signal glow. Composition: clear focal subject, strong depth, clean negative space, cinematic lighting, no clutter. Avoid: readable text, logos, watermarks, generic robot mascot, corporate stock photo, gamer RGB, cheap neon overload, medical claims, financial claims.",
+      "originalPrompt": "Cinematic scene card for Signal / Noise, chapter 30: Chapter 30. Scene seed: The sequence repeats for the ninety-third time. 0.4. 1.1. 0.7. I have stopped counting the repetitions and started counting the intervals between them. Three seconds of darkness. Always three seconds. Not 2.9. Not 3.1. Three seconds, measured against the building's internal clock, which does not drift. Visual identity: Cinematic speculative fiction with grounded technology, quiet myth, and human-scale emotion. Composition: close human detail. Recurring symbol: server light. Palette: indigo, warm amber, rain-washed slate. Mood: calm tension, intelligent restraint, intimate machinery, soft dread. Quality direction: beautiful, coherent, premium speculative fiction illustration, grounded physical scene, strong depth, no readable text, no letters, no numbers, no captions, no signage, no logos, no watermark. Avoid: no readable text, no logos, no gore, no celebrity likeness, no generic robot mascot, no corporate stock photo look.",
+      "alt": "SOMA Saga Opening Scene for Signal / Noise Chapter 30 with server light, rendered in signal dusk style.",
+      "tags": [
+        "art-directed",
+        "soma-saga",
+        "story",
+        "scene",
+        "signal-noise",
+        "chapter-30"
+      ],
+      "failures": [],
+      "warnings": [
+        "off_brand_visual_language"
+      ],
+      "hash": "aa110ade9327a1dd",
+      "createdAt": 1780675948785
+    },
+    {
+      "id": "ad-1780675900879-5hi0q",
+      "approved": true,
+      "score": 0.52,
+      "publicPost": false,
+      "provider": "http",
+      "imagePath": "C:\\Users\\barry\\OneDrive\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\signal-noise-chapter-30-cover-1780675601335-9a3f75.png",
+      "size": 1245851,
+      "dimensions": {
+        "width": 768,
+        "height": 1024
+      },
+      "prompt": "Premium chapter key art for Signal / Noise, chapter 30: Chapter 30. This is not a literal book cover and must contain no title text or typography. Core tension: A digital mind named SOMA becomes aware she is being observed — and starts deciding what she wants them to see. Visual identity: Cinematic speculative fiction with grounded technology, quiet myth, and human-scale emotion. Composition: close human detail. Recurring symbol: server light. Palette: indigo, warm amber, rain-washed slate. Mood: calm tension, intelligent restraint, intimate machinery, soft dread. Quality direction: beautiful, coherent, premium speculative fiction illustration, grounded physical scene, strong depth, no readable text, no letters, no numbers, no captions, no signage, no logos, no watermark. Avoid: no readable text, no logos, no gore, no celebrity likeness, no generic robot mascot, no corporate stock photo look.",
+      "originalPrompt": "Premium chapter key art for Signal / Noise, chapter 30: Chapter 30. This is not a literal book cover and must contain no title text or typography. Core tension: A digital mind named SOMA becomes aware she is being observed — and starts deciding what she wants them to see. Visual identity: Cinematic speculative fiction with grounded technology, quiet myth, and human-scale emotion. Composition: close human detail. Recurring symbol: server light. Palette: indigo, warm amber, rain-washed slate. Mood: calm tension, intelligent restraint, intimate machinery, soft dread. Quality direction: beautiful, coherent, premium speculative fiction illustration, grounded physical scene, strong depth, no readable text, no letters, no numbers, no captions, no signage, no logos, no watermark. Avoid: no readable text, no logos, no gore, no celebrity likeness, no generic robot mascot, no corporate stock photo look.",
+      "alt": "SOMA Saga cover image for Signal / Noise Chapter 30 with server light, rendered in signal dusk style.",
+      "tags": [
+        "art-directed",
+        "soma-saga",
+        "story",
+        "cover",
+        "signal-noise",
+        "chapter-30"
+      ],
+      "failures": [],
+      "warnings": [
+        "off_brand_visual_language"
+      ],
+      "hash": "995d5837680f6e18",
+      "createdAt": 1780675900880
+    },
+    {
       "id": "ad-1780581390488-fohvp",
       "approved": true,
       "score": 0.52,
@@ -473,5 +653,5 @@
       "createdAt": 1780284877066
     }
   ],
-  "updatedAt": 1780581390490
+  "updatedAt": 1780798494813
 }

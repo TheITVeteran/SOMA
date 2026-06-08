@@ -53,7 +53,7 @@ function hash(text, images = []) {
 
 export class SocialQueue {
     /** Add a post to the queue. Returns false if duplicate. */
-    push({ platform, text, scheduledFor, type = 'post', images, imagePath, imageAlt, sourceKey, sourceUrl }) {
+    push({ platform, text, scheduledFor, type = 'post', images, imagePath, imageAlt, sourceKey, sourceUrl, socialIntent, metadata }) {
         assertPublicPost(text, { type, platform });
         const items = load();
         const normalizedImages = normalizeImages(images || (imagePath ? [{ path: imagePath, alt: imageAlt }] : []));
@@ -73,6 +73,8 @@ export class SocialQueue {
             text,
             images:       normalizedImages,
             type,
+            socialIntent: socialIntent || null,
+            metadata: metadata && typeof metadata === 'object' ? metadata : {},
             sourceKey:    sourceKey || null,
             sourceUrl:    sourceUrl || null,
             scheduledFor: scheduledFor || Date.now(),
@@ -119,6 +121,17 @@ export class SocialQueue {
             }
         }
         save(items);
+    }
+
+    /** Persist media changes made by the scheduler before dispatch. */
+    setImages(id, images = []) {
+        const items = load();
+        const item = items.find(i => i.id === id);
+        if (!item) return false;
+        item.images = normalizeImages(images);
+        item.contentHash = hash(item.text, item.images);
+        save(items);
+        return true;
     }
 
     /** Mark an item as failed (keeps it in queue for inspection but won't retry). */

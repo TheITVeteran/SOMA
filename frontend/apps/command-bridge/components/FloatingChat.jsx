@@ -36,7 +36,8 @@ async function speakProactive(text, audioCtxRef, audioUnlockedRef, voiceIdRef) {
 
   // Tier 2: Siren (Fish-Speech, local GPU)
   try {
-    const r = await fetch('http://localhost:8081/v1/tts', {
+    const host = window.location.hostname || 'localhost';
+    const r = await fetch(`http://${host}:8081/v1/tts`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ text }),

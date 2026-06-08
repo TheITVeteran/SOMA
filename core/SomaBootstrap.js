@@ -1633,7 +1633,8 @@ export class SomaBootstrap {
                 gpuTraining: this.system.gpuTraining,
                 learningPipeline: this.system.learningPipeline,
                 localModelServer: this.system.localModelServer,
-                syntheticDataGenerator: this.system.syntheticDataGenerator
+                syntheticDataGenerator: this.system.syntheticDataGenerator,
+                enabled: this.config.mode !== 'test'
             });
             await this.system.autoTrainingCoordinator.initialize();
             console.log('   ✅ AutoTrainingCoordinator ready');
@@ -1645,7 +1646,7 @@ export class SomaBootstrap {
         // Ollama Auto-Trainer (Automatic retraining loop)
         this.system.ollamaAutoTrainer = new OllamaAutoTrainer({
             name: 'OllamaAutoTrainer',
-            enabled: true,
+            enabled: this.config.mode !== 'test',
             conversationThreshold: 100, // Retrain after 100 new conversations
             checkInterval: 3600000, // Check every hour
             minTimeBetweenTraining: 86400000 // 24 hours cooldown

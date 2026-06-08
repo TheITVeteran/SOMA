@@ -397,7 +397,8 @@
 
         // Connect to WebSocket
         function connect() {
-            ws = new WebSocket('ws://localhost:8081');
+            const host = window.location.hostname || 'localhost';
+            ws = new WebSocket(`ws://${host}:8081`);
 
             ws.onopen = () => {
                 statusText.innerText = 'Connected to SOMA Simulation';

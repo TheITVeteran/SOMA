@@ -142,6 +142,7 @@
     "socket.io": "^4.8.3",
     "socket.io-client": "^4.8.3",
     "stopword": "^3.1.5",
+    "sucrase": "^3.35.1",
     "tailwind-merge": "^3.4.0",
     "tesseract.js": "^7.0.0",
     "three": "^0.180.0",

@@ -12,6 +12,8 @@ const SOURCES = {
     stories: path.join(ROOT, 'SOMA', 'stories'),
     photos: path.join(ROOT, 'SOMA', 'photos'),
     socialQueue: path.join(ROOT, 'SOMA', 'social-queue.json'),
+    socialRelationships: path.join(ROOT, 'SOMA', 'social-media', 'social-relationships.json'),
+    socialDaily: path.join(ROOT, 'SOMA', 'social-media', 'daily'),
     discordLog: path.join(ROOT, 'SOMA', 'social-discord.json'),
     commandBridge: path.join(ROOT, 'frontend', 'apps', 'command-bridge'),
     arbiters: path.join(ROOT, 'arbiters'),
@@ -180,6 +182,42 @@ export async function listArtifacts({ query = '', limit = 24, includeCode = true
     for (const file of reflections) items.push(artifact(`reflection-${file.name}`, 'reflection_folio', file.name, { source: 'reflections', status: 'filed', evidencePath: rel(file.path), updatedAt: new Date(file.updatedAt).toISOString(), tags: ['reflection', 'folio'], claimVerbs: ['wrote', 'filed'] }));
     for (const file of stories) items.push(artifact(`story-${rel(file.path)}`, 'story_artifact', file.name, { source: 'story-workspace', status: 'drafted', evidencePath: rel(file.path), updatedAt: new Date(file.updatedAt).toISOString(), tags: ['story', 'saga'], claimVerbs: ['wrote', 'drafted'] }));
     for (const file of photos) items.push(artifact(`photo-${rel(file.path)}`, 'generated_image', file.name, { source: 'image-generation', status: 'generated', evidencePath: rel(file.path), updatedAt: new Date(file.updatedAt).toISOString(), tags: ['image', 'social'], claimVerbs: ['generated'] }));
+
+    const socialRelationships = await readJson(SOURCES.socialRelationships, null);
+    if (socialRelationships) {
+        const recentEvents = Array.isArray(socialRelationships.events) ? socialRelationships.events.slice(0, 16) : [];
+        for (const event of recentEvents) {
+            items.push(artifact(
+                event.id || `social-${event.createdAt || Math.random()}`,
+                'social_memory',
+                `${event.intent || event.type || 'social'} with ${event.author || 'unknown'}`,
+                {
+                    source: 'social-relationship-ledger',
+                    status: event.status || 'observed',
+                    confidence: 0.82,
+                    evidencePath: event.journalPath ? rel(event.journalPath) : rel(SOURCES.socialRelationships),
+                    createdAt: event.createdAt ? new Date(event.createdAt).toISOString() : null,
+                    updatedAt: event.createdAt ? new Date(event.createdAt).toISOString() : null,
+                    summary: `${event.inboundText ? `Observed: ${clean(event.inboundText, 180)} ` : ''}${event.responseText ? `SOMA said: ${clean(event.responseText, 180)}` : ''}`.trim(),
+                    tags: ['social', event.platform || 'bluesky', event.intent || event.type].filter(Boolean),
+                    claimVerbs: ['remembered', 'observed', 'replied', 'posted']
+                }
+            ));
+        }
+    }
+
+    const socialDaily = await listFiles(SOURCES.socialDaily, { limit: 8, extensions: ['.md'] });
+    for (const file of socialDaily) {
+        const distilled = /\.distilled\.md$/i.test(file.name);
+        items.push(artifact(`social-daily-${file.name}`, distilled ? 'social_daily_distillation' : 'social_daily_journal', file.name, {
+            source: distilled ? 'social-daily-distillation' : 'social-daily-journal',
+            status: 'filed',
+            evidencePath: rel(file.path),
+            updatedAt: new Date(file.updatedAt).toISOString(),
+            tags: ['social', 'daily', distilled ? 'distilled' : 'journal', 'bluesky', 'discord'],
+            claimVerbs: ['filed', 'remembered', distilled ? 'distilled' : 'logged']
+        }));
+    }
 
     if (includeCode) {
         const [commandCount, arbiterCount, serverCount, coreCount] = await Promise.all([

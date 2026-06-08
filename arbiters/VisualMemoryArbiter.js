@@ -4,16 +4,18 @@
  * Visual Memory — Organizes what SOMA sees into tagged, structured memories.
  *
  * Subscribes to vision.perceived signals and builds:
- *  - userPresenceModel: is Barry visible? confidence, last seen, typical location
+ *  - userPresenceModel: is the owner visible? confidence, last seen, typical location
  *  - environmentModel: what kind of space is this? desk, room type, recurring objects
  *
- * Saves tagged memories to MnemonicArbiter so SOMA can recall "I saw Barry at his
- * desk at 3pm working in his terminal" across sessions.
+ * Saves tagged memories to MnemonicArbiter so SOMA can recall "I saw the owner at their
+ * desk at 3pm working in their terminal" across sessions.
  *
  * Exposes:
  *  - getUserPresenceSummary()  → string SOMA can read for voice context
  *  - getEnvironmentSummary()   → string SOMA can read for voice context
  */
+
+import SomaOwner from '../core/SomaOwner.cjs';
 
 export class VisualMemoryArbiter {
     constructor(opts = {}) {
@@ -21,6 +23,7 @@ export class VisualMemoryArbiter {
         this.messageBroker = opts.messageBroker || null;
         this.mnemonicArbiter = opts.mnemonicArbiter || null;
         this.visionArbiter = opts.visionArbiter || null;
+        this.ownerName = opts.ownerName || SomaOwner.ownerName?.() || 'the owner';
 
         // User presence model
         this.userPresence = {
@@ -150,8 +153,8 @@ export class VisualMemoryArbiter {
              // 📡 Emit Signal: person_recognized
              if (this.messageBroker) {
                 this.messageBroker.publish('person_recognized', {
-                    name: 'Barry', // Logic for identifying specific people could go here
-                    isCreator: true,
+                    name: this.ownerName,
+                    isOwner: true,
                     confidence: personConfidence,
                     timestamp: now
                 }).catch(() => {});
@@ -215,7 +218,7 @@ export class VisualMemoryArbiter {
     /**
      * Build a one-line diary entry for this frame.
      * "3:14pm [desktop] saw: terminal, code editor"
-     * "3:22pm [webcam] saw Barry at desk"
+     * "3:22pm [webcam] saw owner at desk"
      */
     _buildDiaryLine(channel, objects, timestamp) {
         if (!objects?.length) return null;
@@ -226,7 +229,7 @@ export class VisualMemoryArbiter {
             const hasUser = labels.some(l => ['person', 'human', 'face', 'portrait'].includes(l));
             const roomType = labels.find(l => ['office', 'bedroom', 'living room'].includes(l));
             const loc = this.userPresence.typicalLocation ? ` ${this.userPresence.typicalLocation}` : '';
-            if (hasUser) return `${timeStr} [webcam] saw Barry${loc}${roomType ? ` in ${roomType}` : ''}`;
+            if (hasUser) return `${timeStr} [webcam] saw ${this.ownerName}${loc}${roomType ? ` in ${roomType}` : ''}`;
             return `${timeStr} [webcam] saw: ${labels.slice(0, 3).join(', ')}`;
         }
 
@@ -277,7 +280,7 @@ export class VisualMemoryArbiter {
         if (channel === 'webcam') {
             if (this.userPresence.detected) {
                 const loc = this.userPresence.typicalLocation ? ` ${this.userPresence.typicalLocation}` : '';
-                parts.push(`SOMA saw Barry via webcam${loc} at ${timeStr}`);
+                parts.push(`SOMA saw ${this.ownerName} via webcam${loc} at ${timeStr}`);
             }
             if (this.detectedRoomType) {
                 parts.push(`the room is a ${this.detectedRoomType}`);
@@ -305,7 +308,7 @@ export class VisualMemoryArbiter {
         if (seenAgoMs > 5 * 60 * 1000) return null; // stale — don't mention
 
         const loc = this.userPresence.typicalLocation ? ` ${this.userPresence.typicalLocation}` : '';
-        return `Barry is visible via webcam${loc}`;
+        return `${this.ownerName} is visible via webcam${loc}`;
     }
 
     /**
@@ -313,7 +316,7 @@ export class VisualMemoryArbiter {
      */
     getEnvironmentSummary() {
         const parts = [];
-        if (this.detectedRoomType) parts.push(`Barry's ${this.detectedRoomType}`);
+        if (this.detectedRoomType) parts.push(`${this.ownerName}'s ${this.detectedRoomType}`);
         const topDesktop = [...this.environmentCounts.entries()]
             .filter(([l]) => ['terminal', 'code editor', 'browser'].includes(l))
             .sort((a, b) => b[1] - a[1])

@@ -17,6 +17,7 @@ import storyWorkspace from '../social/StoryPublishingWorkspace.js';
 import socialImageLibrary from '../social/SocialImageLibrary.js';
 import somaImageGeneration from '../social/SomaImageGenerationEngine.js';
 import socialMemory from '../social/SocialMemoryEngine.js';
+import socialRelationships from '../social/SocialRelationshipLedger.js';
 import { guardSomaText } from '../context/GroundedReasoning.js';
 
 const SOMA_DIR = path.join(process.cwd(), 'SOMA');
@@ -214,6 +215,7 @@ export default function createSocialRoutes(system) {
         const discord = normalizeDiscordState();
         const discordLearning = normalizeDiscordReflectionState();
         const socialMemoryState = socialMemory.getState();
+        const socialRelationshipState = socialRelationships.cadenceSnapshot();
         const browserReady = Boolean(system.oculusBrowser || system.somaBrowser || system.browser);
         const discordArbiter = system.discordArbiter;
         const discordWebhookConfigured = Boolean(process.env.DISCORD_WEBHOOK_URL || process.env.DISCORD_WEBHOOK);
@@ -315,6 +317,7 @@ export default function createSocialRoutes(system) {
                 },
             },
             socialMemory: socialMemoryState,
+            socialRelationships: socialRelationshipState,
         });
     });
 
@@ -376,6 +379,20 @@ export default function createSocialRoutes(system) {
                 status: 'simulated',
                 createdAt: now,
                 reason: `#${channel}`,
+            });
+            socialRelationships.recordEvent({
+                id: reply.id,
+                platform: 'discord',
+                type: 'discord_reply',
+                intent: 'respond_to_person',
+                author,
+                handle: author,
+                threadUri: conversationId,
+                inboundText,
+                responseText,
+                status: 'simulated',
+                reason: `#${channel}`,
+                createdAt: now,
             });
             res.json({ ok: true, reply, discord: state });
         } catch (e) {

@@ -23,6 +23,7 @@ import { exec } from 'child_process';
 import { promisify } from 'util';
 import { createRequire } from 'module';
 import socialMemory from '../server/social/SocialMemoryEngine.js';
+import socialRelationships from '../server/social/SocialRelationshipLedger.js';
 import somaImageGeneration from '../server/social/SomaImageGenerationEngine.js';
 import marketEvidenceStore from '../server/finance/MarketEvidenceStore.js';
 import { guardPublicText } from '../server/context/ClaimVerifier.js';
@@ -1151,6 +1152,21 @@ export class DiscordArbiter extends BaseArbiter {
                 sourceUri: msg.url || '',
                 inboundText: content,
                 responseText: reply,
+                reason: reflection.notes,
+                createdAt
+            });
+            socialRelationships.recordEvent({
+                id: event.id,
+                platform: 'discord',
+                type: action === 'reply' ? 'discord_reply' : 'discord_interaction',
+                intent: action === 'reply' ? 'respond_to_person' : 'observe_quietly',
+                author: msg.author?.username || 'unknown',
+                handle: msg.author?.username || 'unknown',
+                threadUri: msg.url || `${msg.guild?.id || 'dm'}:${msg.channelId}`,
+                sourceUri: msg.url || '',
+                inboundText: content,
+                responseText: reply,
+                status: status === 'posted' ? 'posted' : status,
                 reason: reflection.notes,
                 createdAt
             });

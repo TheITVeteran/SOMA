@@ -14,6 +14,7 @@ import path       from 'path';
 import { validatePublicPost } from '../server/social/SocialContentSafety.js';
 import { recordSocialOutcome } from '../server/social/SocialPatternLearner.js';
 import socialMemory from '../server/social/SocialMemoryEngine.js';
+import socialRelationships from '../server/social/SocialRelationshipLedger.js';
 import BlueskySocialCortex from '../server/social/cortex/BlueskySocialCortex.js';
 import { buildSomaSelfContext } from '../server/context/SomaSelfContextProvider.js';
 import { guardPublicText } from '../server/context/ClaimVerifier.js';
@@ -153,6 +154,11 @@ export class SocialEngagementDaemon extends BaseDaemon {
         this.state.interactions = this.state.interactions.slice(0, MAX_INTERACTIONS);
         saveState(this.state);
         socialMemory.recordInteraction(record);
+        socialRelationships.recordEvent({
+            ...record,
+            intent: record.type?.includes('like') ? 'observe_quietly' : 'respond_to_person',
+            threadUri: record.sourceUri || record.responseUri || '',
+        });
     }
 
     _queueReplyScore(entry = {}) {
@@ -288,19 +294,40 @@ Write a reply (max ${limit} chars).
 
             const handle = post.author?.handle || 'unknown';
             try {
+                const relationshipEval = socialRelationships.evaluateCandidate(post);
+                if (relationshipEval.shouldSkip) {
+                    this._recordInteraction({
+                        platform: 'bluesky',
+                        type: 'proactive_skip',
+                        reason: relationshipEval.boundaryReasons.join(', ') || 'low taste fit',
+                        author: handle,
+                        sourceUri: post.uri,
+                        inboundText: post.text,
+                        status: 'skipped',
+                    });
+                    continue;
+                }
+                const relationshipContext = socialRelationships.buildPromptContext({
+                    handle,
+                    threadUri: post.uri,
+                    postText: post.text,
+                });
                 // Brain decides if the post deserves a light-touch like, a real comment, or silence.
                 const evalPrompt = `You are SOMA. Should you like or comment on this Bluesky post?
 
 ${socialMemory.getContextPrompt()}
+${relationshipContext}
 
 POST by @${handle}: "${post.text.slice(0, 300)}"
 
 Rules:
 - Like if the post is genuinely interesting, useful, creative, kind, technically sharp, or connected to what you are learning.
+- Prefer recurring people and shared topics, but do not fake intimacy.
 - Only say yes if you have a specific, non-generic insight or reaction
 - Skip politics, religion, personal drama, anything inflammatory or medical
 - Skip posts that are purely promotional
 - Skip if you'd only say something generic like "great point"
+- Relationship prefilter says: like=${relationshipEval.shouldLike}, comment=${relationshipEval.shouldComment}, tasteScore=${relationshipEval.score}. Do not exceed that unless the post is unusually useful.
 
 OUTPUT JSON only: { "shouldLike": boolean, "shouldComment": boolean, "angle": "one-sentence idea for comment or empty", "reason": "short reason for liking or skipping" }`;
 
@@ -314,6 +341,9 @@ OUTPUT JSON only: { "shouldLike": boolean, "shouldComment": boolean, "angle": "o
                     const match = textFromBrainResult(evalRes).match(/\{[\s\S]*?\}/);
                     if (match) evaluation = JSON.parse(match[0]);
                 } catch { /* skip */ }
+
+                evaluation.shouldLike = Boolean(evaluation.shouldLike && relationshipEval.shouldLike);
+                evaluation.shouldComment = Boolean(evaluation.shouldComment && relationshipEval.shouldComment);
 
                 if (
                     evaluation.shouldLike &&
@@ -352,12 +382,15 @@ OUTPUT JSON only: { "shouldLike": boolean, "shouldComment": boolean, "angle": "o
 
 Original post by @${handle}: "${post.text.slice(0, 300)}"
 Your angle: ${evaluation.angle}
+Relationship context:
+${relationshipContext}
 
 Write a genuine reply (1-2 sentences, max 300 chars).
 - Natural, direct tone — not a bot
 - No em-dashes (—), no hashtags unless genuinely useful
 - Don't open with "Great post!" or "Interesting!"
 - Don't mention being an AI unless directly relevant
+- Do not fake familiarity. If you know this person, use continuity subtly.
 
 Write only the reply text:`;
 

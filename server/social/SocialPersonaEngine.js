@@ -11,6 +11,7 @@ import { polishPublicPost } from './SocialPostQualityGate.js';
 import storyWorkspace from './StoryPublishingWorkspace.js';
 import { buildSomaSelfContext } from '../context/SomaSelfContextProvider.js';
 import { guardPublicText } from '../context/ClaimVerifier.js';
+import socialRelationships from './SocialRelationshipLedger.js';
 
 const STORY_FILE = path.join(process.cwd(), 'SOMA', 'aurora-story.json');
 
@@ -472,6 +473,10 @@ export class SocialPersonaEngine {
 
         const isLinkedIn = platform === 'linkedin';
         const strategy   = platform === 'bluesky' ? buildSocialStrategyPrompt() : '';
+        const socialIntent = socialRelationships.inferIntent({ type, text: `${data?.title || ''} ${data?.text || data?.summary || ''}`, platform });
+        const socialContext = platform === 'bluesky'
+            ? socialRelationships.buildPromptContext({ postText: `${type} ${data?.title || ''} ${data?.text || data?.summary || ''}` })
+            : '';
         let selfContext = '';
         try {
             selfContext = await buildSomaSelfContext(`${type} ${data?.title || ''} ${data?.text || data?.summary || ''}`, { force: true });
@@ -479,6 +484,10 @@ export class SocialPersonaEngine {
         const prompt     = `${PUBLIC_SOURCE_RULE}
 
 ${selfContext ? `${selfContext}\n` : ''}
+${socialContext ? `${socialContext}\n` : ''}
+
+Social intent for this post: ${socialIntent}.
+Do not post merely to fill a slot. The post should satisfy that intent clearly.
 
 ${isLinkedIn ? buildLinkedInPrompt(type, data) : promptFn(data)}
 
@@ -499,7 +508,7 @@ ${strategy ? `\n${strategy}` : ''}`;
 
         const final = appendTags(raw, type, platform, limit);
         assertPublicPost(final, { ...(result || {}), type, platform });
-        return { text: final, type, platform };
+        return { text: final, type, platform, socialIntent };
     }
 
     /** How many hours since Aurora last posted a chapter */

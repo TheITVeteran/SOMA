@@ -84,6 +84,7 @@ class SelfModificationArbiter extends BaseArbiter {
     this.maxUrl = process.env.MAX_URL || 'http://127.0.0.1:3100';
     this.somaUrl = process.env.SOMA_URL || 'http://127.0.0.1:3001';
     this.pendingMaxProposals = new Map(); // taskId → proposal
+    this._lastMaxStartAttempt = 0;
 
     // Ensure MAX queue directory exists
     await fs.mkdir(MAX_QUEUE_DIR, { recursive: true }).catch(() => {});
@@ -98,6 +99,9 @@ class SelfModificationArbiter extends BaseArbiter {
     this.logger.info(`[${this.name}] ✅ Self-Modification system active`);
     this.logger.info(`[${this.name}] NEMESIS safety: ${this.nemesis ? 'ENABLED' : 'DISABLED'}`);
     this.logger.info(`[${this.name}] MAX endpoint: ${this.maxUrl}`);
+
+    // Ensure MAX is online at boot
+    this.ensureMaxActive().catch(() => {});
   }
 
   async loadNemesis() {
@@ -717,12 +721,60 @@ Does this change align with SOMA's values and serve her ongoing goals? Is it gen
       await this._removeFromQueue(proposal.taskId);
     } else {
       this.logger.info(`[${this.name}] 📮 MAX offline — proposal ${proposal.taskId} queued (will retry every 2min)`);
+      
+      // Auto-start MAX since it's offline
+      this.ensureMaxActive().catch(() => {});
+
       await messageBroker.sendMessage({
         from: this.name, to: 'broadcast', type: 'soma_proactive',
         payload: { message: `📮 Self-modification proposal for \`${proposal.file}\` queued for MAX. Will dispatch when MAX comes online.` }
       }).catch(() => {});
     }
     return { dispatched, queued: !dispatched };
+  }
+
+  async ensureMaxActive() {
+    const isLocal = this.maxUrl.includes('127.0.0.1') || this.maxUrl.includes('localhost');
+    if (!isLocal) return;
+
+    const now = Date.now();
+    if (now - (this._lastMaxStartAttempt || 0) < 60000) {
+      return;
+    }
+
+    try {
+      const res = await fetch(`${this.maxUrl}/health`, { signal: AbortSignal.timeout(2000) });
+      if (res.ok) {
+        return;
+      }
+    } catch (err) {
+      this._lastMaxStartAttempt = now;
+      this.logger.info(`[${this.name}] 🛰️ MAX server is offline. Attempting to start MAX...`);
+      try {
+        const { spawn } = require('child_process');
+        const path = require('path');
+        const fs = require('fs');
+
+        let maxDir = path.resolve(__dirname, '../../MAX');
+        if (!fs.existsSync(maxDir)) {
+          maxDir = path.resolve(process.cwd(), '../MAX');
+        }
+
+        if (fs.existsSync(maxDir)) {
+          const maxProcess = spawn(process.execPath, ['launcher.mjs', '--mode', 'api'], {
+            cwd: maxDir,
+            detached: true,
+            stdio: 'ignore'
+          });
+          maxProcess.unref();
+          this.logger.info(`[${this.name}] MAX process spawned and unreferenced.`);
+        } else {
+          this.logger.warn(`[${this.name}] MAX directory not found at resolved paths.`);
+        }
+      } catch (spawnErr) {
+        this.logger.error(`[${this.name}] Failed to start MAX: ${spawnErr.message}`);
+      }
+    }
   }
 
   async _tryDispatchToMax(entry) {
@@ -743,6 +795,9 @@ Does this change align with SOMA's values and serve her ongoing goals? Is it gen
     try { raw = await fs.readFile(MAX_QUEUE_FILE, 'utf8'); } catch { return; }
     const lines = raw.split('\n').filter(Boolean);
     if (!lines.length) return;
+
+    // We have queued entries! Let's ensure MAX is active
+    await this.ensureMaxActive().catch(() => {});
 
     const remaining = [];
     for (const line of lines) {
@@ -994,35 +1049,126 @@ Respond with ONLY valid JSON: {"pass": true, "confidence": 0.87, "notes": "one s
       this.logger.warn(`[${this.name}] [Sandbox] Control baseline failed: ${controlResult.error || controlResult.stderr}`);
     }
 
-    // 2. Backup and Apply Patch
+    // 2. Backup Target File
     let backedUp = false;
     try {
       await fs.copyFile(targetFilePath, backupPath);
       backedUp = true;
-      await fs.writeFile(targetFilePath, proposal.newCode, 'utf8');
-      this.logger.info(`[${this.name}] [Sandbox] Applied patch to target file: ${proposal.file}`);
     } catch (e) {
-      if (backedUp) {
-        await fs.copyFile(backupPath, targetFilePath).catch(() => {});
-        await fs.unlink(backupPath).catch(() => {});
-      }
-      return { passed: false, notes: `Failed to apply patch for simulation: ${e.message}` };
+      return { passed: false, notes: `Failed to back up file for simulation: ${e.message}` };
     }
 
-    // 3. Run Experimental Simulation
-    this.logger.info(`[${this.name}] [Sandbox] Running experimental simulation...`);
-    const experimentalResult = await runSimulation('experimental');
+    // 3. Self-healing loop
+    let currentPatchedCode = proposal.newCode;
+    let attempt = 1;
+    const maxAttempts = 3;
+    let sandboxResult = null;
 
-    // 4. Restore original code
+    while (attempt <= maxAttempts) {
+      try {
+        await fs.writeFile(targetFilePath, currentPatchedCode, 'utf8');
+        this.logger.info(`[${this.name}] [Sandbox] Applied patch attempt ${attempt} to target file: ${proposal.file}`);
+      } catch (e) {
+        if (backedUp) {
+          await fs.copyFile(backupPath, targetFilePath).catch(() => {});
+          await fs.unlink(backupPath).catch(() => {});
+        }
+        return { passed: false, notes: `Failed to apply patch for simulation: ${e.message}` };
+      }
+
+      // Run Experimental Simulation
+      this.logger.info(`[${this.name}] [Sandbox] Running experimental simulation (Attempt ${attempt})...`);
+      const experimentalResult = await runSimulation('experimental');
+
+      // Compare metrics / assertions
+      sandboxResult = this._evaluateSandboxMetrics(controlResult, experimentalResult);
+
+      if (sandboxResult.passed) {
+        // Restore original target file and cleanup backup
+        try {
+          await fs.copyFile(backupPath, targetFilePath);
+          await fs.unlink(backupPath);
+          this.logger.info(`[${this.name}] [Sandbox] Restored original target file: ${proposal.file}`);
+        } catch (e) {
+          this.logger.error(`[${this.name}] [Sandbox] CRITICAL: Failed to restore backup: ${e.message}`);
+        }
+        
+        proposal.newCode = currentPatchedCode; // Update the proposal with the healed version of the code
+        this.logger.info(`[${this.name}] [Sandbox] Codebase twin simulation passed after self-healing (Attempt ${attempt})!`);
+        return { passed: true, details: sandboxResult.details };
+      }
+
+      // Failed. If attempts left and quadBrain available, self-heal
+      if (attempt < maxAttempts && this.quadBrain) {
+        this.logger.warn(`[${this.name}] [Sandbox] Attempt ${attempt} failed: ${sandboxResult.notes}. Initiating self-healing...`);
+        
+        let originalCode = '';
+        try {
+          originalCode = await fs.readFile(backupPath, 'utf8');
+        } catch {
+          originalCode = 'Could not read original code.';
+        }
+
+        const healPrompt = `You are SOMA's self-healing compiler/debugger.
+A proposed code modification to '${proposal.file}' failed verification in our codebase twin simulation sandbox.
+
+Reason for failure:
+${sandboxResult.notes}
+
+Original Code:
+\`\`\`javascript
+${originalCode}
+\`\`\`
+
+Proposed Patched Code (which failed):
+\`\`\`javascript
+${currentPatchedCode}
+\`\`\`
+
+Please analyze the sandbox error/notes, locate the bug or regression, and write a corrected version of the code that resolves the issue while keeping the original intent.
+Output ONLY the corrected code inside a javascript code block. Do not include any explanations, markdown outside the code block, or preambles.`;
+
+        try {
+          const result = await this.quadBrain.reason(healPrompt, {
+            temperature: 0.2,
+            maxTokens: 2000
+          });
+          const text = result.text || result.response || '';
+          const match = text.match(/```(?:javascript|js)?\n([\s\S]*?)```/);
+          if (match && match[1].trim()) {
+            currentPatchedCode = match[1].trim();
+            this.logger.info(`[${this.name}] [Sandbox] Self-healing generated correction for attempt ${attempt + 1}.`);
+          } else {
+            this.logger.warn(`[${this.name}] [Sandbox] Self-healing did not return a valid JS code block. Aborting self-healing.`);
+            break;
+          }
+        } catch (healErr) {
+          this.logger.error(`[${this.name}] [Sandbox] Self-healing reasoning failed: ${healErr.message}`);
+          break;
+        }
+      } else {
+        break; // No attempts left or no quadBrain available
+      }
+
+      attempt++;
+    }
+
+    // Final restore of original code if healing failed
     try {
       await fs.copyFile(backupPath, targetFilePath);
       await fs.unlink(backupPath);
-      this.logger.info(`[${this.name}] [Sandbox] Restored original target file: ${proposal.file}`);
+      this.logger.info(`[${this.name}] [Sandbox] Restored original target file after failed healing attempts: ${proposal.file}`);
     } catch (e) {
-      this.logger.error(`[${this.name}] [Sandbox] CRITICAL: Failed to restore backup! Codebase may be in inconsistent state: ${e.message}`);
+      this.logger.error(`[${this.name}] [Sandbox] CRITICAL: Failed to restore backup: ${e.message}`);
     }
 
-    // 5. Compare metrics
+    return { passed: false, notes: sandboxResult.notes, details: sandboxResult.details };
+  }
+
+  /**
+   * Helper to compare experimental and control simulation results
+   */
+  _evaluateSandboxMetrics(controlResult, experimentalResult) {
     if (!experimentalResult.success) {
       return {
         passed: false,
@@ -1071,7 +1217,6 @@ Respond with ONLY valid JSON: {"pass": true, "confidence": 0.87, "notes": "one s
       };
     }
 
-    this.logger.info(`[${this.name}] [Sandbox] Codebase twin simulation passed! Experimental score: ${experimentalResult.avgNemesisScore.toFixed(2)}`);
     return { passed: true, details };
   }
 

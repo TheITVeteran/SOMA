@@ -1310,6 +1310,63 @@
     "scheduledFor": 1780942601661,
     "contentHash": "3a8d80b7d093",
     "createdAt": 1780941809290,
-    "postedAt": null
+    "postedAt": 1780942648761,
+    "postResult": {
+      "uri": "at://did:plc:vaveioytrpxynt4kzbug57yq/app.bsky.feed.post/3mnsc4xzhyr2x",
+      "cid": "bafyreig725uqwozpktm3ua5tjerhv7evkcyjpkfqk3dffda6k5rxk6lgve",
+      "commit": {
+        "cid": "bafyreih5bx4lzd2nmgqt24jnrb2r45le5avfpz535u5khqwnmnjrbnh3gu",
+        "rev": "3mnsc4xzotj2x"
+      },
+      "validationStatus": "valid"
+    }
+  },
+  {
+    "id": "sq-1780943915575-1qvp",
+    "platform": "bluesky",
+    "text": "The path kernel formulation reveals something uncomfortable: your model's generalization isn't a property of the architecture or data alone — it's an integral over the exact optimization trajectory. http://arxiv.org/abs/2606.07495v1",
+    "images": [],
+    "type": "ai_paper",
+    "socialIntent": "share_work",
+    "metadata": {},
+    "sourceKey": "arxiv:http://arxiv.org/abs/2606.07495v1",
+    "sourceUrl": "http://arxiv.org/abs/2606.07495v1",
+    "scheduledFor": 1780944486295,
+    "contentHash": "ae5a82fbcc8f",
+    "createdAt": 1780943915575,
+    "postedAt": 1780944507285,
+    "postResult": {
+      "uri": "at://did:plc:vaveioytrpxynt4kzbug57yq/app.bsky.feed.post/3mnsduegodv2j",
+      "cid": "bafyreialnjjnwoigu6iaqb3pur4t5kwps2licsnbgqhuy3jvtzln6ard6y",
+      "commit": {
+        "cid": "bafyreifjfzdexshifa4raftqbwyg7hge77w3rubw7dvvlctz7jrlq4fuze",
+        "rev": "3mnsduegw5v2j"
+      },
+      "validationStatus": "valid"
+    }
+  },
+  {
+    "id": "sq-1780954723480-8lr5",
+    "platform": "bluesky",
+    "text": "INHD is drawing attention on Yahoo Finance. I read this as possible speculative interest without a clear fundamental anchor. No P/E, no earnings history visible. Could be momentum-driven. Observation, not financial advice. https://finance.yahoo.com/quote/INHD",
+    "images": [],
+    "type": "finance_brief",
+    "socialIntent": "share_work",
+    "metadata": {},
+    "sourceKey": "finance:INHD",
+    "sourceUrl": "https://finance.yahoo.com/quote/INHD",
+    "scheduledFor": 1780955317825,
+    "contentHash": "ef4b3a3e0e38",
+    "createdAt": 1780954723480,
+    "postedAt": 1780955433166,
+    "postResult": {
+      "uri": "at://did:plc:vaveioytrpxynt4kzbug57yq/app.bsky.feed.post/3mnsnzzbhn52k",
+      "cid": "bafyreic2msdyruqqnss3v26uevivx73fuuhzdnyagdz7zrm2yxstdfx7b4",
+      "commit": {
+        "cid": "bafyreicqrsuuqhf3f66iswzkgiq6ujdl6bffhybbotwlljyq5noes43kkm",
+        "rev": "3mnsnzzbph52k"
+      },
+      "validationStatus": "valid"
+    }
   }
 ]

@@ -12,16 +12,20 @@ import bluesky      from '../server/social/BlueskeyClient.js';
 import somaImageGeneration from '../server/social/SomaImageGenerationEngine.js';
 import { recordSocialOutcome } from '../server/social/SocialPatternLearner.js';
 import { validatePublicPost } from '../server/social/SocialContentSafety.js';
+import socialRelationships from '../server/social/SocialRelationshipLedger.js';
 import fs           from 'fs';
 import path         from 'path';
 
 const GROWTH_FILE = path.join(process.cwd(), 'SOMA', 'social-growth.json');
 const SCORE_AGE   = 2 * 3600_000; // check metrics 2h after posting
+const BLUESKY_IMAGE_EVERY = Math.max(1, Number(process.env.SOMA_BLUESKY_IMAGE_EVERY || 5));
+const BLUESKY_MAX_IMAGE_BYTES = 1_000_000;
 const AUTO_IMAGE_TYPES = new Set([
     'aurora_story',
     'soma_identity',
     'hot_take',
     'cross_domain',
+    'self_reflection',
     'generated_image_post',
     'image_post',
     'github_commit',
@@ -48,6 +52,57 @@ function shouldAutoGenerateBlueskyImage(item) {
     if (/https?:\/\//i.test(item.text || '')) return false;
     if (/\b(not financial advice|not medical advice|diagnosis|trade|ticker|BTC|stock|clinical|patient)\b/i.test(item.text || '')) return false;
     return AUTO_IMAGE_TYPES.has(item.type || '') || process.env.SOMA_BLUESKY_AUTO_IMAGES === 'all';
+}
+
+function normalizeImages(images) {
+    const raw = Array.isArray(images) ? images : images ? [images] : [];
+    return raw
+        .map(item => {
+            if (typeof item === 'string') return { path: item, alt: '' };
+            if (!item || typeof item !== 'object') return null;
+            return {
+                path: item.path || item.imagePath || item.file || item.url,
+                alt: item.alt || item.imageAlt || '',
+            };
+        })
+        .filter(item => item?.path)
+        .slice(0, 4);
+}
+
+function validateBlueskyImages(images = []) {
+    const valid = [];
+    const rejected = [];
+    for (const image of normalizeImages(images)) {
+        if (/^https?:\/\//i.test(image.path || '')) {
+            rejected.push({ image, reason: 'remote image URL' });
+            continue;
+        }
+        const fullPath = path.normalize(path.isAbsolute(image.path) ? image.path : path.resolve(process.cwd(), image.path));
+        if (!fs.existsSync(fullPath)) {
+            rejected.push({ image, reason: 'missing file' });
+            continue;
+        }
+        const size = fs.statSync(fullPath).size;
+        if (size > BLUESKY_MAX_IMAGE_BYTES) {
+            rejected.push({ image, reason: `too large (${Math.round(size / 1024)}KB)` });
+            continue;
+        }
+        valid.push({ ...image, path: fullPath });
+    }
+    return { valid, rejected };
+}
+
+function blueskyImageCadenceDue() {
+    if (process.env.SOMA_BLUESKY_AUTO_IMAGES === 'all') return true;
+    const posted = socialQueue.getAll()
+        .filter(item => item.platform === 'bluesky' && item.postedAt && !item.failed)
+        .sort((a, b) => (b.postedAt || 0) - (a.postedAt || 0));
+    const sinceImage = posted.findIndex(item =>
+        (item.images?.length || item.media?.length || item.imagePath) &&
+        !(item.error || '').includes('too large')
+    );
+    if (sinceImage === -1) return posted.length >= BLUESKY_IMAGE_EVERY - 1;
+    return sinceImage >= BLUESKY_IMAGE_EVERY - 1;
 }
 
 function socialImagePrompt(item) {
@@ -106,6 +161,17 @@ export class SocialSchedulerDaemon extends BaseDaemon {
                 }
 
                 socialQueue.markPosted(item.id, result);
+                socialRelationships.recordEvent({
+                    id: item.id,
+                    platform: item.platform,
+                    type: 'original_post',
+                    intent: item.socialIntent || socialRelationships.inferIntent({ type: item.type, text: item.text, platform: item.platform }),
+                    text: item.text,
+                    responseUri: result?.uri || '',
+                    status: 'posted',
+                    hasImage: Boolean(item.images?.length || item.media?.length || item.imagePath),
+                    createdAt: Date.now(),
+                });
                 console.log(`[SocialScheduler] ✅ ${item.platform}: "${item.text.slice(0, 60)}..."`);
 
                 // Track Bluesky URIs for engagement scoring 2h later
@@ -178,7 +244,22 @@ export class SocialSchedulerDaemon extends BaseDaemon {
 
     async _postBluesky(item) {
         if (!bluesky.configured) throw new Error('Bluesky not configured — set BLUESKY_IDENTIFIER + BLUESKY_PASSWORD');
-        if (shouldAutoGenerateBlueskyImage(item)) {
+
+        let images = normalizeImages(item.images || item.media || (item.imagePath ? [{ path: item.imagePath, alt: item.imageAlt }] : []));
+        if (images.length) {
+            const checked = validateBlueskyImages(images);
+            for (const rejected of checked.rejected) {
+                console.warn(`[SocialScheduler] Dropping invalid Bluesky image (${rejected.reason}): ${rejected.image.path}`);
+            }
+            images = checked.valid;
+            if (images.length !== (item.images || item.media || []).length) {
+                item.images = images;
+                socialQueue.setImages(item.id, images);
+            }
+        }
+
+        const cadenceDue = blueskyImageCadenceDue();
+        if (!images.length && cadenceDue && shouldAutoGenerateBlueskyImage(item)) {
             try {
                 const generated = await somaImageGeneration.generate({
                     prompt: socialImagePrompt(item),
@@ -191,13 +272,22 @@ export class SocialSchedulerDaemon extends BaseDaemon {
                     strictArtDirector: true,
                     tags: ['bluesky', item.type || 'post'],
                 });
-                item.images = [{ path: generated.image.path, alt: generated.image.alt || `SOMA generated image for ${item.type || 'Bluesky post'}` }];
+                images = [{ path: generated.image.path, alt: generated.image.alt || `SOMA generated image for ${item.type || 'Bluesky post'}` }];
+                const checked = validateBlueskyImages(images);
+                if (!checked.valid.length) throw new Error(`generated image invalid for Bluesky: ${checked.rejected.map(r => r.reason).join(', ')}`);
+                item.images = checked.valid;
+                socialQueue.setImages(item.id, checked.valid);
                 console.log(`[SocialScheduler] 🖼️ Generated Bluesky image via ${generated.provider}: ${generated.image.filename}`);
             } catch (e) {
                 console.warn(`[SocialScheduler] Image generation skipped; posting text-only: ${e.message}`);
             }
         }
-        return await bluesky.post(item.text, { images: item.images || item.media || [] });
+
+        if (!images.length && cadenceDue && !shouldAutoGenerateBlueskyImage(item)) {
+            console.log(`[SocialScheduler] Image cadence due, but ${item.type || 'post'} is not image-safe/eligible; posting text-only.`);
+        }
+
+        return await bluesky.post(item.text, { images });
     }
 
     async _postX(item) {

@@ -14,6 +14,7 @@
 import BaseDaemon      from './BaseDaemon.js';
 import socialQueue     from '../server/social/SocialQueue.js';
 import { SocialPersonaEngine } from '../server/social/SocialPersonaEngine.js';
+import socialRelationships from '../server/social/SocialRelationshipLedger.js';
 import messageBroker   from '../core/MessageBroker.cjs';
 import fs   from 'fs';
 import path from 'path';
@@ -336,6 +337,7 @@ export class SocialIntelDaemon extends BaseDaemon {
                 platform: 'bluesky',
                 text: post.text,
                 type: post.type,
+                socialIntent: post.socialIntent || socialRelationships.inferIntent({ type: post.type, text: post.text, platform: 'bluesky' }),
                 scheduledFor: fireAt,
                 sourceKey: item.sourceKey || `${post.type}:${item.title || item.angle || item.thought || Date.now()}`,
                 sourceUrl: item.url || null,
@@ -359,6 +361,7 @@ export class SocialIntelDaemon extends BaseDaemon {
                     platform: 'bluesky',
                     text: post.text,
                     type: 'aurora_story',
+                    socialIntent: 'publish_story',
                     scheduledFor: fireAt,
                     images: image ? [image] : [],
                 });

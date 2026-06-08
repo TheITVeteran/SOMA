@@ -206,6 +206,7 @@ export class NemesisArbiter {
      */
     async evaluate(filepath, changeDescription, motivation = '') {
         console.log(`[${this.name}] 🔴 NEMESIS engaged: ${filepath}`);
+        this.currentFile = filepath;
 
         const investigation = [];
         let verdict = null;
@@ -351,9 +352,10 @@ INVESTIGATION PROTOCOL (follow this order):
 4. check_syntax — is the file syntactically valid?
 5. find_dependents — do callers of this file still work? Critical for interface changes.
 6. run_tests — if tests exist and fail, score must drop below 0.70.
-7. find_usages — are callers of the modified symbol still compatible?
-8. check_imports — do all imports resolve correctly?
-9. render_verdict — only after evidence is gathered.
+7. run_sandboxed_benchmark — run SOMA codebase twin simulation sandbox to evaluate execution latency, memory, and task accuracy.
+8. find_usages — are callers of the modified symbol still compatible?
+9. check_imports — do all imports resolve correctly?
+10. render_verdict — only after evidence is gathered.
 
 WHAT TO LOOK FOR:
 - Does the implementation match the stated intent?
@@ -393,6 +395,8 @@ TOOL REFERENCE (exact parameter names — use these exactly):
                     finds all files that import this file — use to detect breaking interface changes.
   run_tests:        {"filepath": "core/foo.js"}
                     finds and runs the test file for this file. CRITICAL: a failing test = score drop.
+  run_sandboxed_benchmark: {"filepath": "core/foo.js"}
+                    runs SOMA codebase twin simulation sandbox to evaluate execution latency, memory, and task accuracy.
   check_syntax:     {"filepath": "core/foo.js"}
   read_git_diff:    {"filepath": "core/foo.js"}
   check_imports:    {"filepath": "core/foo.js"}
@@ -774,6 +778,33 @@ Begin your investigation. Read the file first.`;
                         }
                     } catch (e) {
                         return { error: e.message };
+                    }
+                }
+            },
+
+            run_sandboxed_benchmark: {
+                description: 'Run codebase twin simulation sandbox benchmark to measure execution performance/correctness (latency, memory, correctness). Args: filepath (optional, target file being analyzed)',
+                execute: async ({ filepath }) => {
+                    try {
+                        const target = filepath || self.currentFile || '';
+                        const cmd = `node tests/codebase-simulation-sandbox.mjs --mode test ${target ? `--targetFile "${target}"` : ''}`;
+                        const output = execSync(cmd, {
+                            timeout: 90000,
+                            cwd: rootPath,
+                            stdio: 'pipe'
+                        }).toString();
+                        
+                        const lines = output.trim().split('\n');
+                        const lastLine = lines[lines.length - 1];
+                        try {
+                            const parsed = JSON.parse(lastLine);
+                            return { success: true, benchmark: parsed };
+                        } catch (e) {
+                            return { success: false, error: 'Failed to parse benchmark JSON output: ' + e.message, output: output.substring(0, 1500) };
+                        }
+                    } catch (e) {
+                        const out = ((e.stdout?.toString() || '') + (e.stderr?.toString() || '')).trim();
+                        return { success: false, error: e.message, output: out.substring(0, 1500) };
                     }
                 }
             },
