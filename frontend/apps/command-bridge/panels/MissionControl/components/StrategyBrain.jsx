@@ -82,8 +82,8 @@ export const StrategyBrain = ({ strategies, autonomousStatus, learnedPlaybook, m
     const winRate = getLiveWinRate(autonomousStatus);
     const sessionPnl = getLiveSessionPnl(autonomousStatus);
     const regime = getRegimeLabel(autonomousStatus);
-    const isRunning = !!autonomousStatus?.running;
-    const totalTrades = autonomousStatus?.stats?.totalTrades ?? 0;
+    const isRunning = !!autonomousStatus?.isRunning;
+    const totalTrades = autonomousStatus?.stats?.tradesExecuted ?? 0;
     const lastReason = getLastSignalReason(autonomousStatus);
 
     const atc = autonomousStatus?.activeTradeConfig;

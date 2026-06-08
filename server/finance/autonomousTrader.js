@@ -1861,6 +1861,13 @@ class AutonomousTrader {
                     : null,
                 rollingTradeCount: this._recentTrades.length,
                 kellyActive: (this._stats.wins + this._stats.losses) >= 10,
+                // pre-computed so frontend never needs to derive
+                profitFactor: this._stats.grossLosses > 0
+                    ? parseFloat((this._stats.grossWins / this._stats.grossLosses).toFixed(3))
+                    : null,
+                winRatePct: (this._stats.wins + this._stats.losses) >= 5
+                    ? parseFloat(((this._stats.wins / (this._stats.wins + this._stats.losses)) * 100).toFixed(1))
+                    : null,
             },
             openPositions: [...this._openPositions],
             uptime: this._stats.sessionStartTime ? Date.now() - this._stats.sessionStartTime : 0,

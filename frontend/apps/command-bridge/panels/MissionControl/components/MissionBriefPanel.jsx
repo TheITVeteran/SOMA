@@ -47,11 +47,22 @@ export function MissionBriefPanel({
     const activeTier = missionRuntime?.activeTierProfile || promotion?.activeTierProfile || null;
     const nextTier = missionRuntime?.promotionTiers?.find(tier => tier.id === ladder.nextTier) || null;
     const stats = autonomousStatus?.stats || {};
-    const closedTrades = Number(promotion.closedTrades ?? promotion.closed_trades ?? stats.tradesExecuted ?? 0);
-    const winRate = Number(promotion.winRate ?? promotion.win_rate ?? 0);
-    const profitFactor = Number(promotion.profitFactor ?? promotion.profit_factor ?? 0);
-    const maxDrawdown = Number(promotion.maxDrawdownPct ?? promotion.max_drawdown_pct ?? riskMetrics?.dailyDrawdown ?? 0);
-    const marketLabScore = Number(activeStrategy?.score ?? activeStrategy?.prometheusScore ?? 0);
+    // Live stats take priority over stale liveReadiness promotion data
+    const closedTrades = Number(stats.tradesExecuted ?? promotion.closedTrades ?? promotion.closed_trades ?? 0);
+    const winRate = stats.winRatePct != null
+        ? stats.winRatePct
+        : stats.rollingWinRate != null
+            ? stats.rollingWinRate * 100
+            : Number(promotion.winRate ?? promotion.win_rate ?? 0);
+    const profitFactor = stats.profitFactor != null
+        ? stats.profitFactor
+        : Number(promotion.profitFactor ?? promotion.profit_factor ?? 0);
+    const maxDrawdown = Number(riskMetrics?.dailyDrawdown ?? promotion.maxDrawdownPct ?? promotion.max_drawdown_pct ?? 0);
+    // Use live ensemble confidence as market lab score when no strategy score is loaded
+    const marketLabScore = Number(
+        activeStrategy?.score ?? activeStrategy?.prometheusScore ??
+        autonomousStatus?.agentConfidences?.strategy ?? 0
+    );
     const liveEligible = Boolean(missionRuntime?.liveEligible || promotion.liveEligible || promotion.passed);
     const simulated = dataSource === 'SIMULATION';
     const paperOnly = isDemoMode || !liveEligible;
@@ -64,27 +75,35 @@ export function MissionBriefPanel({
         {
             label: 'Paper sample',
             passed: closedTrades >= 100,
-            detail: `${closedTrades || 0}/100 closed paper trades recorded before live promotion.`
+            detail: closedTrades > 0
+                ? `${closedTrades}/100 closed paper trades.`
+                : 'No closed trades yet — engine running.'
         },
         {
             label: 'Win rate',
             passed: winRate >= 60,
-            detail: winRate ? `${pct(winRate)} versus 60% minimum.` : 'No verified win-rate sample yet.'
+            detail: winRate > 0
+                ? `${pct(winRate)} win rate (${stats.wins || 0}W / ${stats.losses || 0}L) vs 60% min.`
+                : closedTrades > 0 ? 'Calculating...' : 'No closed trades yet.'
         },
         {
             label: 'Profit factor',
             passed: profitFactor >= 1.4,
-            detail: profitFactor ? `${profitFactor.toFixed(2)} versus 1.40 minimum.` : 'Needs closed trade distribution.'
+            detail: profitFactor != null && profitFactor > 0
+                ? `${profitFactor.toFixed(2)}× gross win/loss ratio vs 1.40 min.`
+                : closedTrades > 0 ? 'Calculating...' : 'Needs closed trade distribution.'
         },
         {
             label: 'Drawdown control',
             passed: maxDrawdown <= 12,
-            detail: `${pct(maxDrawdown)} maximum observed drawdown versus 12% cap.`
+            detail: `${pct(maxDrawdown)} current drawdown vs 12% cap.`
         },
         {
-            label: 'Market lab evidence',
+            label: 'Ensemble confidence',
             passed: marketLabScore >= 0.72,
-            detail: marketLabScore ? `${marketLabScore.toFixed(3)} Prometheus score versus 0.720 minimum.` : 'No graduated strategy score loaded.'
+            detail: marketLabScore > 0
+                ? `${(marketLabScore * 100).toFixed(0)}% ensemble score vs 72% min.`
+                : 'Engine not running — no signal score yet.'
         }
     ];
 
@@ -168,10 +187,10 @@ export function MissionBriefPanel({
                     <div className="rounded bg-zinc-800 px-1.5 py-0.5 text-[9px] font-bold text-zinc-300">{selectedSymbol}</div>
                 </div>
                 <div className="font-mono text-[11px] font-bold text-white">
-                    {activeStrategy?.strategyName || activeStrategy?.strategy?.name || currentPresetId || 'No strategy loaded'}
+                    {autonomousStatus?.preset || activeStrategy?.strategyName || currentPresetId || 'No strategy loaded'}
                 </div>
                 <div className="mt-1 text-[10px] leading-snug text-zinc-500">
-                    Regime: {marketRegime?.regime?.type?.replace('_', ' ') || 'unknown'} · Data: {dataSource || 'unknown'}
+                    Regime: {autonomousStatus?.lastSignal?.regime || marketRegime?.regime?.type?.replace('_', ' ') || 'unknown'} · Data: {dataSource || 'unknown'}
                 </div>
             </div>
 
