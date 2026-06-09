@@ -1820,7 +1820,8 @@ const MissionControlApp = ({ somaBackend, isConnected }) => {
                 return false;
             }
 
-            if (requireBrokerCheck) {
+            // Broker check only matters for live mode — paper/demo mode runs internally without Alpaca.
+            if (requireBrokerCheck && !isDemoMode) {
                 const controller = new AbortController();
                 const timeout = setTimeout(() => controller.abort(), 3000);
                 try {
@@ -1828,7 +1829,7 @@ const MissionControlApp = ({ somaBackend, isConnected }) => {
                     clearTimeout(timeout);
                     const statusData = await statusRes.json();
                     if (!statusData.success || !statusData.status?.connected) {
-                        addToast('Alpaca not connected — add paper trading keys in Settings.', 'warning');
+                        addToast('Alpaca not connected — add live keys in Settings, or enable Paper Mode.', 'warning');
                         setIsSettingsOpen(true);
                         return false;
                     }
