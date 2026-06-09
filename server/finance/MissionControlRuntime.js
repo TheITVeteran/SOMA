@@ -55,7 +55,7 @@ class MissionControlRuntime {
             mode: 'paper',
             activeTier: 'paper',
             liveEligible: false,
-            paperCapital: 1000,
+            paperCapital: 10000,
             activeStrategy: null,
             council: {
                 director: 0.55,
@@ -189,7 +189,7 @@ class MissionControlRuntime {
             minConfidence -= 0.02;
         }
 
-        const maxPaperTradeValue = Math.min(this.state.paperCapital || 1000, 1000);
+        const maxPaperTradeValue = this.state.paperCapital || 10000;
         const config = applyTierProfile({
             ...baseConfig,
             ...profile,

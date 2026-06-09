@@ -811,6 +811,7 @@ class AutonomousTrader {
         // Dynamic threshold based on regime
         let threshold = this.config.minConfidence;
         if (regime === 'VOLATILE') threshold += 0.10; // Require higher confidence in volatile markets
+        if (regime === 'RANGING' || regime?.includes?.('RANGING')) threshold -= 0.08; // Mean-reversion uses tighter directional bar (0.06 vs 0.10), so lower the confidence gate to match
 
         if (recommendation === 'BUY' || recommendation === 'STRONG BUY' || recommendation === 'LONG') {
             if (compositeConfidence >= threshold) {
@@ -971,15 +972,17 @@ class AutonomousTrader {
                 maxValue = Math.min(maxValue, this.config.maxPaperTradeValue);
             }
 
-            const maxQty = Math.floor(maxValue / currentPrice);
-            const bpQty = Math.floor((buyingPower * 0.9) / currentPrice);
+            const isCrypto = this.symbol.includes('-') || this.symbol.includes('USDT');
+
+            // Crypto is fractional — never floor to 0 just because price > balance
+            const maxQty = isCrypto ? maxValue / currentPrice : Math.floor(maxValue / currentPrice);
+            const bpQty  = isCrypto ? (buyingPower * 0.9) / currentPrice : Math.floor((buyingPower * 0.9) / currentPrice);
             const qty = Math.min(maxQty, bpQty);
 
-            const isCrypto = this.symbol.includes('-') || this.symbol.includes('USDT');
-            const finalQty = isCrypto ? Math.min(maxValue / currentPrice, bpQty) : qty;
+            const finalQty = isCrypto ? qty : Math.max(1, qty);
 
             return {
-                qty: isCrypto ? parseFloat(finalQty.toFixed(6)) : Math.max(1, finalQty),
+                qty: isCrypto ? parseFloat(finalQty.toFixed(6)) : finalQty,
                 maxValue,
                 equity,
                 buyingPower,
