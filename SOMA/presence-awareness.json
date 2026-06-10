@@ -1,12 +1,61 @@
 {
   "version": 1,
-  "mode": "unknown",
-  "lastUserActivityAt": 1780957673550,
-  "lastPersonSeenAt": null,
+  "mode": "present",
+  "lastUserActivityAt": 1781038742574,
+  "lastPersonSeenAt": 1781038925880,
   "lastPetSeenAt": null,
-  "lastProbeAt": null,
-  "consecutivePersonFrames": 0,
+  "lastProbeAt": 1781038925880,
+  "lastKnownProbeAt": null,
+  "lastUnknownProbeAt": 1781038925880,
+  "consecutivePersonFrames": 2,
   "pendingReturnSince": null,
-  "lastIdentity": null,
-  "lastProbeReason": null
+  "lastIdentity": "barry",
+  "lastIdentityDisplay": "Barry",
+  "lastProbeReason": "person_seen_after_absence",
+  "learnedUsers": {
+    "barry": {
+      "displayName": "Barry",
+      "firstSeenAt": 1781041536198,
+      "lastSeenAt": 1781041536198,
+      "confidence": 0.9,
+      "source": "identity-test"
+    }
+  },
+  "lastEventKeys": {
+    "camera:raw": 1781038877826,
+    "person:unknown_person": 1781038924303,
+    "probe:unknown": 1781038925880,
+    "identity:barry": 1781041536198
+  },
+  "visionTruth": {
+    "cameraConnected": true,
+    "frameVisible": true,
+    "sceneAnalyzed": true,
+    "personDetected": true,
+    "petDetected": false,
+    "identityKnown": true,
+    "confidence": 0.7,
+    "source": "deep-describe",
+    "summary": "A man sits in a chair, holding his hand to his face with a lamp and shelves behind him.",
+    "labels": [
+      "man",
+      "lamp",
+      "shelves",
+      "person",
+      "chair",
+      "lamp"
+    ],
+    "updatedAt": 1781041536198
+  },
+  "lastVisionLabels": [
+    "man",
+    "lamp",
+    "shelves",
+    "person",
+    "chair",
+    "lamp"
+  ],
+  "lastPersonConfidence": 0.7,
+  "lastIdentityConfidence": 0.9,
+  "lastIdentityAt": 1781041536198
 }

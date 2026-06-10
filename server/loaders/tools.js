@@ -4,7 +4,31 @@
  * Central registry for SOMA's tools.
  */
 
+import fs from 'fs/promises';
+import path from 'path';
 import toolRegistry from '../../core/ToolRegistry.js';
+import { analyzeImageFile, imageMimeType, isImageFile } from '../utils/LocalVisionFileAnalyzer.js';
+
+function normalizeVisionToolObjects(objects = []) {
+    return (Array.isArray(objects) ? objects : [])
+        .map(obj => typeof obj === 'string'
+            ? { label: obj, score: null, bbox: null }
+            : {
+                label: String(obj?.label || obj?.name || obj?.class || 'unknown').toLowerCase(),
+                score: Number.isFinite(obj?.score) ? obj.score : (Number.isFinite(obj?.confidence) ? obj.confidence : null),
+                bbox: obj?.bbox || obj?.box || null
+            })
+        .filter(obj => obj.label && obj.label !== 'unknown');
+}
+
+async function pathExists(filePath) {
+    try {
+        await fs.access(filePath);
+        return true;
+    } catch {
+        return false;
+    }
+}
 
 export async function loadTools(systemContext = {}) {
     console.log('\n[Loader] 🛠️  Initializing Tools...');
@@ -806,14 +830,12 @@ export async function loadTools(systemContext = {}) {
     toolRegistry.registerTool({
         name: 'vision_scan',
         dependencies: ['computer_control'],
-        description: 'Analyze an image or the current screen for objects, text, or patterns. Returns labels and pixel coordinates.',
-        parameters: { source: 'string (optional path or "screen")', threshold: 'number (0-1, default 0.7)' },
-        execute: async ({ source, threshold }) => {
+        description: 'Analyze an image or the current screen for objects, visible text, and semantic scene details. Uses the local VLM first, then falls back to object detection.',
+        parameters: { source: 'string (optional path or "screen")', threshold: 'number (0-1, default 0.7)', prompt: 'string (optional focus question)' },
+        execute: async ({ source, threshold, prompt }) => {
             const liveSystem = getSystem();
             const vision = liveSystem.visionArbiter || liveSystem.visionProcessing;
             const control = liveSystem.computerControl;
-            
-            if (!vision) return 'VisionProcessingArbiter not available';
             
             try {
                 let target = source;
@@ -823,13 +845,56 @@ export async function loadTools(systemContext = {}) {
                     if (!cap.success) return `Capture failed: ${cap.error}`;
                     target = cap.imagePath;
                 }
-                
-                const result = await vision.detectObjects(target, threshold || 0.7);
+
+                const isRemoteTarget = /^https?:\/\//i.test(String(target || ''));
+                const resolved = isRemoteTarget ? target : path.resolve(process.cwd(), target);
+                const canReadTarget = !isRemoteTarget && await pathExists(resolved);
+                const mimeType = imageMimeType(resolved);
+
+                if (canReadTarget && isImageFile(resolved, mimeType)) {
+                    try {
+                        const local = await analyzeImageFile(resolved, {
+                            mimeType,
+                            prompt: [
+                                prompt || 'Analyze this current visual frame for SOMA.',
+                                'Return ONLY JSON: {"summary":"factual description","objects":["short labels"],"ocrText":null,"uncertain":false}.',
+                                'Describe only visible pixels. Include visible UI text when useful. If unclear, set uncertain:true.'
+                            ].join('\n'),
+                            auditType: 'tool_vision_scan',
+                            auditSource: source === 'screen' || !source ? 'screen-tool' : 'file-tool'
+                        });
+                        return {
+                            success: true,
+                            engine: 'local-vlm',
+                            model: local.model,
+                            imagePath: resolved,
+                            summary: local.summary,
+                            objects: normalizeVisionToolObjects(local.objects),
+                            ocrText: local.ocrText,
+                            uncertain: Boolean(local.uncertain),
+                            confidence: local.uncertain ? 'uncertain' : 'usable'
+                        };
+                    } catch (localErr) {
+                        if (!vision?.detectObjects) {
+                            return {
+                                success: false,
+                                imagePath: resolved,
+                                error: `Local VLM unavailable and VisionProcessingArbiter not available: ${localErr.message}`
+                            };
+                        }
+                    }
+                }
+
+                if (!vision?.detectObjects) return 'VisionProcessingArbiter not available';
+                const result = await vision.detectObjects(resolved || target, threshold || 0.7);
+                const objects = normalizeVisionToolObjects(result.objects);
                 return {
                     success: true,
-                    objects: result.objects,
-                    imagePath: target,
-                    summary: `Found ${result.count} objects.`
+                    engine: 'vision-processing',
+                    objects,
+                    ocrText: result.ocrText || null,
+                    imagePath: resolved || target,
+                    summary: objects.length ? `Found ${objects.length} visual labels: ${objects.map(obj => obj.label).slice(0, 8).join(', ')}.` : 'No confident visual labels found.'
                 };
             } catch (e) { return `Vision scan failed: ${e.message}`; }
         }

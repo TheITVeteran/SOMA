@@ -1,4 +1,4 @@
-﻿import express from 'express';
+import express from 'express';
 import { exec, execFile } from 'child_process';
 import fs from 'fs';
 import path from 'path';
@@ -23,8 +23,10 @@ import walkForwardEngine from '../finance/WalkForwardEngine.js';
 import somaImageGeneration from '../social/SomaImageGenerationEngine.js';
 import { buildSomaContext } from '../context/SomaContextKernel.js';
 import { guardPublicText } from '../context/ClaimVerifier.js';
+import { analyzeImageFile, formatImageAnalysisForIngestion } from '../utils/LocalVisionFileAnalyzer.js';
 const require = createRequire(import.meta.url);
 const { defaultLearningSpine } = require('../../core/LearningSpine.cjs');
+const presenceAwareness = require('../../core/PresenceAwarenessState.cjs');
 
 // ── Excel analysis cache: keyed by filePath+mtime, TTL 10 min ──────────────
 // Prevents re-analyzing the same unmodified file on every financial chat message.
@@ -863,15 +865,33 @@ Rules: respond in 1-3 short conversational sentences. No bullets, markdown, or h
             const vc = system.visionContext;
             if (vc?.timestamp && (Date.now() - vc.timestamp < 30000) && vc.objects?.length) {
                 const channel = vc.channel === 'webcam' ? 'webcam (physical room)' : 'desktop (screen)';
-                const visionArbiter = system.visionArbiter;
-                const naturalDesc = visionArbiter?.buildNaturalDescription?.(vc);
-                const objectStr = naturalDesc || vc.objects.slice(0, 4).map(o => o.label).join(', ');
-                visionBlock = `\n[VISUAL AWARENESS — via ${channel}] ${objectStr}.`;
-                if (vc.ocrText) visionBlock += ` Screen text reads: "${vc.ocrText.substring(0, 300)}".`;
-                const visualCtx = system.visualMemory?.getVisualContext?.();
-                if (visualCtx) visionBlock += ` ${visualCtx}.`;
-                visionBlock += '\n';
+                const labels = vc.objects.map(o => String(o?.label || '').toLowerCase()).filter(Boolean);
+                const placeholderWebcam = vc.channel === 'webcam'
+                    && !vc.semanticAnalysis
+                    && (labels.length === 0 || (labels.length === 1 && labels[0] === 'webcam frame'));
+
+                if (placeholderWebcam) {
+                    visionBlock = [
+                        `\n[VISUAL AWARENESS via ${channel}]`,
+                        'The webcam feed is connected, but the latest frame has not been semantically analyzed.',
+                        'Do not describe room contents, shapes, people, pets, lighting, or layout unless a later analyzed scene provides those details.',
+                        '\n'
+                    ].join(' ');
+                } else {
+                    const visionArbiter = system.visionArbiter;
+                    const naturalDesc = visionArbiter?.buildNaturalDescription?.(vc);
+                    const objectStr = naturalDesc || vc.summary || vc.objects.slice(0, 4).map(o => o.label).join(', ');
+                    visionBlock = `\n[VISUAL AWARENESS via ${channel}] ${objectStr}.`;
+                    if (vc.ocrText) visionBlock += ` Screen text reads: "${vc.ocrText.substring(0, 300)}".`;
+                    const visualCtx = system.visualMemory?.getVisualContext?.();
+                    if (visualCtx) visionBlock += ` ${visualCtx}.`;
+                    visionBlock += '\n';
+                }
             }
+            let presenceBlock = '';
+            try {
+                presenceBlock = `\n${presenceAwareness.formatForPrompt()}\n`;
+            } catch {}
 
             const systemPrompt = `
 ${LOGOS_VOICE_SYSTEM}
@@ -879,7 +899,7 @@ ${LOGOS_VOICE_SYSTEM}
 I have just verified the MnemonicArbiter is ONLINE.
 Search results for "${message}":
 ${memoryContext || "No specific memories found for this query."}
-[/CORE_TRUTH]${visionBlock}
+[/CORE_TRUTH]${visionBlock}${presenceBlock}
 `.trim();
 
             const messages = [{ role: 'system', content: systemPrompt }];
@@ -1021,6 +1041,38 @@ ${memoryContext || "No specific memories found for this query."}
     });
 
     // POST /api/soma/chat
+    router.post('/market/interpret', async (req, res) => {
+        try {
+            const { message } = req.body;
+            if (!message) {
+                return res.status(400).json({ success: false, error: 'Message is required' });
+            }
+
+            const brain = getBrain();
+            if (!brain) {
+                return res.status(503).json({ success: false, error: 'Brain modules are loading' });
+            }
+
+            const response = await brain.reason(message, {
+                temperature: 0.1,
+                preferredBrain: 'LOGOS',
+                quickResponse: true,
+                systemOverride: 'You are a cyberpunk market analysis data extractor. Return ONLY valid JSON matching the schema, with no markdown tags or explanations.'
+            });
+
+            console.log('[Market Interpret API] Brain response:', response);
+            const text = typeof response === 'string' ? response : (response?.response || response?.text || response?.message || '');
+            res.json({
+                success: true,
+                response: text,
+                message: text
+            });
+        } catch (err) {
+            console.error('[Market Interpret API] Error:', err.message);
+            res.status(500).json({ success: false, error: err.message });
+        }
+    });
+
     router.post('/chat', chatRateLimit, async (req, res) => {
         const incomingBody = req.body || {};
         const isSilentUtility = Boolean(incomingBody.silent) || incomingBody.source === 'studio-utility' || /^studio-(avatar|cover|oracle|vibe|inspire)$/i.test(String(incomingBody.sessionId || ''));
@@ -2513,13 +2565,27 @@ ${personaContext}${characterContext}`.trim()
     // POST /api/soma/vision/analyze
     router.post('/vision/analyze', async (req, res) => {
         try {
-            const { query, file } = req.body;
-            const brain = getBrain();
-            if (!brain) return res.status(503).json({ error: 'Brain offline' });
-            
-            const result = await brain.reason(`Analyze image: ${query}
-[Image: ${file.name}]`, { vision: true });
-            res.json({ success: true, analysis: result.text });
+            const { query, file, filePath, path: requestedPath } = req.body;
+            const targetPath = filePath || requestedPath || file?.path;
+            if (!targetPath) return res.status(400).json({ success: false, error: 'filePath is required for local vision analysis' });
+            const resolved = path.resolve(process.cwd(), targetPath);
+            if (!resolved.startsWith(process.cwd())) {
+                return res.status(403).json({ success: false, error: 'Image path must be inside the SOMA workspace' });
+            }
+            const result = await analyzeImageFile(resolved, {
+                mimeType: file?.mimeType || file?.type,
+                prompt: query ? [
+                    'Analyze this image for SOMA.',
+                    `User focus: ${String(query).slice(0, 500)}`,
+                    'Return ONLY JSON: {"summary":"factual description","objects":["short labels"],"ocrText":null,"uncertain":false}.',
+                    'Describe only visible pixels.'
+                ].join('\n') : undefined
+            });
+            res.json({
+                success: true,
+                analysis: formatImageAnalysisForIngestion(result, resolved),
+                result
+            });
         } catch (error) { res.status(500).json({ error: error.message }); }
     });
 

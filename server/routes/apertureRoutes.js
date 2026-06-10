@@ -5,6 +5,7 @@ import crypto from 'crypto';
 import { createRequire } from 'module';
 import axisStore from '../axis/AxisStore.js';
 import DendriteSearchEngine from '../services/DendriteSearchEngine.js';
+import portalDb from '../storage/portalDb.js';
 
 const statePath = path.resolve(process.cwd(), 'data', 'aperture', 'state.json');
 const portalIndexPath = path.resolve(process.cwd(), 'data', 'aperture', 'portal-index.json');
@@ -273,6 +274,9 @@ export default function createApertureRoutes(system = {}) {
     });
 
     router.post('/portal/index', async (req, res) => {
+        if (req.body?.isPrivate) {
+            return res.json({ success: true, message: 'Private session - page index skipped' });
+        }
         const page = portalPageFromBody(req.body || {});
         if (!page) {
             return res.status(400).json({ success: false, error: 'A public URL and extracted content are required.' });
@@ -517,6 +521,9 @@ export default function createApertureRoutes(system = {}) {
 
     router.post('/portal/history', async (req, res) => {
         try {
+            if (req.body?.isPrivate) {
+                return res.json({ success: true, message: 'Private session - history skipped' });
+            }
             const { title, address, kind, query = '' } = req.body || {};
             if (!title || !address || !kind) return res.status(400).json({ success: false, error: 'title, address, and kind required' });
             const id = `hist-${Date.now()}-${Math.random().toString(16).slice(2)}`;
@@ -577,6 +584,154 @@ export default function createApertureRoutes(system = {}) {
             }
         }
         res.json({ success: true, results: results.slice(0, 25) });
+    });
+
+    // -- Site Permissions --
+    router.get('/portal/permissions', async (req, res) => {
+        try {
+            const permissions = portalDb.getAllPermissions();
+            res.json({ success: true, permissions });
+        } catch (e) {
+            res.status(500).json({ success: false, error: e.message });
+        }
+    });
+
+    router.get('/portal/permissions/origin', async (req, res) => {
+        try {
+            const origin = String(req.query.origin || '').trim();
+            if (!origin) return res.status(400).json({ success: false, error: 'origin query parameter required' });
+            const permissions = portalDb.getPermissions(origin);
+            res.json({ success: true, permissions });
+        } catch (e) {
+            res.status(500).json({ success: false, error: e.message });
+        }
+    });
+
+    router.post('/portal/permissions', async (req, res) => {
+        try {
+            const { origin, permission, value } = req.body || {};
+            if (!origin || !permission || !value) {
+                return res.status(400).json({ success: false, error: 'origin, permission, and value required' });
+            }
+            const updated = portalDb.setPermission(origin, permission, value);
+            res.json({ success: true, permissions: updated });
+        } catch (e) {
+            res.status(500).json({ success: false, error: e.message });
+        }
+    });
+
+    router.delete('/portal/permissions', async (req, res) => {
+        try {
+            const origin = String(req.query.origin || req.body?.origin || '').trim();
+            if (!origin) return res.status(400).json({ success: false, error: 'origin required' });
+            const removed = portalDb.deletePermissions(origin);
+            res.json({ success: true, removed });
+        } catch (e) {
+            res.status(500).json({ success: false, error: e.message });
+        }
+    });
+
+    // -- Downloads --
+    router.get('/portal/downloads', async (req, res) => {
+        try {
+            const downloads = portalDb.getDownloads();
+            res.json({ success: true, downloads });
+        } catch (e) {
+            res.status(500).json({ success: false, error: e.message });
+        }
+    });
+
+    router.post('/portal/downloads', async (req, res) => {
+        try {
+            const { id, filename, url, savePath, totalBytes } = req.body || {};
+            if (!id || !filename || !url || !savePath) {
+                return res.status(400).json({ success: false, error: 'id, filename, url, and savePath required' });
+            }
+            const download = portalDb.createDownload({ id, filename, url, savePath, totalBytes });
+            res.json({ success: true, download });
+        } catch (e) {
+            res.status(500).json({ success: false, error: e.message });
+        }
+    });
+
+    router.put('/portal/downloads/:id', async (req, res) => {
+        try {
+            const { receivedBytes, state } = req.body || {};
+            if (receivedBytes === undefined) {
+                return res.status(400).json({ success: false, error: 'receivedBytes required' });
+            }
+            const download = portalDb.updateDownloadProgress(req.params.id, receivedBytes, state);
+            res.json({ success: true, download });
+        } catch (e) {
+            res.status(500).json({ success: false, error: e.message });
+        }
+    });
+
+    router.post('/portal/downloads/:id/complete', async (req, res) => {
+        try {
+            const { totalBytes } = req.body || {};
+            const download = portalDb.completeDownload(req.params.id, totalBytes);
+            res.json({ success: true, download });
+        } catch (e) {
+            res.status(500).json({ success: false, error: e.message });
+        }
+    });
+
+    router.post('/portal/downloads/:id/fail', async (req, res) => {
+        try {
+            const { errorMessage } = req.body || {};
+            const download = portalDb.failDownload(req.params.id, errorMessage);
+            res.json({ success: true, download });
+        } catch (e) {
+            res.status(500).json({ success: false, error: e.message });
+        }
+    });
+
+    router.delete('/portal/downloads/:id', async (req, res) => {
+        try {
+            const removed = portalDb.deleteDownload(req.params.id);
+            res.json({ success: true, removed });
+        } catch (e) {
+            res.status(500).json({ success: false, error: e.message });
+        }
+    });
+
+    // -- Credentials --
+    router.get('/portal/credentials', async (req, res) => {
+        try {
+            const { origin } = req.query || {};
+            if (origin) {
+                const credentials = portalDb.getCredentials(origin);
+                res.json({ success: true, credentials });
+            } else {
+                const credentials = portalDb.getAllCredentials();
+                res.json({ success: true, credentials });
+            }
+        } catch (e) {
+            res.status(500).json({ success: false, error: e.message });
+        }
+    });
+
+    router.post('/portal/credentials', async (req, res) => {
+        try {
+            const { origin, username, password } = req.body || {};
+            if (!origin || !username || !password) {
+                return res.status(400).json({ success: false, error: 'origin, username, and password required' });
+            }
+            const credential = portalDb.saveCredential(origin, username, password);
+            res.json({ success: true, credential });
+        } catch (e) {
+            res.status(500).json({ success: false, error: e.message });
+        }
+    });
+
+    router.delete('/portal/credentials/:id', async (req, res) => {
+        try {
+            const removed = portalDb.deleteCredential(req.params.id);
+            res.json({ success: true, removed });
+        } catch (e) {
+            res.status(500).json({ success: false, error: e.message });
+        }
     });
 
     return router;

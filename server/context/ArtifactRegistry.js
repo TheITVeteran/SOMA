@@ -14,6 +14,8 @@ const SOURCES = {
     socialQueue: path.join(ROOT, 'SOMA', 'social-queue.json'),
     socialRelationships: path.join(ROOT, 'SOMA', 'social-media', 'social-relationships.json'),
     socialDaily: path.join(ROOT, 'SOMA', 'social-media', 'daily'),
+    presenceDaily: path.join(ROOT, 'SOMA', 'presence-daily'),
+    visionTruthAudit: path.join(ROOT, 'SOMA', 'vision-truth-audit.jsonl'),
     discordLog: path.join(ROOT, 'SOMA', 'social-discord.json'),
     commandBridge: path.join(ROOT, 'frontend', 'apps', 'command-bridge'),
     arbiters: path.join(ROOT, 'arbiters'),
@@ -218,6 +220,32 @@ export async function listArtifacts({ query = '', limit = 24, includeCode = true
             claimVerbs: ['filed', 'remembered', distilled ? 'distilled' : 'logged']
         }));
     }
+
+    const presenceDaily = await listFiles(SOURCES.presenceDaily, { limit: 8, extensions: ['.md'] });
+    for (const file of presenceDaily) {
+        items.push(artifact(`presence-daily-${file.name}`, 'presence_daily_journal', file.name, {
+            source: 'presence-daily-journal',
+            status: 'filed',
+            evidencePath: rel(file.path),
+            updatedAt: new Date(file.updatedAt).toISOString(),
+            tags: ['presence', 'daily', 'visual-memory', 'webcam'],
+            claimVerbs: ['noticed', 'remembered', 'logged']
+        }));
+    }
+
+    try {
+        const stat = await fs.stat(SOURCES.visionTruthAudit);
+        items.push(artifact('vision-truth-audit', 'vision_truth_audit', 'Vision truth audit log', {
+            source: 'vision-truth-audit',
+            status: 'active',
+            confidence: 0.9,
+            evidencePath: rel(SOURCES.visionTruthAudit),
+            updatedAt: new Date(stat.mtimeMs).toISOString(),
+            summary: 'Append-only record of SOMA visual claims, models, evidence paths, and uncertainty flags.',
+            tags: ['vision', 'audit', 'truth', 'webcam', 'local-vlm'],
+            claimVerbs: ['audited', 'verified', 'logged']
+        }));
+    } catch {}
 
     if (includeCode) {
         const [commandCount, arbiterCount, serverCount, coreCount] = await Promise.all([

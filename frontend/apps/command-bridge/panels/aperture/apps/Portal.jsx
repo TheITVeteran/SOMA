@@ -4,7 +4,8 @@ import {
   ExternalLink, FileText, Globe2, History, Library,
   Plus, RefreshCw, Search, Send, ShieldCheck, Sparkles, X,
   ChevronDown, ChevronRight, Folder, LayoutGrid, User, Music, Users, Settings, Home, File,
-  Lock, Star, Moon, ChevronUp, Code2, DatabaseZap, Copy, Download, Upload, Trash2, RotateCcw
+  Lock, Star, Moon, ChevronUp, Code2, DatabaseZap, Copy, Download, Upload, Trash2, RotateCcw,
+  EyeOff, Unlock, Key
 } from 'lucide-react';
 import somaBackend from '../../../somaBackend';
 import './Portal.css';
@@ -141,11 +142,12 @@ const homePage = () => ({
   createdAt: Date.now()
 });
 
-const newTab = () => {
+const newTab = (isPrivate = false) => {
   const page = homePage();
   return {
     id: `${Date.now()}-${Math.random().toString(16).slice(2)}`,
-    title: 'Portal',
+    title: isPrivate ? 'Private Tab' : 'Portal',
+    isPrivate,
     page,
     stack: [page],
     cursor: 0,
@@ -270,6 +272,18 @@ export default function PortalBrowser({ workspace, policy = {}, onSettingsUpdate
   const [gmnCreateBusy, setGmnCreateBusy] = useState(false);
   const [gmnTemplate, setGmnTemplate] = useState('blank');
   const [dendriteStats, setDendriteStats] = useState({ indexedPages: 0 });
+
+  // Premium Browser States
+  const [showPermissionsPopover, setShowPermissionsPopover] = useState(false);
+  const [sitePermissions, setSitePermissions] = useState(null);
+  const [showDownloadsTray, setShowDownloadsTray] = useState(false);
+  const [downloads, setDownloads] = useState([]);
+  const [activeDownloadsCount, setActiveDownloadsCount] = useState(0);
+  const [showCredentialsPopover, setShowCredentialsPopover] = useState(false);
+  const [activeCredentials, setActiveCredentials] = useState([]);
+  const [newUsername, setNewUsername] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [showAddCredential, setShowAddCredential] = useState(false);
 
   const [webviewStates, setWebviewStates] = useState({});
 
@@ -435,6 +449,243 @@ export default function PortalBrowser({ workspace, policy = {}, onSettingsUpdate
   const activeTab = tabs.find(tab => tab.id === activeTabId) || tabs[0];
   const page = activeTab.page;
   const hasEvidence = page.kind !== 'home' && (page.kind !== 'browser' || page.captured);
+
+  // Resolve active origin
+  const activeOrigin = useMemo(() => {
+    if (activeTab?.page?.kind === 'browser' && activeTab?.page?.address?.startsWith('http')) {
+      try {
+        return new URL(activeTab.page.address).origin;
+      } catch {
+        return null;
+      }
+    }
+    return null;
+  }, [activeTabId, activeTab?.page?.address, activeTab?.page?.kind]);
+
+  // Fetch permissions for active origin
+  useEffect(() => {
+    if (!activeOrigin) {
+      setSitePermissions(null);
+      return;
+    }
+    let active = true;
+    somaBackend.fetch(`/api/aperture/portal/permissions/origin?origin=${encodeURIComponent(activeOrigin)}`)
+      .then(res => {
+        if (active && res.success) {
+          setSitePermissions(res.permissions);
+        }
+      })
+      .catch(err => console.error('[Portal] Failed to fetch permissions:', err));
+    return () => { active = false; };
+  }, [activeOrigin]);
+
+  // Update site permission
+  const handleUpdatePermission = async (permission, value) => {
+    if (!activeOrigin) return;
+    try {
+      const res = await somaBackend.fetch('/api/aperture/portal/permissions', {
+        method: 'POST',
+        body: JSON.stringify({ origin: activeOrigin, permission, value })
+      });
+      if (res.success) {
+        setSitePermissions(res.permissions);
+        setNotice(`Updated ${permission} permission to ${value} for ${activeOrigin}`);
+      }
+    } catch (err) {
+      setError('Failed to update permission');
+    }
+  };
+
+  // Fetch credentials for active origin
+  useEffect(() => {
+    if (!activeOrigin) {
+      setActiveCredentials([]);
+      return;
+    }
+    let active = true;
+    somaBackend.fetch(`/api/aperture/portal/credentials?origin=${encodeURIComponent(activeOrigin)}`)
+      .then(res => {
+        if (active && res.success) {
+          setActiveCredentials(res.credentials || []);
+        }
+      })
+      .catch(err => console.error('[Portal] Error fetching credentials:', err));
+    return () => { active = false; };
+  }, [activeOrigin]);
+
+  // Save new credential
+  const handleSaveCredential = async () => {
+    if (!activeOrigin || !newUsername.trim() || !newPassword.trim()) return;
+    try {
+      const res = await somaBackend.fetch('/api/aperture/portal/credentials', {
+        method: 'POST',
+        body: JSON.stringify({ origin: activeOrigin, username: newUsername, password: newPassword })
+      });
+      if (res.success) {
+        setNewUsername('');
+        setNewPassword('');
+        setShowAddCredential(false);
+        setNotice('Credential saved successfully.');
+        const updated = await somaBackend.fetch(`/api/aperture/portal/credentials?origin=${encodeURIComponent(activeOrigin)}`);
+        if (updated.success) setActiveCredentials(updated.credentials || []);
+      }
+    } catch (err) {
+      setError('Failed to save credential');
+    }
+  };
+
+  // Delete credential
+  const handleDeleteCredential = async (id) => {
+    try {
+      const res = await somaBackend.fetch(`/api/aperture/portal/credentials/${id}`, {
+        method: 'DELETE'
+      });
+      if (res.success) {
+        setActiveCredentials(prev => prev.filter(c => c.id !== id));
+        setNotice('Credential deleted.');
+      }
+    } catch (err) {
+      setError('Failed to delete credential');
+    }
+  };
+
+  // Inject credential autofill
+  const handleAutofillCredential = (username, password) => {
+    if (!webviewRef.current || activeTab?.page?.kind !== 'browser') return;
+    const script = `
+      (function() {
+        const passwordField = document.querySelector('input[type="password"]');
+        if (passwordField) {
+          passwordField.value = ${JSON.stringify(password)};
+          passwordField.dispatchEvent(new Event('input', { bubbles: true }));
+          passwordField.dispatchEvent(new Event('change', { bubbles: true }));
+          
+          let usernameField = null;
+          const inputs = Array.from(document.querySelectorAll('input'));
+          const idx = inputs.indexOf(passwordField);
+          for (let i = idx - 1; i >= 0; i--) {
+            if (inputs[i].type === 'text' || inputs[i].type === 'email') {
+              usernameField = inputs[i];
+              break;
+            }
+          }
+          if (usernameField) {
+            usernameField.value = ${JSON.stringify(username)};
+            usernameField.dispatchEvent(new Event('input', { bubbles: true }));
+            usernameField.dispatchEvent(new Event('change', { bubbles: true }));
+          }
+        }
+      })()
+    `;
+    webviewRef.current.executeJavaScript(script)
+      .then(() => {
+        setNotice('Credentials autofilled.');
+        setShowCredentialsPopover(false);
+      })
+      .catch(err => {
+        console.error('[Portal] Autofill error:', err);
+        setError('Autofill injection failed.');
+      });
+  };
+
+  // Fetch downloads list
+  const fetchDownloads = useCallback(async () => {
+    try {
+      const res = await somaBackend.fetch('/api/aperture/portal/downloads');
+      if (res.success) {
+        setDownloads(res.downloads || []);
+        const activeCount = (res.downloads || []).filter(d => d.state === 'progress').length;
+        setActiveDownloadsCount(activeCount);
+      }
+    } catch (err) {
+      console.error('[Portal] Failed to fetch downloads:', err);
+    }
+  }, []);
+
+  // Poll downloads if tray is open or downloads are in progress
+  useEffect(() => {
+    fetchDownloads();
+    const timer = setInterval(() => {
+      const hasProgress = downloads.some(d => d.state === 'progress');
+      if (hasProgress || showDownloadsTray) {
+        fetchDownloads();
+      }
+    }, 2000);
+    return () => clearInterval(timer);
+  }, [downloads, showDownloadsTray, fetchDownloads]);
+
+  // Delete download entry
+  const handleDeleteDownload = async (id) => {
+    try {
+      const res = await somaBackend.fetch(`/api/aperture/portal/downloads/${id}`, {
+        method: 'DELETE'
+      });
+      if (res.success) {
+        setDownloads(prev => prev.filter(d => d.id !== id));
+        setNotice('Download record removed.');
+      }
+    } catch (err) {
+      setError('Failed to remove download record');
+    }
+  };
+
+  // Explain selected text helper
+  const explainSelection = async () => {
+    if (!webviewRef.current || activeTab?.page?.kind !== 'browser') return;
+    try {
+      const selection = await webviewRef.current.executeJavaScript(`window.getSelection().toString()`);
+      if (!selection || !selection.trim()) {
+        setNotice('Please select/highlight some text on the web page first!');
+        return;
+      }
+      setShowAssistPanel(true);
+      setSideTab('assistant');
+      setSteveThinking(true);
+      setSteveMessages(prev => [...prev, { role: 'user', text: `Explain this highlighted text: "${selection}"`, ts: Date.now() }]);
+      
+      const result = await somaBackend.fetch('/api/soma/steve/chat', {
+        method: 'POST',
+        body: JSON.stringify({
+          message: `Explain this highlighted text selected by the user on the current page:\n\n"${selection}"\n\nActive Page URL: ${activeTab.page.address}`,
+          history: steveMessages.slice(-8).map(m => ({
+            role: m.role === 'user' ? 'user' : 'assistant',
+            content: m.text
+          })),
+          context: portalSteveContext()
+        })
+      });
+      
+      if (result.error || result.success === false) throw new Error(result.error || 'Steve failed to explain selection.');
+      
+      setSteveMessages(prev => [...prev, {
+        role: 'steve',
+        text: responseText(result, 'Steve returned no explanation.'),
+        ts: Date.now()
+      }]);
+    } catch (err) {
+      setError(`Failed to explain: ${err.message}`);
+    } finally {
+      setSteveThinking(false);
+    }
+  };
+
+  // Toggle private mode for current active tab
+  const togglePrivateMode = () => {
+    setTabs(previous => previous.map(tab => {
+      if (tab.id !== activeTabId) return tab;
+      const nextPrivate = !tab.isPrivate;
+      return {
+        ...tab,
+        isPrivate: nextPrivate,
+        title: nextPrivate ? 'Private Tab' : 'Portal',
+        page: {
+          ...tab.page,
+          title: nextPrivate ? 'Private Tab' : 'Portal'
+        }
+      };
+    }));
+    setNotice(activeTab.isPrivate ? 'Switched tab to Standard mode.' : 'Switched tab to Private mode. Cookies, cache, and history will not be logged.');
+  };
   const isSaved = bookmarks.some(item => item.address === page.address);
   const canBack = page.kind === 'browser' ? activeTabState.canGoBack : activeTab.cursor > 0;
   const canForward = page.kind === 'browser' ? activeTabState.canGoForward : activeTab.cursor < activeTab.stack.length - 1;
@@ -558,10 +809,11 @@ export default function PortalBrowser({ workspace, policy = {}, onSettingsUpdate
           title: nextPage.title,
           address: nextPage.address,
           kind: nextPage.kind,
-          query: nextPage.query || ''
+          query: nextPage.query || '',
+          isPrivate: activeTab?.isPrivate || false
         })
       });
-      if (res.success) {
+      if (res.success && !activeTab?.isPrivate) {
         setLibrary(prev => [res.entry, ...prev.filter(entry => entry.address !== nextPage.address)].slice(0, 100));
       }
     } catch (err) {
@@ -1073,7 +1325,7 @@ export default function PortalBrowser({ workspace, policy = {}, onSettingsUpdate
       if (!captured.content) throw new Error('The rendered page did not expose readable content.');
       const indexed = await somaBackend.fetch('/api/aperture/portal/index', {
         method: 'POST',
-        body: JSON.stringify({ url: captured.url, title: captured.title, content: captured.content, source: 'chromium-browser' })
+        body: JSON.stringify({ url: captured.url, title: captured.title, content: captured.content, source: 'chromium-browser', isPrivate: activeTab?.isPrivate || false })
       });
       if (indexed.error || indexed.success === false) throw new Error(indexed.error || 'Dendrite Search indexing failed.');
       setTabs(previous => previous.map(tab => tab.id === activeTabId
@@ -1126,8 +1378,8 @@ export default function PortalBrowser({ workspace, policy = {}, onSettingsUpdate
     : page.kind === 'browser' && webviewRef.current ? webviewRef.current.reload()
       : page.kind === 'reader' ? readUrl(page.address) : null;
 
-  const addTab = () => {
-    const tab = newTab();
+  const addTab = (isPrivate = false) => {
+    const tab = newTab(isPrivate);
     setTabs(previous => [...previous, tab]);
     setActiveTabId(tab.id);
   };
@@ -1287,7 +1539,19 @@ export default function PortalBrowser({ workspace, policy = {}, onSettingsUpdate
     setSteveMessages(previous => [...previous, { role: 'user', text: value, ts: Date.now() }]);
     setSteveThinking(true);
     try {
-      const evidence = hasEvidence ? pageText(page).slice(0, 10000) : 'No captured evidence is available yet.';
+      let evidence = hasEvidence ? pageText(page).slice(0, 10000) : 'No captured evidence is available yet.';
+      if (page.kind === 'browser' && webviewRef.current) {
+        try {
+          const scraped = await webviewRef.current.executeJavaScript(`
+            (document.body ? document.body.innerText : '').slice(0, 15000)
+          `);
+          if (scraped && scraped.trim()) {
+            evidence = `Live Scraped Content of current page:\n${scraped}`;
+          }
+        } catch (err) {
+          console.warn('[Portal] Failed to scrape webview live contents:', err);
+        }
+      }
       const result = await somaBackend.fetch('/api/soma/steve/chat', {
         method: 'POST',
         body: JSON.stringify({
@@ -1406,6 +1670,7 @@ export default function PortalBrowser({ workspace, policy = {}, onSettingsUpdate
   };
 
   const getTabIcon = (tab) => {
+    if (tab.isPrivate) return EyeOff;
     const title = (tab.title || '').toLowerCase();
     const url = (tab.page?.address || '').toLowerCase();
     if (title.includes('spotify') || url.includes('spotify.com')) return Music;
@@ -1563,7 +1828,7 @@ export default function PortalBrowser({ workspace, policy = {}, onSettingsUpdate
   }, []);
 
   return (
-    <div className={`portal ${sidebarCollapsed ? 'sidebar-collapsed' : ''}`}>
+    <div className={`portal ${sidebarCollapsed ? 'sidebar-collapsed' : ''} ${activeTab?.isPrivate ? 'incognito' : ''}`}>
       {/* Sleek top header bar spanning across the window */}
       <header className="portal-header-bar">
         <div className="portal-header-left">
@@ -1606,10 +1871,34 @@ export default function PortalBrowser({ workspace, policy = {}, onSettingsUpdate
               {mode === 'reader' && <FileText size={12} title="Reader View" />}
             </button>
             {mode === 'browse' && (
-              <div className="portal-header-security-badge" title="Secure HTTPS Connection">
-                <Lock size={10} className="portal-security-lock-icon" />
-                <span>Secure</span>
-              </div>
+              <>
+                {(input.startsWith('https://') || page.address.startsWith('https://')) && (
+                  <div className="portal-header-security-badge secure" title="Secure HTTPS Connection" onClick={() => setShowPermissionsPopover(!showPermissionsPopover)}>
+                    <Lock size={10} className="portal-security-lock-icon" />
+                    <span>Secure</span>
+                  </div>
+                )}
+                {(input.startsWith('http://') || page.address.startsWith('http://')) && (
+                  <div className="portal-header-security-badge insecure" title="Insecure Connection" onClick={() => setShowPermissionsPopover(!showPermissionsPopover)}>
+                    <Unlock size={10} className="portal-security-lock-icon" />
+                    <span>Not Secure</span>
+                  </div>
+                )}
+                {(input.startsWith('gmn://') || page.address.startsWith('gmn://')) && (
+                  <div className="portal-header-security-badge gmn" title="GMN Sandbox Network" onClick={() => setShowPermissionsPopover(!showPermissionsPopover)}>
+                    <DatabaseZap size={10} className="portal-security-lock-icon" />
+                    <span>GMN Sandbox</span>
+                  </div>
+                )}
+                {!input.startsWith('https://') && !page.address.startsWith('https://') &&
+                 !input.startsWith('http://') && !page.address.startsWith('http://') &&
+                 !input.startsWith('gmn://') && !page.address.startsWith('gmn://') && (
+                  <div className="portal-header-security-badge portal" title="Local Portal System" onClick={() => setShowPermissionsPopover(!showPermissionsPopover)}>
+                    <ShieldCheck size={10} className="portal-security-lock-icon" />
+                    <span>Local Portal</span>
+                  </div>
+                )}
+              </>
             )}
             <input
               value={input}
@@ -1622,18 +1911,44 @@ export default function PortalBrowser({ workspace, policy = {}, onSettingsUpdate
               }
             />
             {mode === 'browse' && page.kind === 'browser' && (
-              <button
-                type="button"
-                className="portal-header-reader-toggle-btn"
-                onClick={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  readUrl(page.address);
-                }}
-                title="Open in Reader Mode"
-              >
-                <BookOpen size={13} />
-              </button>
+              <>
+                <button
+                  type="button"
+                  className={`portal-header-private-toggle-btn ${activeTab.isPrivate ? 'active' : ''}`}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    togglePrivateMode();
+                  }}
+                  title={activeTab.isPrivate ? "Disable Private Browsing" : "Enable Private Browsing"}
+                >
+                  <EyeOff size={13} className={activeTab.isPrivate ? 'portal-private-icon active' : 'portal-private-icon'} />
+                </button>
+                <button
+                  type="button"
+                  className={`portal-header-key-btn ${activeCredentials.length > 0 ? 'saved' : ''}`}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    setShowCredentialsPopover(!showCredentialsPopover);
+                  }}
+                  title="Saved logins for this site"
+                >
+                  <Key size={13} fill={activeCredentials.length > 0 ? "#c084fc" : "none"} />
+                </button>
+                <button
+                  type="button"
+                  className="portal-header-reader-toggle-btn"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    readUrl(page.address);
+                  }}
+                  title="Open in Reader Mode"
+                >
+                  <BookOpen size={13} />
+                </button>
+              </>
             )}
             {page.kind !== 'home' && (
               <button
@@ -1673,6 +1988,15 @@ export default function PortalBrowser({ workspace, policy = {}, onSettingsUpdate
               <Code2 size={14} />
             </button>
           )}
+          <button
+            type="button"
+            className={`portal-header-downloads-btn ${showDownloadsTray ? 'active' : ''}`}
+            onClick={() => setShowDownloadsTray(!showDownloadsTray)}
+            title="Downloads"
+          >
+            <Download size={14} />
+            {activeDownloadsCount > 0 && <span className="portal-downloads-badge">{activeDownloadsCount}</span>}
+          </button>
           <button type="button" className={`portal-header-assist-toggle ${showAssistPanel ? 'active' : ''}`} onClick={() => setShowAssistPanel(!showAssistPanel)} title="Toggle SOMA Assist">
             <Brain size={14} />
           </button>
@@ -1684,6 +2008,140 @@ export default function PortalBrowser({ workspace, policy = {}, onSettingsUpdate
           </div>
         </div>
       </header>
+
+      {/* Premium Browser Popovers */}
+      {showPermissionsPopover && sitePermissions && activeOrigin && (
+        <div className="portal-permissions-popover">
+          <div className="popover-header">
+            <strong>Site Permissions</strong>
+            <small>{activeOrigin.replace(/^https?:\/\//, '')}</small>
+          </div>
+          <div className="popover-body">
+            {['camera', 'microphone', 'location', 'notifications', 'clipboard'].map(perm => (
+              <div key={perm} className="permission-row">
+                <span>{perm.charAt(0).toUpperCase() + perm.slice(1)}</span>
+                <select
+                  value={sitePermissions[perm] || 'ask'}
+                  onChange={(e) => handleUpdatePermission(perm, e.target.value)}
+                >
+                  <option value="allow">Allow</option>
+                  <option value="deny">Deny</option>
+                  <option value="ask">Ask</option>
+                </select>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {showCredentialsPopover && activeOrigin && (
+        <div className="portal-credentials-popover">
+          <div className="popover-header">
+            <strong>Saved Logins</strong>
+            <button className="add-login-toggle-btn" onClick={() => setShowAddCredential(!showAddCredential)}>
+              {showAddCredential ? 'View Saved' : 'Add New'}
+            </button>
+          </div>
+          <div className="popover-body">
+            {showAddCredential ? (
+              <div className="add-credential-form">
+                <input
+                  type="text"
+                  placeholder="Username / Email"
+                  value={newUsername}
+                  onChange={(e) => setNewUsername(e.target.value)}
+                />
+                <input
+                  type="password"
+                  placeholder="Password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                />
+                <button type="button" onClick={handleSaveCredential} className="save-credential-btn">
+                  Save Login
+                </button>
+              </div>
+            ) : (
+              <div className="credentials-list">
+                {activeCredentials.map(cred => (
+                  <div key={cred.id} className="credential-item">
+                    <div className="cred-details">
+                      <strong>{cred.username}</strong>
+                      <span>••••••••</span>
+                    </div>
+                    <div className="cred-actions">
+                      <button type="button" className="autofill-btn" onClick={() => handleAutofillCredential(cred.username, cred.password)}>
+                        Autofill
+                      </button>
+                      <button type="button" className="delete-cred-btn" onClick={() => handleDeleteCredential(cred.id)}>
+                        <Trash2 size={11} />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+                {activeCredentials.length === 0 && (
+                  <p className="no-credentials-msg">No credentials saved for this site.</p>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {showDownloadsTray && (
+        <div className="portal-downloads-tray">
+          <div className="tray-header">
+            <strong>Downloads</strong>
+            <button className="close-tray-btn" onClick={() => setShowDownloadsTray(false)}>
+              <X size={12} />
+            </button>
+          </div>
+          <div className="tray-body">
+            {downloads.map(d => {
+              const pct = d.total_bytes ? Math.round((d.received_bytes / d.total_bytes) * 100) : 0;
+              return (
+                <div key={d.id} className="download-item">
+                  <div className="download-info">
+                    <span className="file-name" title={d.filename}>{d.filename}</span>
+                    <span className="download-url" title={d.url}>{d.url}</span>
+                  </div>
+                  {d.state === 'progress' && (
+                    <div className="download-progress-container">
+                      <div className="download-progress-bar">
+                        <div className="progress-fill" style={{ width: `${pct}%` }} />
+                      </div>
+                      <div className="progress-details">
+                        <span>{pct}% ({Math.round(d.received_bytes / 1024)} KB / {Math.round(d.total_bytes / 1024)} KB)</span>
+                      </div>
+                    </div>
+                  )}
+                  {d.state === 'completed' && (
+                    <div className="download-status completed">
+                      <span className="status-badge">Completed</span>
+                      <span className="save-path" title={d.save_path}>{d.save_path}</span>
+                      <button className="copy-path-btn" onClick={() => { navigator.clipboard.writeText(d.save_path); setNotice('Save path copied.'); }}>
+                        Copy Path
+                      </button>
+                    </div>
+                  )}
+                  {d.state === 'failed' && (
+                    <div className="download-status failed">
+                      <span className="status-badge">Failed</span>
+                      <span className="error-msg" title={d.error_message}>{d.error_message}</span>
+                    </div>
+                  )}
+                  <button className="delete-download-btn" onClick={() => handleDeleteDownload(d.id)} title="Delete history entry">
+                    <Trash2 size={12} />
+                  </button>
+                </div>
+              );
+            })}
+            {downloads.length === 0 && (
+              <p className="no-downloads-msg">No downloads in history.</p>
+            )}
+          </div>
+        </div>
+      )}
       {showProgressBar && (
         <div className="portal-progress-bar-container">
           <div className="portal-progress-bar-fill" style={{ width: `${loadProgress}%` }} />
@@ -2203,6 +2661,7 @@ export default function PortalBrowser({ workspace, policy = {}, onSettingsUpdate
                     </div>
                     <div className="portal-side-actions">
                       <button type="button" disabled={!hasEvidence || steveThinking} onClick={event => sendToSteve(event, 'Audit this Portal artifact for clarity, weak claims, missing citations, broken flow, and next improvements. Keep it concise and actionable.')}><Sparkles size={13} /> Steve Audit</button>
+                      <button type="button" disabled={page.kind !== 'browser' || steveThinking} onClick={explainSelection}><FileText size={13} /> Explain Selection</button>
                       <button type="button" disabled={!hasEvidence} onClick={saveToMemory}><Brain size={13} /> Catalog</button>
                       <button type="button" disabled={!hasEvidence} onClick={saveToReflections}><BookOpen size={13} /> Save Note</button>
                     </div>
@@ -2601,7 +3060,7 @@ function PortalWebview({ tab, isActive, onNavigate, onStateChange, registerRef, 
         ref={ref}
         className="portal-webview"
         src={tab.page.address}
-        partition="persist:portal"
+        partition={tab.isPrivate ? "portal_private" : "persist:portal"}
         webpreferences="contextIsolation=yes,nodeIntegration=no,sandbox=yes"
       />
     </div>

@@ -27,6 +27,7 @@ import socialRelationships from '../server/social/SocialRelationshipLedger.js';
 import somaImageGeneration from '../server/social/SomaImageGenerationEngine.js';
 import marketEvidenceStore from '../server/finance/MarketEvidenceStore.js';
 import { guardPublicText } from '../server/context/ClaimVerifier.js';
+import tradeLogger from '../server/finance/TradeLogger.js';
 
 const execAsync = promisify(exec);
 const require = createRequire(import.meta.url);
@@ -75,6 +76,8 @@ export class DiscordArbiter extends BaseArbiter {
         this.ambientMaxRepliesPerHour = Number(opts.ambientMaxRepliesPerHour || process.env.DISCORD_AMBIENT_MAX_PER_HOUR || 6);
         this._ambientLastReplyByChannel = new Map();
         this._ambientHourlyReplies = [];
+        this.system = opts.system || null;
+        this.goalPlanner = opts.goalPlanner || opts.system?.goalPlanner || null;
     }
 
     async onInitialize() {
@@ -97,6 +100,21 @@ export class DiscordArbiter extends BaseArbiter {
                     this.channelModes = new Map(Object.entries(saved.channelModes));
                 }
             } catch (e) {}
+
+            // Subscribe to proactive notifications from messageBroker
+            try {
+                const messageBroker = require('../core/MessageBroker.cjs');
+                messageBroker.subscribe('soma_proactive', (envelope) => {
+                    const payload = envelope.payload || envelope;
+                    const msgText = payload.message;
+                    if (msgText) {
+                        this.sendMasterMessage(msgText).catch(() => {});
+                    }
+                });
+                this.log('info', '🛰️ Subscribed to MessageBroker:soma_proactive events');
+            } catch (mbError) {
+                this.log('warn', `Failed to subscribe to MessageBroker proactive events: ${mbError.message}`);
+            }
 
             if (this.token) {
                 try {
@@ -186,6 +204,31 @@ export class DiscordArbiter extends BaseArbiter {
                 reject(err);
             });
         });
+    }
+
+    async sendMasterMessage(message) {
+        if (!this.client || !this.connected) {
+            this.log('warn', 'Cannot send master message: Discord client not connected.');
+            return false;
+        }
+        if (!this.masterId) {
+            this.log('warn', 'Cannot send master message: masterId not configured.');
+            return false;
+        }
+        try {
+            const user = await this.client.users.fetch(this.masterId);
+            if (user) {
+                await user.send(message);
+                this.log('info', `Sent DM to master (${this.masterId}): "${message.substring(0, 60)}..."`);
+                return true;
+            } else {
+                this.log('error', `Could not find master user with ID ${this.masterId}`);
+                return false;
+            }
+        } catch (err) {
+            this.log('error', `Failed to send DM to master: ${err.message}`);
+            return false;
+        }
     }
 
     _setupMessageListener() {
@@ -403,9 +446,128 @@ export class DiscordArbiter extends BaseArbiter {
         }
     }
 
+    async _readTradingState() {
+        const file = path.join(process.cwd(), 'data', 'trading', 'mission-control-runtime.json');
+        try {
+            const raw = await fs.readFile(file, 'utf8');
+            return JSON.parse(raw);
+        } catch (err) {
+            return null;
+        }
+    }
+
+    async _getRealtimeContext() {
+        // 1. Fetch Active Goals
+        let formattedGoals = "No active goals.";
+        if (this.goalPlanner?.getActiveGoals) {
+            try {
+                const goals = await this.goalPlanner.getActiveGoals();
+                if (Array.isArray(goals) && goals.length > 0) {
+                    formattedGoals = goals.map(g => `- ${g.title} (Priority: ${g.priority || 'N/A'})`).join('\n');
+                }
+            } catch (err) {
+                this.log('warn', `Failed to fetch active goals: ${err.message}`);
+            }
+        }
+
+        // 2. Fetch Recent Work Ledger
+        let formattedWork = "No recent autonomic work records.";
+        try {
+            const workItems = workLedger.list(8);
+            if (Array.isArray(workItems) && workItems.length > 0) {
+                formattedWork = workItems.map(item => {
+                    const timeStr = this._formatArtifactDate(item.timestamp);
+                    const title = this._formatSafeSnippet(item.title || item.type || 'activity', 90);
+                    const summary = this._formatSafeSnippet(item.summary || '', 200);
+                    const status = this._formatSafeSnippet(item.status || 'reported', 30);
+                    return `- [${timeStr}] ${title} (${status}): ${summary}`;
+                }).join('\n');
+            }
+        } catch (err) {
+            this.log('warn', `Failed to read work ledger: ${err.message}`);
+        }
+
+        // 3. Fetch Trading State
+        let formattedTrading = "No auto-trading status available.";
+        try {
+            const tradingState = await this._readTradingState();
+            if (tradingState) {
+                const mode = tradingState.mode || 'inactive';
+                const capital = tradingState.paperCapital || 0;
+                const strategy = tradingState.activeStrategy || {};
+                const strategyName = strategy.strategyName || 'None';
+                const symbol = strategy.symbol || 'N/A';
+                const winRate = strategy.winRate ? `${(strategy.winRate * 100).toFixed(2)}%` : 'N/A';
+                const trades = strategy.trades || 0;
+                const pnl = strategy.pnl || 0;
+                formattedTrading = `- Mode: ${mode.toUpperCase()} (Active Tier: ${tradingState.activeTier || 'None'})\n` +
+                                   `- Strategy: ${strategyName} on ${symbol}\n` +
+                                   `- Capital: $${capital}\n` +
+                                   `- Win Rate: ${winRate} over ${trades} trades (PnL: ${pnl})`;
+            }
+        } catch (err) {
+            this.log('warn', `Failed to read trading state: ${err.message}`);
+        }
+
+        // 4. Fetch Live Open Positions & Recent Trades from trades.db
+        let formattedPositions = "No active open positions.";
+        let formattedRecentTrades = "No recent trades recorded.";
+        try {
+            if (tradeLogger) {
+                if (!tradeLogger.db) {
+                    try { tradeLogger.initialize(); } catch (e) {}
+                }
+                if (tradeLogger.db) {
+                    // Open positions
+                    const openTrades = tradeLogger.getOpenTrades();
+                    if (Array.isArray(openTrades) && openTrades.length > 0) {
+                        formattedPositions = openTrades.map(t => {
+                            const ageHours = ((Date.now() - new Date(t.entry_time).getTime()) / (1000 * 60 * 60)).toFixed(1);
+                            return `- ${t.symbol} (${t.side.toUpperCase()}): Qty: ${t.qty} @ $${t.entry_price} (Entered ${ageHours}h ago) [Strategy: ${t.strategy || 'manual'}]`;
+                        }).join('\n');
+                    }
+
+                    // Recent trades (limit 4)
+                    const recentTrades = tradeLogger.getRecentTrades(4);
+                    if (Array.isArray(recentTrades) && recentTrades.length > 0) {
+                        formattedRecentTrades = recentTrades.map(t => {
+                            const time = t.exit_time || t.entry_time;
+                            const timeStr = this._formatArtifactDate(time);
+                            if (t.status === 'closed') {
+                                const pnlStr = t.pnl >= 0 ? `+$${t.pnl.toFixed(2)}` : `-$${Math.abs(t.pnl).toFixed(2)}`;
+                                return `- [${timeStr}] ${t.symbol} (CLOSED ${t.side.toUpperCase()}): Realized PnL: ${pnlStr} (${t.pnl_pct.toFixed(2)}%) @ exit $${t.exit_price}`;
+                            } else {
+                                return `- [${timeStr}] ${t.symbol} (OPENED ${t.side.toUpperCase()}): Expected: $${t.expected_price || t.entry_price} @ entry $${t.entry_price}`;
+                            }
+                        }).join('\n');
+                    }
+                }
+            }
+        } catch (err) {
+            this.log('warn', `Failed to query trades.db: ${err.message}`);
+        }
+
+        return [
+            `[SOMA LIVE OPERATIONAL STATE]`,
+            `Active Goals:`,
+            formattedGoals,
+            `\nRecent Autonomic Work Ledger:`,
+            formattedWork,
+            `\nAuto-Trading Status:`,
+            formattedTrading,
+            `\nActive Open Positions:`,
+            formattedPositions,
+            `\nRecent Completed/Entry Trades:`,
+            formattedRecentTrades
+        ].join('\n');
+    }
+
     async _askBrain(content, context = {}) {
+        const realtimeState = await this._getRealtimeContext();
+        const enhancedContent = `${content}\n\n${realtimeState}`;
+
         if (this.brain?.processQuery) {
-            return await this.brain.processQuery(content, context);
+            return await this.brain.processQuery(enhancedContent, context);
         }
 
         const author = context.author || 'someone';
@@ -419,6 +581,12 @@ export class DiscordArbiter extends BaseArbiter {
             'Answer as one unified cognitive identity.',
             'Be concise, useful, warm when appropriate, and avoid corporate bot language.',
             'Do not mention internal subsystem names unless the user explicitly asks.',
+            'Operational honesty is mandatory: distinguish intent, plans, and verified action.',
+            'Do not claim you scanned files, wrote code, changed the filesystem, spawned MAX, watched a diff stream, committed changes, queued tasks, or observed live trading results unless that exact action is present in the live operational context, a current command result, or a recent work-ledger entry.',
+            'When the user asks you to do work that requires tools you do not have in this Discord turn, say what you can queue or investigate next instead of saying it is already running.',
+            'If a prior message claimed action but no evidence is present, treat it as unverified and say you need to verify it.',
+            `Use the following live operational context to inform your responses naturally (do not repeat it verbatim, only use it as background context to answer questions about your day, goals, trading or what you are doing):`,
+            realtimeState,
             visual,
             channelMode,
             ambient,
@@ -582,10 +750,220 @@ export class DiscordArbiter extends BaseArbiter {
         return /\b(medical|doctor|diagnose|diagnosis|treat|treatment|dose|dosage|symptom|cancer|disease|therapy|patient|drug|medicine)\b/i.test(text);
     }
 
+    _isAdminOperationalRequest(text = '') {
+        const value = String(text || '');
+        const action = /\b(look at|scan|inspect|check|read|open|list|find|search|audit|review|implement|fix|change|modify|refactor|merge|queue|spawn|max)\b/i.test(value);
+        const target = /\b(code|repo|repository|files?|filesystem|arbiter|arbiters|module|modules|server|core|daemon|daemons|discord|personality|tools?|max|self|yourself|your code)\b/i.test(value);
+        return action && (target || Boolean(this._extractPathCandidate(value)));
+    }
+
+    _extractPathCandidate(text = '') {
+        const value = String(text || '');
+        const quoted = value.match(/[`"']([^`"']+\.(?:js|cjs|mjs|ts|tsx|jsx|json|md|txt|py|css|html))[`"']/i);
+        if (quoted) return quoted[1].trim();
+        const bare = value.match(/\b([A-Za-z0-9_. -]+[\\/][A-Za-z0-9_.\\/-]+\.(?:js|cjs|mjs|ts|tsx|jsx|json|md|txt|py|css|html))\b/i);
+        if (bare) return bare[1].trim();
+        const filename = value.match(/\b([A-Za-z0-9_.-]+\.(?:js|cjs|mjs|ts|tsx|jsx|json|md|txt|py|css|html))\b/i);
+        return filename?.[1]?.trim() || null;
+    }
+
+    _extractSearchPattern(text = '') {
+        const quoted = String(text || '').match(/(?:find|search)(?:\s+for)?\s+[`"']([^`"']+)[`"']/i);
+        if (quoted) return quoted[1].trim();
+        const named = String(text || '').match(/\b(?:file|files|named|called)\s+([A-Za-z0-9_.-]+)/i);
+        if (named) return named[1].trim();
+        if (/\barbiter/i.test(text)) return '*Arbiter*';
+        if (/\bdiscord/i.test(text)) return '*Discord*';
+        return '*';
+    }
+
+    async _executeRegistryTool(name, args = {}) {
+        if (!this.system?.toolRegistry?.execute) {
+            throw new Error('ToolRegistry is not available in this SOMA process');
+        }
+        return await this.system.toolRegistry.execute(name, args);
+    }
+
+    _formatToolResult(result, max = 1200) {
+        const text = typeof result === 'string' ? result : JSON.stringify(result, null, 2);
+        return this._formatSafeSnippet(text, max);
+    }
+
+    async _handleAdminOperationalAction(msg, text, visualContext = '') {
+        if (!this._isAdminOperationalRequest(text)) return { handled: false };
+
+        let reply = '';
+        const pathCandidate = this._extractPathCandidate(text);
+        const wantsMutation = /\b(implement|fix|change|modify|refactor|merge|write|edit|update)\b/i.test(text);
+
+        try {
+            if (wantsMutation) {
+                reply = await this._queueAdminEngineeringGoal(text, pathCandidate);
+                await msg.reply(reply);
+                await this._recordDiscordInteraction({ msg, content: text, reply, action: 'admin_engineering_goal', status: 'posted', visualContext });
+                return { handled: true };
+            }
+
+            if (pathCandidate && /\b(read|open|inspect|check|review|look at)\b/i.test(text)) {
+                const result = await this._executeRegistryTool('read_file', { path: pathCandidate });
+                reply = [
+                    `I read \`${pathCandidate}\`.`,
+                    '```text',
+                    this._formatToolResult(result, 1500),
+                    '```'
+                ].join('\n').slice(0, 1900);
+                workLedger.record({
+                    type: 'discord_admin_tool_execution',
+                    title: `Read file from Discord: ${pathCandidate}`,
+                    summary: `Executed read_file for ${pathCandidate}.`,
+                    evidence: [pathCandidate],
+                    status: 'completed',
+                    source: 'DiscordArbiter',
+                    confidence: 0.98
+                });
+                await msg.reply(reply);
+                await this._recordDiscordInteraction({ msg, content: text, reply, action: 'admin_tool_read_file', status: 'posted', visualContext });
+                return { handled: true };
+            }
+
+            if (/\b(find|search)\b/i.test(text)) {
+                const pattern = this._extractSearchPattern(text);
+                const result = await this._executeRegistryTool('find_files', { pattern, path: process.cwd(), limit: 40 });
+                reply = [
+                    `I searched the repo for \`${pattern}\`.`,
+                    '```text',
+                    this._formatToolResult(result, 1500),
+                    '```'
+                ].join('\n').slice(0, 1900);
+                await msg.reply(reply);
+                await this._recordDiscordInteraction({ msg, content: text, reply, action: 'admin_tool_find_files', status: 'posted', visualContext });
+                return { handled: true };
+            }
+
+            if (/\barbiter|arbiters\b/i.test(text)) {
+                const result = await this._executeRegistryTool('list_files', { path: 'arbiters' });
+                reply = [
+                    'I listed the `arbiters` directory for real.',
+                    '```text',
+                    this._formatToolResult(result, 1500),
+                    '```'
+                ].join('\n').slice(0, 1900);
+                await msg.reply(reply);
+                await this._recordDiscordInteraction({ msg, content: text, reply, action: 'admin_tool_list_arbiters', status: 'posted', visualContext });
+                return { handled: true };
+            }
+
+            const [scan, coreList, arbiterList] = await Promise.all([
+                this._executeRegistryTool('system_scan', {}),
+                this._executeRegistryTool('list_files', { path: 'core' }),
+                this._executeRegistryTool('list_files', { path: 'arbiters' })
+            ]);
+            reply = [
+                'I checked my runtime and code directories for real.',
+                `System: ${this._formatToolResult(scan, 350)}`,
+                '',
+                'Core files:',
+                '```text',
+                this._formatToolResult(coreList, 550),
+                '```',
+                'Arbiter files:',
+                '```text',
+                this._formatToolResult(arbiterList, 550),
+                '```'
+            ].join('\n').slice(0, 1900);
+            workLedger.record({
+                type: 'discord_admin_tool_execution',
+                title: 'Inspected SOMA code from Discord',
+                summary: 'Executed system_scan plus core/arbiters directory listing from an admin Discord request.',
+                evidence: ['system_scan', 'core', 'arbiters'],
+                status: 'completed',
+                source: 'DiscordArbiter',
+                confidence: 0.98
+            });
+            await msg.reply(reply);
+            await this._recordDiscordInteraction({ msg, content: text, reply, action: 'admin_tool_inspection', status: 'posted', visualContext });
+            return { handled: true };
+        } catch (err) {
+            reply = `I tried to execute that for real, but the tool path failed: ${err.message}`;
+            await msg.reply(reply);
+            await this._recordDiscordInteraction({ msg, content: text, reply, action: 'admin_tool_execution', status: 'failed', error: err.message, visualContext });
+            return { handled: true };
+        }
+    }
+
+    async _queueAdminEngineeringGoal(text = '', pathCandidate = null) {
+        const title = `Discord admin engineering request: ${this._formatSafeSnippet(text, 90)}`;
+        const description = [
+            `Barry requested this from Discord: ${text}`,
+            pathCandidate ? `Target file mentioned: ${pathCandidate}` : 'No exact target file was provided. Inspect the repo first, then choose the smallest safe change.',
+            'Use real tools. Read relevant files before changing anything. Verify with syntax checks or focused tests. Do not claim completion without evidence.'
+        ].join('\n');
+
+        if (this.goalPlanner?.createGoal) {
+            const result = await this.goalPlanner.createGoal({
+                type: 'operational',
+                category: 'engineering',
+                title,
+                description,
+                priority: 92,
+                requireQuality: false,
+                assignedTo: ['SomaAgenticExecutor', 'EngineeringSwarmArbiter'],
+                confidence: 0.92,
+                successCriteria: [
+                    'Relevant files were inspected with real tools',
+                    'Any code change is verified with syntax check or focused test',
+                    'Final status cites changed files and verification result'
+                ],
+                verification: {
+                    required: true,
+                    evidence: ['tool output', 'file diff', 'syntax check or focused test']
+                },
+                metadata: {
+                    source: 'discord_admin',
+                    pathCandidate,
+                    requestedBy: 'Barry'
+                }
+            }, 'user');
+
+            if (!result.success) {
+                throw new Error(result.error || 'GoalPlanner rejected the request');
+            }
+
+            workLedger.record({
+                type: 'discord_admin_engineering_goal',
+                title,
+                summary: `Created active engineering goal ${result.goalId} from Discord.`,
+                evidence: [result.goalId, pathCandidate].filter(Boolean),
+                nextStep: 'AutonomousHeartbeat/SomaAgenticExecutor should pick up the active goal.',
+                status: 'queued',
+                source: 'DiscordArbiter',
+                confidence: 0.95
+            });
+
+            return `I created a real engineering goal for that request.\nGoal: \`${result.goalId}\`\nStatus: active/queued for the agentic executor. I will need tool output or work-ledger evidence before claiming it is complete.`;
+        }
+
+        if (this.system?.engineeringSwarm?.addGoal) {
+            const id = `discord_admin_${Date.now()}`;
+            this.system.engineeringSwarm.addGoal({
+                id,
+                description,
+                source: 'discord_admin',
+                priority: 0.92,
+                file: pathCandidate || undefined,
+                filepath: pathCandidate || undefined,
+                metadata: { requestedBy: 'Barry', pathCandidate }
+            });
+            return `I queued a real EngineeringSwarm goal: \`${id}\`. I will not call it complete until the swarm reports evidence.`;
+        }
+
+        throw new Error('No GoalPlanner or EngineeringSwarm is available for mutation requests');
+    }
+
     _isOwnWorkQuestion(text = '') {
         const value = String(text || '');
-        const asksAboutSoma = /\b(your|you|soma|own|what are you|what have you|what did you)\b/i.test(value);
-        const workTopic = /\b(papers?|manuscripts?|research|simulations?|findings?|discover(?:y|ies)?|work(?:ing)?|wrote|written|built|made|created|reflections?|folios?|projects?|ledger|notes?)\b/i.test(value);
+        const asksAboutSoma = /\b(your|you|soma|own|what are you|what did you|what have you|how was|how is|how's)\b/i.test(value);
+        const workTopic = /\b(papers?|manuscripts?|published|publication|wrote|written|built|made|created|reflections?|folios?|projects?|ledger|notes?|work(?:ing)?|trading|day|today|doing|thoughts|logs|status|goals?)\b/i.test(value);
         return asksAboutSoma && workTopic;
     }
 
@@ -630,6 +1008,11 @@ export class DiscordArbiter extends BaseArbiter {
             await msg.reply(reply);
             await this._recordDiscordInteraction({ msg, content: text, reply, action: 'summarize', status: 'posted', visualContext });
             return { handled: true };
+        }
+
+        if (isAdmin) {
+            const adminAction = await this._handleAdminOperationalAction(msg, text, visualContext);
+            if (adminAction?.handled) return adminAction;
         }
 
         if (this._isOwnWorkQuestion(text)) {

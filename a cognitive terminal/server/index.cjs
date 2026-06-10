@@ -961,6 +961,9 @@ async function initializeMemorySystem() {
             logger: console
         });
         await goalPlannerArbiter.initialize();
+        if (discordArbiter) {
+            discordArbiter.goalPlanner = goalPlannerArbiter;
+        }
         console.log('🎯 [SOMA] GoalPlannerArbiter active');
         console.log('  📋 Max active goals: 20');
         console.log('  ⏱️  Planning cycle: Every 6 hours');

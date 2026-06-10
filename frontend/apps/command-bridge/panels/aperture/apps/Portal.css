@@ -1492,3 +1492,432 @@
   color: var(--portal-text-muted); cursor: pointer; transition: var(--portal-transition);
 }
 .pgmr-actions button:hover { background: var(--portal-glass); color: var(--portal-text); border-color: var(--portal-glass-border); }
+
+/* ==========================================
+   PREMIUM BROWSER UPGRADES STYLE SHEET
+   ========================================== */
+
+/* ── SSL Security Badges inside Address Bar ── */
+.portal-header-security-badge {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 10px;
+  font-weight: 600;
+  cursor: pointer;
+  user-select: none;
+  transition: var(--portal-transition);
+}
+.portal-header-security-badge:hover {
+  filter: brightness(1.15);
+}
+.portal-header-security-badge.secure {
+  background: rgba(16, 185, 129, 0.12);
+  color: #10b981;
+  border: 1px solid rgba(16, 185, 129, 0.2);
+}
+.portal-header-security-badge.insecure {
+  background: rgba(239, 68, 68, 0.12);
+  color: #ef4444;
+  border: 1px solid rgba(239, 68, 68, 0.2);
+}
+.portal-header-security-badge.gmn {
+  background: rgba(139, 92, 246, 0.12);
+  color: #a78bfa;
+  border: 1px solid rgba(139, 92, 246, 0.2);
+}
+.portal-header-security-badge.portal {
+  background: rgba(59, 130, 246, 0.12);
+  color: #3b82f6;
+  border: 1px solid rgba(59, 130, 246, 0.2);
+}
+.portal-security-lock-icon {
+  flex-shrink: 0;
+}
+
+/* ── Private / Incognito Mode Styles ── */
+.portal.incognito {
+  --portal-bg: #09080d;
+  --portal-glass-bg: rgba(14, 11, 22, 0.75);
+  --portal-accent: #7c3aed;
+  --portal-accent-hover: #8b5cf6;
+  --portal-accent-glass: rgba(124, 58, 237, 0.12);
+  --portal-accent-text: #d8b4fe;
+}
+.portal.incognito .portal-header-address-form {
+  border-color: rgba(124, 58, 237, 0.25);
+  background: rgba(0, 0, 0, 0.45);
+}
+.portal.incognito .portal-header-address-form:focus-within {
+  border-color: rgba(124, 58, 237, 0.55);
+  box-shadow: 0 0 12px rgba(124, 58, 237, 0.25);
+}
+.portal-header-private-toggle-btn {
+  background: transparent;
+  border: 0;
+  color: var(--portal-text-muted);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition: var(--portal-transition);
+}
+.portal-header-private-toggle-btn:hover {
+  color: var(--portal-accent-text);
+}
+.portal-private-icon.active {
+  color: var(--portal-accent-text);
+  filter: drop-shadow(0 0 4px var(--portal-accent));
+}
+
+/* ── Credentials Autofill Key Button ── */
+.portal-header-key-btn {
+  background: transparent;
+  border: 0;
+  color: var(--portal-text-muted);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  transition: var(--portal-transition);
+}
+.portal-header-key-btn:hover {
+  color: var(--portal-accent-text);
+}
+.portal-header-key-btn.saved {
+  color: var(--portal-accent-text);
+}
+
+/* ── Popovers General Styles ── */
+.portal-permissions-popover,
+.portal-credentials-popover,
+.portal-downloads-tray {
+  position: absolute;
+  top: 58px;
+  width: 280px;
+  background: rgba(15, 20, 28, 0.95);
+  border: 1px solid var(--portal-glass-border);
+  border-radius: 12px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(25px) saturate(180%);
+  -webkit-backdrop-filter: blur(25px) saturate(180%);
+  z-index: 1000;
+  display: flex;
+  flex-direction: column;
+  color: var(--portal-text);
+  font-family: inherit;
+  animation: popoverFadeIn 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+}
+@keyframes popoverFadeIn {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.portal-permissions-popover {
+  left: 20%;
+}
+.portal-credentials-popover {
+  right: 20%;
+}
+.portal-downloads-tray {
+  right: 80px;
+  width: 320px;
+}
+
+.popover-header, .tray-header {
+  padding: 12px 14px;
+  border-bottom: 1px solid var(--portal-glass-border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.popover-header strong, .tray-header strong {
+  font-size: 12px;
+  font-weight: 600;
+}
+.popover-header small {
+  font-size: 10px;
+  color: var(--portal-text-muted);
+}
+.popover-body, .tray-body {
+  padding: 10px 14px;
+  max-height: 280px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* ── Permissions Rows ── */
+.permission-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 0;
+  font-size: 11px;
+}
+.permission-row select {
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--portal-glass-border);
+  border-radius: 6px;
+  color: var(--portal-text);
+  font-size: 11px;
+  padding: 2px 6px;
+  outline: none;
+}
+
+/* ── Credentials Popover ── */
+.add-login-toggle-btn {
+  background: transparent;
+  border: 0;
+  color: var(--portal-accent-text);
+  font-size: 10px;
+  cursor: pointer;
+}
+.add-credential-form {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 6px 0;
+}
+.add-credential-form input {
+  height: 28px;
+  background: rgba(0, 0, 0, 0.25);
+  border: 1px solid var(--portal-glass-border);
+  border-radius: 6px;
+  color: var(--portal-text);
+  padding: 0 8px;
+  font-size: 11px;
+  outline: none;
+}
+.save-credential-btn {
+  height: 28px;
+  background: var(--portal-accent);
+  color: white;
+  border: 0;
+  border-radius: 6px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: var(--portal-transition);
+  font-size: 11px;
+}
+.save-credential-btn:hover {
+  background: var(--portal-accent-hover);
+}
+.credentials-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.credential-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--portal-glass-border);
+}
+.cred-details {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.cred-details strong {
+  font-size: 11.5px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cred-details span {
+  font-size: 10px;
+  color: var(--portal-text-muted);
+}
+.cred-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.autofill-btn {
+  padding: 4px 8px;
+  border-radius: 6px;
+  background: var(--portal-accent-glass);
+  border: 1px solid rgba(139, 92, 246, 0.2);
+  color: var(--portal-accent-text);
+  font-size: 10px;
+  cursor: pointer;
+  transition: var(--portal-transition);
+}
+.autofill-btn:hover {
+  background: var(--portal-accent);
+  color: white;
+}
+.delete-cred-btn {
+  background: transparent;
+  border: 0;
+  color: var(--portal-text-muted);
+  cursor: pointer;
+}
+.delete-cred-btn:hover {
+  color: #ff8f91;
+}
+
+/* ── Downloads Tray ── */
+.portal-header-downloads-btn {
+  position: relative;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  background: transparent;
+  border: 0;
+  display: grid;
+  place-items: center;
+  color: var(--portal-text-muted);
+  transition: var(--portal-transition);
+}
+.portal-header-downloads-btn:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--portal-text);
+}
+.portal-header-downloads-btn.active {
+  background: rgba(139, 92, 246, 0.15);
+  color: var(--portal-accent-text);
+  border: 1px solid rgba(139, 92, 246, 0.25);
+}
+.portal-downloads-badge {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  min-width: 14px;
+  height: 14px;
+  border-radius: 7px;
+  background: #ef4444;
+  color: white;
+  font-size: 8px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 3px;
+  border: 1.5px solid var(--portal-bg);
+}
+.close-tray-btn {
+  background: transparent;
+  border: 0;
+  color: var(--portal-text-muted);
+  cursor: pointer;
+}
+.download-item {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--portal-glass-border);
+  position: relative;
+}
+.download-info {
+  display: flex;
+  flex-direction: column;
+  padding-right: 20px;
+  min-width: 0;
+}
+.download-info .file-name {
+  font-size: 11.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.download-info .download-url {
+  font-size: 9px;
+  color: var(--portal-text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.download-progress-container {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.download-progress-bar {
+  height: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 2px;
+  overflow: hidden;
+}
+.progress-fill {
+  height: 100%;
+  background: var(--portal-accent);
+  border-radius: 2px;
+  transition: width 0.15s ease-out;
+}
+.progress-details {
+  font-size: 9px;
+  color: var(--portal-text-muted);
+}
+.download-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 10px;
+}
+.status-badge {
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+.download-status.completed .status-badge {
+  background: rgba(16, 185, 129, 0.12);
+  color: #10b981;
+}
+.download-status.failed .status-badge {
+  background: rgba(239, 68, 68, 0.12);
+  color: #ef4444;
+}
+.save-path, .error-msg {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--portal-text-muted);
+  font-size: 9.5px;
+}
+.copy-path-btn {
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--portal-glass-border);
+  color: var(--portal-text-muted);
+  font-size: 9px;
+  cursor: pointer;
+}
+.copy-path-btn:hover {
+  color: var(--portal-text);
+  background: rgba(255, 255, 255, 0.1);
+}
+.delete-download-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: transparent;
+  border: 0;
+  color: var(--portal-text-muted);
+  cursor: pointer;
+  transition: var(--portal-transition);
+}
+.delete-download-btn:hover {
+  color: #ff8f91;
+}
+.no-downloads-msg, .no-credentials-msg {
+  text-align: center;
+  padding: 20px 0;
+  color: var(--portal-text-muted);
+  font-size: 11px;
+}
+

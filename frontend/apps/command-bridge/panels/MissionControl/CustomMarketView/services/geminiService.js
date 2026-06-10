@@ -23,7 +23,7 @@ export const analyzeMarketAtmosphere = async (data, activeProtocol = 'UNKNOWN') 
     ).join(' | ');
 
     try {
-        const res = await fetch('/api/soma/chat', {
+        const res = await fetch('/api/soma/market/interpret', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({

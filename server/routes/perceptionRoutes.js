@@ -13,8 +13,13 @@ import express from 'express';
 import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
+import { createRequire } from 'module';
+import { VisionProcessingArbiter as LocalClipVisionProcessingArbiter } from '../../arbiters/VisionProcessingArbiter.js';
+import { appendVisionTruthAudit, readVisionTruthAudit, visionTruthAuditPath } from '../utils/VisionTruthAudit.js';
 
 const router = express.Router();
+const require = createRequire(import.meta.url);
+const presenceAwareness = require('../../core/PresenceAwarenessState.cjs');
 const VISION_TEMP_DIR = path.join(process.cwd(), '.soma', 'vision_temp');
 const SCENE_LIMIT = 50;
 const sceneMemory = [];
@@ -22,7 +27,12 @@ const REFLECTIONS_DIR = path.join(process.cwd(), 'data', 'vault', 'reflections')
 const RETENTION_MANIFEST = path.join(process.cwd(), '.soma', 'vision_retention.json');
 const RAW_RETENTION_DAYS = Number(process.env.SOMA_VISION_RAW_RETENTION_DAYS || 7);
 const RAW_CACHE_LIMIT_MB = Number(process.env.SOMA_VISION_CACHE_LIMIT_MB || 2048);
+const WEBCAM_DEEP_DESCRIBE_INTERVAL_MS = Number(process.env.SOMA_WEBCAM_DEEP_DESCRIBE_INTERVAL_MS || 60000);
 let lastRetentionSweep = 0;
+let lastWebcamDeepDescribeAt = 0;
+let webcamDeepDescribeActive = false;
+let localClipVisionProcessing = null;
+let localVlmModelCache = { model: null, ts: 0 };
 
 const REDACTION_PATTERNS = [
     { type: 'api_key', re: /\b(sk-[A-Za-z0-9_-]{12,}|[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,})\b/g },
@@ -257,6 +267,315 @@ function normalizeObjects(objects = []) {
         .filter(obj => obj.label && obj.label !== 'unknown');
 }
 
+function auditVisionTruth(entry = {}) {
+    appendVisionTruthAudit(entry).catch(err => {
+        console.warn('[Perception] Vision truth audit write failed:', err.message);
+    });
+}
+
+function visionConfidence(objects = []) {
+    const scores = normalizeObjects(objects)
+        .map(obj => Number(obj.score))
+        .filter(score => Number.isFinite(score));
+    return scores.length ? Math.max(...scores) : null;
+}
+
+function extractJsonObject(text = '') {
+    const raw = String(text || '').trim();
+    if (!raw) return null;
+    const fenced = raw.match(/```(?:json)?\s*([\s\S]*?)```/i);
+    const candidate = fenced?.[1] || raw;
+    const start = candidate.indexOf('{');
+    const end = candidate.lastIndexOf('}');
+    if (start < 0 || end <= start) return null;
+    try { return JSON.parse(candidate.slice(start, end + 1)); } catch { return null; }
+}
+
+function objectsFromVisionText(text = '') {
+    const lower = String(text || '').toLowerCase();
+    const labels = [];
+    const add = (label, score) => labels.push({ label, score, bbox: null });
+    if (/\b(person|people|human|face|someone|adult|man|woman)\b/.test(lower)) add('person', 0.7);
+    if (/\b(dog|puppy)\b/.test(lower)) add('dog', 0.65);
+    if (/\b(cat|kitten)\b/.test(lower)) add('cat', 0.65);
+    for (const label of ['desk', 'computer', 'keyboard', 'monitor', 'chair', 'lamp', 'door', 'window', 'office', 'bedroom', 'living room']) {
+        if (lower.includes(label)) add(label, 0.55);
+    }
+    return labels;
+}
+
+function summarizeObjects(objects = [], fallback = 'The frame was analyzed locally, but no confident scene labels were found.') {
+    const labels = normalizeObjects(objects)
+        .filter(obj => obj.label !== 'webcam frame')
+        .sort((a, b) => (b.score || 0) - (a.score || 0))
+        .map(obj => obj.label);
+    if (!labels.length) return fallback;
+    const unique = [...new Set(labels)].slice(0, 8);
+    return `Local vision detected: ${unique.join(', ')}.`;
+}
+
+function normalizeVisionAnalysis(analysis = {}) {
+    const parsed = extractJsonObject(analysis.result || analysis.description || analysis.text || '');
+    const mergedObjects = normalizeObjects([
+        ...(analysis.objects || []),
+        ...(Array.isArray(parsed?.objects) ? parsed.objects.map(item => typeof item === 'string' ? { label: item, score: 0.6 } : item) : [])
+    ]);
+    const summary = parsed?.summary
+        || parsed?.description
+        || analysis.result
+        || analysis.description
+        || analysis.text
+        || summarizeObjects(mergedObjects);
+    const parsedObjects = Array.isArray(parsed?.objects)
+        ? parsed.objects.map(item => typeof item === 'string' ? { label: item, score: 0.6 } : item)
+        : [];
+    return {
+        ...analysis,
+        result: String(summary || '').trim(),
+        objects: normalizeObjects([...(analysis.objects || []), ...parsedObjects, ...objectsFromVisionText(summary)]),
+        ocrText: parsed?.ocrText || analysis.ocrText || null,
+    };
+}
+
+function ollamaBaseUrl() {
+    const raw = process.env.OLLAMA_HOST || process.env.OLLAMA_ENDPOINT || 'http://localhost:11434';
+    const base = /^https?:\/\//i.test(raw) ? raw : `http://${raw}`;
+    return base.replace(/\/api\/(?:generate|chat)\/?$/i, '').replace(/\/$/, '');
+}
+
+async function availableOllamaModels() {
+    const response = await fetch(`${ollamaBaseUrl()}/api/tags`, { signal: AbortSignal.timeout(2500) });
+    if (!response.ok) throw new Error(`Ollama tags returned ${response.status}`);
+    const data = await response.json();
+    return Array.isArray(data.models) ? data.models : [];
+}
+
+async function selectLocalVlmModel() {
+    const configured = process.env.SOMA_LOCAL_VLM_MODEL || process.env.OLLAMA_VLM_MODEL || null;
+    if (configured) return configured;
+    const now = Date.now();
+    if (localVlmModelCache.model && now - localVlmModelCache.ts < 30000) return localVlmModelCache.model;
+    const models = await availableOllamaModels();
+    const names = models.map(model => model.name || model.model).filter(Boolean);
+    const visionNames = models
+        .filter(model => Array.isArray(model.capabilities) && model.capabilities.includes('vision'))
+        .map(model => model.name || model.model)
+        .filter(Boolean);
+    const preferred = [
+        'qwen2.5vl:7b',
+        'qwen2.5vl:latest',
+        'llama3.2-vision:11b',
+        'llama3.2-vision:latest',
+        'minicpm-v:latest',
+        'llava:latest',
+        'llava',
+        'moondream:latest',
+        'moondream',
+        'qwen3.5:9b',
+        'qwen3.5:latest'
+    ];
+    const selected = preferred.find(name => names.includes(name) || visionNames.includes(name)) || visionNames[0] || null;
+    if (!selected) throw new Error('No local Ollama vision model found. Install one such as moondream or qwen vision.');
+    localVlmModelCache = { model: selected, ts: now };
+    return selected;
+}
+
+function localVlmLooksUncertain(text = '') {
+    const value = String(text || '').trim();
+    if (value.length < 12) return true;
+    return /\b(no image|no frame|no visual|cannot see|can't see|unable to (?:see|analy[sz]e)|not enough visual|unclear|too blurry|not visible)\b/i.test(value);
+}
+
+function usableLocalVlmAnalysis(analysis = {}) {
+    if (!analysis || analysis.uncertain) return false;
+    const text = String(analysis.result || '').trim();
+    if (localVlmLooksUncertain(text)) return false;
+    if (/^(urn|null|undefined|none|n\/a)$/i.test(text)) return false;
+    return text.length >= 20 || normalizeObjects(analysis.objects || []).length > 0;
+}
+
+async function analyzeWithLocalVlm({ base64, prompt }) {
+    if (!base64) throw new Error('base64 image required for local VLM');
+    const model = await selectLocalVlmModel();
+    const ask = [
+        prompt || 'Describe this image.',
+        '',
+        'Return ONLY JSON:',
+        '{"summary":"one factual sentence about visible contents","objects":["short labels"],"ocrText":null,"uncertain":false}',
+        'Use uncertain:true if the image is unclear. Describe only visible pixels. Do not infer beyond the image.'
+    ].join('\n');
+    const response = await fetch(`${ollamaBaseUrl()}/api/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            model,
+            prompt: ask,
+            images: [base64],
+            stream: false,
+            options: {
+                temperature: 0.1,
+                num_predict: 220
+            }
+        }),
+        signal: AbortSignal.timeout(Number(process.env.SOMA_LOCAL_VLM_TIMEOUT_MS || 45000))
+    });
+    if (!response.ok) {
+        const text = await response.text().catch(() => '');
+        throw new Error(`Local VLM ${model} returned ${response.status}: ${text.slice(0, 240)}`);
+    }
+    const data = await response.json();
+    const text = String(data.response || '').trim();
+    const parsed = extractJsonObject(text) || {};
+    const summary = String(parsed.summary || parsed.description || text || '').trim();
+    const parsedObjects = Array.isArray(parsed.objects)
+        ? parsed.objects.map(item => typeof item === 'string' ? { label: item, score: 0.75 } : { ...item, score: item.score ?? item.confidence ?? 0.75 })
+        : [];
+    const uncertain = parsed.uncertain === true || localVlmLooksUncertain(summary);
+    return normalizeVisionAnalysis({
+        engine: 'local-vlm',
+        model,
+        result: summary || (uncertain ? 'The local vision model could not confidently describe the frame.' : 'Image analyzed by local vision model.'),
+        objects: uncertain ? [] : parsedObjects,
+        ocrText: parsed.ocrText || null,
+        uncertain,
+        raw: data
+    });
+}
+
+function getLocalClipVisionProcessing(sys = {}) {
+    if (localClipVisionProcessing) return localClipVisionProcessing;
+    localClipVisionProcessing = new LocalClipVisionProcessingArbiter({
+        name: 'PresenceLocalClipVision',
+        loadPipeline: sys.loadPipeline || null,
+        quadBrain: null
+    });
+    return localClipVisionProcessing;
+}
+
+async function analyzeWithLocalClip(vision, imagePath, threshold = Number(process.env.SOMA_LOCAL_VISION_THRESHOLD || 0.25)) {
+    if (!vision?.detectObjects) return null;
+    const detected = await vision.detectObjects(imagePath, threshold);
+    if (!detected?.success) return null;
+    const objects = normalizeObjects(detected.objects || []);
+    return normalizeVisionAnalysis({
+        engine: 'local-clip',
+        result: summarizeObjects(objects),
+        objects,
+        ocrText: detected.ocrText || null,
+        raw: detected,
+    });
+}
+
+function isTrustedVisionEngine(engine) {
+    return ['vision-processing', 'local-clip', 'local-vlm'].includes(engine);
+}
+
+function webcamAnalysisIsTrusted(scene, analysis) {
+    if (scene?.channel !== 'webcam') return true;
+    if (!isTrustedVisionEngine(analysis?.engine)) return false;
+    if (analysis?.uncertain || localVlmLooksUncertain(analysis?.result)) return false;
+    if (analysis?.engine === 'local-vlm' && String(analysis?.result || '').trim().length > 20) return true;
+    const objects = normalizeObjects(analysis?.objects || []);
+    return objects.some(obj => obj.label !== 'webcam frame');
+}
+
+function markSceneUnanalyzed(scene, reason = 'No trusted local vision labels were produced.') {
+    scene.summary = `Webcam frame captured, but semantic vision is still uncertain. ${reason}`;
+    scene.objects = normalizeObjects(scene.objects || []);
+    scene.engine = null;
+    scene.source = 'webcam-unanalysed';
+    scene.deepDescribedAt = null;
+    scene.diff = diffScenes(sceneMemory[1] || null, scene);
+    scene.changeScore = scene.diff.score;
+    if (sceneMemory[0]?.id === scene.id) updateVisionContext(scene);
+    try {
+        presenceAwareness.recordVision({
+            channel: scene.channel,
+            imagePath: scene.imagePath,
+            objects: scene.objects,
+            summary: scene.summary,
+            source: scene.source,
+            engine: scene.engine,
+            semanticAnalysis: false,
+            timestamp: Date.now()
+        });
+    } catch {}
+    auditVisionTruth({
+        type: 'scene_unanalyzed',
+        claim: scene.summary,
+        summary: scene.summary,
+        channel: scene.channel,
+        source: scene.source,
+        engine: scene.engine,
+        framePath: scene.imagePath,
+        sceneId: scene.id,
+        objects: scene.objects,
+        confidence: visionConfidence(scene.objects),
+        semanticAnalysis: false,
+        uncertain: true,
+        privacy: scene.privacy,
+        timestamp: Date.now()
+    });
+    return scene;
+}
+
+function normalizeSemanticObjects(scene, analysis) {
+    const objects = normalizeObjects(analysis.objects || []);
+    if (objects.length) return objects;
+    if (scene.channel === 'webcam') return [];
+    return normalizeObjects([...(analysis.objects || []), ...(scene.objects || [])]);
+}
+
+function trustedSemanticAnalysis(scene, analysis) {
+    if (scene.channel !== 'webcam') return Boolean(analysis?.result);
+    return webcamAnalysisIsTrusted(scene, analysis);
+}
+
+function semanticTimestamp(scene) {
+    scene.deepDescribedAt = Date.now();
+    return scene.deepDescribedAt;
+}
+
+function semanticSource(scene, analysis) {
+    return isTrustedVisionEngine(analysis?.engine) ? 'deep-describe' : (scene.source || 'vision');
+}
+
+function semanticEngine(analysis) {
+    return isTrustedVisionEngine(analysis?.engine) ? analysis.engine : null;
+}
+
+function semanticSummary(scene, analysis) {
+    if (!trustedSemanticAnalysis(scene, analysis)) {
+        return 'Webcam frame captured, but semantic vision is still uncertain.';
+    }
+    const modelSuffix = analysis.model ? ` (local model: ${analysis.model})` : '';
+    return `${analysis.result || scene.summary || summarizeObjects(analysis.objects || [])}${modelSuffix}`;
+}
+
+function isPlaceholderWebcamObjects(objects = []) {
+    const labels = normalizeObjects(objects).map(obj => obj.label);
+    return labels.length === 0 || (labels.length === 1 && labels[0] === 'webcam frame');
+}
+
+function updateVisionContext(scene) {
+    global.__SOMA_SYSTEM = global.__SOMA_SYSTEM || {};
+    global.__SOMA_SYSTEM.sceneMemory = sceneMemory;
+    global.__SOMA_SYSTEM.visionContext = {
+        channel: scene.channel,
+        imagePath: scene.imagePath,
+        objects: scene.objects,
+        ocrText: scene.ocrText,
+        summary: scene.summary,
+        source: scene.source,
+        engine: scene.engine,
+        semanticAnalysis: !isPlaceholderWebcamObjects(scene.objects) || scene.source === 'deep-describe' || Boolean(scene.engine),
+        lastChange: scene.diff.summary,
+        changeScore: scene.changeScore,
+        timestamp: scene.timestamp,
+        privacy: scene.privacy,
+    };
+}
+
 function tokenizeText(text = '') {
     return String(text || '')
         .toLowerCase()
@@ -338,19 +657,7 @@ function addSceneMemory({ imagePath, channel = 'desktop', objects = [], ocrText 
     sceneMemory.unshift(normalized);
     if (sceneMemory.length > SCENE_LIMIT) sceneMemory.length = SCENE_LIMIT;
 
-    global.__SOMA_SYSTEM = global.__SOMA_SYSTEM || {};
-    global.__SOMA_SYSTEM.sceneMemory = sceneMemory;
-    global.__SOMA_SYSTEM.visionContext = {
-        channel: normalized.channel,
-        imagePath: normalized.imagePath,
-        objects: normalized.objects,
-        ocrText: normalized.ocrText,
-        summary: normalized.summary,
-        lastChange: normalized.diff.summary,
-        changeScore: normalized.changeScore,
-        timestamp: normalized.timestamp,
-        privacy: normalized.privacy,
-    };
+    updateVisionContext(normalized);
 
     saveImportantSceneReflection(normalized, normalized.diff?.summary || normalized.source);
 
@@ -397,102 +704,134 @@ async function analyzeWithAvailableVision({ imagePath, base64, mimeType, prompt,
         || sys.arbiters?.get?.('VisionProcessingArbiter')?.instance
         || sys.messageBroker?.arbiters?.get?.('VisionProcessingArbiter')?.instance;
 
+    try {
+        const vlm = await analyzeWithLocalVlm({ base64, prompt });
+        if (usableLocalVlmAnalysis(vlm)) return vlm;
+        console.warn('[Perception] Local VLM returned no usable visual description; falling back to CLIP.');
+    } catch (err) {
+        console.warn('[Perception] Local VLM unavailable:', err.message);
+    }
+
     if (vision?.detectObjects) {
         try {
-            const detected = await vision.detectObjects(imagePath, 0.35);
-            if (detected?.success) {
-                return {
-                    engine: 'vision-processing',
-                    result: detected.ocrText || `Detected ${detected.count || detected.objects?.length || 0} visual signals.`,
-                    objects: detected.objects || [],
-                    ocrText: detected.ocrText || null,
-                    raw: detected,
-                };
-            }
+            const local = await analyzeWithLocalClip(vision, imagePath);
+            if (local) return { ...local, engine: 'vision-processing' };
         } catch {}
     }
 
-    if (vision?.analyzeImage) {
-        try {
-            const analyzed = await vision.analyzeImage(base64, mimeType, { prompt });
-            return {
-                engine: 'vision-processing',
-                result: analyzed.description || analyzed.result || analyzed.text || 'Image analyzed.',
-                objects: analyzed.objects || [],
-                ocrText: analyzed.ocrText || null,
-                raw: analyzed,
-            };
-        } catch {
-            try {
-                const analyzed = await vision.analyzeImage(imagePath);
-                return {
-                    engine: 'vision-processing',
-                    result: analyzed.description || analyzed.result || analyzed.text || 'Image analyzed.',
-                    objects: analyzed.objects || [],
-                    ocrText: analyzed.ocrText || null,
-                    raw: analyzed,
-                };
-            } catch {}
-        }
+    try {
+        const localClip = getLocalClipVisionProcessing(sys);
+        const local = await analyzeWithLocalClip(localClip, imagePath);
+        if (local) return local;
+    } catch (err) {
+        console.warn('[Perception] Local CLIP vision unavailable:', err.message);
     }
 
-    const brain = sys.quadBrain || sys.brain;
-    if (brain?.reason) {
-        const ask = prompt || `Analyze this image for ${type || 'visual reasoning'}. Be concise and useful.`;
-        const response = await brain.reason(ask, { images: [imagePath], vision: true, mode: 'fast' });
-        const text = response?.text || response?.response || String(response || '');
-        return {
-            engine: 'quad-brain',
-            result: text,
-            objects: [],
-            ocrText: null,
-            raw: response,
-        };
-    }
-
-    throw new Error('No vision engine available. Set SOMA_LOAD_VISION=true or configure a multimodal provider.');
+    throw new Error('No trusted local vision engine available for semantic webcam analysis.');
 }
 
 async function deepDescribeScene(scene, { prompt = null, saveReflection = true } = {}) {
     if (!scene?.imagePath) throw new Error('No scene image available for deep description');
     const ask = prompt || [
         'Analyze this current SOMA Presence scene.',
-        'Return a concise but useful description of what is visible, any readable text, warnings, UI state, and what changed if apparent.',
+        'Return ONLY compact JSON with keys: summary, objects, ocrText.',
+        'objects should be short labels for visible people, pets, room features, furniture, screen elements, or tools.',
+        'Describe only what is actually visible. If the frame is unclear, say so.',
+        'Include any readable text, warnings, UI state, and what changed if apparent.',
         'If text appears sensitive, summarize the kind of text without reproducing secrets.',
         'Do not use em dashes.'
     ].join(' ');
-    const sys = global.__SOMA_SYSTEM || {};
-    const brain = sys.quadBrain || sys.brain;
-    let analysis = null;
-    if (brain?.reason) {
-        const response = await brain.reason(ask, { images: [scene.imagePath], vision: true, mode: 'fast' });
-        const text = response?.text || response?.response || String(response || '');
-        analysis = { engine: 'quad-brain', result: text, objects: [], ocrText: null, raw: response };
-    } else {
-        analysis = await analyzeWithAvailableVision({
-            imagePath: scene.imagePath,
-            base64: null,
-            mimeType: 'image/png',
-            prompt: ask,
-            type: 'deep-describe'
-        });
-    }
+    const imageBuffer = fs.readFileSync(scene.imagePath);
+    const ext = path.extname(scene.imagePath).toLowerCase();
+    const mimeType = ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg'
+        : ext === '.webp' ? 'image/webp'
+        : 'image/png';
+    const analysis = await analyzeWithAvailableVision({
+        imagePath: scene.imagePath,
+        base64: imageBuffer.toString('base64'),
+        mimeType,
+        prompt: ask,
+        type: 'deep-describe'
+    });
     const redactedOcr = redactSensitiveText(analysis.ocrText || '');
     const redactedSummary = redactSensitiveText(analysis.result || scene.summary || '');
-    scene.summary = redactedSummary.text || scene.summary;
+    if (!trustedSemanticAnalysis(scene, analysis)) {
+        return { scene: markSceneUnanalyzed(scene, 'Local vision did not produce confident labels.'), analysis };
+    }
+    scene.summary = redactedSummary.text || semanticSummary(scene, analysis);
     scene.ocrText = redactedOcr.text || scene.ocrText || '';
-    scene.objects = normalizeObjects([...(analysis.objects || []), ...(scene.objects || [])]);
-    scene.engine = analysis.engine;
-    scene.source = 'deep-describe';
-    scene.deepDescribedAt = Date.now();
+    scene.objects = normalizeSemanticObjects(scene, analysis);
+    scene.engine = semanticEngine(analysis);
+    scene.source = semanticSource(scene, analysis);
+    semanticTimestamp(scene);
     scene.privacy = {
         redactionCount: (scene.privacy?.redactionCount || 0) + redactedOcr.redactionCount + redactedSummary.redactionCount,
         redactionTypes: [...new Set([...(scene.privacy?.redactionTypes || []), ...redactedOcr.redactionTypes, ...redactedSummary.redactionTypes])],
     };
     scene.diff = diffScenes(sceneMemory[1] || null, scene);
     scene.changeScore = scene.diff.score;
+    if (sceneMemory[0]?.id === scene.id) updateVisionContext(scene);
     if (saveReflection) saveImportantSceneReflection(scene, 'deep-describe');
+    try {
+        presenceAwareness.recordVision({
+            channel: scene.channel,
+            imagePath: scene.imagePath,
+            objects: scene.objects,
+            summary: scene.summary,
+            source: scene.source,
+            engine: scene.engine,
+            semanticAnalysis: true,
+            timestamp: scene.deepDescribedAt || Date.now()
+        });
+    } catch {}
+    auditVisionTruth({
+        type: 'scene_deep_describe',
+        claim: scene.summary,
+        summary: scene.summary,
+        channel: scene.channel,
+        source: scene.source,
+        engine: scene.engine || analysis.engine,
+        model: analysis.model || null,
+        framePath: scene.imagePath,
+        sceneId: scene.id,
+        objects: scene.objects,
+        ocrText: scene.ocrText,
+        confidence: visionConfidence(scene.objects),
+        semanticAnalysis: true,
+        uncertain: Boolean(analysis.uncertain),
+        privacy: scene.privacy,
+        timestamp: scene.deepDescribedAt || Date.now()
+    });
     return { scene, analysis };
+}
+
+function maybeDeepDescribeWebcamScene(scene) {
+    if (!scene?.imagePath || scene.channel !== 'webcam') return;
+    const now = Date.now();
+    if (webcamDeepDescribeActive || now - lastWebcamDeepDescribeAt < WEBCAM_DEEP_DESCRIBE_INTERVAL_MS) return;
+    lastWebcamDeepDescribeAt = now;
+    webcamDeepDescribeActive = true;
+    setTimeout(async () => {
+        try {
+            await deepDescribeScene(scene, {
+                prompt: [
+                    'Analyze this live webcam frame for SOMA presence awareness.',
+                    'Describe only what is actually visible.',
+                    'Mention people, pets, major room features, lighting, and motion cues if present.',
+                    'If the frame is unclear, say that instead of guessing.',
+                    'Keep it to one concise paragraph. Do not use em dashes.'
+                ].join(' '),
+                saveReflection: false,
+            });
+        } catch (err) {
+            scene.summary = 'Webcam frame captured, but no semantic vision analysis is available yet.';
+            scene.source = 'webcam-unanalysed';
+            if (sceneMemory[0]?.id === scene.id) updateVisionContext(scene);
+            console.warn('[Perception] Webcam deep describe skipped:', err.message);
+        } finally {
+            webcamDeepDescribeActive = false;
+        }
+    }, 0);
 }
 
 /**
@@ -547,6 +886,24 @@ router.post('/analyze-image', async (req, res) => {
             engine: analysis.engine,
             timestamp: Date.now(),
         });
+        auditVisionTruth({
+            type: 'vision_upload_analysis',
+            claim: analysis.result,
+            summary: analysis.result,
+            channel: scene.channel,
+            source: type,
+            engine: analysis.engine,
+            model: analysis.model || null,
+            framePath: imagePath,
+            sceneId: scene.id,
+            objects: analysis.objects || [],
+            ocrText: analysis.ocrText || '',
+            confidence: visionConfidence(analysis.objects || []),
+            semanticAnalysis: Boolean(analysis.result || analysis.objects?.length),
+            uncertain: Boolean(analysis.uncertain),
+            privacy: scene.privacy,
+            timestamp: scene.timestamp
+        });
         res.json({
             success: true,
             type,
@@ -581,6 +938,7 @@ router.post('/vision/ingest-frame', async (req, res) => {
             count: 1,
             imagePath,
             channel: 'webcam',
+            semanticAnalysis: false,
             timestamp: Date.now(),
         };
         const scene = addSceneMemory({
@@ -588,10 +946,35 @@ router.post('/vision/ingest-frame', async (req, res) => {
             channel: 'webcam',
             objects: payload.objects,
             ocrText: '',
-            summary: 'Webcam frame captured.',
-            source: req.body?.source || 'webcam',
+            summary: 'Webcam frame captured, awaiting semantic vision analysis.',
+            source: req.body?.source || 'webcam-unanalysed',
             timestamp: payload.timestamp,
         });
+        try {
+            presenceAwareness.recordVision({
+                ...payload,
+                scene,
+                summary: scene.summary,
+                source: scene.source,
+                semanticAnalysis: false
+            });
+        } catch {}
+        auditVisionTruth({
+            type: 'webcam_raw_frame',
+            claim: scene.summary,
+            summary: scene.summary,
+            channel: 'webcam',
+            source: scene.source,
+            framePath: imagePath,
+            sceneId: scene.id,
+            objects: payload.objects,
+            confidence: 1,
+            semanticAnalysis: false,
+            uncertain: true,
+            privacy: scene.privacy,
+            timestamp: payload.timestamp
+        });
+        maybeDeepDescribeWebcamScene(scene);
         if (vision) {
             vision.channel = 'webcam';
             vision.lastPerception = { ...payload, scene };
@@ -858,6 +1241,25 @@ router.get('/vision/last', (req, res) => {
  */
 router.get('/vision/scenes', (req, res) => {
     res.json({ success: true, sceneMemory: sceneSnapshot() });
+});
+
+/**
+ * GET /api/perception/vision/audit?limit=50
+ * Append-only visual claims with the evidence source behind each claim.
+ */
+router.get('/vision/audit', async (req, res) => {
+    try {
+        const limit = Math.max(1, Math.min(250, Number(req.query.limit || 50)));
+        const records = await readVisionTruthAudit(limit);
+        res.json({
+            success: true,
+            path: visionTruthAuditPath(),
+            count: records.length,
+            records,
+        });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
 });
 
 /**
@@ -1136,12 +1538,23 @@ Estimate absolute pixel coordinates x and y for clicks based on a standard 1920x
  * POST /api/perception/vision/execute-action
  * Executes an action (either from proposals or ad-hoc), waits, and triggers a fresh verification screenshot
  */
-router.post('/api/perception/vision/execute-action', async (req, res) => {
+router.post('/vision/execute-action', async (req, res) => {
     try {
         const { type, params } = req.body || {};
         if (!type) return res.status(400).json({ success: false, error: 'action type required' });
 
         const sys = global.__SOMA_SYSTEM || {};
+        const { getApprovalSystem } = require('../../ApprovalSystem.cjs');
+        const approvalSystem = getApprovalSystem();
+        const approval = await approvalSystem.requestApproval({
+            type: 'shell_command',
+            action: `execute_desktop_action_${type}`,
+            details: { type, params },
+            context: { app: 'ComputerControl', risk: 'high' }
+        });
+        if (!approval.approved) {
+            return res.status(403).json({ success: false, error: `Action rejected by user: ${approval.reason}` });
+        }
         const control = sys.computerControl || sys.arbiters?.get?.('ComputerControlArbiter')?.instance;
         if (!control) {
             return res.status(503).json({ success: false, error: 'ComputerControlArbiter not available' });

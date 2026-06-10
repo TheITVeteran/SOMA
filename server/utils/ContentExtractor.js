@@ -4,6 +4,7 @@ import path from 'path';
 // Removed broken import - pdf-parse is loaded via require() below
 import mammoth from 'mammoth';
 import { createRequire } from 'module';
+import { analyzeImageFile, formatImageAnalysisForIngestion, isImageFile } from './LocalVisionFileAnalyzer.js';
 
 const require = createRequire(import.meta.url);
 
@@ -26,7 +27,7 @@ const parsePDF = async (buffer) => {
 
 export class ContentExtractor {
     constructor() {
-        this.supportedExtensions = ['.pdf', '.docx', '.doc', '.txt', '.md', '.json', '.js', '.ts', '.py', '.csv'];
+        this.supportedExtensions = ['.pdf', '.docx', '.doc', '.txt', '.md', '.json', '.js', '.ts', '.py', '.csv', '.png', '.jpg', '.jpeg', '.webp', '.gif', '.bmp'];
     }
 
     detectType(buffer, filePath, options = {}) {
@@ -38,6 +39,11 @@ export class ContentExtractor {
         const asciiHeader = header.toString('latin1');
 
         if (asciiHeader.startsWith('%PDF')) return '.pdf';
+        if (header[0] === 0xff && header[1] === 0xd8 && header[2] === 0xff) return '.jpg';
+        if (header[0] === 0x89 && header[1] === 0x50 && header[2] === 0x4e && header[3] === 0x47) return '.png';
+        if (asciiHeader.startsWith('RIFF') && buffer.subarray(8, 12).toString('latin1') === 'WEBP') return '.webp';
+        if (asciiHeader.startsWith('GIF8')) return '.gif';
+        if (mime.startsWith('image/')) return ext || `.${mime.replace('image/', '')}`;
         if (header[0] === 0x50 && header[1] === 0x4b) {
             if (['.docx', '.xlsx', '.pptx'].includes(ext)) return ext;
             if (mime.includes('wordprocessingml')) return '.docx';
@@ -70,7 +76,25 @@ export class ContentExtractor {
         const ext = this.detectType(dataBuffer, filePath, options);
         
         try {
-            if (ext === '.pdf') {
+            if (isImageFile(filePath, options.mimeType) || ['.png', '.jpg', '.jpeg', '.webp', '.gif', '.bmp'].includes(ext)) {
+                try {
+                    const result = await analyzeImageFile(filePath, {
+                        mimeType: options.mimeType,
+                        model: options.visionModel,
+                        prompt: options.visionPrompt
+                    });
+                    return formatImageAnalysisForIngestion(result, filePath);
+                } catch (visionError) {
+                    return [
+                        `[LOCAL VISION INGESTION] ${path.basename(filePath)}`,
+                        'Confidence: unavailable',
+                        '',
+                        `Local vision analysis failed: ${visionError.message}`,
+                        'The file is an image, but SOMA could not extract a semantic visual description from the current local VLM.'
+                    ].join('\n');
+                }
+            }
+            else if (ext === '.pdf') {
                 const data = await parsePDF(dataBuffer);
                 return data.text?.trim() || null;
             } 

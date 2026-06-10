@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import crypto from 'crypto';
 import Database from 'better-sqlite3';
 
 const DEFAULT_DB_PATH = path.resolve(process.cwd(), 'data', 'aperture', 'dendrite-search.db');
@@ -29,6 +30,60 @@ function fallbackSnippet(content = '', terms = []) {
     return start > 0 ? `...${snippet}` : snippet;
 }
 
+// Canonicalize URL helper
+function canonicalizeUrl(urlStr = '') {
+    try {
+        const url = new URL(urlStr.trim());
+        url.hash = '';
+        // Strip tracking params
+        const stripParams = ['utm_source', 'utm_medium', 'utm_campaign', 'utm_term', 'utm_content', 'fbclid', 'gclid'];
+        for (const p of stripParams) {
+            url.searchParams.delete(p);
+        }
+        // Lowercase hostname
+        url.hostname = url.hostname.toLowerCase();
+        // Remove trailing slash if path is just /
+        let res = url.toString();
+        if (res.endsWith('/') && url.pathname === '/') {
+            res = res.slice(0, -1);
+        }
+        return res;
+    } catch {
+        return urlStr.trim().toLowerCase();
+    }
+}
+
+// 128-dimensional term frequency hashing vector helper for offline semantic simulation
+function generateEmbedding(text = '') {
+    const vector = new Array(128).fill(0);
+    const words = String(text || '').toLowerCase().match(/[a-z0-9]{2,}/g) || [];
+    for (const word of words) {
+        let hash = 0;
+        for (let i = 0; i < word.length; i++) {
+            hash = (hash * 31 + word.charCodeAt(i)) & 0xffffffff;
+        }
+        const index = Math.abs(hash) % 128;
+        vector[index] += 1;
+    }
+    // Normalize vector
+    const magnitude = Math.sqrt(vector.reduce((sum, val) => sum + val * val, 0));
+    if (magnitude > 0) {
+        for (let i = 0; i < 128; i++) {
+            vector[i] /= magnitude;
+        }
+    }
+    return vector;
+}
+
+function cosineSimilarity(v1, v2) {
+    if (!v1 || !v2 || v1.length !== v2.length) return 0;
+    let dotProduct = 0;
+    for (let i = 0; i < v1.length; i++) {
+        dotProduct += v1[i] * v2[i];
+    }
+    return dotProduct;
+}
+
 export class DendriteSearchEngine {
     constructor(options = {}) {
         this.dbPath = options.dbPath || DEFAULT_DB_PATH;
@@ -56,6 +111,33 @@ export class DendriteSearchEngine {
             CREATE INDEX IF NOT EXISTS idx_dendrite_pages_source ON dendrite_pages(source);
         `);
 
+        // Dynamic schema upgrades
+        const columns = this.db.prepare("PRAGMA table_info(dendrite_pages)").all().map(c => c.name);
+        if (!columns.includes('canonical_url')) {
+            try { this.db.exec("ALTER TABLE dendrite_pages ADD COLUMN canonical_url TEXT"); } catch (e) {}
+        }
+        if (!columns.includes('domain')) {
+            try { this.db.exec("ALTER TABLE dendrite_pages ADD COLUMN domain TEXT"); } catch (e) {}
+        }
+        if (!columns.includes('captured_at')) {
+            try { this.db.exec("ALTER TABLE dendrite_pages ADD COLUMN captured_at TEXT"); } catch (e) {}
+        }
+        if (!columns.includes('refreshed_at')) {
+            try { this.db.exec("ALTER TABLE dendrite_pages ADD COLUMN refreshed_at TEXT"); } catch (e) {}
+        }
+        if (!columns.includes('status')) {
+            try { this.db.exec("ALTER TABLE dendrite_pages ADD COLUMN status TEXT DEFAULT 'captured'"); } catch (e) {}
+        }
+        if (!columns.includes('content_hash')) {
+            try { this.db.exec("ALTER TABLE dendrite_pages ADD COLUMN content_hash TEXT"); } catch (e) {}
+        }
+        if (!columns.includes('archive_status')) {
+            try { this.db.exec("ALTER TABLE dendrite_pages ADD COLUMN archive_status TEXT DEFAULT 'active'"); } catch (e) {}
+        }
+        if (!columns.includes('semantic_embedding')) {
+            try { this.db.exec("ALTER TABLE dendrite_pages ADD COLUMN semantic_embedding TEXT"); } catch (e) {}
+        }
+
         try {
             this.db.exec(`
                 CREATE VIRTUAL TABLE IF NOT EXISTS dendrite_pages_fts USING fts5(
@@ -76,17 +158,18 @@ export class DendriteSearchEngine {
     }
 
     count() {
-        return this.db.prepare('SELECT COUNT(*) AS n FROM dendrite_pages').get().n;
+        return this.db.prepare("SELECT COUNT(*) AS n FROM dendrite_pages WHERE archive_status != 'deleted'").get().n;
     }
 
     stats() {
         const bySource = this.db.prepare(`
             SELECT source, COUNT(*) AS count
             FROM dendrite_pages
+            WHERE archive_status != 'deleted'
             GROUP BY source
             ORDER BY count DESC
         `).all();
-        const latest = this.db.prepare('SELECT MAX(indexed_at) AS latest FROM dendrite_pages').get()?.latest || null;
+        const latest = this.db.prepare("SELECT MAX(indexed_at) AS latest FROM dendrite_pages WHERE archive_status != 'deleted'").get()?.latest || null;
         return { indexedPages: this.count(), latestIndexedAt: latest, bySource };
     }
 
@@ -100,7 +183,7 @@ export class DendriteSearchEngine {
         }
         const pages = Array.isArray(value.pages) ? value.pages : [];
         let imported = 0;
-        const existing = this.db.prepare('SELECT id FROM dendrite_pages WHERE url = ?');
+        const existing = this.db.prepare("SELECT id FROM dendrite_pages WHERE url = ?");
         const tx = this.db.transaction(() => {
             for (const page of pages) {
                 if (!page?.url || !page?.content || existing.get(page.url)) continue;
@@ -113,20 +196,40 @@ export class DendriteSearchEngine {
     }
 
     indexPage(page = {}) {
-        const id = page.id || Buffer.from(String(page.url || '')).toString('base64url').slice(0, 80);
         const url = String(page.url || '').trim();
+        if (!url) throw new Error('url is required');
+
+        const canonicalUrl = canonicalizeUrl(url);
+        const id = page.id || Buffer.from(canonicalUrl).toString('base64url').slice(0, 80);
         const title = normalizeText(page.title || url).slice(0, 250);
         const content = normalizeText(page.content).slice(0, 120000);
-        if (!id || !url || !content) throw new Error('id, url, and content are required');
+        
+        let parsedDomain = '';
+        try {
+            parsedDomain = new URL(url).hostname;
+        } catch {}
 
         const source = String(page.source || 'unknown').slice(0, 80);
-        const hash = String(page.hash || '').slice(0, 128);
+        
+        // Content hashing
+        const hash = page.hash || crypto.createHash('sha256').update(content).digest('hex');
+        
         const metadata = JSON.stringify(page.metadata || {});
-        const indexedAt = page.indexedAt || page.indexed_at || new Date().toISOString();
+        const nowStr = new Date().toISOString();
+        const capturedAt = page.capturedAt || page.metadata?.capturedAt || nowStr;
+        const refreshedAt = nowStr;
+        const status = page.status || 'captured';
+        const archiveStatus = page.archiveStatus || 'active';
+        
+        const embedding = generateEmbedding(content);
+        const embeddingStr = JSON.stringify(embedding);
 
         this.db.prepare(`
-            INSERT INTO dendrite_pages (id, url, title, content, source, hash, metadata, indexed_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO dendrite_pages (
+                id, url, title, content, source, hash, metadata, indexed_at,
+                canonical_url, domain, captured_at, refreshed_at, status, content_hash, archive_status, semantic_embedding
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(url) DO UPDATE SET
                 id = excluded.id,
                 title = excluded.title,
@@ -134,8 +237,19 @@ export class DendriteSearchEngine {
                 source = excluded.source,
                 hash = excluded.hash,
                 metadata = excluded.metadata,
-                indexed_at = excluded.indexed_at
-        `).run(id, url, title, content, source, hash, metadata, indexedAt);
+                indexed_at = excluded.indexed_at,
+                canonical_url = excluded.canonical_url,
+                domain = excluded.domain,
+                captured_at = excluded.captured_at,
+                refreshed_at = excluded.refreshed_at,
+                status = excluded.status,
+                content_hash = excluded.content_hash,
+                archive_status = excluded.archive_status,
+                semantic_embedding = excluded.semantic_embedding
+        `).run(
+            id, url, title, content, source, hash, metadata, nowStr,
+            canonicalUrl, parsedDomain, capturedAt, refreshedAt, status, hash, archiveStatus, embeddingStr
+        );
 
         if (this.ftsReady) {
             this.db.prepare('DELETE FROM dendrite_pages_fts WHERE id = ?').run(id);
@@ -167,8 +281,9 @@ export class DendriteSearchEngine {
 
     listPages(limit = 100) {
         return this.db.prepare(`
-            SELECT id, url, title, source, hash, metadata, indexed_at, length(content) AS content_length
+            SELECT id, url, title, source, hash, metadata, indexed_at, status, archive_status, length(content) AS content_length
             FROM dendrite_pages
+            WHERE archive_status != 'deleted'
             ORDER BY indexed_at DESC
             LIMIT ?
         `).all(Math.min(Number(limit) || 100, 500)).map(row => ({
@@ -177,6 +292,8 @@ export class DendriteSearchEngine {
             title: row.title,
             source: row.source,
             hash: row.hash,
+            status: row.status,
+            archiveStatus: row.archive_status,
             metadata: this.parseMetadata(row.metadata),
             indexedAt: row.indexed_at,
             contentLength: row.content_length
@@ -184,8 +301,22 @@ export class DendriteSearchEngine {
     }
 
     deletePage(id) {
-        const result = this.db.prepare('DELETE FROM dendrite_pages WHERE id = ?').run(id);
-        if (this.ftsReady) this.db.prepare('DELETE FROM dendrite_pages_fts WHERE id = ?').run(id);
+        const result = this.db.prepare("UPDATE dendrite_pages SET archive_status = 'deleted' WHERE id = ?").run(id);
+        // Also remove from virtual table so it doesn't appear in FTS searches
+        if (this.ftsReady) {
+            this.db.prepare('DELETE FROM dendrite_pages_fts WHERE id = ?').run(id);
+        }
+        return result.changes > 0;
+    }
+
+    archivePage(id, archive = true) {
+        const state = archive ? 'archived' : 'active';
+        const result = this.db.prepare("UPDATE dendrite_pages SET archive_status = ? WHERE id = ?").run(state, id);
+        return result.changes > 0;
+    }
+
+    updatePageStatus(id, status) {
+        const result = this.db.prepare("UPDATE dendrite_pages SET status = ?, refreshed_at = ? WHERE id = ?").run(status, new Date().toISOString(), id);
         return result.changes > 0;
     }
 
@@ -193,41 +324,31 @@ export class DendriteSearchEngine {
         const terms = searchTerms(query);
         if (!terms.length) return [];
         const max = Math.min(Number(limit) || 15, 50);
+        const queryEmbedding = generateEmbedding(query);
+
+        let candidates = [];
 
         if (this.ftsReady) {
             const match = ftsQuery(query);
             try {
-                const rows = this.db.prepare(`
-                    SELECT p.id, p.url, p.title, p.source, p.hash, p.metadata, p.indexed_at,
-                           bm25(dendrite_pages_fts, 8.0, 4.0, 1.0, 1.5) AS rank,
+                candidates = this.db.prepare(`
+                    SELECT p.*,
+                           bm25(dendrite_pages_fts, 8.0, 4.0, 1.0, 1.5) AS bm25_rank,
                            snippet(dendrite_pages_fts, 3, '', '', '...', 42) AS snippet
                     FROM dendrite_pages_fts
                     JOIN dendrite_pages p ON p.id = dendrite_pages_fts.id
-                    WHERE dendrite_pages_fts MATCH ?
-                    ORDER BY rank ASC, p.indexed_at DESC
+                    WHERE dendrite_pages_fts MATCH ? AND p.archive_status != 'deleted'
                     LIMIT 100
                 `).all(match);
-                return rows.map(row => ({
-                    id: row.id,
-                    url: row.url,
-                    title: row.title,
-                    source: row.source,
-                    hash: row.hash,
-                    metadata: this.parseMetadata(row.metadata),
-                    indexedAt: row.indexed_at,
-                    score: Number(this.rankScore(row, terms, -row.rank).toFixed(4)),
-                    snippet: normalizeText(row.snippet)
-                }))
-                    .sort((a, b) => b.score - a.score || b.indexedAt.localeCompare(a.indexedAt))
-                    .slice(0, max);
             } catch (error) {
                 console.warn('[DendriteSearch] FTS query failed, falling back:', error.message);
             }
         }
 
-        const rows = this.db.prepare('SELECT * FROM dendrite_pages ORDER BY indexed_at DESC LIMIT 1000').all();
-        return rows
-            .map(row => {
+        if (candidates.length === 0) {
+            // Fallback to query all active documents
+            const rows = this.db.prepare("SELECT * FROM dendrite_pages WHERE archive_status != 'deleted' LIMIT 1000").all();
+            candidates = rows.map(row => {
                 const haystack = `${row.title} ${row.url} ${row.content}`.toLowerCase();
                 let score = 0;
                 for (const term of terms) {
@@ -235,44 +356,83 @@ export class DendriteSearchEngine {
                     if (String(row.url).toLowerCase().includes(term)) score += 4;
                     score += Math.min(haystack.split(term).length - 1, 8);
                 }
-                return { row, score: this.rankScore(row, terms, score) };
-            })
-            .filter(item => item.score > 0)
-            .sort((a, b) => b.score - a.score || b.row.indexed_at.localeCompare(a.row.indexed_at))
-            .slice(0, max)
-            .map(({ row, score }) => ({
+                return {
+                    ...row,
+                    bm25_rank: -score,
+                    snippet: fallbackSnippet(row.content, terms)
+                };
+            }).filter(item => item.bm25_rank < 0);
+        }
+
+        // Apply blended ranking scoring logic
+        return candidates.map(row => {
+            // 1. Keyword Score
+            const keywordScore = -row.bm25_rank;
+
+            // 2. Semantic vector score (cosine similarity)
+            let semanticSimilarity = 0;
+            if (row.semantic_embedding) {
+                try {
+                    const docEmbedding = JSON.parse(row.semantic_embedding);
+                    semanticSimilarity = cosineSimilarity(queryEmbedding, docEmbedding);
+                } catch {}
+            }
+
+            // 3. Freshness boost
+            const indexedAt = Date.parse(row.indexed_at) || 0;
+            let freshnessScore = 0;
+            if (indexedAt) {
+                const daysOld = Math.max(0, (Date.now() - indexedAt) / 86400000);
+                freshnessScore = Math.max(0, 10 - Math.min(daysOld, 30) * 0.33); // max 10 points boost for new pages
+            }
+
+            // 4. Source Quality boost
+            let qualityScore = 0;
+            const source = String(row.source).toLowerCase();
+            const url = String(row.url).toLowerCase();
+            if (url.startsWith('gmn://')) qualityScore += 12;
+            if (source === 'gmn:site') qualityScore += 10;
+            if (/bookmark|portal-reader|chromium-browser/.test(source)) qualityScore += 5;
+            if (/crawler|dendrite/.test(source)) qualityScore += 2;
+
+            // 5. Duplication Penalty
+            // Check if there are other pages in DB with the exact same content hash
+            let duplicationPenalty = 0;
+            if (row.hash) {
+                try {
+                    const dupCount = this.db.prepare('SELECT COUNT(*) as n FROM dendrite_pages WHERE hash = ? AND id != ? AND archive_status != \'deleted\'').get(row.hash, row.id).n;
+                    if (dupCount > 0) {
+                        duplicationPenalty = Math.min(dupCount * 3.5, 15); // penalize duplicate content
+                    }
+                } catch {}
+            }
+
+            // Calculate blended final score
+            const finalScore = keywordScore + (semanticSimilarity * 18) + freshnessScore + qualityScore - duplicationPenalty;
+
+            return {
                 id: row.id,
                 url: row.url,
                 title: row.title,
                 source: row.source,
                 hash: row.hash,
+                status: row.status,
+                archiveStatus: row.archive_status,
                 metadata: this.parseMetadata(row.metadata),
                 indexedAt: row.indexed_at,
-                score,
-                snippet: fallbackSnippet(row.content, terms)
-            }));
-    }
-
-    rankScore(row, terms = [], baseScore = 0) {
-        const title = String(row.title || '').toLowerCase();
-        const url = String(row.url || '').toLowerCase();
-        const source = String(row.source || '').toLowerCase();
-        const indexedAt = Date.parse(row.indexed_at || row.indexedAt || '') || 0;
-        let score = Number(baseScore) || 0;
-        for (const term of terms) {
-            if (title === term) score += 30;
-            if (title.includes(term)) score += 12;
-            if (url.includes(term)) score += 8;
-        }
-        if (url.startsWith('gmn://')) score += 9;
-        if (source === 'gmn:site') score += 8;
-        if (/bookmark|portal-reader|chromium-browser/.test(source)) score += 4;
-        if (/crawler|dendrite/.test(source)) score += 2;
-        if (indexedAt) {
-            const daysOld = Math.max(0, (Date.now() - indexedAt) / 86400000);
-            score += Math.max(0, 6 - Math.min(daysOld, 30) * 0.2);
-        }
-        return score;
+                score: Number(finalScore.toFixed(4)),
+                snippet: normalizeText(row.snippet || fallbackSnippet(row.content, terms)),
+                // Show extract details for citations
+                citationSource: {
+                    domain: row.domain || '',
+                    title: row.title,
+                    url: row.url,
+                    capturedAt: row.captured_at || row.indexed_at
+                }
+            };
+        })
+        .sort((a, b) => b.score - a.score || b.indexedAt.localeCompare(a.indexedAt))
+        .slice(0, max);
     }
 
     rowToPage(row, includeContent = false) {
@@ -282,6 +442,12 @@ export class DendriteSearchEngine {
             title: row.title,
             source: row.source,
             hash: row.hash,
+            status: row.status,
+            archiveStatus: row.archive_status,
+            canonicalUrl: row.canonical_url,
+            domain: row.domain,
+            capturedAt: row.captured_at,
+            refreshedAt: row.refreshed_at,
             metadata: this.parseMetadata(row.metadata),
             indexedAt: row.indexed_at,
             ...(includeContent ? { content: row.content } : { contentLength: row.content?.length || row.content_length || 0 })

@@ -631,7 +631,12 @@ export async function loadExtendedSystems(system) {
             }
         };
 
-        const discord = new DiscordArbiter({ brain: discordBrain, mnemonic: system.mnemonicArbiter });
+        const discord = new DiscordArbiter({ 
+            brain: discordBrain, 
+            mnemonic: system.mnemonicArbiter,
+            system,
+            goalPlanner: system.goalPlanner
+        });
         await discord.onInitialize();
         system.discordArbiter = discord;
         ext.discordArbiter = discord;
