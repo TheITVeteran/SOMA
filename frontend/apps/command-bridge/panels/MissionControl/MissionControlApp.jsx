@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { GlobalControls } from './components/GlobalControls.jsx';
-import { ChevronDown, ChevronUp, Activity, MessageSquare, CheckCircle, XCircle, AlertTriangle, Send, X, Clock, Swords, BookOpen, FlaskConical, BarChart2, Bell, Bot, ScrollText, Target, Database, Wallet, TrendingUp, TrendingDown } from 'lucide-react';
+import { ChevronDown, ChevronUp, Activity, MessageSquare, CheckCircle, XCircle, AlertTriangle, Send, X, Clock, Swords, BookOpen, FlaskConical, BarChart2, Bell, Bot, ScrollText, Target, Database, Wallet, TrendingUp, TrendingDown, Trophy } from 'lucide-react';
 import { useMarketEngine, MarketMonitor, MarketDeepScan } from './components/MarketRadar.jsx';
 import { StrategyBrain } from './components/StrategyBrain.jsx';
 import { TradeStream } from './components/TradeStream.jsx';
@@ -21,6 +21,7 @@ import { AlertsPanel } from './components/AlertsPanel.jsx';
 import { SimIntelPanel } from './components/SimIntelPanel.jsx';
 import { LifecycleJournalPanel } from './components/LifecycleJournalPanel.jsx';
 import { MissionBriefPanel } from './components/MissionBriefPanel.jsx';
+import { StrategyHuntPanel } from './components/StrategyHuntPanel.jsx';
 import { PnlSummaryCard, computeMissionPnl, formatMoney, pnlTextColor } from './components/PnlSummary.jsx';
 import { TradeMode, AssetType } from './types.js';
 
@@ -380,6 +381,7 @@ const MissionControlApp = ({ somaBackend, isConnected }) => {
     const [currentPresetId, setCurrentPresetId] = useState('BTC_NATIVE');
     const [learnedPlaybook, setLearnedPlaybook] = useState(null);
     const [missionRuntime, setMissionRuntime] = useState(null);
+    const [huntState, setHuntState] = useState(null);
     const [trades, setTrades] = useState([]);
     const [chartData, setChartData] = useState([]);
     const [timeframe, setTimeframe] = useState('1Min');
@@ -737,6 +739,7 @@ const MissionControlApp = ({ somaBackend, isConnected }) => {
         }
 
         if (missionPulse.missionRuntime) setMissionRuntime(missionPulse.missionRuntime);
+        if (missionPulse.strategyHunt) setHuntState(missionPulse.strategyHunt);
         if (missionPulse.scalping) setTrainingStats(missionPulse.scalping);
         if (missionPulse.performance) {
             performancePulseAtRef.current = Date.now();
@@ -2309,6 +2312,7 @@ const MissionControlApp = ({ somaBackend, isConnected }) => {
                                     { id: 'alerts',   icon: Bell,         title: 'Alerts',    activeClass: 'bg-orange-500/20 text-orange-300'    },
                                     { id: 'sim',      icon: FlaskConical, title: 'Sim Intel', activeClass: 'bg-fuchsia-500/20 text-fuchsia-300'  },
                                     { id: 'journal',  icon: ScrollText,   title: 'Journal',   activeClass: 'bg-cyan-500/20 text-cyan-300'       },
+                                    { id: 'hunt',     icon: Trophy,       title: 'Strat Hunt', activeClass: 'bg-amber-500/20 text-amber-300'     },
                                 ].map(({ id, icon: Icon, title, activeClass }) => (
                                     <button key={id} title={title}
                                         onClick={() => { setSidebarTab(id); setSidebarCollapsed(false); }}
@@ -2333,6 +2337,7 @@ const MissionControlApp = ({ somaBackend, isConnected }) => {
                                     { id: 'alerts',   icon: Bell,         title: 'Alerts',        activeClass: 'bg-orange-500/20 text-orange-300 border-b-2 border-orange-500'      },
                                     { id: 'sim',      icon: FlaskConical, title: 'Sim Intel',     activeClass: 'bg-fuchsia-500/20 text-fuchsia-300 border-b-2 border-fuchsia-500'   },
                                     { id: 'journal',  icon: ScrollText,   title: 'Lifecycle Trail', activeClass: 'bg-cyan-500/20 text-cyan-300 border-b-2 border-cyan-500'          },
+                                    { id: 'hunt',     icon: Trophy,       title: 'Strategy Hunt',   activeClass: 'bg-amber-500/20 text-amber-300 border-b-2 border-amber-500'         },
                                 ].map(({ id, icon: Icon, title, activeClass }) => (
                                     <button key={id}
                                         title={title}
@@ -2407,6 +2412,10 @@ const MissionControlApp = ({ somaBackend, isConnected }) => {
                                 ) : sidebarTab === 'journal' ? (
                                     <div className="h-full overflow-hidden">
                                         <LifecycleJournalPanel />
+                                    </div>
+                                ) : sidebarTab === 'hunt' ? (
+                                    <div className="h-full overflow-hidden">
+                                        <StrategyHuntPanel huntState={huntState} />
                                     </div>
                                 ) : (
                                     <StrategyBrain strategies={activeStrategies} autonomousStatus={autonomousStatus} learnedPlaybook={learnedPlaybook} missionRuntime={missionRuntime} />

@@ -16,6 +16,7 @@ import opportunityScanner from './OpportunityScanner.js';
 import binanceService from './BinanceService.js';
 import marketEvidenceStore from './MarketEvidenceStore.js';
 import blueskeyClient from '../social/BlueskeyClient.js';
+import excelOperator from './excelOperator.js';
 
 
 const router = express.Router();
@@ -1105,6 +1106,8 @@ router.get('/news', async (req, res) => {
 
     try {
         if (alpacaService.isConnected && alpacaService.apiKey) {
+
+
             const url = `https://data.alpaca.markets/v1beta1/news?symbols=${encodeURIComponent(alpacaSymbol)}&limit=${parseInt(limit)}&sort=desc`;
             const resp = await fetch(url, {
                 headers: {
@@ -1131,6 +1134,66 @@ router.get('/news', async (req, res) => {
     }
 
     res.json({ success: true, items: [] });
+});
+
+// -- Guarded Excel Operator Endpoints --
+
+router.post('/excel/analyze', async (req, res) => {
+    try {
+        const { filePath, targetVariance } = req.body || {};
+        if (!filePath) {
+            return res.status(400).json({ success: false, error: 'filePath is required' });
+        }
+        const resolvedPath = await excelOperator.resolveWorkbook(filePath);
+        const result = await excelOperator.analyzeAndLocateVariance(resolvedPath, targetVariance);
+        res.json({ success: true, resolvedPath, ...result });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+router.post('/excel/propose', async (req, res) => {
+    try {
+        const { filePath, sheetName, cellAddr, actionType, actionPayload } = req.body || {};
+        if (!filePath || !sheetName || !cellAddr || !actionType || !actionPayload) {
+            return res.status(400).json({ success: false, error: 'filePath, sheetName, cellAddr, actionType, and actionPayload are required' });
+        }
+        const resolvedPath = await excelOperator.resolveWorkbook(filePath);
+        // By default, work on a backup copy
+        const workingCopy = await excelOperator.createWorkingCopy(resolvedPath);
+        const receipt = await excelOperator.proposeModification(workingCopy, sheetName, cellAddr, actionType, actionPayload);
+        res.json({ success: true, workingCopy, receipt });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+router.post('/excel/execute', async (req, res) => {
+    try {
+        const { filePath, sheetName, cellAddr, actionType, actionPayload } = req.body || {};
+        if (!filePath || !sheetName || !cellAddr || !actionType || !actionPayload) {
+            return res.status(400).json({ success: false, error: 'filePath, sheetName, cellAddr, actionType, and actionPayload are required' });
+        }
+        const resolvedPath = await excelOperator.resolveWorkbook(filePath);
+        const success = await excelOperator.executeModification(resolvedPath, sheetName, cellAddr, actionType, actionPayload);
+        res.json({ success });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
+});
+
+router.post('/excel/open', async (req, res) => {
+    try {
+        const { filePath, sheetName, cellAddr } = req.body || {};
+        if (!filePath) {
+            return res.status(400).json({ success: false, error: 'filePath is required' });
+        }
+        const resolvedPath = await excelOperator.resolveWorkbook(filePath);
+        const result = await excelOperator.openInExcel(resolvedPath, sheetName, cellAddr);
+        res.json({ success: true, ...result });
+    } catch (error) {
+        res.status(500).json({ success: false, error: error.message });
+    }
 });
 
 export default router;

@@ -91,16 +91,17 @@ export class TradingConnectionMonitorDaemon extends BaseDaemon {
         }
 
         // Evaluate overall health
-        // Outage triggers if external internet is completely dead OR if both active WS feeds are disconnected
-        const tradingWantsAlpaca = alpacaService.isConnected;
-        const tradingWantsBinance = (process.env.SOMA_LOAD_TRADING === 'true'); // If Binance configuration loaded
+        // Outage triggers if external internet is completely dead OR if active live WS feeds are disconnected.
+        // Paper mode does not use WS streams — only flag WS down if live trading AND stream was actually started.
+        const tradingWantsAlpaca = alpacaService.isConnected && !alpacaService.isPaperTrading && !!lowLatencyEngine.alpacaWs;
+        const tradingWantsBinance = (process.env.SOMA_LOAD_TRADING === 'true') && !!lowLatencyEngine.binanceWs;
 
         let wsHealthy = true;
         if (tradingWantsAlpaca && !result.alpacaWsOpen) {
             wsHealthy = false;
             result.reason.push('Alpaca WS Disconnected');
         }
-        if (tradingWantsBinance && lowLatencyEngine.binanceWs && !result.binanceWsOpen) {
+        if (tradingWantsBinance && !result.binanceWsOpen) {
             wsHealthy = false;
             result.reason.push('Binance WS Disconnected');
         }

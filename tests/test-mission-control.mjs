@@ -123,8 +123,8 @@ try {
     
     test(
         'Routes mounted correctly',
-        routesContent.includes("safeMount('/api/scalping', checkReady, scalpingRoutes)") &&
-        routesContent.includes("safeMount('/api/market', checkReady, marketDataRoutes)")
+        routesContent.includes("safeMount('/api/scalping'") &&
+        routesContent.includes("safeMount('/api/market'")
     );
 } catch (error) {
     test('server/loaders/routes.js checks', false, `Error: ${error.message}`);

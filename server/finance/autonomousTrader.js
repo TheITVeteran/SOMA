@@ -194,6 +194,47 @@ class AutonomousTrader {
             const paperCap = this.config.initialBalance || this._runtimeProfile.paperCapital || 1000;
             this._paperPortfolio.balance = paperCap;
             this._paperPortfolio.initialBalance = paperCap;
+
+            // Restore any open paper positions from SQLite for this symbol
+            try {
+                const openTrades = tradeLogger.getOpenTrades().filter(t => t.symbol === symbol);
+                const closedTrades = tradeLogger.getClosedTrades().filter(t => t.symbol === symbol);
+                const totalRealizedPnL = closedTrades.reduce((sum, t) => sum + (t.pnl || 0), 0);
+                
+                // Adjust virtual cash balance based on closed trades PnL
+                this._paperPortfolio.balance += totalRealizedPnL;
+                
+                for (const t of openTrades) {
+                    const posSide = (t.side === 'buy' || t.side === 'long') ? 'long' : 'short';
+                    this._paperPortfolio.positions[t.symbol] = {
+                        side: posSide,
+                        qty: t.qty,
+                        entryPrice: t.entry_price,
+                        tradeId: t.id,
+                        fees: 0,
+                        openedAt: t.entry_time ? new Date(t.entry_time).getTime() : Date.now()
+                    };
+                    // Mirror _executePaperTrade cash flow: longs consumed cash at
+                    // entry, shorts credited proceeds — so the eventual close reconciles.
+                    if (posSide === 'long') {
+                        this._paperPortfolio.balance -= (t.qty * t.entry_price);
+                    } else {
+                        this._paperPortfolio.balance += (t.qty * t.entry_price);
+                    }
+                    
+                    // Re-populate tradesExecuted for any active trades
+                    this._stats.tradesExecuted++;
+                }
+                
+                if (openTrades.length > 0) {
+                    console.log(`[AutonomousTrader] 📄 Restored ${openTrades.length} open paper position(s) for ${symbol}. Adjusted Virtual Cash Balance: $${this._paperPortfolio.balance.toFixed(2)}`);
+                    this._logDecision('SYSTEM', 'RESTORE', `Restored ${openTrades.length} open paper position(s) from database`, {
+                        openTrades
+                    });
+                }
+            } catch (err) {
+                console.warn(`[AutonomousTrader] ⚠️ Failed to restore open paper positions for ${symbol}:`, err.message);
+            }
         }
         this._runtimeSessionId = missionControlRuntime.startSession({
             symbol,
@@ -1501,7 +1542,7 @@ class AutonomousTrader {
             this._logDecision('MANAGE', 'TIME_EXIT',
                 `Time exit: position open ${ageMin}m (limit ${Math.round(maxAgeMs/60000)}m)`, { position, currentPrice, ageMin });
             this._positionHighWater.delete(sym);
-            await this._closePosition(position, 'TIME_EXIT');
+            await this._closePosition(position, 'TIME_EXIT', currentPrice);
             return true;
         }
 
@@ -1518,7 +1559,7 @@ class AutonomousTrader {
             this._logDecision('MANAGE', 'TRAILING_STOP',
                 `Breakeven stop: gave back gains from peak +${(highWater*100).toFixed(1)}%`, { position, currentPrice, highWater });
             this._positionHighWater.delete(sym);
-            await this._closePosition(position, 'TRAILING_STOP');
+            await this._closePosition(position, 'TRAILING_STOP', currentPrice);
             return true;
         }
 
@@ -1529,7 +1570,7 @@ class AutonomousTrader {
                     position, currentPrice, highWater, drop: highWater - pnlPct
                 });
             this._positionHighWater.delete(sym);
-            await this._closePosition(position, 'TRAILING_STOP');
+            await this._closePosition(position, 'TRAILING_STOP', currentPrice);
             return true;
         }
 
@@ -1538,7 +1579,7 @@ class AutonomousTrader {
             this._logDecision('MANAGE', 'TAKE_PROFIT',
                 `Take profit: +${(pnlPct * 100).toFixed(1)}%`, { position, currentPrice });
             this._positionHighWater.delete(sym);
-            await this._closePosition(position, 'TAKE_PROFIT');
+            await this._closePosition(position, 'TAKE_PROFIT', currentPrice);
             return true;
         }
 
@@ -1547,7 +1588,7 @@ class AutonomousTrader {
             this._logDecision('MANAGE', 'STOP_LOSS',
                 `Stop loss: ${(pnlPct * 100).toFixed(1)}%`, { position, currentPrice });
             this._positionHighWater.delete(sym);
-            await this._closePosition(position, 'STOP_LOSS');
+            await this._closePosition(position, 'STOP_LOSS', currentPrice);
             return true;
         }
 
@@ -1557,13 +1598,15 @@ class AutonomousTrader {
     /**
      * Close a position
      */
-    async _closePosition(position, reason) {
+    async _closePosition(position, reason, fillPriceOverride = null) {
         this._positionHighWater.delete(position.symbol); // always clean up trailing stop state
         // Handle paper mode close
         if (this.paperMode) {
             const pos = this._paperPortfolio.positions[position.symbol];
             if (pos) {
-                const fillPrice = position.currentPrice;
+                // position.currentPrice starts at entryPrice in paper mode and only
+                // updates on stream ticks — prefer the manage cycle's market price.
+                const fillPrice = fillPriceOverride ?? position.currentPrice;
                 const pnl = pos.side === 'long'
                     ? (fillPrice - pos.entryPrice) * pos.qty
                     : (pos.entryPrice - fillPrice) * pos.qty;

@@ -6,6 +6,7 @@
 
 import express from 'express';
 import { AutonomousTrader, _setPerformanceCacheFlush } from './autonomousTrader.js';
+import strategyHuntDaemon from '../../daemons/StrategyHuntDaemon.js';
 
 const router = express.Router();
 
@@ -284,6 +285,22 @@ router.get('/registry', (req, res) => {
     }
 });
 
+// ─── Strategy Hunt routes ─────────────────────────────────────────────────────
+
+router.get('/hunt/state', (req, res) => {
+    res.json({ success: true, ...strategyHuntDaemon.getHuntState() });
+});
+
+router.post('/hunt/lock', (req, res) => {
+    const { strategyId } = req.body || {};
+    if (!strategyId) return res.status(400).json({ success: false, error: 'strategyId required' });
+    res.json(strategyHuntDaemon.lockProvenStrategy(strategyId));
+});
+
+router.post('/hunt/unlock', (req, res) => {
+    res.json(strategyHuntDaemon.unlockStrategy());
+});
+
 /**
  * WebSocket bridge helpers — read from the registry, not the singleton.
  * The singleton (autonomousTrader default export) is never started; all active
@@ -302,6 +319,13 @@ export function getAggregateStatus() {
         runningCount: instances.filter(i => i.isRunning).length,
         runningSymbols: instances.filter(i => i.isRunning).map(i => i.symbol),
     };
+}
+
+// Wire aggregate status into the hunt daemon now that getAggregateStatus is defined
+strategyHuntDaemon.setAggregateStatusFn(getAggregateStatus);
+
+export function getHuntState() {
+    return strategyHuntDaemon.getHuntState();
 }
 
 export function getAggregateDecisions(limit = 30) {

@@ -14,7 +14,7 @@ import { buildSystemSnapshot, buildPulsePayload } from '../utils/systemState.js'
 import { executeCommand } from '../utils/commandRouter.js';
 import { reasonGrounded, guardSomaText, buildGroundedPrompt } from '../context/GroundedReasoning.js';
 import autonomousTrader from '../finance/autonomousTrader.js';
-import { getAggregateStatus, getAggregateDecisions } from '../finance/autonomousRoutes.js';
+import { getAggregateStatus, getAggregateDecisions, getHuntState } from '../finance/autonomousRoutes.js';
 import scalpingEngine from '../finance/scalpingEngine.js';
 import missionControlRuntime from '../finance/MissionControlRuntime.js';
 import marketEvidenceStore from '../finance/MarketEvidenceStore.js';
@@ -174,6 +174,7 @@ function buildMissionControlPulse() {
     const missionRuntime = safeSection(errors, 'missionRuntime', () => missionControlRuntime.getStatus(), null);
     const evidence = safeSection(errors, 'evidence', () => marketEvidenceStore.summarize(), null);
     const tradeThesis = safeSection(errors, 'tradeThesis', () => tradeThesisStore.active(), null);
+    const strategyHunt = safeSection(errors, 'strategyHunt', () => getHuntState(), null);
 
     return {
         type: 'mission_control_pulse',
@@ -185,7 +186,8 @@ function buildMissionControlPulse() {
         performance,
         missionRuntime,
         evidence,
-        tradeThesis
+        tradeThesis,
+        strategyHunt
     };
 }
 
@@ -529,6 +531,10 @@ export function setupWebSocket(server, wss, system) {
                 imagePath: p.imagePath || null,
                 objects: analysis.objects || [],
                 ocrText: analysis.ocrText || null,
+                summary: analysis.summary || analysis.description || p.summary || null,
+                source: p.source || analysis.source || null,
+                engine: p.engine || analysis.engine || null,
+                semanticAnalysis: Boolean(p.semanticAnalysis || analysis.semanticAnalysis || p.source === 'deep-describe' || analysis.engine),
                 ghostCursor: p.ghostCursor || null,
                 timestamp: p.timestamp || Date.now()
             };
@@ -539,6 +545,8 @@ export function setupWebSocket(server, wss, system) {
                 imagePath: system.visionContext.imagePath,
                 objects: system.visionContext.objects,
                 ocrText: system.visionContext.ocrText,
+                summary: system.visionContext.summary,
+                semanticAnalysis: system.visionContext.semanticAnalysis,
                 ghostCursor: system.visionContext.ghostCursor,
                 timestamp: system.visionContext.timestamp
             });
@@ -549,8 +557,14 @@ export function setupWebSocket(server, wss, system) {
                 const presence = presenceAwareness.recordVision({
                     channel: system.visionContext.channel,
                     objects: system.visionContext.objects,
+                    imagePath: system.visionContext.imagePath,
+                    summary: system.visionContext.summary,
+                    source: system.visionContext.source,
+                    engine: system.visionContext.engine,
+                    semanticAnalysis: system.visionContext.semanticAnalysis,
                     timestamp: system.visionContext.timestamp
                 });
+                broadcast('presence_state', presenceAwareness.evidenceSnapshot());
                 if (presence.probe) broadcast('soma_presence_probe', presence.probe);
             } catch (e) {
                 logger.warn('[PresenceAwareness] vision update failed:', e.message);
@@ -831,6 +845,20 @@ export function setupWebSocket(server, wss, system) {
                         possibleAction: threadDecision.actionHint || null
                     }
                 });
+
+                // Publish to MessageBroker so DiscordArbiter and other CNS components receive it
+                try {
+                    const broker = require('../../core/MessageBroker.cjs');
+                    broker.publish('soma_proactive', {
+                        from: 'WebSocketProactiveLoop',
+                        to: 'broadcast',
+                        type: 'soma_proactive',
+                        payload: { message: text, source: 'websocket_proactive' }
+                    }).catch(() => {});
+                } catch (e) {
+                    // Non-critical
+                }
+
                 console.log(`[SOMA] 💭 Proactive (RTC+Ground): "${text.substring(0, 80)}"`);
 
             } catch (err) {
@@ -935,6 +963,7 @@ export function setupWebSocket(server, wss, system) {
                         const timestamp = payload?.timestamp || Date.now();
                         broker.publish('user.interaction', { timestamp, source: 'frontend' }).catch(() => {});
                         const presence = presenceAwareness.recordUserActivity({ timestamp });
+                        broadcast('presence_state', presenceAwareness.evidenceSnapshot());
                         if (presence.probe) broadcast('soma_presence_probe', presence.probe);
                     } catch { /* non-fatal */ }
                     return;
@@ -950,6 +979,7 @@ export function setupWebSocket(server, wss, system) {
                                 source: payload?.source || 'frontend',
                                 timestamp: payload?.timestamp || Date.now()
                             });
+                            broadcast('presence_state', presenceAwareness.evidenceSnapshot());
                         }
                     } catch { /* non-fatal */ }
                     return;
