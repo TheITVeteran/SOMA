@@ -5,6 +5,7 @@
 
 import fs from 'fs';
 import path from 'path';
+import messageBroker from '../../core/MessageBroker.js';
 
 const SETTINGS_FILE = path.join(process.cwd(), '.soma', 'notifications.json');
 
@@ -48,8 +49,28 @@ class NotificationService {
      * Generic Discord embed sender — used for engine lifecycle alerts and
      * daily promotion-gate summaries. No-op when no webhook is configured.
      */
+    /**
+     * Fallback delivery through SOMA's own Discord bot (DiscordArbiter
+     * subscribes to soma_proactive and DMs the master). Used whenever no
+     * webhook URL is configured.
+     */
+    _publishToBot(text) {
+        try {
+            messageBroker.publish('soma_proactive', {
+                from: 'NotificationService',
+                to: 'broadcast',
+                type: 'soma_proactive',
+                payload: { message: text, source: 'trading_notifications' }
+            }).catch(() => {});
+        } catch { /* broker unavailable — drop silently */ }
+    }
+
     async sendAlert(title, description, { color = 5793266, fields = [] } = {}) {
-        if (!this.settings.discordWebhookUrl) return;
+        if (!this.settings.discordWebhookUrl) {
+            const fieldText = fields.length ? '\n' + fields.map(f => `${f.name}: ${f.value}`).join(' · ') : '';
+            this._publishToBot(`${title}\n${description || ''}${fieldText}`);
+            return;
+        }
         try {
             await fetch(this.settings.discordWebhookUrl, {
                 method: 'POST',
@@ -68,7 +89,6 @@ class NotificationService {
      * Self-fetches the local API so this stays decoupled from finance internals.
      */
     async sendDailyGateSummary() {
-        if (!this.settings.discordWebhookUrl) return;
         try {
             const [repRes, perfRes] = await Promise.all([
                 fetch('http://localhost:3001/api/learning/report'),
@@ -115,7 +135,14 @@ class NotificationService {
      * @param {object} trade - The closed trade object
      */
     async sendTradeNotification(trade) {
-        if (!this.settings.discordWebhookUrl) return;
+        if (!this.settings.discordWebhookUrl) {
+            const sign = trade.pnl >= 0 ? '+' : '';
+            this._publishToBot(
+                `${trade.pnl >= 0 ? '🟢' : '🔴'} Trade closed: ${trade.symbol} ${String(trade.side || '').toUpperCase()} — ` +
+                `${sign}$${trade.pnl.toFixed(2)} (${sign}${trade.pnlPct.toFixed(2)}%) · ${trade.reason}`
+            );
+            return;
+        }
 
         try {
             const isProfit = trade.pnl > 0;
