@@ -17,6 +17,9 @@ credentials.json
 *.secret
 *secret*
 *_secret*
+# SecretSanctum is the vault *implementation* (no secrets in it) — the
+# encrypted vault itself lives at .soma/secrets.vault which stays ignored
+!core/SecretSanctum.js
 
 # ── Build Output ──────────────────────────────────────────────────────────────
 dist/
@@ -30,8 +33,9 @@ out/
 *.tsbuildinfo
 
 # ── Private / secondary frontend apps ────────────────────────────────────────
+# NOTE: command-ct (Cognitive Terminal) is a primary interface imported by the
+# main bridge — it must ship or the public frontend build breaks.
 frontend/apps/conceive-bridge/
-frontend/apps/command-ct/
 frontend/command-bridge/
 frontend/src/
 frontend/SomaMinimal.jsx
@@ -57,7 +61,8 @@ librechat_repo/
 nofx_repo/
 workflowagent_repo/
 kaymen99_ai_assistant/
-research/
+# root research collection only — bare "research/" also swallowed server/research/ source
+/research/
 Deep-RL-Stock-Trading/
 SportsBetting/
 binance-futures-bot/
@@ -93,7 +98,13 @@ checkpoints/
 *.sqlite3
 soma-memory.db*
 soma-vectors.json
-data/
+# root runtime data only — bare "data/" also swallowed frontend/.../data/ source modules
+/data/
+# nested runtime-data dirs (previously covered by the bare patterns above)
+server/data/
+Concieve/datasnipper-app/server/data/
+SOMA/stories/research/
+SOMA/training/
 backup/
 config_backup/
 
