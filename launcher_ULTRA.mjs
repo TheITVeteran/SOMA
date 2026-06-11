@@ -101,6 +101,24 @@ const __dirname = dirname(__filename);
 // ─── Port zombie recovery ────────────────────────────────────
 import { execSync } from 'child_process';
 
+/**
+ * If a HEALTHY SOMA instance already owns the port, this launcher must yield
+ * — not murder the incumbent. Killing healthy owners caused repeated silent
+ * engine losses when multiple launchers (human + agents) raced each other.
+ * Returns true when a healthy instance responded.
+ */
+async function portOwnerIsHealthy(port) {
+    try {
+        const controller = new AbortController();
+        const t = setTimeout(() => controller.abort(), 4000);
+        const res = await fetch(`http://localhost:${port}/api/autonomous/status`, { signal: controller.signal });
+        clearTimeout(t);
+        return res.ok;
+    } catch {
+        return false; // no response — genuine zombie or free port
+    }
+}
+
 function killPortOwner(port) {
     try {
         const pidStr = execSync(
@@ -156,8 +174,13 @@ async function main() {
         cLog('ULTRA', '🟢 Initializing SOMA System...');
 
         // 1. Start Server IMMEDIATELY (Atomic Port Binding)
-        const PORT = 3001; 
-        killPortOwner(PORT);
+        const PORT = 3001;
+        if (await portOwnerIsHealthy(PORT)) {
+            cLog('ULTRA', `🟡 A healthy SOMA instance already owns port ${PORT}. Yielding — this launcher will exit.`);
+            logSync(`[PORT-RECOVERY] Healthy instance on ${PORT}; exiting instead of taking over.`);
+            process.exit(0);
+        }
+        killPortOwner(PORT); // only unresponsive zombies reach this point
         await new Promise(r => setTimeout(r, 1000)); // brief pause for OS
 
         const app = express();

@@ -9,6 +9,7 @@ import fs from 'fs';
 import path from 'path';
 import { AutonomousTrader, _setPerformanceCacheFlush } from './autonomousTrader.js';
 import strategyHuntDaemon from '../../daemons/StrategyHuntDaemon.js';
+import notificationService from '../services/NotificationService.js';
 
 const router = express.Router();
 
@@ -50,6 +51,70 @@ function getOrCreateInstance(symbol) {
     return _registry.get(key);
 }
 
+// ─── Durable trading intent ──────────────────────────────────────────────────
+// The registry is in-memory, so a server restart used to silently end trading.
+// Intent is persisted on every deliberate start/stop and PAPER sessions are
+// auto-resumed shortly after boot. Live sessions are never auto-resumed —
+// re-engaging real money always requires an explicit human start.
+
+const INTENT_PATH = path.join(process.cwd(), 'data', 'trading', 'trading-intent.json');
+
+function _readIntent() {
+    try {
+        return JSON.parse(fs.readFileSync(INTENT_PATH, 'utf8'));
+    } catch { return { engaged: {} }; }
+}
+
+function _writeIntent(intent) {
+    try {
+        fs.mkdirSync(path.dirname(INTENT_PATH), { recursive: true });
+        fs.writeFileSync(INTENT_PATH, JSON.stringify(intent, null, 2));
+    } catch (e) {
+        console.warn('[Autonomous] Failed to persist trading intent:', e.message);
+    }
+}
+
+function recordEngaged(symbol, preset, config) {
+    const intent = _readIntent();
+    intent.engaged[symbol] = { preset: preset || null, config: config || {}, engagedAt: new Date().toISOString() };
+    _writeIntent(intent);
+}
+
+function recordDisengaged(symbol = null) {
+    const intent = _readIntent();
+    if (symbol) delete intent.engaged[symbol];
+    else intent.engaged = {};
+    _writeIntent(intent);
+}
+
+async function resumeEngagedSessions() {
+    const intent = _readIntent();
+    const symbols = Object.keys(intent.engaged || {});
+    if (symbols.length === 0) return;
+    console.log(`[Autonomous] 🔁 Resuming ${symbols.length} engaged trading session(s) from intent file...`);
+    for (const sym of symbols) {
+        const { preset, config } = intent.engaged[sym];
+        if (config?.paperMode !== true) {
+            console.warn(`[Autonomous] ⏭ Skipping auto-resume of ${sym} — not explicitly paper mode. Live resume requires a human.`);
+            continue;
+        }
+        try {
+            const existing = _registry.get(sym);
+            if (existing?.isRunning) continue;
+            const instance = getOrCreateInstance(sym);
+            const result = await instance.start(sym, preset, config);
+            console.log(`[Autonomous] ${result.success ? '✅ Resumed' : '❌ Failed to resume'} ${sym}${result.success ? '' : ': ' + (result.error || 'unknown')}`);
+            if (result.success) notificationService.sendAlert('🔁 Engine Auto-Resumed', `Paper trading on **${sym}** resumed after server restart`).catch(() => {});
+            flushCache(sym);
+        } catch (e) {
+            console.warn(`[Autonomous] ❌ Resume error for ${sym}:`, e.message);
+        }
+    }
+}
+
+// Give the bootstrap and extended loaders time to settle before resuming.
+setTimeout(() => { resumeEngagedSessions().catch(() => {}); }, 75_000);
+
 /**
  * POST /api/autonomous/start
  * Start autonomous trading for a symbol. Multiple symbols can run concurrently.
@@ -70,6 +135,8 @@ router.post('/start', async (req, res) => {
         const result = await instance.start(sym, preset, config || {});
 
         if (!result.success) return res.status(400).json(result);
+        recordEngaged(sym, preset, config || {});
+        notificationService.sendAlert('🟢 Engine Engaged', `Autonomous ${config?.paperMode ? 'paper ' : ''}trading started on **${sym}** (${preset || 'default'})`).catch(() => {});
         flushCache(sym);
         res.json({ ...result, symbol: sym, runningSymbols: [..._registry.keys()].filter(k => _registry.get(k).isRunning) });
     } catch (error) {
@@ -108,6 +175,8 @@ router.post('/stop', (req, res) => {
             if (!instance) return res.status(404).json({ success: false, error: `${sym} not found in registry` });
             const result = instance.stop();
             _registry.delete(sym);
+            recordDisengaged(sym);
+            notificationService.sendAlert('🔴 Engine Stopped', `Autonomous trading stopped on **${sym}**`, { color: 13632027 }).catch(() => {});
             flushCache(sym);
             return res.json({ ...result, symbol: sym, runningSymbols: [..._registry.keys()].filter(k => _registry.get(k).isRunning) });
         }
@@ -119,6 +188,8 @@ router.post('/stop', (req, res) => {
             stopped.push(sym);
         }
         _registry.clear();
+        recordDisengaged();
+        if (stopped.length > 0) notificationService.sendAlert('🔴 Engine Stopped', `Autonomous trading stopped on **${stopped.join(', ')}**`, { color: 13632027 }).catch(() => {});
         flushCache();
         res.json({ success: true, stopped, message: `Stopped ${stopped.length} trader(s)` });
     } catch (error) {

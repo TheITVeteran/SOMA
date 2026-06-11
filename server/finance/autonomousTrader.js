@@ -391,7 +391,7 @@ class AutonomousTrader {
             // Check session drawdown
             if (this._stats.sessionStartTime) {
                 const startingEquity = this.paperMode
-                    ? 100000  // Paper mode: check against initial virtual balance
+                    ? (this._paperPortfolio?.initialBalance || this.config.initialBalance || 10000)
                     : (alpacaService.accountInfo ? parseFloat(alpacaService.accountInfo.last_equity) : 0);
                 if (startingEquity > 0) {
                     const drawdownPct = (this._stats.sessionPnL / startingEquity);
