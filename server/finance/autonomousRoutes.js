@@ -5,6 +5,8 @@
  */
 
 import express from 'express';
+import fs from 'fs';
+import path from 'path';
 import { AutonomousTrader, _setPerformanceCacheFlush } from './autonomousTrader.js';
 import strategyHuntDaemon from '../../daemons/StrategyHuntDaemon.js';
 
@@ -84,6 +86,21 @@ router.post('/start', async (req, res) => {
 router.post('/stop', (req, res) => {
     try {
         const { symbol } = req.body || {};
+
+        // Audit every stop call — engines have been vanishing from the registry
+        // with no session_end; this records who issued the stop.
+        try {
+            const auditPath = path.join(process.cwd(), 'data', 'trading', 'stop-audit.jsonl');
+            fs.mkdirSync(path.dirname(auditPath), { recursive: true });
+            fs.appendFileSync(auditPath, JSON.stringify({
+                at: new Date().toISOString(),
+                ip: req.ip || req.socket?.remoteAddress || null,
+                userAgent: req.get?.('user-agent') || null,
+                referer: req.get?.('referer') || null,
+                body: req.body || null,
+                registrySymbols: [..._registry.keys()]
+            }) + '\n');
+        } catch { /* audit is best-effort */ }
 
         if (symbol) {
             const sym = symbol.toUpperCase();
