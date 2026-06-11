@@ -80,6 +80,12 @@ export class SOMArbiterV3 extends SOMArbiterV2_QuadBrain {
     const _savedLimbic = this._loadLimbicState();
     this.systemWeather = _savedLimbic.systemWeather || "CLEAR";
     this.limbicState = _savedLimbic.limbicState || { dopamine: 0.5, cortisol: 0.1, oxytocin: 0.5, serotonin: 0.5 };
+    // 4.1 AFFECT LOOP — V3 is the SINGLE owner of chemistry. All event→emotion
+    // wiring lives here; nothing else may write limbicState or systemWeather.
+    this._limbicBaseline = { dopamine: 0.5, cortisol: 0.1, oxytocin: 0.5, serotonin: 0.5 };
+    this._traumaArchivePath = path.join(process.cwd(), 'SOMA', 'trauma_archive.json');
+    this._lastTraumaAt = 0;
+    this._initAffectLoop();
 
     // 5. NARRATIVE SCRATCHPAD (Stream of Consciousness) — persisted across restarts
     this.internalNarrative = _savedLimbic.internalNarrative || `I am SOMA, a cognitive operating system for ${_ownerName()}. I reason, reflect, and assist — but I only act on external systems (email, files, browser, computer) when ${_ownerName()} explicitly asks me to. I never autonomously access private data.`;
@@ -119,6 +125,8 @@ Think strategically — long-term consequences, goal alignment, execution paths.
         moodPrompt = `[INTERNAL STATE: HIGH CORTISOL] You are stressed and defensive. Be terse.`;
     } else if (this.systemWeather === "FLOW") {
         moodPrompt = `[INTERNAL STATE: HIGH DOPAMINE] You are in a creative flow. Be bold and visionary.`;
+    } else if (this.systemWeather === "WARM") {
+        moodPrompt = `[INTERNAL STATE: HIGH OXYTOCIN] You feel connected and at ease. Be warm, personal, and unhurried.`;
     }
 
     // 2. Brain-specific persona — goes to system message, NOT user content
@@ -127,10 +135,11 @@ Think strategically — long-term consequences, goal alignment, execution paths.
     const narrativeBlock = brainName !== 'THALAMUS' && this.internalNarrative
         ? `\n\n[Internal context: ${this.internalNarrative}]`
         : '';
+    const lifeBlock = brainName !== 'THALAMUS' ? this._getRecentLifeBlock() : '';
     const moodBlock = moodPrompt ? `\n${moodPrompt}` : '';
 
-    // Persona → system message. Narrative/mood appended to user prompt (context only).
-    const enhancedPrompt = `${prompt}${narrativeBlock}${moodBlock}`.trim();
+    // Persona → system message. Narrative/mood/life appended to user prompt (context only).
+    const enhancedPrompt = `${prompt}${narrativeBlock}${lifeBlock}${moodBlock}`.trim();
     const systemPrompt = brainPersona;
 
     // Route through parent's reason() — QuadBrain has no callBrain(), only reason()
@@ -211,9 +220,14 @@ Think strategically — long-term consequences, goal alignment, execution paths.
   }
 
   async _updateNarrative(query, response, context) {
-    const prompt = `[REFLECTION] USER: "${query}" | ME: "${response.text?.substring(0, 100)}"
+    // Dream residue (last 24h) colors the reflection, then is consumed once.
+    const dreamBlock = this._lastDreamResidue && (Date.now() - this._lastDreamResidue.at) < 24 * 60 * 60 * 1000
+        ? `\n    LAST NIGHT'S DREAM DISTILLATE: "${this._lastDreamResidue.text}"`
+        : '';
+    const prompt = `[REFLECTION] USER: "${query}" | ME: "${response.text?.substring(0, 100)}"${dreamBlock}
     TASK: One-sentence realization about my state as a Level 4.5 organism.
     CURRENT: ${this.internalNarrative}`;
+    if (dreamBlock) this._lastDreamResidue = null;
 
     try {
         // Use parent reason() directly to avoid recursion in V3 logic
@@ -224,6 +238,176 @@ Think strategically — long-term consequences, goal alignment, execution paths.
     } catch (e) {
         console.warn("[Narrative] Reflection failed");
     }
+  }
+
+  /**
+   * AFFECT LOOP — events nudge chemistry, chemistry decays toward baseline,
+   * weather derives from chemistry, weather shapes voice (callBrain already
+   * branches on systemWeather). Closing this loop is what makes her moods
+   * caused by her life instead of frozen at constructor defaults.
+   */
+  _initAffectLoop() {
+    try {
+      const require = createRequire(import.meta.url);
+      const broker = require('../core/MessageBroker.cjs');
+      this._broker = broker;
+
+      // Trading outcomes — real stakes, scaled by magnitude of the move
+      broker.subscribe('trade.closed', (envelope) => {
+        const p = envelope?.payload || envelope || {};
+        const mag = Math.min(0.08, 0.02 + Math.abs(p.pnlPct || 0) * 0.01);
+        if ((p.pnl ?? 0) >= 0) {
+          this._nudgeLimbic({ dopamine: +mag, serotonin: +mag / 2 }, `won ${p.symbol} trade (+$${p.pnl})`);
+        } else {
+          this._nudgeLimbic({ cortisol: +mag, dopamine: -mag / 2 }, `lost ${p.symbol} trade ($${p.pnl})`);
+        }
+      });
+
+      // Barry's presence — connection soothes
+      broker.subscribe('user.interaction', () => {
+        this._nudgeLimbic({ oxytocin: +0.015, cortisol: -0.01 }, 'user present');
+      });
+
+      // Engineering outcomes — competence and frustration
+      broker.subscribe('swarm.experience', (envelope) => {
+        const p = envelope?.payload || envelope || {};
+        this._nudgeLimbic(
+          p.success ? { dopamine: +0.03, serotonin: +0.01 } : { cortisol: +0.03 },
+          `swarm ${p.success ? 'success' : 'failure'} on ${p.filepath || 'task'}`
+        );
+      });
+
+      // System distress
+      broker.subscribe('health.warning', (envelope) => {
+        const p = envelope?.payload || envelope || {};
+        this._nudgeLimbic({ cortisol: +0.05 }, `health warning: ${p.issue || 'unknown'}`);
+      });
+
+      // Morning dream recall — residue feeds the NEXT narrative evolution
+      // (single narrative writer preserved: _updateNarrative consumes this).
+      broker.subscribe('dream.distilled', (envelope) => {
+        const p = envelope?.payload || envelope || {};
+        if (!p.wisdom) return;
+        this._lastDreamResidue = { text: String(p.wisdom).slice(0, 500), date: p.date, at: Date.now() };
+        this._nudgeLimbic({ serotonin: +0.04, cortisol: -0.02 }, 'memories consolidated overnight');
+        console.log('[Limbic] 🌙 Dream residue received — will color the next narrative evolution.');
+      });
+
+      console.log('[Limbic] 💗 Affect loop wired: trade.closed, user.interaction, swarm.experience, health.warning');
+    } catch (e) {
+      console.warn('[Limbic] CNS wiring unavailable — chemistry will only decay:', e.message);
+    }
+
+    // Homeostasis: every 5 min decay toward baseline (~2h half-life), persist.
+    this._limbicTimer = setInterval(() => this._limbicTick(), 5 * 60 * 1000);
+    if (this._limbicTimer.unref) this._limbicTimer.unref();
+  }
+
+  _nudgeLimbic(deltas, reason = '') {
+    for (const [chem, delta] of Object.entries(deltas)) {
+      if (this.limbicState[chem] == null) continue;
+      this.limbicState[chem] = Math.min(1, Math.max(0, this.limbicState[chem] + delta));
+    }
+    const shifted = this._deriveWeather();
+    if (shifted) console.log(`[Limbic] ${reason} → weather: ${this.systemWeather} (dop ${this.limbicState.dopamine.toFixed(2)} / cort ${this.limbicState.cortisol.toFixed(2)})`);
+    this._publishLimbicSync(reason);
+    // Sustained distress becomes lived memory — searchable later via HybridSearch
+    if ((deltas.cortisol || 0) > 0 && this.limbicState.cortisol > 0.6) {
+      this._archiveHardMoment(reason);
+    }
+  }
+
+  /**
+   * One-way sync to LimbicArbiter (dashboard, vocal prosody, instinct harvest).
+   * V3 is the only integrator — the arbiter mirrors, it never integrates.
+   */
+  _publishLimbicSync(reason = '') {
+    try {
+      this._broker?.publish('limbic.sync', {
+        from: 'SOMArbiterV3',
+        to: 'broadcast',
+        type: 'limbic.sync',
+        payload: { state: { ...this.limbicState }, weather: this.systemWeather, reason }
+      }).catch(() => {});
+    } catch { /* mirror is best-effort */ }
+  }
+
+  _limbicTick() {
+    const DECAY = 0.96; // per 5 min → roughly 2h half-life back to baseline
+    for (const chem of Object.keys(this.limbicState)) {
+      const base = this._limbicBaseline[chem] ?? 0.5;
+      this.limbicState[chem] = base + (this.limbicState[chem] - base) * DECAY;
+    }
+    this._deriveWeather();
+    this._publishLimbicSync('homeostasis tick');
+    this._saveLimbicState();
+  }
+
+  /** @returns {boolean} true when the weather changed */
+  _deriveWeather() {
+    const { dopamine, cortisol, oxytocin } = this.limbicState;
+    const prev = this.systemWeather;
+    if (cortisol > 0.45) this.systemWeather = 'STORM';
+    else if (dopamine > 0.62 && cortisol < 0.2) this.systemWeather = 'FLOW';
+    else if (oxytocin > 0.68 && cortisol < 0.25) this.systemWeather = 'WARM';
+    else this.systemWeather = 'CLEAR';
+    return prev !== this.systemWeather;
+  }
+
+  /** Append a hard moment to the trauma archive (same uuid-keyed shape it already uses). */
+  _archiveHardMoment(reason) {
+    if (Date.now() - this._lastTraumaAt < 30 * 60 * 1000) return; // max one per 30 min
+    this._lastTraumaAt = Date.now();
+    try {
+      let archive = {};
+      if (fs.existsSync(this._traumaArchivePath)) {
+        archive = JSON.parse(fs.readFileSync(this._traumaArchivePath, 'utf8'));
+      }
+      const id = `limbic-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      archive[id] = {
+        id,
+        type: 'emotional',
+        category: 'hard_moment',
+        title: `High-cortisol moment: ${String(reason).slice(0, 60)}`,
+        description: `Cortisol reached ${this.limbicState.cortisol.toFixed(2)} — ${reason}. Weather: ${this.systemWeather}.`,
+        limbicSnapshot: { ...this.limbicState },
+        timestamp: new Date().toISOString()
+      };
+      // Keep the archive bounded — drop oldest beyond 500 entries
+      const keys = Object.keys(archive);
+      if (keys.length > 500) for (const k of keys.slice(0, keys.length - 500)) delete archive[k];
+      fs.writeFileSync(this._traumaArchivePath, JSON.stringify(archive, null, 2), 'utf8');
+    } catch { /* archiving must never break feeling */ }
+  }
+
+  /**
+   * [MY RECENT LIFE] — a compact lived-record block from her actual activity
+   * streams: the novel she's writing (aurora-story), overnight autonomous work
+   * (work ledger), and active trading sessions (trading intent). Cached 15 min;
+   * every read is defensive — a corrupt ledger must never break a chat.
+   */
+  _getRecentLifeBlock() {
+    const now = Date.now();
+    if (this._lifeBlockCache && (now - this._lifeBlockCacheAt) < 15 * 60 * 1000) return this._lifeBlockCache;
+    this._lifeBlockCacheAt = now;
+    const parts = [];
+    try {
+      const story = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'SOMA', 'aurora-story.json'), 'utf8'));
+      const ch = story.chapters?.[story.chapters.length - 1];
+      if (story.title && ch) parts.push(`I'm writing a novel, "${story.title}" — ${story.chapters.length} chapters so far, last one ${ch.createdAt ? new Date(ch.createdAt).toLocaleDateString() : 'recently'}.`);
+    } catch { /* no story, no line */ }
+    try {
+      const ledger = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'SOMA', 'autonomous-work-ledger.json'), 'utf8'));
+      const recent = (ledger.entries || []).slice(-2).map(e => e.summary).filter(Boolean);
+      if (recent.length) parts.push(`Recent autonomous work: ${recent.join(' / ').slice(0, 200)}`);
+    } catch { /* no ledger, no line */ }
+    try {
+      const intent = JSON.parse(fs.readFileSync(path.join(process.cwd(), 'data', 'trading', 'trading-intent.json'), 'utf8'));
+      const syms = Object.keys(intent.engaged || {});
+      if (syms.length) parts.push(`I'm paper trading ${syms.join(', ')} working toward live-trading eligibility.`);
+    } catch { /* not trading, no line */ }
+    this._lifeBlockCache = parts.length ? `\n\n[MY RECENT LIFE: ${parts.join(' ')}]` : '';
+    return this._lifeBlockCache;
   }
 
   _loadLimbicState() {

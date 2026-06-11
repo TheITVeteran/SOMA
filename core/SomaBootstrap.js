@@ -2393,6 +2393,7 @@ export class SomaBootstrap {
             const { OptimizationDaemon } = await import('../daemons/OptimizationDaemon.js');
             const { DiscoveryDaemon }    = await import('../daemons/DiscoveryDaemon.js');
             const { default: MemoryPrunerDaemon } = await import('../daemons/MemoryPrunerDaemon.js');
+            const { MemoryDistillerDaemon } = await import('../daemons/MemoryDistillerDaemon.js');
             const { CuriosityReactor }    = await import('./CuriosityReactor.js');
             const { default: CuriosityDaemon }    = await import('../daemons/CuriosityDaemon.js');
 
@@ -2500,9 +2501,15 @@ export class SomaBootstrap {
             // 6. Register daemons and start (startAll also launches watchdog)
             this.system.daemonManager.register(new RepoWatcherDaemon({ root: this.rootPath }));
             this.system.daemonManager.register(new HealthDaemon({ intervalMs: 30_000 }));
-            this.system.daemonManager.register(new MemoryPrunerDaemon({ 
+            this.system.daemonManager.register(new MemoryPrunerDaemon({
                 mnemonic: this.system.mnemonic,
                 intervalMs: 43200000 // 12 hours
+            }));
+            // Dreaming: distill aged memories into wisdom daily. Was orphaned in
+            // the unused loaders/cos.js since ~May 15 — dream-journal.json stalled.
+            this.system.daemonManager.register(new MemoryDistillerDaemon({
+                system: this.system,
+                intervalMs: 86_400_000 // daily
             }));
             this.system.daemonManager.register(new OptimizationDaemon({
                 optimizer:  this.system.swarmOptimizer,

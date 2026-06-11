@@ -50,10 +50,33 @@ export class LimbicArbiter extends BaseArbiterV4 {
         
         // Subscribe to system events
         if (this.messageBroker) {
+            // DEPRECATED feeds: these signal names were never published anywhere
+            // (real names are trade.closed / user.interaction) so they never fired.
+            // Kept for compatibility, but the live feed is the limbic.sync mirror below.
             this.messageBroker.subscribe('trade_closed', this.handleTrade.bind(this));
             this.messageBroker.subscribe('security_alert', this.handleThreat.bind(this));
             this.messageBroker.subscribe('user_message', this.handleSocial.bind(this));
             this.messageBroker.subscribe('system_error', this.handleError.bind(this));
+
+            // MIRROR MODE: SOMArbiterV3 is the single chemistry integrator.
+            // We mirror its state through adjust() so the sensation log
+            // (instinct harvest), dashboard reads, and limbic_update broadcasts
+            // (vocal prosody) all keep working — without double-integrating.
+            this.messageBroker.subscribe('limbic.sync', (envelope) => {
+                const p = envelope?.payload || envelope || {};
+                if (!p.state) return;
+                let weatherShift = false;
+                const before = this.getSystemWeather();
+                for (const [chem, target] of Object.entries(p.state)) {
+                    if (this.chemistry[chem] == null) continue;
+                    const delta = target - this.chemistry[chem];
+                    if (Math.abs(delta) > 0.01) {
+                        this.adjust(chem, delta, p.reason || 'limbic sync from V3');
+                    }
+                }
+                if (this.getSystemWeather() !== before) weatherShift = true;
+                if (weatherShift) this.broadcastState();
+            });
             
             // 🔱 RESONANCE FEEDBACK: Sync neurochemistry with the cognitive pulse
             this.messageBroker.subscribe('system.resonance.pulse', (pulse) => {

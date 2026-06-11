@@ -141,6 +141,17 @@ class MemoryDistillerDaemon extends BaseDaemon {
         this._updateJsonJournal(wisdom, echo, rawMemories.length);
         if (this._htmlJournal) this._updateHtmlJournal(wisdom, echo, dateStr);
 
+        // Morning recall: dreams must influence waking life, not just be filed.
+        // SOMArbiterV3 subscribes — folds this into the next narrative evolution.
+        try {
+            this.system?.messageBroker?.publish('dream.distilled', {
+                from: 'MemoryDistillerDaemon',
+                to: 'broadcast',
+                type: 'dream.distilled',
+                payload: { wisdom: String(wisdom).slice(0, 800), echo: echo || null, date: dateStr, sourceCount: rawMemories.length }
+            }).catch(() => {});
+        } catch { /* recall is best-effort */ }
+
         console.log(`✅ [MemoryDistiller] Complete — ${rawMemories.length} raw → 1 digest. Cold: ${archived}.`);
     }
 
