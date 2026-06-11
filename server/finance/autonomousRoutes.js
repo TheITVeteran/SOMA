@@ -324,6 +324,18 @@ export function getAggregateStatus() {
 // Wire aggregate status into the hunt daemon now that getAggregateStatus is defined
 strategyHuntDaemon.setAggregateStatusFn(getAggregateStatus);
 
+// Hot-apply hunt strategy rotations to engines that are already running
+strategyHuntDaemon.setApplyProfileFn((profile) => {
+    let applied = 0;
+    for (const inst of _registry.values()) {
+        if (inst.isRunning) {
+            inst.applyRuntimeProfile(profile);
+            applied++;
+        }
+    }
+    return applied;
+});
+
 export function getHuntState() {
     return strategyHuntDaemon.getHuntState();
 }

@@ -46,12 +46,17 @@ export class StrategyHuntDaemon extends BaseDaemon {
 
         // Injected by autonomousRoutes.js to avoid circular import
         this._getAggregateStatus = () => ({ isRunning: false, instances: [] });
+        this._applyProfileToRunning = null; // injected: pushes config into running engines
 
         this._state = this._loadState();
     }
 
     setAggregateStatusFn(fn) {
         this._getAggregateStatus = fn;
+    }
+
+    setApplyProfileFn(fn) {
+        this._applyProfileToRunning = fn;
     }
 
     get targetDailyPnlUsd() {
@@ -186,6 +191,18 @@ export class StrategyHuntDaemon extends BaseDaemon {
                 appliedAt: new Date().toISOString(),
             };
             missionControlRuntime._saveState();
+        }
+
+        // Hot-apply to running engines — without this, rotation only takes
+        // effect on the next engine start (the trader snapshots its profile at boot).
+        if (this._applyProfileToRunning) {
+            try {
+                const profile = missionControlRuntime.getActiveExecutionProfile({});
+                const applied = this._applyProfileToRunning(profile);
+                if (applied > 0) this.logger.info(`[StrategyHunt] ⚡ Hot-applied ${strategyId} to ${applied} running engine(s)`);
+            } catch (err) {
+                this.logger.warn(`[StrategyHunt] Hot-apply failed: ${err.message}`);
+            }
         }
     }
 

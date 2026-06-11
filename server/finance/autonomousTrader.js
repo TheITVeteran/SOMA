@@ -1971,6 +1971,25 @@ class AutonomousTrader {
         this._logDecision('SYSTEM', 'CONFIG', `Config updated`, { config: this.config });
         return this.config;
     }
+
+    /**
+     * Hot-apply a runtime execution profile to the RUNNING engine (Strategy Hunt
+     * rotation). Replaces the boot-time _runtimeProfile snapshot so strategy
+     * attribution follows the rotation, then merges the tier-clamped config.
+     * initialBalance/paperMode are not part of profile.config, so the paper
+     * portfolio is untouched.
+     */
+    applyRuntimeProfile(profile) {
+        if (!profile?.config) return this.config;
+        this._runtimeProfile = profile;
+        this.config = { ...this.config, ...profile.config };
+        const label = profile.activeStrategy?.strategyId || profile.preset || 'unknown';
+        this._logDecision('SYSTEM', 'STRATEGY_ROTATE', `Strategy Hunt hot-applied ${label} to running engine`, {
+            strategyId: label,
+            config: profile.config
+        });
+        return this.config;
+    }
 }
 
 // Singleton (kept for backward compat — autonomousRoutes uses the registry instead)
