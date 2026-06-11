@@ -2523,6 +2523,21 @@ export class SomaBootstrap {
             }));
             await this.system.daemonManager.startAll();
 
+            // Her diary: SelfReflectionArbiter writes daily first-person
+            // "State of the Self" entries to knowledge/aurora/ and cross-
+            // pollinates lobe insights (sprout). Orphaned in the unused
+            // loaders/cos.js — last diary entry was 2026-05-11.
+            try {
+                const { SelfReflectionArbiter } = await import('../arbiters/SelfReflectionArbiter.js');
+                this.system.selfReflectionArbiter = new SelfReflectionArbiter({
+                    quadBrain: this.system.quadBrain || this.system.brain
+                });
+                await this.system.selfReflectionArbiter.initialize();
+                console.log('   📓 SelfReflectionArbiter online — daily diary resumes');
+            } catch (err) {
+                console.warn(`   ⚠️  SelfReflectionArbiter skipped: ${err.message}`);
+            }
+
             // 7. Wire signal reactions: perception drives the decision/execution loop
             this.system.messageBroker.subscribe('swarm.optimization.needed', async (signal) => {
                 if (!this.system.swarmOptimizer) return;
