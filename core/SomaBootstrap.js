@@ -2506,9 +2506,11 @@ export class SomaBootstrap {
                 intervalMs: 43200000 // 12 hours
             }));
             // Dreaming: distill aged memories into wisdom daily. Was orphaned in
-            // the unused loaders/cos.js since ~May 15 — dream-journal.json stalled.
+            // the unused loaders/cos.js since ~May 15 — dream-journal.json and
+            // DREAM_JOURNAL.html (her private journal, stalled Apr 5) both resume.
             this.system.daemonManager.register(new MemoryDistillerDaemon({
                 system: this.system,
+                htmlJournal: join(this.rootPath, 'DREAM_JOURNAL.html'),
                 intervalMs: 86_400_000 // daily
             }));
             this.system.daemonManager.register(new OptimizationDaemon({

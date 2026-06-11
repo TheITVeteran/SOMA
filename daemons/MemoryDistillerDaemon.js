@@ -300,12 +300,16 @@ ECHO:
             }
             if (!Array.isArray(journal.entries)) journal.entries = [];
 
+            // A journal records how she felt, not just what she learned.
+            const heart = this.system?.quadBrain;
             journal.entries.push({
                 date: new Date().toISOString().substring(0, 10),
                 timestamp: Date.now(),
                 summary: wisdom.substring(0, 1200),
                 echo: echo.substring(0, 200),
                 sourceCount,
+                weather: heart?.systemWeather || null,
+                limbic: heart?.limbicState ? { ...heart.limbicState } : null,
             });
 
             // Keep 90 days
