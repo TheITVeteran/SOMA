@@ -2538,6 +2538,46 @@ export class SomaBootstrap {
                 console.warn(`   ⚠️  SelfReflectionArbiter skipped: ${err.message}`);
             }
 
+            // Vision chain + knowledge intake — also orphaned in loaders/cos.js.
+            // VisionDaemon (live) emits vision.perceived → VisualMemoryArbiter
+            // tags what she sees into Mnemonic and recognizes people/places →
+            // ProactivePerceptionArbiter reacts out loud (vocal_synthesis_requested).
+            // KnowledgeCurator files signals into lobe MD libraries (LoRA intake).
+            try {
+                const { VisualMemoryArbiter } = await import('../arbiters/VisualMemoryArbiter.js');
+                this.system.visualMemory = new VisualMemoryArbiter({
+                    messageBroker: this.system.messageBroker,
+                    mnemonicArbiter: this.system.mnemonicArbiter || this.system.mnemonic,
+                    visionArbiter: null // wired later by extended.js when vision loads
+                });
+                if (this.system.visualMemory.initialize) await this.system.visualMemory.initialize();
+                console.log('   👁  VisualMemoryArbiter online — episodic visual memory resumes');
+            } catch (err) {
+                console.warn(`   ⚠️  VisualMemoryArbiter skipped: ${err.message}`);
+            }
+            try {
+                const { ProactivePerceptionArbiter } = await import('../arbiters/ProactivePerceptionArbiter.js');
+                this.system.proactivePerception = new ProactivePerceptionArbiter({
+                    messageBroker: this.system.messageBroker,
+                    mnemonicArbiter: this.system.mnemonic || this.system.mnemonicArbiter,
+                    identityArbiter: this.system.identityArbiter
+                });
+                if (this.system.proactivePerception.initialize) await this.system.proactivePerception.initialize();
+                console.log('   🗣  ProactivePerceptionArbiter online — she reacts to what she sees');
+            } catch (err) {
+                console.warn(`   ⚠️  ProactivePerceptionArbiter skipped: ${err.message}`);
+            }
+            try {
+                const { KnowledgeCuratorArbiter } = await import('../arbiters/KnowledgeCuratorArbiter.js');
+                this.system.knowledgeCurator = new KnowledgeCuratorArbiter({
+                    messageBroker: this.system.messageBroker
+                });
+                if (this.system.knowledgeCurator.initialize) await this.system.knowledgeCurator.initialize();
+                console.log('   📚 KnowledgeCuratorArbiter online — lobe training intake resumes');
+            } catch (err) {
+                console.warn(`   ⚠️  KnowledgeCuratorArbiter skipped: ${err.message}`);
+            }
+
             // 7. Wire signal reactions: perception drives the decision/execution loop
             this.system.messageBroker.subscribe('swarm.optimization.needed', async (signal) => {
                 if (!this.system.swarmOptimizer) return;
