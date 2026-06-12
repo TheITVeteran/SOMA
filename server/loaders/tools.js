@@ -100,6 +100,21 @@ export async function loadTools(systemContext = {}) {
         execute: async () => new Date().toISOString()
     });
 
+    // ApertureOS Agency Bridge — SOMA drives the desktop-in-a-tab as a copilot.
+    toolRegistry.registerTool({
+        name: 'aperture_os',
+        description: "Control the ApertureOS desktop as Barry's copilot: open or close an app, show a desktop notification, or navigate the Portal browser. Use when asked to do something on the desktop/Aperture, or to proactively show Barry something there. Verbs: open_app|close_app (arg: files|portal|tasks|notes|calendar|status|archive|settings|terminal|processes), notify (arg: message text), portal_navigate (arg: URL or search query).",
+        parameters: { verb: 'string (open_app|close_app|notify|portal_navigate)', arg: 'string' },
+        execute: async ({ verb, arg }) => {
+            const verbs = ['open_app', 'close_app', 'notify', 'portal_navigate'];
+            if (!verbs.includes(verb)) return `Error: verb must be one of ${verbs.join(', ')}`;
+            const sys = getSystem();
+            if (typeof sys.broadcast !== 'function') return 'ApertureOS bridge offline (WebSocket layer not ready yet)';
+            sys.broadcast('aperture_command', { verb, arg: String(arg ?? ''), from: 'SOMA', at: Date.now() });
+            return `Done — ${verb}${arg ? ` ("${arg}")` : ''} sent to the ApertureOS desktop, attributed to me.`;
+        }
+    });
+
     // Market Data Tool
     toolRegistry.registerTool({
         name: 'get_market_data',

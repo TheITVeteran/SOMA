@@ -205,6 +205,22 @@ export default function createApertureRoutes(system = {}) {
     const router = express.Router();
     const dendriteSearch = new DendriteSearchEngine({ legacyJsonPath: portalIndexPath });
 
+    // ─── SOMA Agency Bridge ───────────────────────────────────────────────────
+    // Lets SOMA (or anything backend-side) drive the ApertureOS desktop.
+    // Broadcast over WS → kernel-level dispatch in the frontend shell.
+    const APERTURE_VERBS = ['open_app', 'close_app', 'notify', 'portal_navigate'];
+    router.post('/command', (req, res) => {
+        const { verb, arg } = req.body || {};
+        if (!APERTURE_VERBS.includes(verb)) {
+            return res.status(400).json({ success: false, error: `verb must be one of: ${APERTURE_VERBS.join(', ')}` });
+        }
+        if (typeof system.broadcast !== 'function') {
+            return res.status(503).json({ success: false, error: 'WebSocket broadcast not ready' });
+        }
+        system.broadcast('aperture_command', { verb, arg: String(arg ?? ''), from: req.body?.from || 'SOMA', at: Date.now() });
+        res.json({ success: true, verb, arg });
+    });
+
     router.get('/settings', async (_req, res) => {
         const state = await readState();
         res.json({ success: true, settings: state.settings });

@@ -593,6 +593,44 @@ export default function ApertureOS() {
     setLauncher(false);
   }, []);
 
+  // ─── SOMA Agency Bridge ───────────────────────────────────────────────────
+  // SOMA (backend) drives the OS through aperture_command WS broadcasts.
+  // Every action she takes is attributed via a kernel notification so the
+  // desktop never changes "mysteriously". Verbs are a small allow-list.
+  useEffect(() => {
+    const handler = (cmd) => {
+      const { verb, arg } = cmd || {};
+      const credit = (action) => kernel.notify('SOMA', action, { appId: 'system', type: 'info' });
+      switch (verb) {
+        case 'open_app':
+          if (APPS[arg]) { launchApp(arg); credit(`I opened ${APPS[arg].name} for you.`); }
+          break;
+        case 'close_app':
+          setOpenWindows(p => {
+            const win = p.find(w => w.appId === arg);
+            if (!win) return p;
+            if (win.pid) kernel.kill(win.pid, 'SIGTERM');
+            credit(`I closed ${APPS[arg]?.name || arg}.`);
+            return p.filter(w => w.appId !== arg);
+          });
+          break;
+        case 'notify':
+          kernel.notify('SOMA', String(arg || ''), { appId: 'system', type: 'info' });
+          break;
+        case 'portal_navigate':
+          launchApp('portal');
+          // Give Portal a beat to mount before handing it the destination
+          setTimeout(() => window.dispatchEvent(new CustomEvent('aperture:portal-navigate', { detail: { query: String(arg || '') } })), 700);
+          credit(`I'm pulling up "${arg}" in Portal.`);
+          break;
+        default:
+          break;
+      }
+    };
+    somaBackend.on('aperture_command', handler);
+    return () => somaBackend.off('aperture_command', handler);
+  }, [launchApp]);
+
   const focusWindow  = id => { nextZ.current += 1; setActiveWindowId(id); setOpenWindows(p => p.map(w => w.id === id ? { ...w, zIndex: nextZ.current } : w)); };
   const mutateWindow = (id, patch) => setOpenWindows(p => p.map(w => {
     if (w.id !== id) return w;

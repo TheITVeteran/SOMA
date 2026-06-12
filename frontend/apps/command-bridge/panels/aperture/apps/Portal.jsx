@@ -1373,6 +1373,23 @@ export default function PortalBrowser({ workspace, policy = {}, onSettingsUpdate
     }
   };
 
+  // ─── SOMA Agency Bridge: remote navigation ────────────────────────────────
+  // ApertureOS shell dispatches aperture:portal-navigate when SOMA wants to
+  // browse. Ref keeps the handler bound to the latest closures; her requests
+  // respect the same network-access policy as user-initiated browsing.
+  const remoteNavRef = useRef(null);
+  remoteNavRef.current = (query) => {
+    if (!query) return;
+    if (policy.networkAccess === false) { setError('SOMA requested navigation, but network access is disabled in Settings.'); return; }
+    if (checkIsUrl(query)) browseUrl(query);
+    else runPortalSearch(query);
+  };
+  useEffect(() => {
+    const listener = (e) => remoteNavRef.current?.(e.detail?.query);
+    window.addEventListener('aperture:portal-navigate', listener);
+    return () => window.removeEventListener('aperture:portal-navigate', listener);
+  }, []);
+
   const navigateHistory = offset => {
     if (page.kind === 'browser' && webviewRef.current) {
       if (offset < 0 && webviewRef.current.canGoBack()) webviewRef.current.goBack();

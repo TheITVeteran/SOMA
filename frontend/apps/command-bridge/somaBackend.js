@@ -316,6 +316,10 @@ class SomaBackend {
       case 'thirdplace.position':
         this.emit('thirdplace.position', data);
         break;
+      // ── ApertureOS agency bridge: SOMA-issued desktop commands ─────────────
+      case 'aperture_command':
+        this.emit('aperture_command', payload);
+        break;
       default:
         // suppress noisy unknown-type logs in production
         break;
