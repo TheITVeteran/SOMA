@@ -73,7 +73,7 @@
 .ap-dock { position:absolute;z-index:500;left:50%;bottom:14px;transform:translateX(-50%);height:58px;display:flex;align-items:center;justify-content:center;gap:12px;padding:0;background:transparent;border:0;box-shadow:none; }
 .ap-dock button { width:47px;height:47px;display:grid;place-items:center;border-radius:14px;border:1px solid transparent;background:rgba(9,14,19,.3);backdrop-filter:blur(12px);color:#d2dde4;cursor:pointer;position:relative;transition:transform .16s,background .16s,border-color .16s,color .16s,box-shadow .16s; }
 .ap-dock button svg { width:25px;height:25px;filter:drop-shadow(0 2px 5px rgba(0,0,0,.42)); }
-.ap-dock button img { width:36px;height:36px;filter:drop-shadow(0 2px 5px rgba(0,0,0,.42)); }
+.ap-dock button img { width:30px;height:30px;padding:3px;box-sizing:content-box;border-radius:10px;background:linear-gradient(152deg, color-mix(in srgb, currentColor 30%, rgba(10,15,20,.55)), color-mix(in srgb, currentColor 6%, rgba(10,15,20,.75)) 65%);border:1px solid color-mix(in srgb, currentColor 38%, transparent);box-shadow:inset 0 1px 0 rgba(255,255,255,.2), 0 3px 8px rgba(0,0,0,.4);filter:saturate(1.1); }
 .ap-dock button.blue { color:#57b4ff; }.ap-dock button.cyan { color:#42e0da; }.ap-dock button.green { color:#46d99f; }.ap-dock button.amber { color:#ffc85c; }.ap-dock button.rose { color:#fb8d98; }.ap-dock button.violet { color:#b99aff; }.ap-dock button.indigo { color:#83a4ff; }.ap-dock button.slate { color:#d7e1e7; }
 .ap-dock button:hover { transform:translateY(-6px) scale(1.09);background:rgba(18,26,32,.7);border-color:rgba(255,255,255,.12);box-shadow:0 10px 24px rgba(0,0,0,.38); }
 .ap-dock button.open { background:rgba(12,20,25,.56);border-color:rgba(255,255,255,.09); }
@@ -336,7 +336,20 @@
 .ap-desktop-icon{position:absolute;z-index:2;display:flex;flex-direction:column;align-items:center;gap:5px;padding:6px 8px;border-radius:10px;cursor:pointer;user-select:none;transition:background .15s;}
 .ap-desktop-icon:hover,.ap-desktop-icon.selected{background:rgba(78,228,188,.1);}
 .ap-di-icon-wrap{width:48px;height:48px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:22px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.08);box-shadow:0 2px 10px rgba(0,0,0,.3);}
-.ap-di-icon-wrap-custom{width:56px;height:56px;display:flex;align-items:center;justify-content:center;}
+/* Unified glass tiles: the PNG set is stylistically mixed, so every icon sits
+   in one consistent accent-tinted squircle — a single visual language. */
+.ap-di-icon-wrap-custom{width:56px;height:56px;display:flex;align-items:center;justify-content:center;border-radius:15px;position:relative;background:linear-gradient(152deg, rgba(255,255,255,.13) 0%, rgba(255,255,255,.04) 38%, rgba(8,12,16,.55) 100%);border:1px solid rgba(255,255,255,.14);box-shadow:0 6px 16px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.2);backdrop-filter:blur(6px);overflow:hidden;transition:transform .16s, box-shadow .16s;}
+.ap-di-icon-wrap-custom::after{content:"";position:absolute;inset:0;border-radius:inherit;background:linear-gradient(180deg, rgba(255,255,255,.16), transparent 42%);pointer-events:none;}
+.ap-di-icon-wrap-custom img{width:42px !important;height:42px !important;filter:drop-shadow(0 3px 6px rgba(0,0,0,.5)) saturate(1.12);}
+.ap-desktop-icon:hover .ap-di-icon-wrap-custom{transform:translateY(-2px) scale(1.05);box-shadow:0 10px 22px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.25);}
+.ap-di-blue   .ap-di-icon-wrap-custom{background:linear-gradient(152deg, rgba(87,180,255,.34), rgba(87,180,255,.07) 55%, rgba(8,12,16,.6));border-color:rgba(87,180,255,.4);}
+.ap-di-cyan   .ap-di-icon-wrap-custom{background:linear-gradient(152deg, rgba(66,224,218,.32), rgba(66,224,218,.07) 55%, rgba(8,12,16,.6));border-color:rgba(66,224,218,.38);}
+.ap-di-green  .ap-di-icon-wrap-custom{background:linear-gradient(152deg, rgba(70,217,159,.32), rgba(70,217,159,.07) 55%, rgba(8,12,16,.6));border-color:rgba(70,217,159,.38);}
+.ap-di-amber  .ap-di-icon-wrap-custom{background:linear-gradient(152deg, rgba(255,200,92,.32), rgba(255,200,92,.07) 55%, rgba(8,12,16,.6));border-color:rgba(255,200,92,.38);}
+.ap-di-rose   .ap-di-icon-wrap-custom{background:linear-gradient(152deg, rgba(251,141,152,.32), rgba(251,141,152,.07) 55%, rgba(8,12,16,.6));border-color:rgba(251,141,152,.38);}
+.ap-di-violet .ap-di-icon-wrap-custom{background:linear-gradient(152deg, rgba(185,154,255,.32), rgba(185,154,255,.07) 55%, rgba(8,12,16,.6));border-color:rgba(185,154,255,.38);}
+.ap-di-indigo .ap-di-icon-wrap-custom{background:linear-gradient(152deg, rgba(131,164,255,.32), rgba(131,164,255,.07) 55%, rgba(8,12,16,.6));border-color:rgba(131,164,255,.38);}
+.ap-di-slate  .ap-di-icon-wrap-custom{background:linear-gradient(152deg, rgba(215,225,231,.22), rgba(215,225,231,.05) 55%, rgba(8,12,16,.6));border-color:rgba(215,225,231,.3);}
 .ap-di-label{font-size:10px;color:#c8dae5;text-align:center;max-width:72px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-shadow:0 1px 4px rgba(0,0,0,.9);}
 .ap-di-teal .ap-di-icon-wrap{background:rgba(78,228,188,.15);border-color:rgba(78,228,188,.25);}
 .ap-di-purple .ap-di-icon-wrap{background:rgba(200,179,255,.12);border-color:rgba(200,179,255,.22);}
