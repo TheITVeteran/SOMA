@@ -10,6 +10,7 @@ import path from 'path';
 import { AutonomousTrader, _setPerformanceCacheFlush } from './autonomousTrader.js';
 import strategyHuntDaemon from '../../daemons/StrategyHuntDaemon.js';
 import notificationService from '../services/NotificationService.js';
+import lowLatencyEngine from './lowLatencyEngine.js';
 
 const router = express.Router();
 
@@ -110,10 +111,45 @@ async function resumeEngagedSessions() {
             console.warn(`[Autonomous] ❌ Resume error for ${sym}:`, e.message);
         }
     }
+    ensureStreaming();
 }
 
 // Give the bootstrap and extended loaders time to settle before resuming.
 setTimeout(() => { resumeEngagedSessions().catch(() => {}); }, 75_000);
+
+// ─── Streaming tick bridge ────────────────────────────────────────────────────
+// lowLatencyEngine ticks (Alpaca crypto WS, ~ms latency) feed each running
+// trader's existing real-time trigger path (_onTradeUpdate: instant TP/SL/
+// trailing exits + live mark prices). Entries stay on the deliberate cycle;
+// this makes her REACTIONS tick-speed without making her impulsive.
+
+lowLatencyEngine.on('tick', (tick) => {
+    try {
+        const sym = lowLatencyEngine.normalizeSymbol(tick.symbol);
+        const inst = _registry.get(sym);
+        if (inst?.isRunning) {
+            inst._onTradeUpdate({ Symbol: sym, Price: tick.price });
+        }
+    } catch { /* tick handling must never throw */ }
+});
+
+/** Ensure the streaming engine covers every engaged symbol. */
+function ensureStreaming() {
+    try {
+        const symbols = [..._registry.keys()].filter(k => _registry.get(k)?.isRunning);
+        if (symbols.length === 0) return;
+        const covered = lowLatencyEngine.isRunning
+            ? symbols.every(s => lowLatencyEngine.orderBook?.has?.(s) || (lowLatencyEngine._streamSymbols || []).includes(s))
+            : false;
+        if (!covered) {
+            if (lowLatencyEngine.isRunning) lowLatencyEngine.stop();
+            lowLatencyEngine._streamSymbols = symbols;
+            lowLatencyEngine.start(symbols).catch(e => console.warn('[Autonomous] Tick stream start failed:', e.message));
+        }
+    } catch (e) {
+        console.warn('[Autonomous] ensureStreaming failed:', e.message);
+    }
+}
 
 /**
  * POST /api/autonomous/start
@@ -136,6 +172,7 @@ router.post('/start', async (req, res) => {
 
         if (!result.success) return res.status(400).json(result);
         recordEngaged(sym, preset, config || {});
+        ensureStreaming();
         notificationService.sendAlert('🟢 Engine Engaged', `Autonomous ${config?.paperMode ? 'paper ' : ''}trading started on **${sym}** (${preset || 'default'})`).catch(() => {});
         flushCache(sym);
         res.json({ ...result, symbol: sym, runningSymbols: [..._registry.keys()].filter(k => _registry.get(k).isRunning) });

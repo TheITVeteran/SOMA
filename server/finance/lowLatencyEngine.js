@@ -81,13 +81,22 @@ class LowLatencyTradingEngine extends EventEmitter {
                 }
             }
 
-            // Connect to Binance WebSocket for crypto (always free!)
-            if (binanceSymbols.length > 0) {
-                console.log('[LowLatency] Connecting to Binance WebSocket for crypto:', binanceSymbols);
-                // Don't await fully to prevent blocking startup, catch immediate errors
-                this.connectBinanceWebSocket(binanceSymbols).catch(err => {
-                    console.error('[LowLatency] Binance connection setup failed:', err.message);
-                });
+            // Crypto: Alpaca's free crypto stream first (not geo-blocked, works
+            // with paper keys). Binance only as fallback when Alpaca creds are
+            // missing — it 451s on this machine and self-disables anyway.
+            if (cryptoSymbols.length > 0) {
+                let alpacaCryptoOk = false;
+                try {
+                    alpacaCryptoOk = await this.connectAlpacaCryptoWebSocket(cryptoSymbols);
+                } catch (err) {
+                    console.warn('[LowLatency] Alpaca crypto stream failed:', err.message);
+                }
+                if (!alpacaCryptoOk) {
+                    console.log('[LowLatency] Falling back to Binance WebSocket for crypto:', binanceSymbols);
+                    this.connectBinanceWebSocket(binanceSymbols).catch(err => {
+                        console.error('[LowLatency] Binance connection setup failed:', err.message);
+                    });
+                }
             }
 
             this.isRunning = true;
@@ -144,6 +153,71 @@ class LowLatencyTradingEngine extends EventEmitter {
 
         // Start WebSocket connection
         this.alpacaWs.connect();
+    }
+
+    /**
+     * Connect to Alpaca's FREE crypto stream (v1beta3) — works with paper keys
+     * and is not geo-blocked. Primary crypto tick source on this machine;
+     * Binance stays as fallback for installs where it's reachable.
+     */
+    async connectAlpacaCryptoWebSocket(symbols) {
+        // 'BTC-USD' → 'BTC/USD' (Alpaca crypto pair format)
+        const pairs = symbols.map(s => s.replace('-', '/'));
+        const creds = alpacaService.loadCredentials?.('alpaca_paper')
+            || alpacaService.loadCredentials?.('alpaca_live')
+            || alpacaService.loadCredentials?.();
+        if (!creds?.apiKey) {
+            console.warn('[LowLatency] No Alpaca credentials for crypto stream.');
+            return false;
+        }
+
+        const WebSocket = (await import('ws')).default;
+        const ws = new WebSocket('wss://stream.data.alpaca.markets/v1beta3/crypto/us');
+        this.alpacaCryptoWs = ws;
+
+        ws.on('open', () => {
+            ws.send(JSON.stringify({ action: 'auth', key: creds.apiKey, secret: creds.apiSecret }));
+        });
+
+        ws.on('message', (data) => {
+            const receiveTime = process.hrtime.bigint();
+            try {
+                const messages = JSON.parse(data);
+                for (const msg of Array.isArray(messages) ? messages : [messages]) {
+                    if (msg.T === 'success' && msg.msg === 'authenticated') {
+                        console.log('[Alpaca Crypto WS] Authenticated — subscribing:', pairs.join(', '));
+                        ws.send(JSON.stringify({ action: 'subscribe', trades: pairs }));
+                        this.emit('alpaca_crypto_connected');
+                    } else if (msg.T === 't') {
+                        this.handleTick({
+                            symbol: msg.S,                       // 'BTC/USD' — normalizeSymbol maps to BTC-USD
+                            price: parseFloat(msg.p),
+                            size: parseFloat(msg.s),
+                            timestamp: new Date(msg.t).getTime(),
+                            receiveTime: Number(receiveTime / 1000n),
+                            exchange: 'alpaca_crypto'
+                        });
+                    } else if (msg.T === 'error') {
+                        console.error('[Alpaca Crypto WS] Error:', msg.msg);
+                    }
+                }
+            } catch (err) {
+                console.error('[Alpaca Crypto WS] Parse error:', err.message);
+            }
+        });
+
+        ws.on('error', (err) => {
+            console.error('[Alpaca Crypto WS] Error:', err.message);
+        });
+
+        ws.on('close', () => {
+            console.log('[Alpaca Crypto WS] Connection closed');
+            if (this.isRunning && this.alpacaCryptoWs === ws) {
+                setTimeout(() => this.connectAlpacaCryptoWebSocket(symbols).catch(() => {}), 5000);
+            }
+        });
+
+        return true;
     }
 
     /**
@@ -401,6 +475,12 @@ class LowLatencyTradingEngine extends EventEmitter {
 
         if (this.alpacaWs) {
             this.alpacaWs.disconnect();
+        }
+
+        if (this.alpacaCryptoWs) {
+            const ws = this.alpacaCryptoWs;
+            this.alpacaCryptoWs = null; // disable the reconnect-on-close handler
+            try { ws.close(); } catch { /* already closing */ }
         }
 
         if (this.binanceWs) {
