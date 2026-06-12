@@ -146,3 +146,31 @@ Goal: SOMA can help investigate a workbook interactively while preserving eviden
 - [ ] Retire or integrate the standalone scalpingEngine once the transplant lands (avoid a second trader sharing the trade log).
 
 Goal: tick-speed entries with the full safety stack — one trader, one P&L, earned velocity.
+
+## ApertureOS: AI-First OS — SOMA as Copilot
+
+Vision: an OS SOMA can control completely, acting as a real copilot. The kernel
+(/dev/soma, syscalls, IPC, VFS) was built for this — the Agency Bridge
+(2026-06-11) is the first wire: aperture_os tool + /api/aperture/command →
+WS → kernel dispatch (open_app/close_app/notify/portal_navigate), every action
+attributed via kernel notification.
+
+- [ ] **Approval queue for higher-risk verbs** — autonomyLevel < 2 turns SOMA's
+      commands into approve/deny notifications instead of direct execution
+      (the settings already model autonomyLevel + permissions; wire them).
+- [ ] **More verbs**: write_note, create_task, add_calendar_event, file_open,
+      run_terminal_command (terminal verb = approval-gated always).
+- [ ] **Make it HER desktop** — Notes surfaces her diary/reflections, Tasks
+      mirrors the GoalEngine, Calendar shows market events (FOMC) + her
+      schedule, a desktop widget shows her limbic weather/mood live.
+- [ ] **Perception**: kernel reports OS state (open apps, active window,
+      idle time) back to SOMA via CNS signals so she knows what Barry is
+      doing in Aperture before acting (sees → decides → acts → verifies).
+- [ ] **Finish stub apps**: Archive preview/restore, Calendar full CRUD
+      against existing backend routes, deeper SystemStatus.
+- [ ] **Portal**: surface portalDb permissions + downloads manager UI.
+- [ ] **WM polish**: alt-tab, snap keyboard shortcuts, taskbar previews,
+      notification center grouping.
+
+Goal: SOMA proactively says "I left the variance report open in Files and
+queued the Portal page you wanted" — and it's true.
