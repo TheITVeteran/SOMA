@@ -1621,7 +1621,7 @@ class AutonomousTrader {
 
                 // UCB1 strategy outcome — teach mission control which profile performs best
                 const activeStrategyId = this._runtimeProfile?.activeStrategy?.strategyId || this.preset || 'standard_portfolio';
-                missionControlRuntime.recordStrategyOutcome(activeStrategyId, pnlPct, this._lastKnownRegime);
+                missionControlRuntime.recordStrategyOutcome(activeStrategyId, pnlPct, this._lastKnownRegime, 'live');
 
                 // A/B test outcome
                 const abEntry = this._abTestArmAtEntry.get(position.symbol);
@@ -1700,7 +1700,7 @@ class AutonomousTrader {
 
             // UCB1 strategy outcome
             const activeStrategyId = this._runtimeProfile?.activeStrategy?.strategyId || this.preset || 'standard_portfolio';
-            missionControlRuntime.recordStrategyOutcome(activeStrategyId, (position.unrealizedPnlPct || 0) / 100, this._lastKnownRegime);
+            missionControlRuntime.recordStrategyOutcome(activeStrategyId, (position.unrealizedPnlPct || 0) / 100, this._lastKnownRegime, 'live');
 
             // A/B test outcome
             const abEntry = this._abTestArmAtEntry.get(position.symbol);

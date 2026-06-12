@@ -120,7 +120,7 @@ export class StrategyHuntDaemon extends BaseDaemon {
         const pnlPct        = trialPnlUsd / capital;
 
         // Record outcome for UCB1 learning
-        missionControlRuntime.recordStrategyOutcome(trial.strategyId, pnlPct, regime);
+        missionControlRuntime.recordStrategyOutcome(trial.strategyId, pnlPct, regime, 'live');
 
         // Push to history
         this._state.trialHistory.push({
@@ -273,17 +273,25 @@ export class StrategyHuntDaemon extends BaseDaemon {
             ? parseFloat(((trial.trialPnlUsd / trialHrs) * 24).toFixed(2))
             : null;
 
-        // UCB1 strategy leaderboard
+        // UCB1 strategy leaderboard — live (real trade) ledger first; sim
+        // reputation shown only as fallback for strategies with no live data.
         const ucbState  = missionControlRuntime._ucb?.strategies || {};
-        const leaderboard = Object.entries(ucbState).map(([id, s]) => ({
-            strategyId:  id,
-            label:       PROFILE_LABELS[id] || id,
-            trials:      s.trials || 0,
-            avgReward:   parseFloat((s.avgReward || 0).toFixed(4)),
-            winRate:     s.trials > 0 ? parseFloat(((s.wins / s.trials) * 100).toFixed(1)) : null,
-            proven:      this._state.provenStrategies.some(p => p.strategyId === id),
-            locked:      this._state.lockedStrategy === id,
-        })).sort((a, b) => b.avgReward - a.avgReward);
+        const leaderboard = Object.entries(ucbState).map(([id, s]) => {
+            const lt = s.live?.trials || 0;
+            return {
+                strategyId:  id,
+                label:       PROFILE_LABELS[id] || id,
+                trials:      lt || s.trials || 0,
+                liveTrials:  lt,
+                simTrials:   s.trials || 0,
+                avgReward:   parseFloat(((lt >= 1 ? s.live.avgReward : s.avgReward) || 0).toFixed(4)),
+                winRate:     lt > 0 ? parseFloat(((s.live.wins / lt) * 100).toFixed(1))
+                             : (s.trials > 0 ? parseFloat(((s.wins / s.trials) * 100).toFixed(1)) : null),
+                liveData:    lt > 0,
+                proven:      this._state.provenStrategies.some(p => p.strategyId === id),
+                locked:      this._state.lockedStrategy === id,
+            };
+        }).sort((a, b) => b.avgReward - a.avgReward);
 
         return {
             active:               true,

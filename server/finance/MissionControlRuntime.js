@@ -446,8 +446,12 @@ class MissionControlRuntime {
      */
     selectTradingStrategy(regime = null) {
         const C = 1.5;
+        // Sim reputations are a weak prior only — live (real paper/live trade)
+        // outcomes dominate as soon as they exist. Untested-live strategies get
+        // the discounted sim prior, so a strategy that is PROVEN bad live loses
+        // to one that hasn't been tried yet.
+        const SIM_PRIOR_DISCOUNT = 0.3;
         const strategies = this._ucb.strategies;
-        const total = this._ucb.totalTrials || 1;
 
         // Ensure all strategy profiles are tracked
         for (const id of Object.keys(STRATEGY_PROFILES)) {
@@ -457,43 +461,47 @@ class MissionControlRuntime {
             if (!strategies[id].byRegime) strategies[id].byRegime = {};
         }
 
-        // If regime known and we have enough regime-specific data, use it
-        if (regime) {
+        const liveTotal = Object.values(strategies).reduce((sum, s) => sum + (s.live?.trials || 0), 0);
+
+        // Regime-specific selection on LIVE data only
+        if (regime && liveTotal > 0) {
             const regimeStrategies = Object.entries(strategies)
-                .filter(([, s]) => s.byRegime?.[regime]?.trials >= 3);
+                .filter(([, s]) => (s.live?.byRegime?.[regime]?.trials || 0) >= 3);
             if (regimeStrategies.length >= 2) {
-                const regimeTotal = regimeStrategies.reduce((s, [, v]) => s + (v.byRegime[regime]?.trials || 0), 0) || 1;
+                const regimeTotal = regimeStrategies.reduce((sum, [, v]) => sum + v.live.byRegime[regime].trials, 0) || 1;
                 let bestId = null, bestScore = -Infinity;
                 for (const [id, s] of regimeStrategies) {
-                    const rs = s.byRegime[regime];
+                    const rs = s.live.byRegime[regime];
                     const exploit = rs.avgReward || 0;
                     const explore = C * Math.sqrt(Math.log(regimeTotal) / (rs.trials || 1));
                     const score   = exploit + explore;
                     if (score > bestScore) { bestScore = score; bestId = id; }
                 }
                 if (bestId) {
-                    console.log(`[MCR] UCB1 regime-select: ${bestId} for regime=${regime}`);
+                    console.log(`[MCR] UCB1 live-regime-select: ${bestId} for regime=${regime}`);
                     return bestId;
                 }
             }
         }
 
-        // Global UCB1 fallback
-        // Force exploration: any strategy with < 3 trials goes first
-        const underexplored = Object.entries(strategies).filter(([, s]) => s.trials < 3);
+        // Force exploration: any strategy with < 3 LIVE trials goes first
+        const underexplored = Object.entries(strategies).filter(([, s]) => (s.live?.trials || 0) < 3);
         if (underexplored.length > 0) {
             const [id] = underexplored[Math.floor(Math.random() * underexplored.length)];
+            console.log(`[MCR] UCB1 live-explore: ${id} (${underexplored.length} strategies lack live data)`);
             return id;
         }
 
-        // UCB1 formula: avgReward + C * sqrt(ln(total) / trials)
+        // Global UCB1 on live ledger: liveAvgReward + C * sqrt(ln(liveTotal) / liveTrials)
         let bestId = null, bestScore = -Infinity;
         for (const [id, s] of Object.entries(strategies)) {
-            const exploit = s.avgReward;
-            const explore = C * Math.sqrt(Math.log(total) / (s.trials || 1));
+            const lt = s.live?.trials || 0;
+            const exploit = lt >= 3 ? s.live.avgReward : (s.avgReward || 0) * SIM_PRIOR_DISCOUNT;
+            const explore = C * Math.sqrt(Math.log(Math.max(liveTotal, 2)) / (lt || 1));
             const score   = exploit + explore;
             if (score > bestScore) { bestScore = score; bestId = id; }
         }
+        console.log(`[MCR] UCB1 live-select: ${bestId} (liveTotal=${liveTotal})`);
         return bestId || Object.keys(STRATEGY_PROFILES)[0];
     }
 
@@ -503,7 +511,7 @@ class MissionControlRuntime {
      * @param {number} pnlPct     - realized P&L as fraction (0.02 = +2%)
      * @param {string} [regime]   - optional market regime at trade time
      */
-    recordStrategyOutcome(strategyId, pnlPct, regime = null) {
+    recordStrategyOutcome(strategyId, pnlPct, regime = null, source = 'sim') {
         if (!strategyId || typeof pnlPct !== 'number') return;
         let s = this._ucb.strategies[strategyId];
         if (!s) {
@@ -513,6 +521,41 @@ class MissionControlRuntime {
             this._ucb.strategies[strategyId] = s;
         }
         if (!s.byRegime) s.byRegime = {};
+
+        // LIVE PARTITION — real paper/live trade outcomes get their own ledger.
+        // The sim suite records thousands of outcomes into the shared rolling
+        // window, flushing live evidence out faster than it accumulates; the
+        // hunt then keeps picking strategies on simulated reputations
+        // (full_aggression bled 9.6% win-rate paper while holding a 0.95 sim
+        // avgReward). Selection prefers the live ledger once it has data.
+        if (source === 'live') {
+            if (!s.live) s.live = { trials: 0, wins: 0, rewards: [], avgReward: 0, byRegime: {} };
+            const liveReward = Math.tanh(pnlPct * 20);
+            s.live.trials++;
+            if (pnlPct > 0) s.live.wins++;
+            s.live.rewards.push(liveReward);
+            if (s.live.rewards.length > 100) s.live.rewards.shift();
+            let lSum = 0, lTot = 0;
+            for (let i = 0; i < s.live.rewards.length; i++) {
+                const w = Math.pow(0.97, s.live.rewards.length - 1 - i);
+                lSum += s.live.rewards[i] * w; lTot += w;
+            }
+            s.live.avgReward = lTot > 0 ? lSum / lTot : 0;
+            if (regime) {
+                if (!s.live.byRegime[regime]) s.live.byRegime[regime] = { trials: 0, wins: 0, rewards: [], avgReward: 0 };
+                const lr = s.live.byRegime[regime];
+                lr.trials++;
+                if (pnlPct > 0) lr.wins++;
+                lr.rewards.push(liveReward);
+                if (lr.rewards.length > 50) lr.rewards.shift();
+                let lrSum = 0, lrTot = 0;
+                for (let i = 0; i < lr.rewards.length; i++) {
+                    const w = Math.pow(0.97, lr.rewards.length - 1 - i);
+                    lrSum += lr.rewards[i] * w; lrTot += w;
+                }
+                lr.avgReward = lrTot > 0 ? lrSum / lrTot : 0;
+            }
+        }
 
         s.trials++;
         this._ucb.totalTrials++;
