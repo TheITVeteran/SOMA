@@ -155,17 +155,20 @@ Vision: an OS SOMA can control completely, acting as a real copilot. The kernel
 WS → kernel dispatch (open_app/close_app/notify/portal_navigate), every action
 attributed via kernel notification.
 
-- [ ] **Approval queue for higher-risk verbs** — autonomyLevel < 2 turns SOMA's
-      commands into approve/deny notifications instead of direct execution
-      (the settings already model autonomyLevel + permissions; wire them).
-- [ ] **More verbs**: write_note, create_task, add_calendar_event, file_open,
-      run_terminal_command (terminal verb = approval-gated always).
+DESIGN RULE (Barry, 2026-06-12): SOMA drives Aperture autonomously — NEMESIS
+audits post-hoc; aperture_os lives in the ApprovalSystem auto-approve tier.
+No pre-approval friction on her own desktop. Terminal/shell is the exception.
+
+NEXT SLICE (priority order):
+- [ ] **1. Perception first**: kernel reports OS state (open apps, active
+      window, idle time) back to SOMA via CNS signals so she knows what's
+      happening in Aperture before acting (sees → decides → acts → verifies).
+- [ ] **2. Write verbs**: write_note, create_task, add_calendar_event,
+      file_open. run_terminal_command stays approval-gated always (shell ≠
+      her desktop).
 - [ ] **Make it HER desktop** — Notes surfaces her diary/reflections, Tasks
       mirrors the GoalEngine, Calendar shows market events (FOMC) + her
       schedule, a desktop widget shows her limbic weather/mood live.
-- [ ] **Perception**: kernel reports OS state (open apps, active window,
-      idle time) back to SOMA via CNS signals so she knows what Barry is
-      doing in Aperture before acting (sees → decides → acts → verifies).
 - [ ] **Finish stub apps**: Archive preview/restore, Calendar full CRUD
       against existing backend routes, deeper SystemStatus.
 - [ ] **Portal**: surface portalDb permissions + downloads manager UI.
