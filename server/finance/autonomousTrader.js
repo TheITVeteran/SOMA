@@ -1323,6 +1323,11 @@ class AutonomousTrader {
                     pnl,
                     pnlPct
                 });
+                notificationService.sendTradeNotification({
+                    symbol: this.symbol, side: 'short', qty: pos.qty,
+                    entryPrice: pos.entryPrice, exitPrice: fillPrice,
+                    pnl, pnlPct: pnlPct * 100, reason: 'signal close'
+                }).catch(() => {});
             } else {
                 this._paperPortfolio.balance -= cost;
                 let tradeId = null;
@@ -1398,6 +1403,11 @@ class AutonomousTrader {
                     pnl,
                     pnlPct
                 });
+                notificationService.sendTradeNotification({
+                    symbol: this.symbol, side: 'long', qty: pos.qty,
+                    entryPrice: pos.entryPrice, exitPrice: fillPrice,
+                    pnl, pnlPct: pnlPct * 100, reason: 'signal close'
+                }).catch(() => {});
             } else {
                 // Open short
                 this._paperPortfolio.balance += fillPrice * filledQty - fill.fee;
