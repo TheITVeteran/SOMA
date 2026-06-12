@@ -58,6 +58,9 @@ class ApprovalSystem {
       git_status: 'file_read', git_log: 'file_read', git_diff: 'file_read',
       get_market_data: 'network_request', list_files: 'file_read', list_processes: 'file_read',
       check_port: 'file_read',
+      // ApertureOS is HER desktop — she drives it autonomously by design;
+      // NEMESIS audits quality post-hoc rather than gating pre-action.
+      aperture_os: 'code_search',
       // Medium risk
       read_file: 'file_read', fetch_url: 'network_request', research_web: 'network_request',
       analyze_codebase: 'file_read', remember: 'memory_write', add_knowledge: 'memory_write',
