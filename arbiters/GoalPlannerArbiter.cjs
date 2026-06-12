@@ -22,6 +22,9 @@ try {
 }
 
 class GoalPlannerArbiter extends BaseArbiter {
+  // Statuses that must never occupy an active goal slot
+  static TERMINAL_STATUSES = new Set(['failed', 'completed', 'verification_failed', 'abandoned', 'archived']);
+
   static role = 'goal-planner';
   static capabilities = ['create-goals', 'prioritize', 'coordinate-tasks', 'track-progress', 'autonomous-planning'];
 
@@ -391,6 +394,20 @@ Rules:
       }
 
       // Check active goal limit — HARD CAP
+      if (this.activeGoals.size >= this.maxActiveGoals) {
+        // First sweep: terminal-status goals must never hold an active slot
+        let evicted = 0;
+        for (const id of Array.from(this.activeGoals)) {
+          if (GoalPlannerArbiter.TERMINAL_STATUSES.has(this.goals.get(id)?.status)) {
+            this.activeGoals.delete(id);
+            evicted++;
+          }
+        }
+        if (evicted > 0) {
+          this.logger.warn(`[${this.name}] 🧹 Evicted ${evicted} terminal-status goal(s) from active slots at cap check`);
+          this._dirty = true;
+        }
+      }
       if (this.activeGoals.size >= this.maxActiveGoals) {
         this.logger.warn(`[${this.name}] Active goal limit reached (${this.activeGoals.size}/${this.maxActiveGoals}), deferring low-priority goals...`);
         const deferred = await this.deferLowPriorityGoals(1);
@@ -2032,9 +2049,18 @@ Rules:
         this._dirty = true;
       }
 
-      // Restore active goals set
+      // Restore active goals set — but never resurrect terminal-status goals
+      // into active slots. Stale failed/verification_failed corpses occupied
+      // the cap for a month (May–June 2026) and blocked all new goal creation
+      // ("Active goal limit reached (20)") because nothing evicted them.
       if (snapshot.activeGoals) {
-        this.activeGoals = new Set(snapshot.activeGoals.filter(id => this.goals.has(id)));
+        const restored = snapshot.activeGoals.filter(id => this.goals.has(id));
+        const live = restored.filter(id => !GoalPlannerArbiter.TERMINAL_STATUSES.has(this.goals.get(id)?.status));
+        if (live.length < restored.length) {
+          this.logger.warn(`[${this.name}] 🧹 Evicted ${restored.length - live.length} terminal-status goal(s) from the active set on restore`);
+          this._dirty = true;
+        }
+        this.activeGoals = new Set(live);
       }
 
       // ═══ ENFORCE maxActiveGoals ON RESTORE ═══
