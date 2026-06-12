@@ -6,6 +6,7 @@
 
 import fs from 'fs/promises';
 import path from 'path';
+import { execFile } from 'child_process';
 import toolRegistry from '../../core/ToolRegistry.js';
 import { analyzeImageFile, imageMimeType, isImageFile } from '../utils/LocalVisionFileAnalyzer.js';
 
@@ -28,6 +29,44 @@ async function pathExists(filePath) {
     } catch {
         return false;
     }
+}
+
+async function speakWithWindowsSpeech(message, rate = 0, volume = 100) {
+    if (process.platform !== 'win32') {
+        return { success: false, error: 'Windows System.Speech requires win32.' };
+    }
+
+    const script = `
+Add-Type -AssemblyName System.Speech
+$speaker = New-Object System.Speech.Synthesis.SpeechSynthesizer
+$speaker.Rate = [int]$env:SOMA_SPEAK_RATE
+$speaker.Volume = [int]$env:SOMA_SPEAK_VOLUME
+$speaker.Speak($env:SOMA_SPEAK_TEXT)
+$speaker.Dispose()
+`;
+
+    return await new Promise((resolve) => {
+        execFile('powershell.exe', [
+            '-NoProfile',
+            '-ExecutionPolicy', 'Bypass',
+            '-Command', script
+        ], {
+            timeout: 30000,
+            windowsHide: true,
+            env: {
+                ...process.env,
+                SOMA_SPEAK_TEXT: message,
+                SOMA_SPEAK_RATE: String(rate),
+                SOMA_SPEAK_VOLUME: String(volume)
+            }
+        }, (error, stdout, stderr) => {
+            if (error) {
+                resolve({ success: false, error: error.message, stderr: String(stderr || '').trim() });
+                return;
+            }
+            resolve({ success: true, stdout: String(stdout || '').trim() });
+        });
+    });
 }
 
 export async function loadTools(systemContext = {}) {
@@ -169,6 +208,68 @@ export async function loadTools(systemContext = {}) {
                 node: process.version,
                 platform: process.platform,
                 cpu: process.arch
+            };
+        }
+    });
+
+    toolRegistry.registerTool({
+        name: 'desktop_speak',
+        description: 'Speak a short message aloud on the local desktop speakers or Command Bridge voice chain.',
+        parameters: { text: 'string', rate: 'number (optional -10 to 10)', volume: 'number (optional 0 to 100)', listenForReply: 'boolean (optional)', listenWindowMs: 'number (optional)', requestId: 'string (optional)', recipient: 'string (optional)', replyChannelId: 'string (optional)', checkPresence: 'boolean (optional)' },
+        execute: async ({ text, rate, volume, listenForReply, listenWindowMs, requestId, recipient, replyChannelId, checkPresence }) => {
+            const message = String(text || '').replace(/\s+/g, ' ').trim().slice(0, 500);
+            if (!message) return { success: false, error: 'text is required' };
+
+            const speechRate = Math.max(-10, Math.min(10, Number.isFinite(Number(rate)) ? Number(rate) : 0));
+            const speechVolume = Math.max(0, Math.min(100, Number.isFinite(Number(volume)) ? Number(volume) : 100));
+            const liveSystem = getSystem();
+            const visionContext = liveSystem?.visionContext || null;
+            const visibleLabels = normalizeVisionToolObjects(visionContext?.objects || []).map(obj => obj.label);
+            const presenceCheck = checkPresence ? {
+                checked: true,
+                channel: visionContext?.channel || null,
+                summary: visionContext?.summary || null,
+                visiblePerson: visibleLabels.some(label => /\b(person|human|face|adult|woman|man)\b/i.test(label)),
+                labels: visibleLabels.slice(0, 8),
+                semanticAnalysis: Boolean(visionContext?.semanticAnalysis)
+            } : { checked: false };
+
+            const localSpeech = await speakWithWindowsSpeech(message, speechRate, speechVolume);
+
+            let broadcasted = false;
+            if (liveSystem?.broadcast) {
+                liveSystem.broadcast(listenForReply ? 'soma_remote_speech' : 'soma_proactive', {
+                    requestId: requestId || `remote-speech-${Date.now()}`,
+                    message,
+                    source: 'desktop_speak',
+                    forceSpeak: true,
+                    suppressSpeak: localSpeech.success,
+                    recipient: recipient || null,
+                    replyChannelId: replyChannelId || null,
+                    listenForReply: Boolean(listenForReply),
+                    listenWindowMs: Math.max(5000, Math.min(120000, Number(listenWindowMs || 25000))),
+                    presenceCheck,
+                    timestamp: Date.now()
+                });
+                broadcasted = true;
+            }
+
+            if (!localSpeech.success && !broadcasted) {
+                return {
+                    success: false,
+                    error: localSpeech.error || 'No desktop speech route succeeded.',
+                    stderr: localSpeech.stderr || '',
+                    presenceCheck
+                };
+            }
+
+            return {
+                success: true,
+                spoken: message,
+                route: broadcasted && localSpeech.success ? 'system_speech+command_bridge' : (broadcasted ? 'command_bridge' : 'system_speech'),
+                commandBridgeBroadcast: broadcasted,
+                systemSpeech: localSpeech,
+                presenceCheck
             };
         }
     });

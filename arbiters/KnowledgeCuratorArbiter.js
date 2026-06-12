@@ -77,13 +77,10 @@ export class KnowledgeCuratorArbiter {
         this._syncCountsFromDisk().catch(() => {});
     }
 
-    // ── Subscription ──────────────────────────────────────────────────────────
-
     _subscribe() {
         for (const signalType of Object.keys(SIGNAL_ROUTES)) {
             try {
-                this.messageBroker.subscribe(this.name, signalType);
-                this.messageBroker.on(signalType, (envelope) => {
+                this.messageBroker.subscribe(signalType, (envelope) => {
                     const payload = envelope?.payload || envelope || {};
                     this._onSignal(signalType, payload).catch(e =>
                         console.warn(`[KnowledgeCuratorArbiter] Error filing ${signalType}:`, e.message)

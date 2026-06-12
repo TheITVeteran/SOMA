@@ -985,6 +985,15 @@ export function setupWebSocket(server, wss, system) {
                     return;
                 }
 
+                if (type === 'remote_speech_status') {
+                    try {
+                        await system.discordArbiter?.handleRemoteSpeechStatus?.(payload || {});
+                    } catch (err) {
+                        logger.warn(`[RemoteSpeech] Discord status bridge failed: ${err.message}`);
+                    }
+                    return;
+                }
+
                 if (type === 'tool_execute') {
                     const toolName = payload?.name;
                     const args = payload?.args || {};

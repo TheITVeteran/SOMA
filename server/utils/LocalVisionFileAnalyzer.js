@@ -86,14 +86,17 @@ export async function analyzeImageFile(filePath, options = {}) {
     const buffer = await fs.readFile(filePath);
     const base64 = buffer.toString('base64');
     const model = options.model || await selectLocalVisionModel();
-    const prompt = options.prompt || [
-        'Analyze this image for SOMA file ingestion.',
-        'Return ONLY JSON:',
-        '{"summary":"factual description of visible contents","objects":["short labels"],"ocrText":null,"uncertain":false}',
-        'If there is visible text, include it in ocrText.',
-        'If the image is too dark, blurry, blank, or unclear, set uncertain:true.',
-        'Describe only visible pixels. Do not infer beyond the image.'
-    ].join('\n');
+    const isMoondream = String(model).toLowerCase().includes('moondream');
+    const prompt = isMoondream
+        ? (options.prompt || 'Describe what is visible in this image in detail. Mention any visible text, windows, or objects.')
+        : options.prompt || [
+            'Analyze this image for SOMA file ingestion.',
+            'Return ONLY JSON:',
+            '{"summary":"factual description of visible contents","objects":["short labels"],"ocrText":null,"uncertain":false}',
+            'If there is visible text, include it in ocrText.',
+            'If the image is too dark, blurry, blank, or unclear, set uncertain:true.',
+            'Describe only visible pixels. Do not infer beyond the image.'
+        ].join('\n');
 
     const response = await fetch(`${ollamaBaseUrl()}/api/generate`, {
         method: 'POST',

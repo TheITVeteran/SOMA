@@ -278,6 +278,9 @@ class SomaBackend {
       case 'soma_presence_probe':
         this.emit('soma_presence_probe', payload);
         break;
+      case 'soma_remote_speech':
+        this.emit('soma_remote_speech', payload);
+        break;
       case 'soma_activity':
         this.emit('soma_activity', payload);
         break;

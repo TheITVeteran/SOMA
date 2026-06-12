@@ -1236,6 +1236,7 @@ const SomaCommandBridge = () => {
   const lastTranscriptRef = useRef('');
   useEffect(() => { lastTranscriptRef.current = lastTranscript; }, [lastTranscript]);
   const pendingGreetingRef = useRef(null); // queues greeting if orb not ready yet
+  const remoteSpeechSessionRef = useRef(null);
 
   useEffect(() => {
     const onProactiveSpeak = (payload) => {
@@ -1251,6 +1252,112 @@ const SomaCommandBridge = () => {
     somaBackend.on('soma_proactive', onProactiveSpeak);
     return () => somaBackend.off('soma_proactive', onProactiveSpeak);
   }, []);
+
+  // Remote speech is an intentional Discord/admin handoff into the local room.
+  // It can speak through the normal Orb voice chain and optionally leave the mic open briefly for a reply.
+  useEffect(() => {
+    let remoteCooldownUntil = 0;
+    const onRemoteSpeech = async (payload = {}) => {
+      const text = payload.message || payload.text;
+      if (!text) return;
+
+      const now = Date.now();
+      if (now < remoteCooldownUntil) return;
+      remoteCooldownUntil = now + 2500;
+
+      const previousModule = activeModule;
+      if (previousModule !== 'orb') {
+        setActiveModule('orb');
+        await new Promise(resolve => setTimeout(resolve, 250));
+      }
+
+      if (isTalkingRef.current) return;
+      const listenForReply = Boolean(payload.listenForReply);
+      const wasConnected = isOrbConnectedRef.current;
+      const beforeTranscript = lastTranscriptRef.current;
+      if (listenForReply) {
+        remoteSpeechSessionRef.current = {
+          requestId: payload.requestId,
+          recipient: payload.recipient || 'someone at home',
+          beforeTranscript,
+          heardReply: false,
+          answered: false,
+          startedAt: Date.now()
+        };
+        window.somaRemotePersonContext = {
+          requestId: payload.requestId,
+          recipient: payload.recipient || 'someone at home',
+          startedAt: Date.now()
+        };
+        if (payload.recipient) {
+          somaBackend.send('presence_identity', {
+            name: payload.recipient,
+            source: 'remote_speech_recipient',
+            confidence: 0.72,
+            timestamp: Date.now()
+          });
+        }
+      }
+
+      if (listenForReply && !wasConnected) {
+        try { await connectOrb(); } catch { /* speak anyway if mic cannot open */ }
+      }
+
+      if (!payload.suppressSpeak && speakTextRef.current) await speakTextRef.current(text);
+
+      if (listenForReply && !wasConnected) {
+        setTimeout(() => {
+          const session = remoteSpeechSessionRef.current;
+          if (session?.requestId === payload.requestId && !session.heardReply) {
+            somaBackend.send('remote_speech_status', {
+              requestId: payload.requestId,
+              phase: 'no_reply',
+              recipient: payload.recipient || null,
+              timestamp: Date.now()
+            });
+            remoteSpeechSessionRef.current = null;
+            delete window.somaRemotePersonContext;
+          }
+          if (lastTranscriptRef.current === beforeTranscript && !isTalkingRef.current && !isListeningRef.current) {
+            disconnectOrb();
+          }
+        }, Number(payload.listenWindowMs || 25000));
+      }
+    };
+
+    somaBackend.on('soma_remote_speech', onRemoteSpeech);
+    return () => somaBackend.off('soma_remote_speech', onRemoteSpeech);
+  }, [activeModule, connectOrb, disconnectOrb]);
+
+  useEffect(() => {
+    const session = remoteSpeechSessionRef.current;
+    if (!session || session.heardReply || !lastTranscript || lastTranscript === session.beforeTranscript) return;
+    session.heardReply = true;
+    somaBackend.send('remote_speech_status', {
+      requestId: session.requestId,
+      phase: 'heard_reply',
+      speaker: session.recipient,
+      transcriptPreview: lastTranscript.slice(0, 180),
+      timestamp: Date.now()
+    });
+  }, [lastTranscript]);
+
+  useEffect(() => {
+    const session = remoteSpeechSessionRef.current;
+    if (!session || !session.heardReply || session.answered || !orbConversation.length) return;
+    const latest = orbConversation[orbConversation.length - 1];
+    if (latest?.role !== 'soma' || !latest.text) return;
+    session.answered = true;
+    somaBackend.send('remote_speech_status', {
+      requestId: session.requestId,
+      phase: 'soma_answered',
+      speaker: session.recipient,
+      summary: latest.text.slice(0, 240),
+      timestamp: Date.now()
+    });
+    remoteSpeechSessionRef.current = null;
+    delete window.somaRemotePersonContext;
+  }, [orbConversation]);
 
   // Presence probe — only when wake/presence mode is armed, and only for backend-gated return events.
   useEffect(() => {

@@ -479,6 +479,13 @@ export default function PortalBrowser({ workspace, policy = {}, onSettingsUpdate
     return () => { active = false; };
   }, [activeOrigin]);
 
+  // Auto-redirect browser pages to reader mode when running outside of Electron
+  useEffect(() => {
+    if (!isElectron && page?.kind === 'browser' && page?.address) {
+      readUrl(page.address);
+    }
+  }, [page?.kind, page?.address, isElectron]);
+
   // Update site permission
   const handleUpdatePermission = async (permission, value) => {
     if (!activeOrigin) return;
@@ -1292,6 +1299,13 @@ export default function PortalBrowser({ workspace, policy = {}, onSettingsUpdate
       setError('Network access is disabled in Aperture Settings.');
       return;
     }
+
+    // Auto-switch to reader capture mode when running outside of Electron
+    if (!isElectron) {
+      readUrl(address);
+      return;
+    }
+
     const hostname = new URL(address).hostname;
     const nextPage = {
       kind: 'browser',

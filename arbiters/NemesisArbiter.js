@@ -1229,7 +1229,7 @@ Reply with ONLY this JSON (no other text):
         }
     }
 
-    async evaluateResponse(brain, message, result, geminiCallback) {
+    async evaluateResponse(brain, message, result, geminiCallback, visualContext = '') {
         const responseText = result?.text || result?.response || '';
         if (!responseText) {
             return { score: 0.5, needsRevision: false, reason: 'empty response', linguistic: { summary: 'empty response' } };
@@ -1270,10 +1270,16 @@ Reply with ONLY this JSON (no other text):
             };
         }
 
-        const evalPrompt = `You are a strict quality auditor for an AI assistant called SOMA.
+        let evalPrompt = `You are a strict quality auditor for an AI assistant called SOMA.
 
 USER MESSAGE: ${message.substring(0, 300)}
+`;
 
+        if (visualContext) {
+            evalPrompt += `\nSOMA'S VISUAL STATE CONTEXT (this is real visual data SOMA actually perceived from the user's screen/webcam - use to verify if visual references in response are grounded and NOT hallucinated):\n${visualContext.substring(0, 800)}\n`;
+        }
+
+        evalPrompt += `
 SOMA'S RESPONSE (from ${brain || 'unknown'} lobe):
 ${responseText.substring(0, 1200)}
 

@@ -547,6 +547,10 @@ export function useSomaAudio(onResponse, visionContextRef = null, communicationC
       if (introducedName) {
         enrichedQuery = `[PRESENCE: The person speaking just introduced themselves as ${introducedName}. Treat them as a newly known person, speak normally, and invite conversation with one natural question about their day or what they have going on.]\n\n${enrichedQuery}`;
       }
+      const remotePerson = window.somaRemotePersonContext;
+      if (!introducedName && remotePerson?.recipient && Date.now() - Number(remotePerson.startedAt || 0) < 2 * 60 * 1000) {
+        enrichedQuery = `[PRESENCE: This reply is probably from ${remotePerson.recipient}, who is responding locally after Barry asked SOMA through Discord to speak at home. Speak naturally to ${remotePerson.recipient}. Do not store private details unless explicitly asked to remember them.]\n\n${enrichedQuery}`;
+      }
       const vc = visionContextRef?.current;
       if (vc?.lastPerception?.objects?.length) {
         const perception = vc.lastPerception;

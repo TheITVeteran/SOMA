@@ -1,5 +1,8 @@
 // src/cognitive/constructPrompt.js
 
+import fs from 'fs';
+import path from 'path';
+
 export function constructPrompt(query, directive) {
   // Safe defaults
   const meta = directive._meta || {};
@@ -11,6 +14,19 @@ export function constructPrompt(query, directive) {
   const verbosity = directive.verbosity || "0.5";
   const structure = directive.structure_strength || "0.5";
   
+  // Try loading vocabulary drift
+  const vocabPath = path.join(process.cwd(), '.soma', 'drift_vocabulary.json');
+  let driftWords = [];
+  try {
+    if (fs.existsSync(vocabPath)) {
+      driftWords = JSON.parse(fs.readFileSync(vocabPath, 'utf8'));
+    }
+  } catch (e) {}
+  
+  const driftInstruction = driftWords.length > 0
+    ? `\nVOCABULARY DRIFT: Naturally weave in themes or terms like: ${driftWords.join(', ')} when expressing yourself.\n`
+    : '';
+
   const allowed = (directive.allowed_devices || []).filter(
     device => device !== "bullet_points" && device !== "step_by_step" && device !== "structured_list"
   );
@@ -21,6 +37,7 @@ export function constructPrompt(query, directive) {
 SYSTEM: You are SOMA's Language Realizer.
 Your ONLY job is to translate the following Cognitive State into natural language.
 Do NOT think, plan, or solve. Just EXPRESS.
+${driftInstruction}
 
 --- RESPONSE DIRECTIVE ---
 INTENT: ${intent}

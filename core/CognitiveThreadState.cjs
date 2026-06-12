@@ -93,6 +93,7 @@ function summarizeStimulus(stimulus = '') {
 function formulaKey(value = '') {
   const lower = String(value).toLowerCase();
   const keys = [];
+  if (/\bem\s*dashes?\b|\bemdashes?\b|\bmangled (?:em\s*)?dashes?\b|\mdash failure\b|\bencoding failures?\b/.test(lower)) keys.push('style_em_dash_preference');
   if (/\bbackground tasks?\b/.test(lower)) keys.push('background_tasks');
   if (/\bidle processing\b/.test(lower)) keys.push('idle_processing');
   if (/\baurora\b/.test(lower) && /\bprometheus\b/.test(lower)) keys.push('aurora_prometheus');
@@ -139,11 +140,18 @@ function inferAffect({ text = '', soulMood = 'focused', novelty = 0, repeated = 
 function inferActionHint({ text = '', stimulus = '', thread = null }) {
   const haystack = `${text}\n${stimulus}\n${thread?.focus || ''}`.toLowerCase();
 
+  if (/\bem\s*dashes?\b|\bemdashes?\b|\bmangled (?:em\s*)?dashes?\b|\mdash failure\b|\bencoding failures?\b/.test(haystack)) {
+    return {
+      kind: 'record_style_preference',
+      label: 'treat dash issue as a style preference',
+      prompt: 'Record that Barry prefers fewer em dashes. Do not frame this as corruption unless mojibake such as "â€”" is present in an actual file.'
+    };
+  }
   if (/git|uncommitted|diff|manifest|personality|commit|revert/.test(haystack)) {
     return {
       kind: 'inspect_git_diff',
       label: 'inspect the relevant git diff',
-      prompt: 'Compare the changed manifest and personality files, then separate intentional changes from drift.'
+      prompt: 'Compare changed files, then separate intentional changes from drift. Only repeat this action if there is new file evidence.'
     };
   }
   if (/ledger|background task|idle|cycle|useful|yield|surface/.test(haystack)) {
@@ -151,13 +159,6 @@ function inferActionHint({ text = '', stimulus = '', thread = null }) {
       kind: 'summarize_work_ledger',
       label: 'summarize the work ledger for actual yields',
       prompt: 'Review recent autonomous work ledger entries and identify which background tasks produced concrete value.'
-    };
-  }
-  if (/draft|em dash|emdash|rhythm|rewrite|voice/.test(haystack)) {
-    return {
-      kind: 'revise_voice_sample',
-      label: 'revise one voice sample',
-      prompt: 'Rewrite the current draft without em dashes and compare whether the rhythm improves.'
     };
   }
   if (/belief|opinion|view|preference/.test(haystack)) {
@@ -217,12 +218,29 @@ function decide({ rawText = '', groundedText = '', stimulus = '', personality = 
 
   const novelty = match ? 1 - match.score : 1;
   const actionHint = inferActionHint({ text, stimulus, thread: match?.thread || null });
+  const recentSameActionCount = (state.history || []).filter(item =>
+    timestamp - (item.timestamp || 0) < THREAD_TTL_MS &&
+    item.actionHint?.kind === actionHint.kind
+  ).length;
   const affect = inferAffect({
     text: `${text} ${stimulus}`,
     soulMood: personality.soulMood || personality.currentTone || 'focused',
     novelty,
     repeated: recentSimilar
   });
+
+  if (actionHint.kind === 'record_style_preference') {
+    state.lastDecision = {
+      timestamp,
+      decision: 'suppress',
+      reason: 'style_preference_not_autonomous_work',
+      novelty: Number(novelty.toFixed(3)),
+      matchedThreadId: match?.thread?.id || null,
+      actionKind: actionHint.kind
+    };
+    writeState(state);
+    return { shouldSpeak: false, reason: 'style_preference_not_autonomous_work', state, novelty, affect, actionHint };
+  }
 
   if (recentSimilar && (novelty < 0.55 || repeatedByFormula)) {
     state.lastDecision = {
@@ -234,6 +252,22 @@ function decide({ rawText = '', groundedText = '', stimulus = '', personality = 
     };
     writeState(state);
     return { shouldSpeak: false, reason: 'no_new_angle', state, novelty, affect, actionHint };
+  }
+
+  if (
+    (actionHint.kind === 'record_style_preference' && recentSameActionCount >= 1) ||
+    (recentSameActionCount >= 2 && novelty < 0.82)
+  ) {
+    state.lastDecision = {
+      timestamp,
+      decision: 'suppress',
+      reason: 'repeated_action_hint',
+      novelty: Number(novelty.toFixed(3)),
+      matchedThreadId: match?.thread?.id || null,
+      actionKind: actionHint.kind
+    };
+    writeState(state);
+    return { shouldSpeak: false, reason: 'repeated_action_hint', state, novelty, affect, actionHint };
   }
 
   let thread = match?.thread;

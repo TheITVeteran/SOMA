@@ -1,11 +1,22 @@
 import React, { useState, useEffect } from 'react';
-import { Moon, Sparkles, BookOpen, Brain, Lightbulb, Shield, TrendingUp } from 'lucide-react';
+import { createPortal } from 'react-dom';
+import { Moon, Sparkles, BookOpen, Brain, Lightbulb, Shield, TrendingUp, X } from 'lucide-react';
 
 const DreamInsights = ({ isConnected }) => {
   const [insights, setInsights] = useState(null);
   const [narrative, setNarrative] = useState('');
   const [sparks, setSparks] = useState([]);
   const [recentInsights, setRecentInsights] = useState([]);
+  const [selectedDream, setSelectedDream] = useState(null);
+
+  // Close modal on Escape key press
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key === 'Escape') setSelectedDream(null);
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   useEffect(() => {
     if (!isConnected) return;
@@ -59,6 +70,24 @@ const DreamInsights = ({ isConnected }) => {
     }
   };
 
+  // Helper to open the latest dream entry in modal when narrative card is clicked
+  const openLatestDream = () => {
+    if (recentInsights.length > 0) {
+      const latest = recentInsights[recentInsights.length - 1];
+      setSelectedDream({
+        ...latest,
+        echo: latest.echo || narrative
+      });
+    } else if (narrative) {
+      setSelectedDream({
+        type: 'dream',
+        source: 'Latest Entry',
+        content: narrative,
+        echo: ''
+      });
+    }
+  };
+
   return (
     <div className="bg-[#151518]/60 backdrop-blur-md border border-white/5 rounded-xl p-5 shadow-lg h-[250px] flex flex-col relative overflow-hidden">
       {/* Background Ambience */}
@@ -71,7 +100,11 @@ const DreamInsights = ({ isConnected }) => {
       <div className="flex-1 overflow-y-auto custom-scrollbar space-y-3 relative z-10">
         {/* Narrative Section */}
         {narrative && (
-            <div className="p-3 bg-violet-500/5 border-l-2 border-violet-500/30 rounded-r-lg mb-4">
+            <div 
+              className="p-3 bg-violet-500/5 border-l-2 border-violet-500/30 rounded-r-lg mb-4 cursor-pointer hover:bg-violet-500/10 transition-colors"
+              onClick={openLatestDream}
+              title="Click to expand dream"
+            >
                 <div className="flex items-center text-[10px] text-violet-300 font-bold mb-1 uppercase tracking-wider">
                     <BookOpen className="w-3 h-3 mr-1.5" /> Latest Entry
                 </div>
@@ -97,8 +130,13 @@ const DreamInsights = ({ isConnected }) => {
         {/* Recent Insights from Nighttime Learning */}
         {recentInsights.length > 0 && (
           <div className="space-y-2">
-            {recentInsights.slice(0, 4).map((insight, i) => (
-              <div key={insight.id || i} className={`border p-2.5 rounded-lg hover:border-white/20 transition-colors ${getInsightColor(insight.type)}`}>
+            {[...recentInsights].reverse().slice(0, 4).map((insight, i) => (
+              <div 
+                key={insight.id || i} 
+                className={`border p-2.5 rounded-lg hover:border-white/20 hover:bg-white/5 cursor-pointer transition-all ${getInsightColor(insight.type)}`}
+                onClick={() => setSelectedDream(insight)}
+                title="Click to expand dream"
+              >
                 <div className="flex items-center text-[10px] text-zinc-400 font-bold mb-1 uppercase tracking-wider">
                   {getInsightIcon(insight.type)}
                   <span>{insight.type || 'Insight'}</span>
@@ -117,7 +155,11 @@ const DreamInsights = ({ isConnected }) => {
 
         {/* Legacy predictions */}
         {insights?.predictions?.slice(0, 2).map((p, i) => (
-          <div key={i} className="bg-[#09090b]/40 border border-white/5 p-2.5 rounded-lg hover:border-violet-500/20 transition-colors">
+          <div 
+            key={i} 
+            className="bg-[#09090b]/40 border border-white/5 p-2.5 rounded-lg hover:border-violet-500/20 cursor-pointer transition-colors"
+            onClick={() => setSelectedDream({ type: 'strategic', source: 'Future Prediction', content: p.prediction, confidence: p.confidence })}
+          >
             <div className="flex items-center text-xs text-zinc-400 font-bold mb-1">
               <Sparkles className="w-3 h-3 mr-1 text-yellow-400" /> Future Prediction
             </div>
@@ -132,8 +174,70 @@ const DreamInsights = ({ isConnected }) => {
             </div>
         )}
       </div>
+
+      {/* Modal Overlay for Full Dream View - Rendered in Document Body */}
+      {selectedDream && createPortal(
+        <div 
+          className="fixed inset-0 bg-black/75 backdrop-blur-md flex items-center justify-center z-[9999] p-4 transition-all duration-300 animate-in fade-in"
+          onClick={() => setSelectedDream(null)}
+        >
+          <div 
+            className="bg-[#131316] border border-white/10 rounded-2xl w-full max-w-lg p-6 shadow-2xl relative overflow-hidden animate-in zoom-in-95 duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Background Ambience */}
+            <div className="absolute -top-12 -right-12 w-48 h-48 bg-violet-500/10 rounded-full blur-3xl pointer-events-none" />
+
+            <button 
+              className="absolute top-4 right-4 text-zinc-400 hover:text-zinc-100 hover:bg-white/5 p-1.5 rounded-lg transition-colors"
+              onClick={() => setSelectedDream(null)}
+              title="Close dream"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            <div className="flex items-center gap-2 mb-4 pr-6">
+              {getInsightIcon(selectedDream.type)}
+              <span className="text-xs font-bold text-violet-400 uppercase tracking-wider">
+                {selectedDream.type === 'dream' ? 'Episodic Dream' : selectedDream.type}
+              </span>
+              <span className="text-[10px] text-zinc-500 font-mono">
+                {selectedDream.source}
+              </span>
+            </div>
+
+            <div className="space-y-4">
+              <div className="max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
+                <p className="text-zinc-200 text-sm leading-relaxed whitespace-pre-wrap font-serif italic">
+                  "{selectedDream.content}"
+                </p>
+              </div>
+
+              {selectedDream.echo && (
+                <div className="border-t border-white/5 pt-3">
+                  <span className="text-[10px] text-zinc-500 font-bold uppercase tracking-wider block mb-1">
+                    Dream Echo
+                  </span>
+                  <p className="text-xs text-teal-400 italic leading-relaxed">
+                    "{selectedDream.echo}"
+                  </p>
+                </div>
+              )}
+
+              {selectedDream.confidence !== undefined && (
+                <div className="flex justify-between items-center text-[10px] text-zinc-500 font-mono border-t border-white/5 pt-3">
+                  <span>Confidence: {(selectedDream.confidence * 100).toFixed(0)}%</span>
+                  {selectedDream.id && <span>TS: {selectedDream.id}</span>}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
     </div>
   );
 };
 
 export default DreamInsights;
+

@@ -297,13 +297,24 @@ class MessageBroker extends EventEmitter {
       tieredBuckets.cognitive.size > 0 ||
       tieredBuckets.operational.size > 0
     );
+    const hasEventEmitterListeners = this.listenerCount(topic) > 0;
 
-    if (!hasTiered && (!flatHandlers || flatHandlers.size === 0)) {
+    if (!hasTiered && (!flatHandlers || flatHandlers.size === 0) && !hasEventEmitterListeners) {
       return 0;
     }
 
     const envelope = this._createEnvelope(message, topic);
     let delivered = 0;
+
+    // Emit standard EventEmitter event
+    try {
+      if (hasEventEmitterListeners) {
+        this.emit(topic, envelope);
+        delivered += this.listenerCount(topic);
+      }
+    } catch (err) {
+      console.error(`[MessageBroker] Error in EventEmitter dispatch for ${topic}:`, err);
+    }
 
     // Tier-ordered dispatch: strategic → cognitive → operational (sequential, each awaited)
     if (hasTiered) {

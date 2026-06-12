@@ -16,6 +16,7 @@ import crypto from 'crypto';
 import { createRequire } from 'module';
 import { VisionProcessingArbiter as LocalClipVisionProcessingArbiter } from '../../arbiters/VisionProcessingArbiter.js';
 import { appendVisionTruthAudit, readVisionTruthAudit, visionTruthAuditPath } from '../utils/VisionTruthAudit.js';
+import { recordLoopEvent, readLoopLedger, loopLedgerPath } from '../utils/LoopLedger.js';
 
 const router = express.Router();
 const require = createRequire(import.meta.url);
@@ -33,6 +34,7 @@ let lastWebcamDeepDescribeAt = 0;
 let webcamDeepDescribeActive = false;
 let localClipVisionProcessing = null;
 let localVlmModelCache = { model: null, ts: 0 };
+const visionActionRepairCooldown = new Map();
 
 const REDACTION_PATTERNS = [
     { type: 'api_key', re: /\b(sk-[A-Za-z0-9_-]{12,}|[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{20,})\b/g },
@@ -350,6 +352,18 @@ async function availableOllamaModels() {
     return Array.isArray(data.models) ? data.models : [];
 }
 
+async function selectHighQualityVlmModel() {
+    try {
+        const models = await availableOllamaModels();
+        const names = models.map(model => model.name || model.model).filter(Boolean);
+        const preferred = ['qwen2.5vl:7b', 'qwen2.5vl:latest', 'llama3.2-vision:11b', 'llama3.2-vision:latest'];
+        const found = preferred.find(name => names.includes(name));
+        return found || await selectLocalVlmModel();
+    } catch {
+        return await selectLocalVlmModel();
+    }
+}
+
 async function selectLocalVlmModel() {
     const configured = process.env.SOMA_LOCAL_VLM_MODEL || process.env.OLLAMA_VLM_MODEL || null;
     if (configured) return configured;
@@ -394,16 +408,19 @@ function usableLocalVlmAnalysis(analysis = {}) {
     return text.length >= 20 || normalizeObjects(analysis.objects || []).length > 0;
 }
 
-async function analyzeWithLocalVlm({ base64, prompt }) {
+async function analyzeWithLocalVlm({ base64, prompt, model: requestedModel = null }) {
     if (!base64) throw new Error('base64 image required for local VLM');
-    const model = await selectLocalVlmModel();
-    const ask = [
-        prompt || 'Describe this image.',
-        '',
-        'Return ONLY JSON:',
-        '{"summary":"one factual sentence about visible contents","objects":["short labels"],"ocrText":null,"uncertain":false}',
-        'Use uncertain:true if the image is unclear. Describe only visible pixels. Do not infer beyond the image.'
-    ].join('\n');
+    const model = requestedModel || await selectLocalVlmModel();
+    const isMoondream = String(model).toLowerCase().includes('moondream');
+    const ask = isMoondream
+        ? 'Describe what is visible on this screen in detail. Mention any text or windows you see.'
+        : [
+            prompt || 'Describe this image.',
+            '',
+            'Return ONLY JSON:',
+            '{"summary":"one factual sentence about visible contents","objects":["short labels"],"ocrText":null,"uncertain":false}',
+            'Use uncertain:true if the image is unclear. Describe only visible pixels. Do not infer beyond the image.'
+        ].join('\n');
     const response = await fetch(`${ollamaBaseUrl()}/api/generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -697,7 +714,7 @@ function saveImagePayload(body = {}) {
     return { imagePath, base64, mimeType };
 }
 
-async function analyzeWithAvailableVision({ imagePath, base64, mimeType, prompt, type }) {
+async function analyzeWithAvailableVision({ imagePath, base64, mimeType, prompt, type, model = null }) {
     const sys = global.__SOMA_SYSTEM || {};
     const vision = sys.visionProcessing
         || sys.visionArbiter
@@ -705,7 +722,7 @@ async function analyzeWithAvailableVision({ imagePath, base64, mimeType, prompt,
         || sys.messageBroker?.arbiters?.get?.('VisionProcessingArbiter')?.instance;
 
     try {
-        const vlm = await analyzeWithLocalVlm({ base64, prompt });
+        const vlm = await analyzeWithLocalVlm({ base64, prompt, model });
         if (usableLocalVlmAnalysis(vlm)) return vlm;
         console.warn('[Perception] Local VLM returned no usable visual description; falling back to CLIP.');
     } catch (err) {
@@ -730,7 +747,7 @@ async function analyzeWithAvailableVision({ imagePath, base64, mimeType, prompt,
     throw new Error('No trusted local vision engine available for semantic webcam analysis.');
 }
 
-async function deepDescribeScene(scene, { prompt = null, saveReflection = true } = {}) {
+async function deepDescribeScene(scene, { prompt = null, saveReflection = true, model = null } = {}) {
     if (!scene?.imagePath) throw new Error('No scene image available for deep description');
     const ask = prompt || [
         'Analyze this current SOMA Presence scene.',
@@ -746,12 +763,14 @@ async function deepDescribeScene(scene, { prompt = null, saveReflection = true }
     const mimeType = ext === '.jpg' || ext === '.jpeg' ? 'image/jpeg'
         : ext === '.webp' ? 'image/webp'
         : 'image/png';
+    const selectedModel = model || await selectHighQualityVlmModel();
     const analysis = await analyzeWithAvailableVision({
         imagePath: scene.imagePath,
         base64: imageBuffer.toString('base64'),
         mimeType,
         prompt: ask,
-        type: 'deep-describe'
+        type: 'deep-describe',
+        model: selectedModel
     });
     const redactedOcr = redactSensitiveText(analysis.ocrText || '');
     const redactedSummary = redactSensitiveText(analysis.result || scene.summary || '');
@@ -834,6 +853,49 @@ function maybeDeepDescribeWebcamScene(scene) {
     }, 0);
 }
 
+async function maybeQueueVisionActionRepair(sys = {}, actionType = 'action', params = {}, reason = '') {
+    const planner = sys.goalPlanner || global.__SOMA_SYSTEM?.goalPlanner;
+    if (!planner?.createGoal) return null;
+
+    const key = `${actionType}:${String(reason || '').slice(0, 80)}`;
+    if ((visionActionRepairCooldown.get(key) || 0) > Date.now()) return null;
+
+    const recent = await readLoopLedger(80, { loop: 'vision_action_verification' });
+    const oneHourAgo = Date.now() - 60 * 60 * 1000;
+    const failures = recent.filter(record =>
+        (record.timestamp || 0) >= oneHourAgo &&
+        record.target === actionType &&
+        record.poseidon?.state === 'FALSE'
+    );
+    if (failures.length < 2) return null;
+
+    visionActionRepairCooldown.set(key, Date.now() + 2 * 60 * 60 * 1000);
+    return await planner.createGoal({
+        type: 'operational',
+        category: 'vision_action_verification',
+        title: `Repair repeated desktop action verification failure: ${actionType}`,
+        description: [
+            `The vision-action loop recorded ${failures.length} FALSE events for "${actionType}" in the last hour.`,
+            `Latest reason: ${reason || 'unknown'}`,
+            `Latest params: ${JSON.stringify(params).slice(0, 500)}`,
+            'Inspect ComputerControl, capture timing, route approval flow, and target coordinate assumptions.',
+            'Success means failures become explicit before action or the after-action visual check passes.'
+        ].join('\n'),
+        priority: 82,
+        requireQuality: false,
+        confidence: 0.84,
+        metadata: {
+            source: 'vision_action_verification_loop',
+            actionType,
+            recentFailureIds: failures.slice(0, 5).map(item => item.id)
+        },
+        verification: {
+            required: true,
+            evidence: ['LoopLedger vision_action_verification FALSE entries', 'focused action verification test']
+        }
+    }, 'vision-action-loop');
+}
+
 /**
  * GET /api/perception/vision/frame?path=<encoded_path>
  * Serves a captured image frame for frontend preview
@@ -853,7 +915,10 @@ router.get('/vision/frame', (req, res) => {
             return res.status(404).json({ success: false, error: 'Frame not found' });
         }
 
-        res.sendFile(resolved);
+        // Use read stream to bypass Express sendFile Windows path resolution issues
+        const mime = resolved.endsWith('.png') ? 'image/png' : 'image/jpeg';
+        res.setHeader('Content-Type', mime);
+        fs.createReadStream(resolved).pipe(res);
     } catch (err) {
         res.status(500).json({ success: false, error: err.message });
     }
@@ -977,6 +1042,8 @@ router.post('/vision/ingest-frame', async (req, res) => {
         maybeDeepDescribeWebcamScene(scene);
         if (vision) {
             vision.channel = 'webcam';
+            vision.lastIngestedFramePath = imagePath;
+            vision.lastIngestedFrameTime = payload.timestamp || Date.now();
             vision.lastPerception = { ...payload, scene };
             vision.perceptionCount = (vision.perceptionCount || 0) + 1;
         }
@@ -1256,6 +1323,26 @@ router.get('/vision/audit', async (req, res) => {
             path: visionTruthAuditPath(),
             count: records.length,
             records,
+        });
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+/**
+ * GET /api/perception/loops?limit=100&loop=remote_home_presence
+ * Poseidon-tagged loop closure events across voice, vision, action, and honesty loops.
+ */
+router.get('/loops', async (req, res) => {
+    try {
+        const limit = Math.max(1, Math.min(500, Number(req.query.limit || 100)));
+        const loop = req.query.loop ? String(req.query.loop) : null;
+        const records = await readLoopLedger(limit, loop ? { loop } : {});
+        res.json({
+            success: true,
+            path: loopLedgerPath(),
+            count: records.length,
+            records
         });
     } catch (err) {
         res.status(500).json({ success: false, error: err.message });
@@ -1581,6 +1668,23 @@ router.post('/vision/execute-action', async (req, res) => {
         }
 
         if (!result.success) {
+            await recordLoopEvent({
+                loop: 'vision_action_verification',
+                phase: 'execution_failed',
+                actor: 'PerceptionRoutes',
+                target: type,
+                channel: 'desktop',
+                claim: `Desktop action ${type} failed before verification`,
+                falsificationTest: 'ComputerControl executeAction/handleBrowserAction returned success true',
+                testResult: false,
+                evidence: {
+                    actionType: type,
+                    params,
+                    error: result.error || 'Execution failed'
+                },
+                nextStep: 'Queue repair after repeated execution failures.'
+            });
+            await maybeQueueVisionActionRepair(sys, type, params, result.error || 'Execution failed');
             return res.status(500).json({ success: false, error: result.error || 'Execution failed' });
         }
 
@@ -1607,6 +1711,43 @@ router.post('/vision/execute-action', async (req, res) => {
 
             // Clear proposals list as the screen has changed
             activeProposals = [];
+
+            await recordLoopEvent({
+                loop: 'vision_action_verification',
+                phase: 'verification_capture',
+                actor: 'PerceptionRoutes',
+                target: type,
+                channel: 'desktop',
+                claim: `Desktop action ${type} produced a verification screenshot`,
+                falsificationTest: 'ComputerControl action succeeded and captureScreen returned an image path',
+                testResult: result.success === true && Boolean(cap.imagePath),
+                evidence: {
+                    actionType: type,
+                    params,
+                    sceneId: verificationScene.id,
+                    source: verificationScene.source
+                },
+                framePath: cap.imagePath,
+                nextStep: 'Use scene diff/deep description to decide whether the intended UI state changed.'
+            });
+        } else {
+            await recordLoopEvent({
+                loop: 'vision_action_verification',
+                phase: 'verification_capture_failed',
+                actor: 'PerceptionRoutes',
+                target: type,
+                channel: 'desktop',
+                claim: `Desktop action ${type} executed but verification screenshot failed`,
+                falsificationTest: 'captureScreen returned success true after action execution',
+                testResult: false,
+                evidence: {
+                    actionType: type,
+                    params,
+                    error: cap.error || 'captureScreen failed'
+                },
+                nextStep: 'Queue repair after repeated capture failures.'
+            });
+            await maybeQueueVisionActionRepair(sys, type, params, cap.error || 'captureScreen failed');
         }
 
         // Record to timeline/history via communicationHub if available

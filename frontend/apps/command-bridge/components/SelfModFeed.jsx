@@ -119,7 +119,7 @@ export default function SelfModFeed({ isConnected }) {
     const latestAvg = status?.trend?.at(-1)?.avg;
 
     return (
-        <div className="bg-[#151518]/60 backdrop-blur-md border border-white/5 rounded-xl p-5 shadow-lg">
+        <div className="bg-[#151518]/60 backdrop-blur-md border border-white/5 rounded-xl p-5 shadow-lg h-full flex flex-col">
             <div className="flex items-center justify-between mb-3">
                 <h3 className="text-zinc-100 font-semibold text-sm flex items-center uppercase tracking-wider">
                     <Wrench className="w-4 h-4 mr-2 text-fuchsia-400" /> Self-Modifications
@@ -163,7 +163,7 @@ export default function SelfModFeed({ isConnected }) {
             {error && <p className="text-red-400 text-xs text-center py-4">{error}</p>}
 
             {status && (
-                <div className="space-y-1 max-h-48 overflow-y-auto custom-scrollbar">
+                <div className="space-y-1 flex-1 min-h-0 overflow-y-auto custom-scrollbar">
                     {!showContested && entries.length === 0 && (
                         <p className="text-zinc-600 text-xs text-center py-4">No modifications yet</p>
                     )}

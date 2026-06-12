@@ -12,7 +12,7 @@ Write-Host "[Siren] Starting Project Siren Stack (with FFmpeg at $FFmpegBin)..."
 
 function Test-FishReady {
     try {
-        $r = Invoke-WebRequest -Uri "http://127.0.0.1:8080/v1/health" -Method Post -TimeoutSec 2 -EA Stop
+        $r = Invoke-WebRequest -Uri "http://127.0.0.1:8080/v1/health" -Method Post -TimeoutSec 2 -UseBasicParsing -EA Stop
         return $r.StatusCode -eq 200
     } catch {
         return $false
@@ -21,7 +21,7 @@ function Test-FishReady {
 
 function Test-PaulaReady {
     try {
-        $r = Invoke-WebRequest -Uri "http://127.0.0.1:8081/health" -Method Get -TimeoutSec 2 -EA Stop
+        $r = Invoke-WebRequest -Uri "http://127.0.0.1:8081/health" -Method Get -TimeoutSec 2 -UseBasicParsing -EA Stop
         return $r.StatusCode -eq 200
     } catch {
         return $false

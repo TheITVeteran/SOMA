@@ -3831,10 +3831,53 @@ Return ONLY valid JSON (no markdown, no explanation):
         res.json({ success: true, forecasts });
     });
 // 7. MISSING COMPONENTS (Dream, Muse, etc.)
-    app.get('/api/dream/insights', (req, res) => {
-        const raw = system.dreamArbiter?.getInsights?.() || { recentInsights: [] };
-        const insights = raw.recentInsights || [];
-        res.json({ success: true, recentInsights: insights, narrative: system.dreamArbiter?.getNarrative?.() || null });
+    app.get('/api/dream/insights', async (req, res) => {
+        try {
+            const journalPath = path.join(process.cwd(), 'SOMA', 'dream-journal.json');
+            let fileInsights = [];
+            let fileNarrative = null;
+            let fileLoaded = false;
+
+            try {
+                const stat = await fs.stat(journalPath).catch(() => null);
+                if (stat) {
+                    const content = await fs.readFile(journalPath, 'utf8');
+                    const journal = JSON.parse(content);
+                    const entries = journal.entries || [];
+                    
+                    fileInsights = entries.map(entry => ({
+                        id: entry.timestamp || Date.now(),
+                        type: entry.type === 'episodic_consolidation' ? 'dream' : (entry.type || 'dream'),
+                        source: entry.date || 'DreamConsolidation',
+                        content: entry.summary,
+                        echo: entry.echo || null,
+                        confidence: 1.0
+                    }));
+
+                    const latestEntry = entries[entries.length - 1];
+                    if (latestEntry) {
+                        fileNarrative = latestEntry.echo || latestEntry.summary || null;
+                    }
+                    fileLoaded = true;
+                }
+            } catch (err) {
+                console.error('[Routes] Failed to read dream-journal.json:', err.message);
+            }
+
+            if (fileLoaded) {
+                return res.json({
+                    success: true,
+                    recentInsights: fileInsights,
+                    narrative: fileNarrative
+                });
+            }
+
+            const raw = system.dreamArbiter?.getInsights?.() || { recentInsights: [] };
+            const insights = raw.recentInsights || [];
+            res.json({ success: true, recentInsights: insights, narrative: system.dreamArbiter?.getNarrative?.() || null });
+        } catch (error) {
+            res.status(500).json({ success: false, error: error.message });
+        }
     });
     app.get('/api/muse/sparks', (req, res) => {
         const muse = system.museEngine || system.museArbiter || system.muse;

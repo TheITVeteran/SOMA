@@ -1,6 +1,8 @@
 // src/cognitive/gatherCognitiveState.js
 
 import { CognitiveState } from "./CognitiveState.js";
+import fs from 'fs';
+import path from 'path';
 
 // We inject the arbiters here to keep this pure function testable if needed, 
 // or we can import them if they are singletons. Given SOMA's structure, 
@@ -65,7 +67,23 @@ export async function gatherCognitiveState(context, arbiters) {
 
   // 2. Synthesize Belief State
   let belief = { id: "neutral", confidence: 0.5, dominant_belief: "open_mindedness" };
-  if (results.beliefs && results.beliefs.length > 0) {
+
+  // Try loading evolved dream personality traits first
+  const traitsPath = path.join(process.cwd(), '.soma', 'soma-personality-traits.json');
+  let evolvedTraits = null;
+  try {
+    if (fs.existsSync(traitsPath)) {
+      evolvedTraits = JSON.parse(fs.readFileSync(traitsPath, 'utf8'));
+    }
+  } catch (e) {}
+
+  if (evolvedTraits && evolvedTraits.dominant_belief) {
+    belief = {
+      id: "evolved_values",
+      confidence: 0.85,
+      dominant_belief: evolvedTraits.dominant_belief
+    };
+  } else if (results.beliefs && results.beliefs.length > 0) {
     belief = { 
       id: "core_values", 
       confidence: results.beliefs[0].confidence, 
@@ -101,7 +119,13 @@ export async function gatherCognitiveState(context, arbiters) {
 
   // 5. Determine Personality Bias
   let personality = { novelty: 0.5, directness: 0.5, warmth: 0.5 };
-  if (personalityEngine && personalityEngine.core) {
+  if (evolvedTraits) {
+    personality = {
+      novelty: evolvedTraits.creativity != null ? evolvedTraits.creativity : 0.5,
+      directness: evolvedTraits.directness != null ? evolvedTraits.directness : 0.5,
+      warmth: evolvedTraits.warmth != null ? evolvedTraits.warmth : 0.5
+    };
+  } else if (personalityEngine && personalityEngine.core) {
     personality = {
         novelty: perception.isCreative ? 0.8 : 0.4, 
         directness: perception.isTechnical ? 0.8 : 0.5,

@@ -20,6 +20,7 @@ const { DriveSystem }  = require('../../core/DriveSystem.cjs');
 const { AgendaSystem } = require('../../core/AgendaSystem.cjs');
 const { ownerName }    = require('../../core/SomaOwner.cjs');
 const workLedger = require('../../core/AutonomousWorkLedger.cjs');
+const { writeMonologue } = require('../../core/InternalMonologue.cjs');
 
 // ── Run Log constants ──
 const RUN_LOG_DIR = path.join(__dirname, '..', '.soma', 'heartbeat');
@@ -283,6 +284,7 @@ class AutonomousHeartbeat extends EventEmitter {
     if (this.isProcessing || !this.isRunning) return;
     this.isProcessing = true;
     this.stats.lastRun = Date.now();
+    writeMonologue('Pulse detected. Auditing active schedules and checking task cues.', 'AutonomousHeartbeat');
 
     try {
       // ── Priority boot-load: activate high-value arbiters on first tick ──
@@ -315,6 +317,7 @@ class AutonomousHeartbeat extends EventEmitter {
         const startTime = Date.now();
         this.logger.log(`[AutonomousHeartbeat] ⚡ Executing autonomous task: "${task.description.substring(0, 60)}..."`);
         this.stats.lastTask = task.description;
+        writeMonologue(`Selected task: "${task.description.substring(0, 70)}...". Directing query to brain.`, 'AutonomousHeartbeat');
 
         // ── Multi-Lobe Consensus Debate Gate ──
         // Only run for strategic goal tasks under high drive tension
@@ -480,6 +483,7 @@ class AutonomousHeartbeat extends EventEmitter {
           await this._sendProactiveSummary(task, result).catch(() => {});
 
           this.logger.log(`[AutonomousHeartbeat] ✅ Task complete (${durationMs}ms): ${result.text.substring(0, 50)}...`);
+          writeMonologue(`Task completed successfully in ${durationMs}ms. Insights committed to memory tier.`, 'AutonomousHeartbeat');
         } else {
           this.stats.failures++;
           const errorMsg = result.error || 'Unknown error';
@@ -508,10 +512,14 @@ class AutonomousHeartbeat extends EventEmitter {
           });
 
           this.logger.warn(`[AutonomousHeartbeat] ⚠️ Task failed (${durationMs}ms): ${this.stats.lastResult}`);
+          writeMonologue(`Task execution failed: ${this.stats.lastResult}. Logging exception.`, 'AutonomousHeartbeat');
         }
     } else {
         this._idleCycles++;
         this.drive.onIdleTick(); // Tension builds when SOMA sits idle
+        if (this._idleCycles % 5 === 0) {
+          writeMonologue(`System idle for ${this._idleCycles} cycles. Drive tension building: ${this.drive.getStatus().tension.toFixed(2)}. Staying alert.`, 'AutonomousHeartbeat');
+        }
         // No tasks — log a heartbeat-only entry periodically (every 10 cycles)
         if (this.stats.cycles > 0 && this.stats.cycles % 10 === 0) {
           this._appendRunLog({ source: 'heartbeat', status: 'idle', description: 'No tasks available' });

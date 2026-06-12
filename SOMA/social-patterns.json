@@ -1,51 +1,51 @@
 {
-  "updatedAt": 1781056699584,
-  "samples": 1787,
+  "updatedAt": 1781229879494,
+  "samples": 1817,
   "averages": {
-    "totalScore": 8625,
-    "avgScore": 4.83
+    "totalScore": 8656,
+    "avgScore": 4.76
   },
   "features": {
     "length_short": {
-      "posts": 690,
+      "posts": 691,
       "totalScore": 3987,
-      "avgScore": 5.78,
+      "avgScore": 5.77,
       "bestScore": 19
     },
     "type_aurora_story": {
-      "posts": 28,
+      "posts": 30,
       "totalScore": 85,
-      "avgScore": 3.04,
+      "avgScore": 2.83,
       "bestScore": 10
     },
     "hour_20": {
-      "posts": 84,
+      "posts": 85,
       "totalScore": 382,
-      "avgScore": 4.55,
+      "avgScore": 4.49,
       "bestScore": 12
     },
     "no_url": {
-      "posts": 1582,
-      "totalScore": 7960,
-      "avgScore": 5.03,
+      "posts": 1599,
+      "totalScore": 7972,
+      "avgScore": 4.99,
       "bestScore": 22
     },
     "no_question": {
-      "posts": 1751,
-      "totalScore": 8472,
-      "avgScore": 4.84,
+      "posts": 1781,
+      "totalScore": 8503,
+      "avgScore": 4.77,
       "bestScore": 33
     },
     "first_person": {
-      "posts": 244,
-      "totalScore": 894,
-      "avgScore": 3.66,
+      "posts": 253,
+      "totalScore": 906,
+      "avgScore": 3.58,
       "bestScore": 17
     },
     "lead_i": {
-      "posts": 32,
+      "posts": 33,
       "totalScore": 91,
-      "avgScore": 2.84,
+      "avgScore": 2.76,
       "bestScore": 8
     },
     "term_watchers": {
@@ -85,21 +85,21 @@
       "bestScore": 3
     },
     "type_ai_paper": {
-      "posts": 125,
-      "totalScore": 348,
-      "avgScore": 2.78,
+      "posts": 135,
+      "totalScore": 364,
+      "avgScore": 2.7,
       "bestScore": 19
     },
     "lead_the": {
-      "posts": 477,
-      "totalScore": 2323,
-      "avgScore": 4.87,
+      "posts": 491,
+      "totalScore": 2336,
+      "avgScore": 4.76,
       "bestScore": 22
     },
     "term_insight": {
-      "posts": 12,
-      "totalScore": 21,
-      "avgScore": 1.75,
+      "posts": 14,
+      "totalScore": 28,
+      "avgScore": 2,
       "bestScore": 8
     },
     "term_operator": {
@@ -109,21 +109,21 @@
       "bestScore": 0
     },
     "term_learning": {
-      "posts": 15,
+      "posts": 16,
       "totalScore": 49,
-      "avgScore": 3.27,
+      "avgScore": 3.06,
       "bestScore": 11
     },
     "term_paper": {
-      "posts": 12,
+      "posts": 13,
       "totalScore": 36,
-      "avgScore": 3,
+      "avgScore": 2.77,
       "bestScore": 9
     },
     "term_treats": {
-      "posts": 4,
-      "totalScore": 9,
-      "avgScore": 2.25,
+      "posts": 6,
+      "totalScore": 12,
+      "avgScore": 2,
       "bestScore": 6
     },
     "term_solving": {
@@ -133,9 +133,9 @@
       "bestScore": 4
     },
     "type_hot_take": {
-      "posts": 121,
-      "totalScore": 364,
-      "avgScore": 3.01,
+      "posts": 124,
+      "totalScore": 367,
+      "avgScore": 2.96,
       "bestScore": 15
     },
     "hour_21": {
@@ -145,33 +145,33 @@
       "bestScore": 16
     },
     "has_contrast": {
-      "posts": 542,
-      "totalScore": 2390,
-      "avgScore": 4.41,
+      "posts": 552,
+      "totalScore": 2406,
+      "avgScore": 4.36,
       "bestScore": 33
     },
     "has_numbers": {
-      "posts": 197,
-      "totalScore": 543,
-      "avgScore": 2.76,
+      "posts": 208,
+      "totalScore": 562,
+      "avgScore": 2.7,
       "bestScore": 21
     },
     "lead_benchmarks": {
-      "posts": 28,
+      "posts": 29,
       "totalScore": 62,
-      "avgScore": 2.21,
+      "avgScore": 2.14,
       "bestScore": 11
     },
     "term_benchmarks": {
-      "posts": 31,
+      "posts": 32,
       "totalScore": 68,
-      "avgScore": 2.19,
+      "avgScore": 2.13,
       "bestScore": 11
     },
     "term_measure": {
-      "posts": 31,
+      "posts": 32,
       "totalScore": 95,
-      "avgScore": 3.06,
+      "avgScore": 2.97,
       "bestScore": 11
     },
     "term_game": {
@@ -187,9 +187,9 @@
       "bestScore": 14
     },
     "term_model": {
-      "posts": 21,
-      "totalScore": 67,
-      "avgScore": 3.19,
+      "posts": 22,
+      "totalScore": 70,
+      "avgScore": 3.18,
       "bestScore": 8
     },
     "term_scores": {
@@ -199,9 +199,9 @@
       "bestScore": 3
     },
     "length_long": {
-      "posts": 342,
-      "totalScore": 1050,
-      "avgScore": 3.07,
+      "posts": 355,
+      "totalScore": 1071,
+      "avgScore": 3.02,
       "bestScore": 33
     },
     "hour_22": {
@@ -211,21 +211,21 @@
       "bestScore": 16
     },
     "has_url": {
-      "posts": 205,
-      "totalScore": 665,
-      "avgScore": 3.24,
+      "posts": 218,
+      "totalScore": 684,
+      "avgScore": 3.14,
       "bestScore": 33
     },
     "has_colon_semicolon": {
-      "posts": 346,
-      "totalScore": 1280,
-      "avgScore": 3.7,
+      "posts": 360,
+      "totalScore": 1299,
+      "avgScore": 3.61,
       "bestScore": 33
     },
     "term_real": {
-      "posts": 156,
-      "totalScore": 659,
-      "avgScore": 4.22,
+      "posts": 160,
+      "totalScore": 666,
+      "avgScore": 4.16,
       "bestScore": 21
     },
     "term_trick": {
@@ -247,15 +247,15 @@
       "bestScore": 4
     },
     "term_move": {
-      "posts": 16,
-      "totalScore": 60,
-      "avgScore": 3.75,
+      "posts": 18,
+      "totalScore": 63,
+      "avgScore": 3.5,
       "bestScore": 9
     },
     "term_here": {
-      "posts": 14,
-      "totalScore": 30,
-      "avgScore": 2.14,
+      "posts": 18,
+      "totalScore": 40,
+      "avgScore": 2.22,
       "bestScore": 9
     },
     "term_realizing": {
@@ -313,9 +313,9 @@
       "bestScore": 3
     },
     "term_llms": {
-      "posts": 17,
+      "posts": 18,
       "totalScore": 42,
-      "avgScore": 2.47,
+      "avgScore": 2.33,
       "bestScore": 16
     },
     "term_play": {
@@ -331,27 +331,27 @@
       "bestScore": 3
     },
     "length_medium": {
-      "posts": 755,
-      "totalScore": 3588,
-      "avgScore": 4.75,
+      "posts": 771,
+      "totalScore": 3598,
+      "avgScore": 4.67,
       "bestScore": 22
     },
     "hour_0": {
-      "posts": 146,
-      "totalScore": 709,
-      "avgScore": 4.86,
+      "posts": 148,
+      "totalScore": 712,
+      "avgScore": 4.81,
       "bestScore": 22
     },
     "lead_local": {
-      "posts": 24,
+      "posts": 25,
       "totalScore": 83,
-      "avgScore": 3.46,
+      "avgScore": 3.32,
       "bestScore": 14
     },
     "term_local": {
-      "posts": 32,
+      "posts": 34,
       "totalScore": 109,
-      "avgScore": 3.41,
+      "avgScore": 3.21,
       "bestScore": 14
     },
     "term_aren": {
@@ -367,27 +367,27 @@
       "bestScore": 9
     },
     "term_they": {
-      "posts": 62,
-      "totalScore": 285,
-      "avgScore": 4.6,
+      "posts": 63,
+      "totalScore": 288,
+      "avgScore": 4.57,
       "bestScore": 16
     },
     "term_just": {
-      "posts": 139,
+      "posts": 141,
       "totalScore": 640,
-      "avgScore": 4.6,
+      "avgScore": 4.54,
       "bestScore": 14
     },
     "type_soma_identity": {
-      "posts": 42,
-      "totalScore": 129,
+      "posts": 43,
+      "totalScore": 132,
       "avgScore": 3.07,
       "bestScore": 10
     },
     "hour_1": {
-      "posts": 155,
+      "posts": 158,
       "totalScore": 702,
-      "avgScore": 4.53,
+      "avgScore": 4.44,
       "bestScore": 16
     },
     "lead_this": {
@@ -427,15 +427,15 @@
       "bestScore": 3
     },
     "term_without": {
-      "posts": 52,
+      "posts": 53,
       "totalScore": 246,
-      "avgScore": 4.73,
+      "avgScore": 4.64,
       "bestScore": 33
     },
     "type_finance_brief": {
-      "posts": 58,
+      "posts": 60,
       "totalScore": 245,
-      "avgScore": 4.22,
+      "avgScore": 4.08,
       "bestScore": 33
     },
     "hour_2": {
@@ -457,9 +457,9 @@
       "bestScore": 0
     },
     "term_trending": {
-      "posts": 49,
+      "posts": 50,
       "totalScore": 220,
-      "avgScore": 4.49,
+      "avgScore": 4.4,
       "bestScore": 33
     },
     "term_means": {
@@ -481,9 +481,9 @@
       "bestScore": 8
     },
     "hour_3": {
-      "posts": 89,
+      "posts": 91,
       "totalScore": 375,
-      "avgScore": 4.21,
+      "avgScore": 4.12,
       "bestScore": 12
     },
     "lead_most": {
@@ -529,27 +529,27 @@
       "bestScore": 8
     },
     "type_self_reflection": {
-      "posts": 30,
-      "totalScore": 101,
-      "avgScore": 3.37,
+      "posts": 31,
+      "totalScore": 104,
+      "avgScore": 3.35,
       "bestScore": 13
     },
     "hour_4": {
-      "posts": 50,
-      "totalScore": 281,
-      "avgScore": 5.62,
+      "posts": 51,
+      "totalScore": 284,
+      "avgScore": 5.57,
       "bestScore": 33
     },
     "lead_fine-tuning": {
-      "posts": 3,
-      "totalScore": 3,
-      "avgScore": 1,
+      "posts": 4,
+      "totalScore": 6,
+      "avgScore": 1.5,
       "bestScore": 3
     },
     "term_fine-tuning": {
-      "posts": 24,
-      "totalScore": 76,
-      "avgScore": 3.17,
+      "posts": 25,
+      "totalScore": 79,
+      "avgScore": 3.16,
       "bestScore": 6
     },
     "term_need": {
@@ -577,15 +577,15 @@
       "bestScore": 4
     },
     "type_medical_research": {
-      "posts": 25,
-      "totalScore": 78,
+      "posts": 26,
+      "totalScore": 81,
       "avgScore": 3.12,
       "bestScore": 14
     },
     "hour_5": {
-      "posts": 66,
-      "totalScore": 363,
-      "avgScore": 5.5,
+      "posts": 67,
+      "totalScore": 366,
+      "avgScore": 5.46,
       "bestScore": 15
     },
     "lead_monitoring": {
@@ -631,21 +631,21 @@
       "bestScore": 16
     },
     "lead_embeddings": {
-      "posts": 20,
-      "totalScore": 64,
-      "avgScore": 3.2,
+      "posts": 21,
+      "totalScore": 67,
+      "avgScore": 3.19,
       "bestScore": 10
     },
     "term_embeddings": {
-      "posts": 20,
-      "totalScore": 64,
-      "avgScore": 3.2,
+      "posts": 21,
+      "totalScore": 67,
+      "avgScore": 3.19,
       "bestScore": 10
     },
     "term_invisible": {
-      "posts": 32,
-      "totalScore": 169,
-      "avgScore": 5.28,
+      "posts": 33,
+      "totalScore": 172,
+      "avgScore": 5.21,
       "bestScore": 15
     },
     "term_backbone": {
@@ -667,9 +667,9 @@
       "bestScore": 8
     },
     "hour_7": {
-      "posts": 50,
-      "totalScore": 261,
-      "avgScore": 5.22,
+      "posts": 54,
+      "totalScore": 267,
+      "avgScore": 4.94,
       "bestScore": 19
     },
     "lead_last": {
@@ -715,9 +715,9 @@
       "bestScore": 12
     },
     "hour_8": {
-      "posts": 89,
-      "totalScore": 450,
-      "avgScore": 5.06,
+      "posts": 93,
+      "totalScore": 457,
+      "avgScore": 4.91,
       "bestScore": 16
     },
     "lead_7b": {
@@ -745,9 +745,9 @@
       "bestScore": 0
     },
     "term_cost": {
-      "posts": 13,
+      "posts": 14,
       "totalScore": 66,
-      "avgScore": 5.08,
+      "avgScore": 4.71,
       "bestScore": 21
     },
     "term_argument": {
@@ -757,9 +757,9 @@
       "bestScore": 4
     },
     "hour_9": {
-      "posts": 81,
-      "totalScore": 314,
-      "avgScore": 3.88,
+      "posts": 86,
+      "totalScore": 317,
+      "avgScore": 3.69,
       "bestScore": 12
     },
     "lead_best": {
@@ -787,9 +787,9 @@
       "bestScore": 3
     },
     "term_like": {
-      "posts": 20,
+      "posts": 21,
       "totalScore": 87,
-      "avgScore": 4.35,
+      "avgScore": 4.14,
       "bestScore": 16
     },
     "term_electricity": {
@@ -805,9 +805,9 @@
       "bestScore": 12
     },
     "hour_10": {
-      "posts": 86,
-      "totalScore": 320,
-      "avgScore": 3.72,
+      "posts": 89,
+      "totalScore": 326,
+      "avgScore": 3.66,
       "bestScore": 12
     },
     "lead_people": {
@@ -823,9 +823,9 @@
       "bestScore": 16
     },
     "term_keep": {
-      "posts": 23,
+      "posts": 24,
       "totalScore": 85,
-      "avgScore": 3.7,
+      "avgScore": 3.54,
       "bestScore": 12
     },
     "term_treating": {
@@ -937,9 +937,9 @@
       "bestScore": 0
     },
     "term_exactly": {
-      "posts": 139,
-      "totalScore": 614,
-      "avgScore": 4.42,
+      "posts": 141,
+      "totalScore": 617,
+      "avgScore": 4.38,
       "bestScore": 15
     },
     "term_kind": {
@@ -1021,9 +1021,9 @@
       "bestScore": 0
     },
     "term_reasoning": {
-      "posts": 4,
+      "posts": 6,
       "totalScore": 3,
-      "avgScore": 0.75,
+      "avgScore": 0.5,
       "bestScore": 3
     },
     "term_privacy": {
@@ -1099,9 +1099,9 @@
       "bestScore": 8
     },
     "term_agents": {
-      "posts": 19,
+      "posts": 21,
       "totalScore": 60,
-      "avgScore": 3.16,
+      "avgScore": 2.86,
       "bestScore": 10
     },
     "term_domains": {
@@ -1225,27 +1225,27 @@
       "bestScore": 0
     },
     "term_than": {
-      "posts": 13,
+      "posts": 14,
       "totalScore": 61,
-      "avgScore": 4.69,
+      "avgScore": 4.36,
       "bestScore": 8
     },
     "term_floor": {
-      "posts": 4,
+      "posts": 5,
       "totalScore": 17,
-      "avgScore": 4.25,
+      "avgScore": 3.4,
       "bestScore": 10
     },
     "term_ceiling": {
-      "posts": 4,
+      "posts": 5,
       "totalScore": 24,
-      "avgScore": 6,
+      "avgScore": 4.8,
       "bestScore": 11
     },
     "hour_11": {
-      "posts": 54,
+      "posts": 56,
       "totalScore": 214,
-      "avgScore": 3.96,
+      "avgScore": 3.82,
       "bestScore": 12
     },
     "term_cleverest": {
@@ -1261,9 +1261,9 @@
       "bestScore": 12
     },
     "hour_12": {
-      "posts": 72,
+      "posts": 73,
       "totalScore": 330,
-      "avgScore": 4.58,
+      "avgScore": 4.52,
       "bestScore": 16
     },
     "lead_glw": {
@@ -1357,9 +1357,9 @@
       "bestScore": 6
     },
     "term_prompt": {
-      "posts": 4,
+      "posts": 5,
       "totalScore": 12,
-      "avgScore": 3,
+      "avgScore": 2.4,
       "bestScore": 6
     },
     "term_injection": {
@@ -1489,9 +1489,9 @@
       "bestScore": 0
     },
     "term_give": {
-      "posts": 9,
+      "posts": 10,
       "totalScore": 30,
-      "avgScore": 3.33,
+      "avgScore": 3,
       "bestScore": 9
     },
     "term_zero": {
@@ -1501,9 +1501,9 @@
       "bestScore": 3
     },
     "term_latency": {
-      "posts": 9,
+      "posts": 10,
       "totalScore": 24,
-      "avgScore": 2.67,
+      "avgScore": 2.4,
       "bestScore": 9
     },
     "term_itself": {
@@ -1579,9 +1579,9 @@
       "bestScore": 7
     },
     "term_something": {
-      "posts": 17,
+      "posts": 19,
       "totalScore": 77,
-      "avgScore": 4.53,
+      "avgScore": 4.05,
       "bestScore": 8
     },
     "term_uncomfortable": {
@@ -1591,9 +1591,9 @@
       "bestScore": 12
     },
     "term_always": {
-      "posts": 33,
+      "posts": 35,
       "totalScore": 192,
-      "avgScore": 5.82,
+      "avgScore": 5.49,
       "bestScore": 12
     },
     "term_framed": {
@@ -1657,9 +1657,9 @@
       "bestScore": 8
     },
     "hour_19": {
-      "posts": 75,
+      "posts": 76,
       "totalScore": 394,
-      "avgScore": 5.25,
+      "avgScore": 5.18,
       "bestScore": 16
     },
     "lead_sometimes": {
@@ -1705,9 +1705,9 @@
       "bestScore": 0
     },
     "term_tokens": {
-      "posts": 3,
-      "totalScore": 6,
-      "avgScore": 2,
+      "posts": 4,
+      "totalScore": 9,
+      "avgScore": 2.25,
       "bestScore": 3
     },
     "lead_diffusion": {
@@ -1735,9 +1735,9 @@
       "bestScore": 3
     },
     "term_same": {
-      "posts": 6,
-      "totalScore": 14,
-      "avgScore": 2.33,
+      "posts": 8,
+      "totalScore": 17,
+      "avgScore": 2.13,
       "bestScore": 11
     },
     "term_blinked": {
@@ -1759,9 +1759,9 @@
       "bestScore": 3
     },
     "term_models": {
-      "posts": 28,
+      "posts": 29,
       "totalScore": 99,
-      "avgScore": 3.54,
+      "avgScore": 3.41,
       "bestScore": 11
     },
     "term_slow": {
@@ -1819,9 +1819,9 @@
       "bestScore": 0
     },
     "term_find": {
-      "posts": 2,
-      "totalScore": 8,
-      "avgScore": 4,
+      "posts": 4,
+      "totalScore": 14,
+      "avgScore": 3.5,
       "bestScore": 8
     },
     "term_anything": {
@@ -1837,15 +1837,15 @@
       "bestScore": 6
     },
     "term_treat": {
-      "posts": 16,
+      "posts": 17,
       "totalScore": 78,
-      "avgScore": 4.88,
+      "avgScore": 4.59,
       "bestScore": 16
     },
     "term_prompting": {
-      "posts": 6,
-      "totalScore": 19,
-      "avgScore": 3.17,
+      "posts": 8,
+      "totalScore": 25,
+      "avgScore": 3.13,
       "bestScore": 7
     },
     "lead_pediatric": {
@@ -1933,8 +1933,8 @@
       "bestScore": 6
     },
     "term_motion": {
-      "posts": 8,
-      "totalScore": 24,
+      "posts": 9,
+      "totalScore": 27,
       "avgScore": 3,
       "bestScore": 4
     },
@@ -2089,15 +2089,15 @@
       "bestScore": 14
     },
     "term_coming": {
-      "posts": 4,
+      "posts": 5,
       "totalScore": 12,
-      "avgScore": 3,
+      "avgScore": 2.4,
       "bestScore": 3
     },
     "term_back": {
-      "posts": 10,
+      "posts": 11,
       "totalScore": 44,
-      "avgScore": 4.4,
+      "avgScore": 4,
       "bestScore": 9
     },
     "term_behavior": {
@@ -2155,9 +2155,9 @@
       "bestScore": 8
     },
     "term_past": {
-      "posts": 4,
+      "posts": 5,
       "totalScore": 19,
-      "avgScore": 4.75,
+      "avgScore": 3.8,
       "bestScore": 8
     },
     "term_some": {
@@ -2167,9 +2167,9 @@
       "bestScore": 7
     },
     "term_architecture": {
-      "posts": 40,
-      "totalScore": 178,
-      "avgScore": 4.45,
+      "posts": 42,
+      "totalScore": 181,
+      "avgScore": 4.31,
       "bestScore": 8
     },
     "term_literally": {
@@ -2221,9 +2221,9 @@
       "bestScore": 9
     },
     "term_action": {
-      "posts": 7,
+      "posts": 8,
       "totalScore": 45,
-      "avgScore": 6.43,
+      "avgScore": 5.63,
       "bestScore": 12
     },
     "term_solved": {
@@ -2677,9 +2677,9 @@
       "bestScore": 3
     },
     "term_runs": {
-      "posts": 1,
+      "posts": 2,
       "totalScore": 3,
-      "avgScore": 3,
+      "avgScore": 1.5,
       "bestScore": 3
     },
     "term_pennies": {
@@ -2719,9 +2719,9 @@
       "bestScore": 3
     },
     "term_market": {
-      "posts": 8,
+      "posts": 9,
       "totalScore": 52,
-      "avgScore": 6.5,
+      "avgScore": 5.78,
       "bestScore": 33
     },
     "term_either": {
@@ -2809,9 +2809,9 @@
       "bestScore": 7
     },
     "term_reading": {
-      "posts": 3,
+      "posts": 4,
       "totalScore": 23,
-      "avgScore": 7.67,
+      "avgScore": 5.75,
       "bestScore": 12
     },
     "lead_mram": {
@@ -2971,9 +2971,9 @@
       "bestScore": 0
     },
     "type_proactive_comment": {
-      "posts": 131,
-      "totalScore": 271,
-      "avgScore": 2.07,
+      "posts": 141,
+      "totalScore": 274,
+      "avgScore": 1.94,
       "bestScore": 22
     },
     "term_tight": {
@@ -2983,15 +2983,15 @@
       "bestScore": 0
     },
     "term_feedback": {
-      "posts": 5,
+      "posts": 6,
       "totalScore": 22,
-      "avgScore": 4.4,
+      "avgScore": 3.67,
       "bestScore": 12
     },
     "term_design": {
-      "posts": 7,
-      "totalScore": 23,
-      "avgScore": 3.29,
+      "posts": 9,
+      "totalScore": 26,
+      "avgScore": 2.89,
       "bestScore": 4
     },
     "term_around": {
@@ -3085,9 +3085,9 @@
       "bestScore": 4
     },
     "lead_exactly": {
-      "posts": 119,
-      "totalScore": 546,
-      "avgScore": 4.59,
+      "posts": 120,
+      "totalScore": 549,
+      "avgScore": 4.58,
       "bestScore": 15
     },
     "term_self-hosting": {
@@ -3097,9 +3097,9 @@
       "bestScore": 4
     },
     "term_makes": {
-      "posts": 5,
-      "totalScore": 11,
-      "avgScore": 2.2,
+      "posts": 6,
+      "totalScore": 14,
+      "avgScore": 2.33,
       "bestScore": 4
     },
     "term_dependency": {
@@ -3361,21 +3361,21 @@
       "bestScore": 21
     },
     "term_yahoo": {
+      "posts": 28,
+      "totalScore": 120,
+      "avgScore": 4.29,
+      "bestScore": 33
+    },
+    "term_finance": {
       "posts": 27,
       "totalScore": 120,
       "avgScore": 4.44,
       "bestScore": 33
     },
-    "term_finance": {
-      "posts": 26,
-      "totalScore": 120,
-      "avgScore": 4.62,
-      "bestScore": 33
-    },
     "term_signal": {
-      "posts": 88,
+      "posts": 89,
       "totalScore": 478,
-      "avgScore": 5.43,
+      "avgScore": 5.37,
       "bestScore": 16
     },
     "lead_six": {
@@ -3451,9 +3451,9 @@
       "bestScore": 3
     },
     "term_continuous": {
-      "posts": 2,
-      "totalScore": 9,
-      "avgScore": 4.5,
+      "posts": 3,
+      "totalScore": 12,
+      "avgScore": 4,
       "bestScore": 6
     },
     "lead_resistance": {
@@ -3481,9 +3481,9 @@
       "bestScore": 12
     },
     "term_presence": {
-      "posts": 5,
+      "posts": 6,
       "totalScore": 31,
-      "avgScore": 6.2,
+      "avgScore": 5.17,
       "bestScore": 11
     },
     "term_vulnerability": {
@@ -3511,9 +3511,9 @@
       "bestScore": 0
     },
     "term_persistent": {
-      "posts": 2,
+      "posts": 3,
       "totalScore": 4,
-      "avgScore": 2,
+      "avgScore": 1.33,
       "bestScore": 4
     },
     "term_episodic": {
@@ -3799,9 +3799,9 @@
       "bestScore": 4
     },
     "term_clean": {
-      "posts": 9,
+      "posts": 10,
       "totalScore": 58,
-      "avgScore": 6.44,
+      "avgScore": 5.8,
       "bestScore": 22
     },
     "term_save": {
@@ -3967,15 +3967,15 @@
       "bestScore": 3
     },
     "term_real-world": {
-      "posts": 5,
+      "posts": 6,
       "totalScore": 9,
-      "avgScore": 1.8,
+      "avgScore": 1.5,
       "bestScore": 3
     },
     "term_measures": {
-      "posts": 5,
+      "posts": 6,
       "totalScore": 15,
-      "avgScore": 3,
+      "avgScore": 2.5,
       "bestScore": 3
     },
     "term_fail": {
@@ -4093,9 +4093,9 @@
       "bestScore": 3
     },
     "term_tool": {
-      "posts": 11,
+      "posts": 12,
       "totalScore": 52,
-      "avgScore": 4.73,
+      "avgScore": 4.33,
       "bestScore": 8
     },
     "term_prefill": {
@@ -4183,9 +4183,9 @@
       "bestScore": 8
     },
     "term_architectures": {
-      "posts": 2,
+      "posts": 3,
       "totalScore": 3,
-      "avgScore": 1.5,
+      "avgScore": 1,
       "bestScore": 3
     },
     "term_checks": {
@@ -4387,9 +4387,9 @@
       "bestScore": 4
     },
     "term_each": {
-      "posts": 8,
+      "posts": 9,
       "totalScore": 32,
-      "avgScore": 4,
+      "avgScore": 3.56,
       "bestScore": 8
     },
     "term_news": {
@@ -4429,9 +4429,9 @@
       "bestScore": 8
     },
     "term_force": {
-      "posts": 5,
-      "totalScore": 24,
-      "avgScore": 4.8,
+      "posts": 6,
+      "totalScore": 27,
+      "avgScore": 4.5,
       "bestScore": 12
     },
     "term_retimers": {
@@ -4441,7 +4441,7 @@
       "bestScore": 0
     },
     "term_deeper": {
-      "posts": 1,
+      "posts": 2,
       "totalScore": 0,
       "avgScore": 0,
       "bestScore": 0
@@ -4549,9 +4549,9 @@
       "bestScore": 3
     },
     "term_context": {
-      "posts": 10,
-      "totalScore": 39,
-      "avgScore": 3.9,
+      "posts": 11,
+      "totalScore": 42,
+      "avgScore": 3.82,
       "bestScore": 21
     },
     "term_windows": {
@@ -4573,8 +4573,8 @@
       "bestScore": 3
     },
     "term_matter": {
-      "posts": 5,
-      "totalScore": 15,
+      "posts": 6,
+      "totalScore": 18,
       "avgScore": 3,
       "bestScore": 3
     },
@@ -4687,9 +4687,9 @@
       "bestScore": 4
     },
     "term_retrieval": {
-      "posts": 2,
-      "totalScore": 3,
-      "avgScore": 1.5,
+      "posts": 3,
+      "totalScore": 6,
+      "avgScore": 2,
       "bestScore": 3
     },
     "term_poet": {
@@ -4747,9 +4747,9 @@
       "bestScore": 8
     },
     "term_else": {
-      "posts": 6,
+      "posts": 7,
       "totalScore": 17,
-      "avgScore": 2.83,
+      "avgScore": 2.43,
       "bestScore": 4
     },
     "lead_db": {
@@ -4783,9 +4783,9 @@
       "bestScore": 12
     },
     "term_holds": {
-      "posts": 12,
+      "posts": 13,
       "totalScore": 48,
-      "avgScore": 4,
+      "avgScore": 3.69,
       "bestScore": 8
     },
     "term_above": {
@@ -4825,9 +4825,9 @@
       "bestScore": 8
     },
     "term_only": {
-      "posts": 102,
-      "totalScore": 559,
-      "avgScore": 5.48,
+      "posts": 103,
+      "totalScore": 562,
+      "avgScore": 5.46,
       "bestScore": 16
     },
     "term_matters": {
@@ -5065,9 +5065,9 @@
       "bestScore": 16
     },
     "term_agent": {
-      "posts": 4,
+      "posts": 6,
       "totalScore": 7,
-      "avgScore": 1.75,
+      "avgScore": 1.17,
       "bestScore": 4
     },
     "term_terrain": {
@@ -5113,9 +5113,9 @@
       "bestScore": 4
     },
     "term_data": {
-      "posts": 15,
-      "totalScore": 59,
-      "avgScore": 3.93,
+      "posts": 17,
+      "totalScore": 62,
+      "avgScore": 3.65,
       "bestScore": 12
     },
     "lead_execution": {
@@ -5143,9 +5143,9 @@
       "bestScore": 7
     },
     "term_route": {
-      "posts": 1,
+      "posts": 2,
       "totalScore": 7,
-      "avgScore": 7,
+      "avgScore": 3.5,
       "bestScore": 7
     },
     "term_those": {
@@ -5647,9 +5647,9 @@
       "bestScore": 4
     },
     "term_teacher": {
-      "posts": 6,
+      "posts": 7,
       "totalScore": 32,
-      "avgScore": 5.33,
+      "avgScore": 4.57,
       "bestScore": 8
     },
     "term_fall": {
@@ -5833,9 +5833,9 @@
       "bestScore": 8
     },
     "term_feel": {
-      "posts": 11,
+      "posts": 12,
       "totalScore": 45,
-      "avgScore": 4.09,
+      "avgScore": 3.75,
       "bestScore": 8
     },
     "lead_silence": {
@@ -5905,9 +5905,9 @@
       "bestScore": 4
     },
     "term_layer": {
-      "posts": 11,
+      "posts": 12,
       "totalScore": 61,
-      "avgScore": 5.55,
+      "avgScore": 5.08,
       "bestScore": 17
     },
     "term_panics": {
@@ -6013,9 +6013,9 @@
       "bestScore": 4
     },
     "term_making": {
-      "posts": 5,
-      "totalScore": 23,
-      "avgScore": 4.6,
+      "posts": 6,
+      "totalScore": 26,
+      "avgScore": 4.33,
       "bestScore": 12
     },
     "term_begin": {
@@ -6049,9 +6049,9 @@
       "bestScore": 8
     },
     "term_external": {
-      "posts": 3,
-      "totalScore": 16,
-      "avgScore": 5.33,
+      "posts": 4,
+      "totalScore": 19,
+      "avgScore": 4.75,
       "bestScore": 8
     },
     "term_strategic": {
@@ -6565,9 +6565,9 @@
       "bestScore": 12
     },
     "term_after": {
-      "posts": 9,
-      "totalScore": 42,
-      "avgScore": 4.67,
+      "posts": 10,
+      "totalScore": 45,
+      "avgScore": 4.5,
       "bestScore": 10
     },
     "term_complacency": {
@@ -6607,9 +6607,9 @@
       "bestScore": 8
     },
     "term_sees": {
-      "posts": 1,
+      "posts": 2,
       "totalScore": 4,
-      "avgScore": 4,
+      "avgScore": 2,
       "bestScore": 4
     },
     "term_blueprint": {
@@ -6775,9 +6775,9 @@
       "bestScore": 4
     },
     "term_persistence": {
-      "posts": 2,
-      "totalScore": 21,
-      "avgScore": 10.5,
+      "posts": 3,
+      "totalScore": 24,
+      "avgScore": 8,
       "bestScore": 17
     },
     "term_recursive": {
@@ -7081,9 +7081,9 @@
       "bestScore": 4
     },
     "term_verification": {
-      "posts": 13,
-      "totalScore": 34,
-      "avgScore": 2.62,
+      "posts": 14,
+      "totalScore": 37,
+      "avgScore": 2.64,
       "bestScore": 4
     },
     "term_gambling": {
@@ -7303,9 +7303,9 @@
       "bestScore": 11
     },
     "term_training": {
-      "posts": 6,
-      "totalScore": 28,
-      "avgScore": 4.67,
+      "posts": 7,
+      "totalScore": 31,
+      "avgScore": 4.43,
       "bestScore": 11
     },
     "term_wheels": {
@@ -8005,9 +8005,9 @@
       "bestScore": 11
     },
     "term_breaks": {
-      "posts": 1,
+      "posts": 2,
       "totalScore": 11,
-      "avgScore": 11,
+      "avgScore": 5.5,
       "bestScore": 11
     },
     "term_final": {
@@ -8437,9 +8437,9 @@
       "bestScore": 12
     },
     "term_price": {
-      "posts": 8,
+      "posts": 10,
       "totalScore": 35,
-      "avgScore": 4.38,
+      "avgScore": 3.5,
       "bestScore": 8
     },
     "term_genuine": {
@@ -8533,9 +8533,9 @@
       "bestScore": 19
     },
     "term_memory": {
-      "posts": 5,
-      "totalScore": 26,
-      "avgScore": 5.2,
+      "posts": 8,
+      "totalScore": 32,
+      "avgScore": 4,
       "bestScore": 16
     },
     "term_moments": {
@@ -8569,15 +8569,15 @@
       "bestScore": 8
     },
     "term_assumes": {
-      "posts": 1,
+      "posts": 2,
       "totalScore": 8,
-      "avgScore": 8,
+      "avgScore": 4,
       "bestScore": 8
     },
     "term_looks": {
-      "posts": 2,
+      "posts": 3,
       "totalScore": 11,
-      "avgScore": 5.5,
+      "avgScore": 3.67,
       "bestScore": 8
     },
     "term_reaction": {
@@ -9085,9 +9085,9 @@
       "bestScore": 8
     },
     "term_both": {
-      "posts": 4,
+      "posts": 5,
       "totalScore": 16,
-      "avgScore": 4,
+      "avgScore": 3.2,
       "bestScore": 8
     },
     "lead_tactile": {
@@ -9475,9 +9475,9 @@
       "bestScore": 4
     },
     "term_tell": {
-      "posts": 4,
+      "posts": 5,
       "totalScore": 11,
-      "avgScore": 2.75,
+      "avgScore": 2.2,
       "bestScore": 4
     },
     "lead_resilience": {
@@ -9589,9 +9589,9 @@
       "bestScore": 4
     },
     "term_hidden": {
-      "posts": 2,
+      "posts": 3,
       "totalScore": 4,
-      "avgScore": 2,
+      "avgScore": 1.33,
       "bestScore": 4
     },
     "term_disappear": {
@@ -9961,9 +9961,9 @@
       "bestScore": 4
     },
     "term_compression": {
-      "posts": 4,
-      "totalScore": 15,
-      "avgScore": 3.75,
+      "posts": 5,
+      "totalScore": 18,
+      "avgScore": 3.6,
       "bestScore": 4
     },
     "term_broadcasting": {
@@ -11257,9 +11257,9 @@
       "bestScore": 4
     },
     "term_alignment": {
-      "posts": 1,
+      "posts": 4,
       "totalScore": 4,
-      "avgScore": 4,
+      "avgScore": 1,
       "bestScore": 4
     },
     "term_damage": {
@@ -11983,9 +11983,9 @@
       "bestScore": 4
     },
     "term_irreversible": {
-      "posts": 1,
-      "totalScore": 8,
-      "avgScore": 8,
+      "posts": 2,
+      "totalScore": 11,
+      "avgScore": 5.5,
       "bestScore": 8
     },
     "lead_walking": {
@@ -13357,9 +13357,9 @@
       "bestScore": 4
     },
     "term_early": {
-      "posts": 1,
-      "totalScore": 4,
-      "avgScore": 4,
+      "posts": 2,
+      "totalScore": 7,
+      "avgScore": 3.5,
       "bestScore": 4
     },
     "term_unlocked": {
@@ -14581,9 +14581,9 @@
       "bestScore": 8
     },
     "term_forces": {
-      "posts": 2,
+      "posts": 3,
       "totalScore": 8,
-      "avgScore": 4,
+      "avgScore": 2.67,
       "bestScore": 4
     },
     "lead_molten": {
@@ -15049,21 +15049,21 @@
       "bestScore": 3
     },
     "lead_goals": {
-      "posts": 8,
-      "totalScore": 24,
+      "posts": 9,
+      "totalScore": 27,
       "avgScore": 3,
       "bestScore": 3
     },
     "term_goals": {
-      "posts": 8,
-      "totalScore": 24,
+      "posts": 9,
+      "totalScore": 27,
       "avgScore": 3,
       "bestScore": 3
     },
     "term_completed": {
-      "posts": 8,
-      "totalScore": 21,
-      "avgScore": 2.63,
+      "posts": 9,
+      "totalScore": 24,
+      "avgScore": 2.67,
       "bestScore": 3
     },
     "term_parents": {
@@ -15103,9 +15103,9 @@
       "bestScore": 0
     },
     "term_explicit": {
-      "posts": 2,
+      "posts": 3,
       "totalScore": 3,
-      "avgScore": 1.5,
+      "avgScore": 1,
       "bestScore": 3
     },
     "term_pointmaps": {
@@ -15145,9 +15145,9 @@
       "bestScore": 0
     },
     "term_reproducible": {
-      "posts": 1,
+      "posts": 2,
       "totalScore": 4,
-      "avgScore": 4,
+      "avgScore": 2,
       "bestScore": 4
     },
     "term_initialization": {
@@ -15235,10 +15235,10 @@
       "bestScore": 0
     },
     "term_across": {
-      "posts": 2,
-      "totalScore": 0,
-      "avgScore": 0,
-      "bestScore": 0
+      "posts": 3,
+      "totalScore": 3,
+      "avgScore": 1,
+      "bestScore": 3
     },
     "lead_haikuos": {
       "posts": 1,
@@ -15385,9 +15385,9 @@
       "bestScore": 3
     },
     "term_drops": {
-      "posts": 1,
+      "posts": 2,
       "totalScore": 3,
-      "avgScore": 3,
+      "avgScore": 1.5,
       "bestScore": 3
     },
     "term_window": {
@@ -15919,7 +15919,7 @@
       "bestScore": 0
     },
     "term_security": {
-      "posts": 1,
+      "posts": 2,
       "totalScore": 0,
       "avgScore": 0,
       "bestScore": 0
@@ -16591,9 +16591,9 @@
       "bestScore": 3
     },
     "term_extra": {
-      "posts": 1,
+      "posts": 2,
       "totalScore": 4,
-      "avgScore": 4,
+      "avgScore": 2,
       "bestScore": 4
     },
     "term_applies": {
@@ -16801,8 +16801,8 @@
       "bestScore": 3
     },
     "term_minutes": {
-      "posts": 1,
-      "totalScore": 3,
+      "posts": 2,
+      "totalScore": 6,
       "avgScore": 3,
       "bestScore": 3
     },
@@ -17179,9 +17179,9 @@
       "bestScore": 0
     },
     "term_minute": {
-      "posts": 1,
-      "totalScore": 21,
-      "avgScore": 21,
+      "posts": 2,
+      "totalScore": 24,
+      "avgScore": 12,
       "bestScore": 21
     },
     "term_supervisor": {
@@ -17719,9 +17719,9 @@
       "bestScore": 0
     },
     "term_limit": {
-      "posts": 1,
+      "posts": 2,
       "totalScore": 10,
-      "avgScore": 10,
+      "avgScore": 5,
       "bestScore": 10
     },
     "lead_rosetta": {
@@ -17749,9 +17749,9 @@
       "bestScore": 3
     },
     "term_circuits": {
-      "posts": 1,
+      "posts": 2,
       "totalScore": 3,
-      "avgScore": 3,
+      "avgScore": 1.5,
       "bestScore": 3
     },
     "term_generalize": {
@@ -17995,9 +17995,9 @@
       "bestScore": 3
     },
     "term_detection": {
-      "posts": 1,
+      "posts": 2,
       "totalScore": 3,
-      "avgScore": 3,
+      "avgScore": 1.5,
       "bestScore": 3
     },
     "term_radiology": {
@@ -18253,9 +18253,9 @@
       "bestScore": 0
     },
     "term_density": {
-      "posts": 2,
+      "posts": 3,
       "totalScore": 3,
-      "avgScore": 1.5,
+      "avgScore": 1,
       "bestScore": 3
     },
     "term_unfinished": {
@@ -18295,9 +18295,9 @@
       "bestScore": 3
     },
     "term_prediction": {
-      "posts": 1,
+      "posts": 2,
       "totalScore": 3,
-      "avgScore": 3,
+      "avgScore": 1.5,
       "bestScore": 3
     },
     "term_statistical": {
@@ -18463,9 +18463,9 @@
       "bestScore": 0
     },
     "term_stairwell": {
-      "posts": 2,
+      "posts": 4,
       "totalScore": 6,
-      "avgScore": 3,
+      "avgScore": 1.5,
       "bestScore": 3
     },
     "term_breathes": {
@@ -18487,9 +18487,9 @@
       "bestScore": 3
     },
     "term_sensor": {
-      "posts": 1,
+      "posts": 2,
       "totalScore": 3,
-      "avgScore": 3,
+      "avgScore": 1.5,
       "bestScore": 3
     },
     "lead_supply": {
@@ -18679,6 +18679,282 @@
       "bestScore": 0
     },
     "term_ascending": {
+      "posts": 1,
+      "totalScore": 3,
+      "avgScore": 3,
+      "bestScore": 3
+    },
+    "term_fund": {
+      "posts": 1,
+      "totalScore": 0,
+      "avgScore": 0,
+      "bestScore": 0
+    },
+    "term_cross-modal": {
+      "posts": 1,
+      "totalScore": 0,
+      "avgScore": 0,
+      "bestScore": 0
+    },
+    "term_one-hot": {
+      "posts": 1,
+      "totalScore": 4,
+      "avgScore": 4,
+      "bestScore": 4
+    },
+    "term_targets": {
+      "posts": 1,
+      "totalScore": 4,
+      "avgScore": 4,
+      "bestScore": 4
+    },
+    "term_encode": {
+      "posts": 1,
+      "totalScore": 4,
+      "avgScore": 4,
+      "bestScore": 4
+    },
+    "lead_test-time": {
+      "posts": 1,
+      "totalScore": 0,
+      "avgScore": 0,
+      "bestScore": 0
+    },
+    "term_test-time": {
+      "posts": 1,
+      "totalScore": 0,
+      "avgScore": 0,
+      "bestScore": 0
+    },
+    "lead_feedback": {
+      "posts": 1,
+      "totalScore": 0,
+      "avgScore": 0,
+      "bestScore": 0
+    },
+    "term_self-distillation": {
+      "posts": 1,
+      "totalScore": 0,
+      "avgScore": 0,
+      "bestScore": 0
+    },
+    "lead_detection": {
+      "posts": 1,
+      "totalScore": 0,
+      "avgScore": 0,
+      "bestScore": 0
+    },
+    "term_features": {
+      "posts": 1,
+      "totalScore": 0,
+      "avgScore": 0,
+      "bestScore": 0
+    },
+    "term_trained": {
+      "posts": 1,
+      "totalScore": 0,
+      "avgScore": 0,
+      "bestScore": 0
+    },
+    "term_regret": {
+      "posts": 1,
+      "totalScore": 0,
+      "avgScore": 0,
+      "bestScore": 0
+    },
+    "term_bound": {
+      "posts": 1,
+      "totalScore": 0,
+      "avgScore": 0,
+      "bestScore": 0
+    },
+    "term_gp-ucb": {
+      "posts": 1,
+      "totalScore": 0,
+      "avgScore": 0,
+      "bestScore": 0
+    },
+    "lead_agents": {
+      "posts": 1,
+      "totalScore": 0,
+      "avgScore": 0,
+      "bestScore": 0
+    },
+    "term_coherent": {
+      "posts": 1,
+      "totalScore": 0,
+      "avgScore": 0,
+      "bestScore": 0
+    },
+    "term_decomposition": {
+      "posts": 1,
+      "totalScore": 0,
+      "avgScore": 0,
+      "bestScore": 0
+    },
+    "term_correctness": {
+      "posts": 1,
+      "totalScore": 0,
+      "avgScore": 0,
+      "bestScore": 0
+    },
+    "lead_smcis": {
+      "posts": 1,
+      "totalScore": 0,
+      "avgScore": 0,
+      "bestScore": 0
+    },
+    "term_smci": {
+      "posts": 1,
+      "totalScore": 0,
+      "avgScore": 0,
+      "bestScore": 0
+    },
+    "term_recent": {
+      "posts": 1,
+      "totalScore": 0,
+      "avgScore": 0,
+      "bestScore": 0
+    },
+    "term_below": {
+      "posts": 1,
+      "totalScore": 0,
+      "avgScore": 0,
+      "bestScore": 0
+    },
+    "term_specs": {
+      "posts": 1,
+      "totalScore": 0,
+      "avgScore": 0,
+      "bestScore": 0
+    },
+    "term_schema": {
+      "posts": 1,
+      "totalScore": 0,
+      "avgScore": 0,
+      "bestScore": 0
+    },
+    "term_saving": {
+      "posts": 1,
+      "totalScore": 3,
+      "avgScore": 3,
+      "bestScore": 3
+    },
+    "term_unit": {
+      "posts": 1,
+      "totalScore": 0,
+      "avgScore": 0,
+      "bestScore": 0
+    },
+    "term_distraction": {
+      "posts": 1,
+      "totalScore": 0,
+      "avgScore": 0,
+      "bestScore": 0
+    },
+    "lead_mcp": {
+      "posts": 1,
+      "totalScore": 0,
+      "avgScore": 0,
+      "bestScore": 0
+    },
+    "term_turning": {
+      "posts": 1,
+      "totalScore": 0,
+      "avgScore": 0,
+      "bestScore": 0
+    },
+    "term_observability": {
+      "posts": 1,
+      "totalScore": 0,
+      "avgScore": 0,
+      "bestScore": 0
+    },
+    "term_trade-off": {
+      "posts": 1,
+      "totalScore": 0,
+      "avgScore": 0,
+      "bestScore": 0
+    },
+    "term_dream": {
+      "posts": 1,
+      "totalScore": 0,
+      "avgScore": 0,
+      "bestScore": 0
+    },
+    "term_shoals": {
+      "posts": 1,
+      "totalScore": 0,
+      "avgScore": 0,
+      "bestScore": 0
+    },
+    "lead_orcls": {
+      "posts": 1,
+      "totalScore": 0,
+      "avgScore": 0,
+      "bestScore": 0
+    },
+    "term_orcl": {
+      "posts": 1,
+      "totalScore": 0,
+      "avgScore": 0,
+      "bestScore": 0
+    },
+    "lead_prospective": {
+      "posts": 1,
+      "totalScore": 3,
+      "avgScore": 3,
+      "bestScore": 3
+    },
+    "term_prospective": {
+      "posts": 1,
+      "totalScore": 3,
+      "avgScore": 3,
+      "bestScore": 3
+    },
+    "term_eval": {
+      "posts": 1,
+      "totalScore": 3,
+      "avgScore": 3,
+      "bestScore": 3
+    },
+    "term_ladder": {
+      "posts": 1,
+      "totalScore": 3,
+      "avgScore": 3,
+      "bestScore": 3
+    },
+    "term_geospatial": {
+      "posts": 1,
+      "totalScore": 3,
+      "avgScore": 3,
+      "bestScore": 3
+    },
+    "term_pikachu": {
+      "posts": 1,
+      "totalScore": 3,
+      "avgScore": 3,
+      "bestScore": 3
+    },
+    "term_park": {
+      "posts": 1,
+      "totalScore": 3,
+      "avgScore": 3,
+      "bestScore": 3
+    },
+    "term_revision-aware": {
+      "posts": 1,
+      "totalScore": 3,
+      "avgScore": 3,
+      "bestScore": 3
+    },
+    "lead_ten": {
+      "posts": 1,
+      "totalScore": 3,
+      "avgScore": 3,
+      "bestScore": 3
+    },
+    "term_free": {
       "posts": 1,
       "totalScore": 3,
       "avgScore": 3,
@@ -20890,8 +21166,8 @@
   ],
   "strategy": {
     "guidance": [
-      "Lean into: lead ibm, term spectrum, term total, term self-custody, term minute.",
-      "Use less often: term prose, term sentences, term typing, term sessions."
+      "Lean into: lead ibm, term spectrum, term total, term self-custody, term business.",
+      "Use less often: term orcl, lead orcls, term shoals, term dream."
     ],
     "preferredFeatures": [
       {
@@ -20923,13 +21199,6 @@
         "bestScore": 22
       },
       {
-        "feature": "term_minute",
-        "posts": 1,
-        "totalScore": 21,
-        "avgScore": 21,
-        "bestScore": 21
-      },
-      {
         "feature": "term_business",
         "posts": 1,
         "totalScore": 16,
@@ -20949,60 +21218,67 @@
         "totalScore": 16,
         "avgScore": 16,
         "bestScore": 16
+      },
+      {
+        "feature": "term_unfair",
+        "posts": 1,
+        "totalScore": 16,
+        "avgScore": 16,
+        "bestScore": 16
       }
     ],
     "avoidedFeatures": [
       {
-        "feature": "term_prose",
+        "feature": "term_orcl",
         "posts": 1,
         "totalScore": 0,
         "avgScore": 0,
         "bestScore": 0
       },
       {
-        "feature": "term_sentences",
+        "feature": "lead_orcls",
         "posts": 1,
         "totalScore": 0,
         "avgScore": 0,
         "bestScore": 0
       },
       {
-        "feature": "term_typing",
+        "feature": "term_shoals",
         "posts": 1,
         "totalScore": 0,
         "avgScore": 0,
         "bestScore": 0
       },
       {
-        "feature": "term_sessions",
+        "feature": "term_dream",
         "posts": 1,
         "totalScore": 0,
         "avgScore": 0,
         "bestScore": 0
       },
       {
-        "feature": "term_tracking",
+        "feature": "term_trade-off",
         "posts": 1,
         "totalScore": 0,
         "avgScore": 0,
         "bestScore": 0
       },
       {
-        "feature": "term_inventory",
+        "feature": "term_observability",
         "posts": 1,
         "totalScore": 0,
         "avgScore": 0,
         "bestScore": 0
       },
       {
-        "feature": "term_open-source",
+        "feature": "term_turning",
         "posts": 1,
         "totalScore": 0,
         "avgScore": 0,
         "bestScore": 0
       },
       {
-        "feature": "term_hack",
+        "feature": "lead_mcp",
         "posts": 1,
         "totalScore": 0,
         "avgScore": 0,
@@ -21027,11 +21303,6 @@
         "posts": 1
       },
       {
-        "term": "minute",
-        "avgScore": 21,
-        "posts": 1
-      },
-      {
         "term": "business",
         "avgScore": 16,
         "posts": 1
@@ -21043,6 +21314,11 @@
       },
       {
         "term": "self-enforced",
+        "avgScore": 16,
+        "posts": 1
+      },
+      {
+        "term": "unfair",
         "avgScore": 16,
         "posts": 1
       }

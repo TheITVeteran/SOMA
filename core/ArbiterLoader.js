@@ -377,8 +377,8 @@ export class ArbiterLoader {
             return null;
         }
 
-        // Extract class name — `export class Foo` or `export default class Foo`
-        const clsMatch = src.match(/export\s+(?:default\s+)?class\s+(\w+)/);
+        // Extract class name — `export class Foo` or `export default class Foo` or CJS `class Foo`
+        const clsMatch = src.match(/(?:export\s+(?:default\s+)?)?class\s+(\w+)/);
         if (!clsMatch) return null; // Not a class-based arbiter, skip
         const cls = clsMatch[1];
 

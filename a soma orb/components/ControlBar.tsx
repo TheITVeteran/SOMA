@@ -1,13 +1,15 @@
 import React from 'react';
-import { Mic, Power } from 'lucide-react';
+import { Mic, Power, Camera, CameraOff } from 'lucide-react';
 
 interface ControlBarProps {
   isConnected: boolean;
   onToggle: () => void;
   inputVolume: number; // 0 to 1, based on user mic input
+  webcamActive: boolean;
+  onToggleWebcam: () => void;
 }
 
-export const ControlBar: React.FC<ControlBarProps> = ({ isConnected, onToggle, inputVolume }) => {
+export const ControlBar: React.FC<ControlBarProps> = ({ isConnected, onToggle, inputVolume, webcamActive, onToggleWebcam }) => {
   // Input visualization
   const glowIntensity = isConnected ? Math.max(0.1, inputVolume) : 0;
   const ringScale = 1 + (glowIntensity * 0.5);
@@ -57,7 +59,8 @@ export const ControlBar: React.FC<ControlBarProps> = ({ isConnected, onToggle, i
   const colors = getMicColors();
 
   return (
-    <div className="flex flex-col items-center gap-4">
+    <div className="flex flex-row items-center gap-6">
+      {/* Mic / Power Button */}
       <div className="relative">
         {/* Reverb Ring - Dynamic Color */}
         <div 
@@ -83,6 +86,24 @@ export const ControlBar: React.FC<ControlBarProps> = ({ isConnected, onToggle, i
           )}
         </button>
       </div>
+
+      {/* Webcam Toggle Button */}
+      {isConnected && (
+        <button
+          onClick={onToggleWebcam}
+          className={`
+            flex items-center justify-center w-12 h-12 rounded-full border transition-all duration-100 bg-black hover:bg-zinc-900
+            ${webcamActive ? 'border-cyan-400 text-cyan-200 shadow-[0_0_15px_rgba(34,211,238,0.4)]' : 'border-zinc-800 text-zinc-500 hover:border-zinc-700 hover:text-zinc-400'}
+          `}
+          title={webcamActive ? "Pause Webcam" : "Enable Webcam"}
+        >
+          {webcamActive ? (
+            <Camera className="w-5 h-5 animate-pulse" />
+          ) : (
+            <CameraOff className="w-5 h-5" />
+          )}
+        </button>
+      )}
     </div>
   );
 };

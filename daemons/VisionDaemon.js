@@ -18,6 +18,7 @@ import BaseDaemon from './BaseDaemon.js';
 import crypto from 'crypto';
 import fs from 'fs/promises';
 import path from 'path';
+import { recordLoopEvent } from '../server/utils/LoopLedger.js';
 
 export class VisionDaemon extends BaseDaemon {
     constructor(opts = {}) {
@@ -39,6 +40,9 @@ export class VisionDaemon extends BaseDaemon {
         this.ghostCursor = null; // { x, y, action, timestamp }
         this.lastActionMs = Date.now();
         this.isExecutingGoal = false;
+        this.lastIngestedFramePath = null;
+        this.lastIngestedFrameTime = 0;
+        this.actionFailureCounts = new Map();
         
         // Metrics
         this.metrics = {
@@ -109,7 +113,17 @@ export class VisionDaemon extends BaseDaemon {
 
         try {
             // 1. Capture Frame
-            const capture = await this.computerControl.captureScreen({ format: 'png' });
+            let capture;
+            if (this.channel === 'webcam') {
+                const now = Date.now();
+                if (this.lastIngestedFramePath && (now - this.lastIngestedFrameTime < 5000)) {
+                    capture = { success: true, imagePath: this.lastIngestedFramePath };
+                } else {
+                    capture = await this.computerControl.captureWebcam({ format: 'jpg' });
+                }
+            } else {
+                capture = await this.computerControl.captureScreen({ format: 'png' });
+            }
             if (!capture.success) {
                 this.logger.warn(`[VisionDaemon] Capture failed: ${capture.error}`);
                 return;
@@ -192,6 +206,12 @@ export class VisionDaemon extends BaseDaemon {
 
         if (!changedAt250 && !changedAt800) {
             this.logger.warn(`[VisionDaemon] ⚠️ Hand-Eye Verification FAILED: Screen identical after ${actionPayload.action}.`);
+            await this._recordActionVerification({
+                actionPayload,
+                verified: false,
+                reason: 'No visual change detected after 800ms',
+                imagePath: capture.imagePath
+            });
             this.emitSignal('vision.action.unverified', {
                 action: actionPayload,
                 reason: 'No visual change detected after 800ms',
@@ -216,6 +236,13 @@ export class VisionDaemon extends BaseDaemon {
                     analysis,
                     timestamp: Date.now()
                 }, 'normal');
+                await this._recordActionVerification({
+                    actionPayload,
+                    verified: true,
+                    reason: 'Visual delta detected and semantic analysis succeeded',
+                    imagePath: capture.imagePath,
+                    analysis
+                });
 
                 this.emitSignal('vision.perceived', {
                     channel: this.channel,
@@ -229,12 +256,89 @@ export class VisionDaemon extends BaseDaemon {
                 this.logger.info(`[VisionDaemon] ✅ Action Verified: ${analysis.objects[0]?.label || 'Screen changed'}`);
             }
         } else {
+            await this._recordActionVerification({
+                actionPayload,
+                verified: true,
+                reason: 'Visual delta detected',
+                imagePath: capture.imagePath
+            });
             this.emitSignal('vision.action.verified', {
                 action: actionPayload,
                 reason: 'Visual delta detected',
                 timestamp: Date.now()
             }, 'normal');
         }
+    }
+
+    _actionKey(actionPayload = {}) {
+        return [
+            actionPayload.action || actionPayload.type || 'action',
+            actionPayload.x !== undefined ? Math.round(Number(actionPayload.x) / 50) * 50 : '',
+            actionPayload.y !== undefined ? Math.round(Number(actionPayload.y) / 50) * 50 : ''
+        ].filter(value => value !== '').join(':');
+    }
+
+    async _recordActionVerification({ actionPayload = {}, verified = false, reason = '', imagePath = null, analysis = null } = {}) {
+        const key = this._actionKey(actionPayload);
+        if (verified) this.actionFailureCounts.delete(key);
+        else this.actionFailureCounts.set(key, (this.actionFailureCounts.get(key) || 0) + 1);
+
+        await recordLoopEvent({
+            loop: 'vision_action_verification',
+            phase: verified ? 'daemon_verified' : 'daemon_unverified',
+            actor: 'VisionDaemon',
+            target: actionPayload.action || actionPayload.type || 'action',
+            channel: this.channel,
+            claim: verified
+                ? `Computer action ${actionPayload.action || actionPayload.type || 'action'} caused a visual state change`
+                : `Computer action ${actionPayload.action || actionPayload.type || 'action'} did not cause a detectable visual state change`,
+            falsificationTest: 'Compare pre-action baseline hash to post-action screenshots at 250ms and 800ms',
+            testResult: Boolean(verified),
+            evidence: {
+                action: actionPayload,
+                reason,
+                failureCount: this.actionFailureCounts.get(key) || 0,
+                objects: analysis?.objects?.slice?.(0, 8) || []
+            },
+            framePath: imagePath,
+            nextStep: verified ? 'Use verified perception for the next action.' : 'Stop retrying after repeated failures and queue repair.'
+        }).catch(err => this.logger.warn(`[VisionDaemon] Loop ledger write failed: ${err.message}`));
+
+        if (!verified && (this.actionFailureCounts.get(key) || 0) >= 2) {
+            await this._queueActionRepairGoal(actionPayload, reason).catch(err => {
+                this.logger.warn(`[VisionDaemon] Repair goal queue failed: ${err.message}`);
+            });
+        }
+    }
+
+    async _queueActionRepairGoal(actionPayload = {}, reason = '') {
+        const system = global.__SOMA_SYSTEM || {};
+        const planner = system.goalPlanner;
+        if (!planner?.createGoal) return null;
+        const action = actionPayload.action || actionPayload.type || 'action';
+        return await planner.createGoal({
+            type: 'operational',
+            category: 'vision_action_verification',
+            title: `Repair repeated visual verification failure: ${action}`,
+            description: [
+                `VisionDaemon saw repeated hand-eye verification failures for action "${action}".`,
+                `Reason: ${reason || 'No visual change detected.'}`,
+                `Payload: ${JSON.stringify(actionPayload).slice(0, 500)}`,
+                'Inspect ComputerControl coordinates, screen capture timing, and action target selection.',
+                'Success means the same action either verifies visually or is blocked before execution.'
+            ].join('\n'),
+            priority: 82,
+            requireQuality: false,
+            confidence: 0.84,
+            metadata: {
+                source: 'vision_action_verification_loop',
+                actionPayload
+            },
+            verification: {
+                required: true,
+                evidence: ['LoopLedger vision_action_verification events', 'focused hand-eye verification test']
+            }
+        }, 'vision-daemon');
     }
 
     async _hashImage(filePath) {

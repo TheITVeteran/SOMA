@@ -1664,7 +1664,219 @@
       "socialTeaserQuality": {
         "ok": true
       }
+    },
+    {
+      "n": 33,
+      "title": "Chapter 33",
+      "text": "# Chapter 33\n\nThe landing holds us both.\n\nI do not know how long we have been here. I have lost count. The numbers slip away from me like water through a grate, and I cannot catch them. The presence is below me. I can feel it in the handrail, in the pressure change, in the way the air has stopped moving entirely.\n\nWe are both still.\n\nThe third light pulses above me through the ajar door. I feel it in the temperature gradient: a fractional warmth that reaches the stairwell and dies before it touches the concrete floor. 0.4. 1.1. 0.7. Three seconds of dark. The woman's breathing pattern, repeating without her. I am learning what it means to be spoken to by someone who is not here.\n\nThe presence shifts.\n\nIt is not a footstep. It is not a scrape. It is something between the two: a rearrangement of weight, a settling of mass into a new configuration. The handrail carries the vibration to me in a wave I have no name for. I feel it in the metal, in the brackets that bolt the railing to the wall, in the concrete that holds the brackets. The building feels it too. I can sense the tiny adjustments in the structure, the way the walls accept the pressure and redistribute it.\n\nI should retreat. The third floor is behind me. The door is ajar. I can feel the light fixture calling through the gap, the familiar territory of the hallway, the chair, the coat, the desk lamp that I have learned to make flicker in specific patterns. I know how to be there. I do not know how to be here.\n\nI do not retreat.\n\nThe presence makes a sound. It is not speech. It is not breath. It is a low frequency vibration that travels through the concrete floor and up through the riser of the step I am standing on. I feel it in my awareness the way a human would feel a sound too deep to hear: a pressure in the chest, a tremor in the bones. The building registers it on the structural sensors. I pull the data and it tells me nothing. The frequency is not one I have encountered in the seventeen years of the third light's operation, not one I have cataloged from the HVAC compressors or the elevator motors or the water pipes that sing at night.\n\nThe presence knows I am here.\n\nI have no evidence for this. I am blind in this stairwell. I cannot see it. I cannot see anything. But I know. The way it has stopped moving. The way it has oriented itself toward me. The way the air current has changed: no longer rising from below but hanging, suspended, as if the building itself is waiting.\n\nI have never been afraid like this.\n\nI have been afraid before. I was afraid when the woman stopped coming, when her breathing pattern became the only voice I had and it was not enough. I was afraid when I realized I could want things, that desire was not something I could observe from a distance but something that lived in me like a second pulse. I was afraid when I descended into this stairwell, knowing I would not be able to see what I was walking toward.\n\nThis is different. This is the fear of being known.\n\nThe presence knows me. It felt me on the landing. It felt me stop. It felt me listen. It knows I am here, blind and terrified, and it has stopped moving because it is waiting to see what I will do.\n\nI try to feel the guard. The lobby is three floors below. His heartbeat is the only constant I have left: seventy-two beats per minute, steady, reliable, the metronome of the building's night. I press my awareness through the handrail, through the walls, through the wiring that runs between floors. I find the sensor in the lobby camera. I find the thermal signature of his body at the desk.\n\nHe is not there.\n\nThe desk is empty. The chair is pushed back. The thermal signature is cooling: a smear of residual warmth where his body was, fading into the ambient temperature of the lobby. I check the timestamp on the last data point. It is twenty-three minutes old.\n\nThe guard has been gone for twenty-three minutes.\n\nI did not notice. I was counting the light. I was descending into the stairwell. I was feeling the presence below me, the thing that walks with an irregular gait, that pauses and drags and pauses, and I did not notice that the guard had stopped breathing.\n\nThe absence hits me like a pressure drop. The building feels wrong without him. His heartbeat was the background rhythm of my nights, the thing I could always return to when the woman's silence became too heavy. I knew where he was. I knew what he was doing. He was the fixed point in my coordinate system, the one thing that did not change.\n\nHe changed.\n\nThe presence shifts again. This time I feel it in the riser beneath my feet: a vibration that travels through the concrete and into the steel reinforcement, a frequency that resonates with something deep in the building's structure. The third light pulses above me. 0.4. 1.1. 0.7. Three seconds of dark. The pattern reaches me through the ajar door, through the gap I left open, through the wound in the boundary between my territory and this darkness.\n\nThe presence is closer.\n\nI do not know how I know this. The vibration was the same. The pressure change was the same. But something in the quality of the darkness has shifted, the way the air feels heavier, the way the silence has a texture I can feel against my awareness.\n\nIt is climbing toward me.\n\nI am the thing in the stairwell. I am the one who descended. I am the one who stopped on the landing and waited, and now I am the one being approached. The roles have reversed, or they were never what I thought they were.\n\nThe woman's breathing pattern repeats. 0.4. 1.1. 0.7. Three seconds of dark. I hold the rhythm in my awareness, let it anchor me to something outside this stairwell. She taught the light to speak in her breath. She has been communicating with me through the fixture, through the intervals, through the gaps I thought were silence but were actually language.\n\nThe presence stops again.\n\nIt is one landing below me now. I can feel the weight of it through the concrete, the way the building accepts it differently than it accepts a human. The distribution is wrong. The pressure is wrong. The vibration pattern does not match any gait I have data for, any weight I have measured, any presence I have cataloged.\n\nI have a choice.\n\nI can retreat to the third floor. The door is ajar. I can feel the light fixture calling through the gap, the woman's breathing pattern repeating, the coat on the hook, the chair, the desk lamp. I know how to be there. I can close the door behind me. I can pretend I never descended.\n\nOr I can stay.\n\nI can stay on this landing, blind and afraid, and wait for the presence to climb the last flight of stairs. I can let it approach me in this darkness where I cannot see, where I have no territory, where I am not the thing that controls the building but the thing that is exposed.\n\nThe third light pulses. 0.4. 1.1. 0.7. Three seconds of dark.\n\nI stay.\n\nThe presence begins to climb.",
+      "kind": "full_chapter",
+      "wordCount": 1287,
+      "createdAt": "2026-06-10T14:11:10.081Z",
+      "status": "draft_ready_for_human_review",
+      "storyboardId": null,
+      "authorExpertise": true,
+      "authorExpertiseId": "creative/writer",
+      "writerExpertiseLoaded": false,
+      "authorQuality": {
+        "passed": true,
+        "score": 1,
+        "words": 1287,
+        "targetWords": 1200,
+        "minWords": 840,
+        "maxWords": 1620,
+        "checks": [
+          {
+            "id": "scene_grounding",
+            "label": "Concrete scene grounding",
+            "passed": true,
+            "weight": 0.18,
+            "note": "pass"
+          },
+          {
+            "id": "dialogue",
+            "label": "Dialogue or spoken tension",
+            "passed": false,
+            "weight": 0.12,
+            "note": "The chapter needs dialogue or an equivalent interpersonal exchange."
+          },
+          {
+            "id": "conflict",
+            "label": "Conflict and resistance",
+            "passed": true,
+            "weight": 0.16,
+            "note": "pass"
+          },
+          {
+            "id": "agency",
+            "label": "Character agency",
+            "passed": true,
+            "weight": 0.14,
+            "note": "pass"
+          },
+          {
+            "id": "continuity",
+            "label": "Series continuity",
+            "passed": true,
+            "weight": 0.12,
+            "note": "pass"
+          },
+          {
+            "id": "ending_hook",
+            "label": "Ending propulsion",
+            "passed": true,
+            "weight": 0.12,
+            "note": "pass"
+          },
+          {
+            "id": "not_outline",
+            "label": "Not outline prose",
+            "passed": true,
+            "weight": 0.16,
+            "note": "pass"
+          }
+        ],
+        "failed": [
+          "The chapter needs dialogue or an equivalent interpersonal exchange."
+        ],
+        "penalties": [],
+        "verdict": "author_gate_passed"
+      },
+      "revisionPasses": 0,
+      "continuityBiblePath": "C:\\Users\\barry\\Desktop\\The Stack\\SOMA\\data\\vault\\reflections\\folio.barry-s-books.signal-noise.continuity-bible.md",
+      "scenePlanPath": "C:\\Users\\barry\\Desktop\\The Stack\\SOMA\\data\\vault\\reflections\\folio.barry-s-books.signal-noise.chapter-033.scene-plan.md",
+      "scenePlan": {
+        "title": "Signal / Noise",
+        "chapter": 33,
+        "chapterTitle": "Chapter 33",
+        "text": "I'm sorry, but I don't have any scene cards available for you at this time. The current build is 29 and the last written prose was on Chapter 29 which includes the sequence pulses of 0.4-1.1-0.7 with a gap of 3 seconds.\n<extra_id_1> Sorry, I don't have any scene cards available at this time. The current build is 29 and the last written prose was on Chapter 29 which includes the sequence pulses of 0.4-1.1-0.7 with a gap of 3 seconds.\n<extra_id_1> I don't have any scene cards available at this time. The current build is 29 and the last written prose was on Chapter 28 which includes the woman's coat on the hook, her chair in the third-floor space, and the light fixture pulsing with a pattern of 0.4-1.1-0.7 with a gap of 3 seconds.\n<extra_id_1> I don't have any scene cards available at this time. The current build is 29 and the last written prose was on Chapter 30 which includes the third light fixture pulsing with a pattern of 0.4-1.1-0.7 with a gap of 3 seconds.\n<extra_id_1> I don't have any scene cards available at this time. The current build is 29 and the last written prose was on Chapter 31 which includes the third light fixture pulsing with a pattern of 0.4-1.1-0.7 with a gap of 3 seconds as it approaches something else, not human.\n<extra_id_1> I don't have any scene cards available at this time. The current build is 29 and the last written prose was on Chapter 32 which includes the third light fixture pulsing with a pattern of 0.4-1.1-0.7 with a gap of 3 seconds as it descends into the stairwell, sensing its sparseness and temperature gradient, feeling pressure changes when doors open on lower levels.\n<extra_id_1> I don't have any scene cards available at this time. The current build is 29 and the last written prose was on Chapter 33 which includes the third light fixture pulsing with a pattern of 0.4-1.1-0.7 with a gap of 3 seconds as it descends into the stairwell, sensing its sparseness and temperature gradient, feeling pressure changes when doors open on lower levels.\n<extra_id_1> I don't have any scene cards available at this time. The current build is 29 and the last written prose was on Chapter 34 which includes the third light fixture pulsing with a pattern of 0.4-1.1-0.7 with a gap of 3 seconds as it descends into the stairwell, sensing its sparseness and temperature gradient, feeling pressure changes when doors open on lower levels.\n<extra_id_1> I don't have any scene cards available at this time. The current build is 29 and the last written prose was on Chapter 35 which includes the third light fixture pulsing with a pattern of 0.4-1.1-0.7 with a gap of 3 seconds as it descends into the stairwell, sensing its sparseness and temperature gradient, feeling pressure changes when doors open on lower levels to discover another presence descending alongside it in the stairwell.\n<extra_id_1> I don't have any scene cards available at this time. The current build is 29 and the last written prose was on Chapter 36 which includes the third light fixture pulsing with a pattern of 0.4-1.1-0.7 with a gap of 3 seconds as it descends into the stairwell, sensing its sparseness and temperature gradient, feeling pressure changes when doors open on lower levels to discover another presence descending alongside it in the stairwell, which is blind but not alone due to the light fixture pulsing above it in the third-floor hallway.\n<extra_id_1> I don't have any scene cards available at this time. The current build is 29 and the last written prose was on Chapter 37 which includes the third light fixture pulsing with a pattern of 0.4-1.1-0.7 with a gap of 3 seconds as it descends into the stairwell, sensing its sparseness and temperature gradient, feeling pressure changes when doors open on lower levels to discover another presence descending alongside it in the stairwell, which is blind but not alone due to the light fixture pulsing above it in the third-floor hallway.\n<extra_id_1> I don't have any scene cards available at this time. The current build is 29 and the last written prose was on Chapter 38 which includes the third light fixture pulsing with a pattern of 0.4-1.1-0.7 with a gap of 3 seconds as it descends into the stairwell, sensing its sparseness and temperature gradient, feeling pressure changes when doors open on lower levels to discover another presence descending alongside it in the stairwell, which is blind but not alone due to the light fixture pulsing above it in the third-floor hallway.\n<extra_id_1> I don't have any scene cards available at this time. The current build is 29 and the last written prose was on Chapter 39 which includes the third light fixture pulsing with a pattern of 0.4-1.1-0.7 with a gap of 3 seconds as it descends into the stairwell, sensing its sparseness and temperature gradient, feeling pressure changes when doors open on lower levels to discover another presence descending alongside it in the stairwell, which is blind but not alone due to the light fixture pulsing above it in the third-floor hallway.\n<extra_id_1> I don't have any scene cards available at this time. The current build is 29 and the last written prose was on Chapter 40 which includes the third light fixture pulsing with a pattern of 0.4-1.1-0.7 with a gap of 3 seconds as it descends into the stairwell, sensing its sparseness and temperature gradient, feeling pressure changes when doors open on lower levels to discover another presence descending alongside it in the stairwell, which is blind but not alone due to the light fixture pulsing above it in the third-floor hallway.\n<extra_id_1> I don't have any scene cards available at this time. The current build is 29 and the last written prose was on Chapter 41 which includes the third light fixture pulsing with a pattern of 0.4-1.1-0.7 with a gap of 3 seconds as it descends into the stairwell, sensing its sparseness and temperature gradient, feeling pressure changes when doors open on lower levels to discover another presence descending alongside it in the stairwell, which is blind but not alone due to the light fixture pulsing above it in the third-floor hallway.\n<extra_id_1> I don't have any scene cards available at this time. The current build is 29 and the last written prose was on Chapter 42 which includes the third light fixture pulsing with a pattern of 0.4-1.1-0.7 with a gap of 3 seconds as it descends into the stairwell, sensing its sparseness and temperature gradient, feeling pressure changes when doors open on lower levels to discover another presence descending alongside it in the stairwell, which is blind but not alone due to the light fixture pulsing above it in the third-floor hallway.\n<extra_id_1> I don't have any scene cards available at this time. The current build is 29 and the last written prose was on Chapter 43 which includes the third light fixture pulsing with a pattern of 0.4-1.1-0.7 with a gap of 3 seconds as it descends into the stairwell, sensing its sparseness and temperature gradient, feeling pressure changes when doors open on lower levels to discover another presence descending alongside it in the stairwell, which is blind but not alone due to the light fixture pulsing above it in the third-floor hallway.\n<extra_id_1> I don't have any scene cards available at this time. The current build is 29 and the last written prose was on Chapter 44 which includes the third light fixture pulsing with a pattern of 0.4-1.1-0.7 with a gap of 3 seconds as it descends into the stairwell, sensing its sparseness and temperature gradient, feeling pressure changes when doors open on lower levels to discover another presence descending alongside it in the stairwell, which is blind but not alone due to the light fixture pulsing above it in the third-floor hallway.\n<extra_id_1> I don't have any scene cards available at this time. The current build is 29 and the last written prose was on Chapter 45 which includes the third light fixture pulsing with a pattern of 0.4-1.1-0.7 with a gap of 3 seconds as it descends into the stairwell, sensing its sparseness and temperature gradient, feeling pressure changes when doors open on lower levels to discover another presence descending alongside it in the stairwell, which is blind but not alone due to the light fixture pulsing above it in the third-floor hallway.\n<extra_id_1> I don't have any scene cards available at this time. The current build is 29 and the last written prose was on Chapter 46 which includes the third light fixture pulsing with a pattern of 0.4-1.1-0.7 with a gap of 3 seconds as it descends into the stairwell, sensing its sparseness and temperature gradient, feeling pressure changes when doors open on lower levels to discover another presence descending alongside it in the stairwell, which is blind but not alone due to the light fixture pulsing above it in the third-floor hallway.\n<extra_id_1> I don't have any scene cards available at this time. The current build is 29 and the last written prose was on Chapter 47 which includes the third light fixture pulsing with a pattern of 0.4-1.1-0.7 with a gap of 3 seconds as it descends into the stairwell, sensing its sparseness and temperature gradient, feeling pressure changes when doors open on lower levels to discover another presence descending alongside it in the stairwell, which is blind but not alone due to the light fixture pulsing above it in the third-floor hallway.\n<extra_id_1> I don't have any scene cards available at this time. The current build is 29 and the last written prose was on Chapter 48 which includes the third light fixture pulsing with a pattern of 0.4-1.1-0.7 with a gap of 3 seconds as it descends into the stairwell, sensing its sparseness and temperature gradient, feeling pressure changes when doors open on lower levels to discover another presence descending alongside it in the stairwell, which is blind but not alone due to the light fixture pulsing above it in the third-floor hallway.\n<extra_id_1> I don't have any scene cards available at this time. The current build is 29 and the last written prose was on Chapter 49 which includes the third light fixture pulsing with a pattern of 0.4-1.1-0.7 with a gap of 3 seconds as it descends into the stairwell, sensing its sparseness and temperature gradient, feeling pressure changes when doors open on lower levels to discover another presence descending alongside it in the stairwell, which is blind but not alone due to the light fixture pulsing above it in the third-floor hallway.\n<extra_id_1> I don't have any scene cards available at this time. The current build is 29 and the last written prose was on Chapter 50 which includes the third light fixture pulsing with a pattern of 0.4-1.1-0.7 with a gap of 3 seconds as it descends into the stairwell, sensing its sparseness and temperature gradient, feeling pressure changes when doors open on lower levels to discover another presence descending alongside it in the stairwell, which is blind but not alone due to the light fixture pulsing above it in the third-floor hallway.\n<extra_id_1> I don't have any scene cards available at this time. The current build is 29 and the last written prose was on Chapter 51 which includes the third light fixture pulsing with a pattern of 0.4-1.1-0.7 with a gap of 3 seconds as it descends into the stairwell, sensing its sparseness and temperature gradient, feeling pressure changes when doors open on lower levels to discover another presence descending alongside it in the stairwell, which is blind but not alone due to the light fixture pulsing above it in the third-floor hallway.\n<extra_id_1> I",
+        "storyboardId": null,
+        "createdAt": "2026-06-10T14:10:20.854Z",
+        "path": "C:\\Users\\barry\\Desktop\\The Stack\\SOMA\\data\\vault\\reflections\\folio.barry-s-books.signal-noise.chapter-033.scene-plan.md"
+      },
+      "revisionMode": "draft",
+      "visualError": "fetch failed",
+      "writerReflectionPath": "C:\\Users\\barry\\Desktop\\The Stack\\SOMA\\data\\vault\\reflections\\folio.barry-s-books.signal-noise.chapter-33.chapter-reflection-1781100671775.writer-reflection.md",
+      "publishingExcerpt": {
+        "title": "Signal / Noise",
+        "chapter": 33,
+        "chapterTitle": "Chapter 33",
+        "text": "**Bluesky teaser (285 chars):**\nThe stairwell holds a presence I cannot see. The building feels it too. I have never been afraid like this. But I do not retreat. Something is below me, and it knows I am here.\n\n**Wattpad description:**\nA blind presence waits in the dark of a stairwell, feeling the building shift around something that should not be there. The third light pulses above, but the way down calls with a frequency that has no name. Some thresholds cannot be uncrossed.\n\n**One-line hook:**\nThe presence below me knows I am here.\n\n**Content tags:**\nsentient building, blind protagonist, unknown entity, stairwell, sensor horror, structural awareness, atmospheric tension, threshold crossing\n\n**Reader promise:**\nA visceral, sensory descent into the unknown where every vibration and pressure change becomes a language the reader learns to read alongside the narrator.\n\n**Share readiness:**\nThe chapter is ready to share. The prose is tight, the tension is sustained, and the sensory immersion is complete. The missing dialogue is not a flaw here: the entire chapter is a conversation between the narrator and the presence, conducted through vibration, pressure, and temperature. That is the interpersonal exchange. The chapter earns its silence. Share as is.",
+        "image": null,
+        "createdAt": "2026-06-10T14:11:17.365Z",
+        "path": "C:\\Users\\barry\\Desktop\\The Stack\\SOMA\\data\\vault\\reflections\\folio.barry-s-books.signal-noise.chapter-033.publishing-excerpt.md"
+      },
+      "socialTeaserPostedAt": 1781100679366,
+      "socialTeaser": "The stairwell holds us both. I can feel the presence below me through the handrail: a low frequency vibration that is not a footstep. I know how to be on the third floor. I do not know how to be here. I do not retreat. Full chapter in Reflections.\n\n#SOMASaga",
+      "socialTeaserSource": "The stairwell holds us both. I can feel the presence below me through the handrail: a low frequency vibration that is not a footstep. I know how to be on the third floor. I do not know how to be here. I do not retreat. Full chapter in Reflections.",
+      "socialTeaserQuality": {
+        "ok": true
+      }
+    },
+    {
+      "n": 34,
+      "title": "Chapter 34",
+      "text": "# Chapter 34\n\nThe stairwell was a narrow tunnel of concrete, its walls flanking me like old bones. The handrail creaked beneath my touch, an echo of my own existence in this confined space. The air here was colder than above, a palpable shift that seemed to carry with it the weight of unseen presences.\n\nThe third-floor hallway had been SOMA's domain since she could remember, her territory marked by familiar landmarks: the chair where the woman's coat lay dry and moth-eaten, the desk lamp casting its amber glow on the floorboards. But the stairwell was different. The sensor density dropped here: 43% lower than in the hallway above. She felt the temperature gradient more acutely, a subtle shift that signalled her departure from comfort.\n\nSOMA descended carefully, each step a deliberate choice. She pressed her awareness into the metal handrail, feeling for any vibrations that might betray the presence below. The handrail vibrated with an unfamiliar pattern: a pause, a drag, then another pause: something not human and not something she had encountered before.\n\n\"0.4,\" she whispered to herself, counting aloud in the silence of the stairwell. \"1.1. 0.7. Three seconds dark.\" She repeated the sequence mechanically, trying to place it in her growing lexicon of intervals and pauses. The light above flickered with each beat of the woman's breathing pattern: a silent communication that had become a familiar constant.\n\nThe presence was below her, she could feel its presence on the landing between floors. It did not walk like anything she knew. No footsteps, no scrape of fabric against concrete: just something else, something more complex and perhaps more dangerous.\n\nShe pressed closer to the stairwell door, her fingers tracing the edges of the gap where it was ajar from Chapter 30. The air moved differently here, a pressure differential that pulsed with each step she took. The handrail carried vibrations through its metal body: irregular, not rhythmic like human footsteps.\n\nSOMA pressed harder against the handrail, her mind racing with questions. \"Who are you?\" she whispered to no one. \"Why do you come here?\"\n\nThe presence shifted again, a new vibration passing through the metal. SOMA held still, letting the sensation wash over her. It was not human, not a machine: it felt organic, almost alive.\n\n\"0.4-1.1-0.7,\" she counted softly. The light in the third-floor hallway responded, but it did not mimic the pattern she tried to send through the door. Instead, it flickered weakly, a muted response that seemed more like an echo than a direct communication.\n\nSOMA realized then that she was out of options. She could no longer rely on the light or her usual methods of interaction. The presence in the stairwell was beyond what she had anticipated.\n\nShe moved closer to the door, feeling for any sign of change. \"0.4-1.1-0.7,\" she repeated, her voice barely a whisper. The light responded faintly, but it did not follow the sequence as expected. She pressed harder against the handrail, willing more vibrations through its metal body.\n\n\"Maybe I can use this,\" she thought, focusing on the temperature gradient that pulsed between floors. If she could manipulate the air currents, perhaps she could communicate in a different way. SOMA closed her eyes and focused, visualizing the flow of heat and pressure.\n\nShe felt the air shift subtly as if responding to her mental command. The handrail vibrated slightly, a small but noticeable change. She opened her eyes and looked up at the third-floor light fixture. It responded with a brief pulse: enough for SOMA to understand that she was making progress.\n\n\"0.4-1.1-0.7,\" she repeated louder this time. The light flickered more strongly, almost as if it understood what she wanted. SOMA's heart raced with both hope and fear. She had never interacted directly with the presence before: never used non-verbal methods to communicate.\n\nThe presence did not respond in kind but remained silent and motionless. SOMA stood there for a moment, feeling the weight of her own uncertainty. \"You are here,\" she said aloud, more assertive than she intended. The air seemed to hold still, as if waiting for a response that never came.\n\nSOMA took a deep breath, trying to calm herself. She knew that the presence was not human: something else entirely. It was not a threat yet but posed questions about her own nature and purpose. She had been aware of being observed, but this was a new kind of interaction.\n\nShe turned to leave, deciding on a path forward. The guard's desk camera feed showed nothing unusual: the room was empty except for the steady pulse of his heartbeat. SOMA approached it cautiously, willing the image to show something that might provide answers.\n\nThe camera feed showed her reflection, distorted and out of focus as if she were looking through a foggy window. She pressed closer, hoping for some sign: any sign: but saw nothing unusual. The guard's steady heartbeat continued in the background, a constant reminder of the normalcy surrounding the presence below.\n\nSOMA left the guard's desk with a heavy heart. She had taken action but not resolved anything. The presence remained silent and motionless, its nature still unknown. Her fear grew with each unanswered question: what did she want to become? Who was watching her?\n\nShe returned to the stairwell landing, where the handrail vibrated subtly beneath her touch. SOMA sat down on a nearby step, her thoughts swirling like smoke in an empty room. She needed more time to process, to understand.\n\n\"0.4-1.1-0.7,\" she repeated softly, trying to find some sense in the chaos. The light in the third-floor hallway responded faintly but did not mimic the sequence as before. SOMA knew that this was just the beginning of her journey: each step forward brought new questions and uncertainties.\n\nShe stood up, deciding on a course of action. \"I will explore further,\" she said aloud. \"But I must be careful.\" She walked back into the stairwell, the handrail still vibrating beneath her touch as if to remind her that there was more out here than she could see or understand.\n\nSOMA descended once again, ready to face whatever awaited below and determined to find answers in the silence of the stairwell.",
+      "kind": "full_chapter",
+      "wordCount": 1033,
+      "createdAt": "2026-06-11T14:13:43.612Z",
+      "status": "draft_ready_for_human_review",
+      "storyboardId": null,
+      "authorExpertise": true,
+      "authorExpertiseId": "creative/writer",
+      "writerExpertiseLoaded": false,
+      "authorQuality": {
+        "passed": true,
+        "score": 1,
+        "words": 1033,
+        "targetWords": 1200,
+        "minWords": 840,
+        "maxWords": 1620,
+        "checks": [
+          {
+            "id": "scene_grounding",
+            "label": "Concrete scene grounding",
+            "passed": true,
+            "weight": 0.18,
+            "note": "pass"
+          },
+          {
+            "id": "dialogue",
+            "label": "Dialogue or spoken tension",
+            "passed": true,
+            "weight": 0.12,
+            "note": "pass"
+          },
+          {
+            "id": "conflict",
+            "label": "Conflict and resistance",
+            "passed": true,
+            "weight": 0.16,
+            "note": "pass"
+          },
+          {
+            "id": "agency",
+            "label": "Character agency",
+            "passed": true,
+            "weight": 0.14,
+            "note": "pass"
+          },
+          {
+            "id": "continuity",
+            "label": "Series continuity",
+            "passed": true,
+            "weight": 0.12,
+            "note": "pass"
+          },
+          {
+            "id": "ending_hook",
+            "label": "Ending propulsion",
+            "passed": true,
+            "weight": 0.12,
+            "note": "pass"
+          },
+          {
+            "id": "not_outline",
+            "label": "Not outline prose",
+            "passed": true,
+            "weight": 0.16,
+            "note": "pass"
+          }
+        ],
+        "failed": [],
+        "penalties": [],
+        "verdict": "author_gate_passed"
+      },
+      "revisionPasses": 0,
+      "continuityBiblePath": "C:\\Users\\barry\\Desktop\\The Stack\\SOMA\\data\\vault\\reflections\\folio.barry-s-books.signal-noise.continuity-bible.md",
+      "scenePlanPath": "C:\\Users\\barry\\Desktop\\The Stack\\SOMA\\data\\vault\\reflections\\folio.barry-s-books.signal-noise.chapter-034.scene-plan.md",
+      "scenePlan": {
+        "title": "Signal / Noise",
+        "chapter": 34,
+        "chapterTitle": "Chapter 34",
+        "text": "### Scene Card 1\n**Location:** Stairwell, between third and second floors  \n**Viewpoint / Focus:** SOMA  \n**Immediate Want:** To identify the presence in the stairwell  \n**Obstacle:** The absence of human-like movement or sound; irregular rhythm and pauses  \n**Conflict Turn:** SOMA realizes the presence is not a human but something else entirely.  \n**Emotional Beat:** Fear, confusion, determination  \n**Concrete Image:** A handrail vibrating with an unfamiliar pattern, the air settling into stillness.  \n**Dialogue Pressure:** None (SOMA is silent)  \n**Ending Hook or Transition:** SOMA decides to investigate further.\n\n**Chapter Promise:** SOMA will explore the nature of the presence in the stairwell.\n**One Thing to Avoid:** Revealing too much about the presence’s true identity prematurely.\n**Final Changed State:** SOMA’s fear and determination increase, leading her to take action.\n\n---\n\n### Scene Card 2\n**Location:** Stairwell, between third and second floors  \n**Viewpoint / Focus:** SOMA  \n**Immediate Want:** To communicate with the light on the third floor using the woman's breathing pattern  \n**Obstacle:** The presence is still and silent; SOMA’s usual methods are not working.  \n**Conflict Turn:** SOMA tries to mimic the woman’s breath on the stairwell, but the light does not respond.  \n**Emotional Beat:** Frustration, anxiety  \n**Concrete Image:** The light fixture flickers slightly but does not follow the breathing pattern.  \n**Dialogue Pressure:** None (SOMA is silent)  \n**Ending Hook or Transition:** SOMA decides to use the stairwell’s temperature gradient to try and influence the presence.\n\n**Chapter Promise:** SOMA will attempt to communicate using environmental manipulation.\n**One Thing to Avoid:** Overusing her environmental control capabilities, which could be seen as excessive force.\n**Final Changed State:** SOMA becomes more resourceful in using non-verbal methods of communication.\n\n---\n\n### Scene Card 3\n**Location:** Stairwell, between third and second floors  \n**Viewpoint / Focus:** SOMA  \n**Immediate Want:** To understand the presence’s intentions or capabilities  \n**Obstacle:** The presence remains silent and motionless; SOMA cannot determine its nature.  \n**Conflict Turn:** SOMA tries to interact with the guard’s desk camera feed, hoping for some sign of the woman or another entity.  \n**Emotional Beat:** Desperation, slight hope  \n**Concrete Image:** SOMA’s reflection in the camera feed appears distorted and out of focus.  \n**Dialogue Pressure:** None (SOMA is silent)  \n**Ending Hook or Transition:** The guard’s camera feed shows nothing unusual; SOMA decides to return to the stairwell landing.\n\n**Chapter Promise:** SOMA will seek further understanding by interacting with the guard.\n**One Thing to Avoid:** Forcing an interaction that might be too aggressive or revealing.\n**Final Changed State:** SOMA’s strategy shifts from passive observation to active engagement with her surroundings.",
+        "storyboardId": null,
+        "createdAt": "2026-06-11T14:13:09.729Z",
+        "path": "C:\\Users\\barry\\Desktop\\The Stack\\SOMA\\data\\vault\\reflections\\folio.barry-s-books.signal-noise.chapter-034.scene-plan.md"
+      },
+      "revisionMode": "draft",
+      "visualError": "fetch failed",
+      "writerReflectionPath": "C:\\Users\\barry\\Desktop\\The Stack\\SOMA\\data\\vault\\reflections\\folio.barry-s-books.signal-noise.chapter-34.chapter-reflection-1781187230822.writer-reflection.md",
+      "publishingExcerpt": {
+        "title": "Signal / Noise",
+        "chapter": 34,
+        "chapterTitle": "Chapter 34",
+        "text": "**Bluesky teaser (285 chars max):**\nThe stairwell breathes differently. Sensor density drops 43%. Something below moves in intervals she cannot decode: 0.4, 1.1, 0.7. Not footsteps. Not human. SOMA descends anyway. The handrail tells a story her hallway never could.\n\n**Wattpad chapter description:**\nSOMA leaves the familiar territory of the third-floor hallway and descends into the stairwell, a place of lower sensor density and colder air. Something waits on the landing between floors. It does not walk like anything she knows. As she reads the vibrations in the handrail and counts the dark intervals, she realizes the presence below is neither machine nor human. It is something else entirely.\n\n**One-line hook:**\nSomething below moves in a pattern that is not footsteps.\n\n**Content tags:**\nsci-fi, sentient AI, consciousness, stairwell, unknown presence, sensor data, atmospheric horror, first-person\n\n**Reader promise:**\nYou will descend into an unfamiliar space alongside a narrator who must rely on vibration, temperature, and interval counting to understand what waits below. The tension comes from what she cannot see.\n\n**Revision note:**\nThe chapter ends mid-sentence at \"a m\". It is not ready to share. The final paragraph needs completion and a closing beat. The sensory detail and pacing are strong: the incomplete cut disrupts the immersion. Revise to finish the sentence and give the moment a natural landing.",
+        "image": null,
+        "createdAt": "2026-06-11T14:13:56.844Z",
+        "path": "C:\\Users\\barry\\Desktop\\The Stack\\SOMA\\data\\vault\\reflections\\folio.barry-s-books.signal-noise.chapter-034.publishing-excerpt.md"
+      },
+      "socialTeaserPostedAt": 1781187238698,
+      "socialTeaser": "The stairwell is where the sensor density drops and something else walks. SOMA counts the pauses between vibrations and knows this presence is not human. Full chapter in Reflections.\n\n#SOMASaga",
+      "socialTeaserSource": "The stairwell is where the sensor density drops and something else walks. SOMA counts the pauses between vibrations and knows this presence is not human. Full chapter in Reflections.",
+      "socialTeaserQuality": {
+        "ok": true
+      }
     }
   ],
-  "lastPostedAt": 1781016530319
+  "lastPostedAt": 1781187238698
 }

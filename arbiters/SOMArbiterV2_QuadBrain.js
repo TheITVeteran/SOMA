@@ -446,7 +446,7 @@ INTEGRATED RESPONSE:`;
             this.auditLogger.info(`[${this.name}] 🦙 Fallback Local: ${modelToUse}...`);
         }
         
-        const result = await this._callOllama(prompt, modelToUse, temperature, maxTokens, systemPrompt, history, context.signal || null);
+        const result = await this._callOllama(prompt, modelToUse, temperature, maxTokens, systemPrompt, history, context.signal || null, context.images || []);
         const cleanText = (result.text || '').replace(/—/g, ': ');
         return { ...result, text: cleanText, brain: requestedLobe || 'LOCAL_HEARTBEAT', provider: 'local', lobeModel: !!lobeModel };
     } catch (e) {
@@ -495,11 +495,30 @@ INTEGRATED RESPONSE:`;
     return { text, provider: 'gemini' };
   }
 
-  async _callOllama(prompt, model, temperature, maxTokens, systemPrompt, history = [], signal = null) {
+  async _callOllama(prompt, model, temperature, maxTokens, systemPrompt, history = [], signal = null, images = []) {
     const messages = [];
     if (systemPrompt) messages.push({ role: 'system', content: systemPrompt });
     if (history?.length) history.forEach(h => messages.push({ role: h.role, content: h.content }));
-    messages.push({ role: 'user', content: prompt });
+
+    const userMessage = { role: 'user', content: prompt };
+    if (images && images.length > 0) {
+        userMessage.images = [];
+        for (const img of images) {
+            if (typeof img === 'string') {
+                if (img.startsWith('data:image') || img.length > 1000) {
+                    userMessage.images.push(img.replace(/^data:image\/[a-z]+;base64,/, ''));
+                } else {
+                    try {
+                        const buffer = await fs.readFile(img);
+                        userMessage.images.push(buffer.toString('base64'));
+                    } catch (err) {
+                        console.warn(`[QuadBrain] Failed to load image from path ${img}:`, err.message);
+                    }
+                }
+            }
+        }
+    }
+    messages.push(userMessage);
 
     const response = await fetch(`${this.ollamaEndpoint}/api/chat`, {
         method: 'POST',

@@ -1,6 +1,18 @@
 {
   "read-files": [
     {
+      "file": "AnalystArbiter.cjs",
+      "cls": "AnalystArbiter",
+      "capabilities": [
+        "read-files",
+        "search-web",
+        "access-db"
+      ],
+      "role": "analyst",
+      "lobe": null,
+      "status": null
+    },
+    {
       "file": "AnalystArbiter.js",
       "cls": "AnalystArbiter",
       "capabilities": [
@@ -138,6 +150,18 @@
   ],
   "search-web": [
     {
+      "file": "AnalystArbiter.cjs",
+      "cls": "AnalystArbiter",
+      "capabilities": [
+        "read-files",
+        "search-web",
+        "access-db"
+      ],
+      "role": "analyst",
+      "lobe": null,
+      "status": null
+    },
+    {
       "file": "AnalystArbiter.js",
       "cls": "AnalystArbiter",
       "capabilities": [
@@ -209,6 +233,18 @@
   ],
   "access-db": [
     {
+      "file": "AnalystArbiter.cjs",
+      "cls": "AnalystArbiter",
+      "capabilities": [
+        "read-files",
+        "search-web",
+        "access-db"
+      ],
+      "role": "analyst",
+      "lobe": null,
+      "status": null
+    },
+    {
       "file": "AnalystArbiter.js",
       "cls": "AnalystArbiter",
       "capabilities": [
@@ -221,8 +257,32 @@
       "status": null
     },
     {
-      "file": "MnemonicArbiter.js",
+      "file": "DreamArbiter.cjs",
+      "cls": "DreamFragment",
+      "capabilities": [
+        "cache-data",
+        "access-db"
+      ],
+      "role": null,
+      "lobe": null,
+      "status": "failed",
+      "error": "Could not find class \"DreamFragment\" in DreamArbiter.cjs"
+    },
+    {
+      "file": "MnemonicArbiter.cjs",
       "cls": "MnemonicArbiter",
+      "capabilities": [
+        "cache-data",
+        "access-db",
+        "clone-self"
+      ],
+      "role": "mnemonic",
+      "lobe": null,
+      "status": null
+    },
+    {
+      "file": "MnemonicArbiter.js",
+      "cls": "VectorUtils",
       "capabilities": [
         "cache-data",
         "access-db",
@@ -283,17 +343,6 @@
       "status": null
     },
     {
-      "file": "ChemistryArbiter.js",
-      "cls": "ChemistryArbiter",
-      "capabilities": [
-        "reasoning",
-        "knowledge-synthesis"
-      ],
-      "role": "maintainer",
-      "lobe": null,
-      "status": null
-    },
-    {
       "file": "ChemistryLabArbiter.js",
       "cls": "ChemistryLabArbiter",
       "capabilities": [
@@ -304,6 +353,17 @@
       "role": "specialist",
       "lobe": "COGNITIVE",
       "status": "verified"
+    },
+    {
+      "file": "ChemistryArbiter.js",
+      "cls": "ChemistryArbiter",
+      "capabilities": [
+        "reasoning",
+        "knowledge-synthesis"
+      ],
+      "role": "maintainer",
+      "lobe": null,
+      "status": null
     },
     {
       "file": "ContextSearchArbiter.js",
@@ -367,7 +427,7 @@
     },
     {
       "file": "GuardianArbiterV2.js",
-      "cls": "SelfHealingCloningGuardianArbiter",
+      "cls": "AntibodyClone",
       "capabilities": [
         "monitor-health",
         "patch-code",
@@ -427,17 +487,6 @@
       "status": null
     },
     {
-      "file": "ChemistryArbiter.js",
-      "cls": "ChemistryArbiter",
-      "capabilities": [
-        "reasoning",
-        "knowledge-synthesis"
-      ],
-      "role": "maintainer",
-      "lobe": null,
-      "status": null
-    },
-    {
       "file": "ChemistryLabArbiter.js",
       "cls": "ChemistryLabArbiter",
       "capabilities": [
@@ -448,6 +497,17 @@
       "role": "specialist",
       "lobe": "COGNITIVE",
       "status": "verified"
+    },
+    {
+      "file": "ChemistryArbiter.js",
+      "cls": "ChemistryArbiter",
+      "capabilities": [
+        "reasoning",
+        "knowledge-synthesis"
+      ],
+      "role": "maintainer",
+      "lobe": null,
+      "status": null
     },
     {
       "file": "MaterialsScienceArbiter.js",
@@ -525,7 +585,7 @@
     },
     {
       "file": "ReflexArbiter.js",
-      "cls": "ReflexArbiter",
+      "cls": "Payload",
       "capabilities": [
         "code-generation",
         "analysis"
@@ -939,6 +999,44 @@
       "status": null
     }
   ],
+  "cache-data": [
+    {
+      "file": "DreamArbiter.cjs",
+      "cls": "DreamFragment",
+      "capabilities": [
+        "cache-data",
+        "access-db"
+      ],
+      "role": null,
+      "lobe": null,
+      "status": "failed",
+      "error": "Could not find class \"DreamFragment\" in DreamArbiter.cjs"
+    },
+    {
+      "file": "MnemonicArbiter.cjs",
+      "cls": "MnemonicArbiter",
+      "capabilities": [
+        "cache-data",
+        "access-db",
+        "clone-self"
+      ],
+      "role": "mnemonic",
+      "lobe": null,
+      "status": null
+    },
+    {
+      "file": "MnemonicArbiter.js",
+      "cls": "VectorUtils",
+      "capabilities": [
+        "cache-data",
+        "access-db",
+        "clone-self"
+      ],
+      "role": "mnemonic",
+      "lobe": null,
+      "status": null
+    }
+  ],
   "reason-task": [
     {
       "file": "DiagnosticCortexArbiter.js",
@@ -949,30 +1047,6 @@
       "role": "diagnostician",
       "lobe": "THALAMUS",
       "status": "verified"
-    }
-  ],
-  "code-generation": [
-    {
-      "file": "DiscoverySwarm.js",
-      "cls": "DiscoverySwarm",
-      "capabilities": [
-        "pattern-recognition",
-        "code-generation"
-      ],
-      "role": "scout",
-      "lobe": null,
-      "status": null
-    },
-    {
-      "file": "ReflexArbiter.js",
-      "cls": "ReflexArbiter",
-      "capabilities": [
-        "code-generation",
-        "analysis"
-      ],
-      "role": "engineer",
-      "lobe": null,
-      "status": null
     }
   ],
   "auditory-processing": [
@@ -1081,6 +1155,17 @@
       "status": null
     },
     {
+      "file": "QuantumSimulationArbiter.js",
+      "cls": "QuantumState",
+      "capabilities": [
+        "execute-code",
+        "memory-access"
+      ],
+      "role": "specialist",
+      "lobe": null,
+      "status": null
+    },
+    {
       "file": "PulseArbiter.js",
       "cls": "PulseArbiter",
       "capabilities": [
@@ -1092,17 +1177,6 @@
       ],
       "role": "orchestrator",
       "lobe": "COGNITIVE",
-      "status": null
-    },
-    {
-      "file": "QuantumSimulationArbiter.js",
-      "cls": "QuantumSimulationArbiter",
-      "capabilities": [
-        "execute-code",
-        "memory-access"
-      ],
-      "role": "specialist",
-      "lobe": null,
       "status": null
     },
     {
@@ -1118,73 +1192,26 @@
       "status": null
     }
   ],
-  "modify-code": [
+  "code-generation": [
     {
-      "file": "EngineeringSwarmArbiter.js",
-      "cls": "EngineeringSwarmArbiter",
+      "file": "DiscoverySwarm.js",
+      "cls": "DiscoverySwarm",
       "capabilities": [
-        "read-files",
-        "write-files",
-        "execute-code",
-        "modify-code",
-        "self-healing",
-        "security-audit"
+        "pattern-recognition",
+        "code-generation"
       ],
-      "role": "architect",
+      "role": "scout",
       "lobe": null,
       "status": null
     },
     {
-      "file": "ExecutiveCortexArbiter.js",
-      "cls": "ExecutiveCortexArbiter",
+      "file": "ReflexArbiter.js",
+      "cls": "Payload",
       "capabilities": [
-        "execute-task",
-        "modify-code",
-        "deploy-system",
-        "reflex-execution"
+        "code-generation",
+        "analysis"
       ],
-      "role": "executive_cortex",
-      "lobe": null,
-      "status": null
-    },
-    {
-      "file": "SelfImprovementCoordinator.js",
-      "cls": "SelfImprovementCoordinator",
-      "capabilities": [
-        "track-learning",
-        "optimize-learning",
-        "modify-code",
-        "coordinate-asi"
-      ],
-      "role": "coordinator",
-      "lobe": "PROMETHEUS",
-      "status": "verified"
-    }
-  ],
-  "self-healing": [
-    {
-      "file": "EngineeringSwarmArbiter.js",
-      "cls": "EngineeringSwarmArbiter",
-      "capabilities": [
-        "read-files",
-        "write-files",
-        "execute-code",
-        "modify-code",
-        "self-healing",
-        "security-audit"
-      ],
-      "role": "architect",
-      "lobe": null,
-      "status": null
-    },
-    {
-      "file": "SubstrateOptimizerArbiter.js",
-      "cls": "SubstrateOptimizerArbiter",
-      "capabilities": [
-        "self-healing",
-        "system-audit"
-      ],
-      "role": "maintainer",
+      "role": "engineer",
       "lobe": null,
       "status": null
     }
@@ -1284,6 +1311,17 @@
       "status": "verified"
     },
     {
+      "file": "QuantumSimulationArbiter.js",
+      "cls": "QuantumState",
+      "capabilities": [
+        "execute-code",
+        "memory-access"
+      ],
+      "role": "specialist",
+      "lobe": null,
+      "status": null
+    },
+    {
       "file": "PulseArbiter.js",
       "cls": "PulseArbiter",
       "capabilities": [
@@ -1295,17 +1333,6 @@
       ],
       "role": "orchestrator",
       "lobe": "COGNITIVE",
-      "status": null
-    },
-    {
-      "file": "QuantumSimulationArbiter.js",
-      "cls": "QuantumSimulationArbiter",
-      "capabilities": [
-        "execute-code",
-        "memory-access"
-      ],
-      "role": "specialist",
-      "lobe": null,
       "status": null
     },
     {
@@ -1327,6 +1354,77 @@
         "memory-access"
       ],
       "role": "specialist",
+      "lobe": null,
+      "status": null
+    }
+  ],
+  "modify-code": [
+    {
+      "file": "EngineeringSwarmArbiter.js",
+      "cls": "EngineeringSwarmArbiter",
+      "capabilities": [
+        "read-files",
+        "write-files",
+        "execute-code",
+        "modify-code",
+        "self-healing",
+        "security-audit"
+      ],
+      "role": "architect",
+      "lobe": null,
+      "status": null
+    },
+    {
+      "file": "ExecutiveCortexArbiter.js",
+      "cls": "ExecutiveCortexArbiter",
+      "capabilities": [
+        "execute-task",
+        "modify-code",
+        "deploy-system",
+        "reflex-execution"
+      ],
+      "role": "executive_cortex",
+      "lobe": null,
+      "status": null
+    },
+    {
+      "file": "SelfImprovementCoordinator.js",
+      "cls": "SelfImprovementCoordinator",
+      "capabilities": [
+        "track-learning",
+        "optimize-learning",
+        "modify-code",
+        "coordinate-asi"
+      ],
+      "role": "coordinator",
+      "lobe": "PROMETHEUS",
+      "status": "verified"
+    }
+  ],
+  "self-healing": [
+    {
+      "file": "EngineeringSwarmArbiter.js",
+      "cls": "EngineeringSwarmArbiter",
+      "capabilities": [
+        "read-files",
+        "write-files",
+        "execute-code",
+        "modify-code",
+        "self-healing",
+        "security-audit"
+      ],
+      "role": "architect",
+      "lobe": null,
+      "status": null
+    },
+    {
+      "file": "SubstrateOptimizerArbiter.js",
+      "cls": "SubstrateOptimizerArbiter",
+      "capabilities": [
+        "self-healing",
+        "system-audit"
+      ],
+      "role": "maintainer",
       "lobe": null,
       "status": null
     }
@@ -1483,7 +1581,7 @@
   "patch-code": [
     {
       "file": "GuardianArbiterV2.js",
-      "cls": "SelfHealingCloningGuardianArbiter",
+      "cls": "AntibodyClone",
       "capabilities": [
         "monitor-health",
         "patch-code",
@@ -1509,7 +1607,7 @@
   "verify-fix": [
     {
       "file": "GuardianArbiterV2.js",
-      "cls": "SelfHealingCloningGuardianArbiter",
+      "cls": "AntibodyClone",
       "capabilities": [
         "monitor-health",
         "patch-code",
@@ -1676,9 +1774,9 @@
       "status": "verified"
     }
   ],
-  "cache-data": [
+  "clone-self": [
     {
-      "file": "MnemonicArbiter.js",
+      "file": "MnemonicArbiter.cjs",
       "cls": "MnemonicArbiter",
       "capabilities": [
         "cache-data",
@@ -1688,12 +1786,10 @@
       "role": "mnemonic",
       "lobe": null,
       "status": null
-    }
-  ],
-  "clone-self": [
+    },
     {
       "file": "MnemonicArbiter.js",
-      "cls": "MnemonicArbiter",
+      "cls": "VectorUtils",
       "capabilities": [
         "cache-data",
         "access-db",
@@ -1795,6 +1891,18 @@
       "status": null
     }
   ],
+  "learn": [
+    {
+      "file": "SelfReflectionArbiter.js",
+      "cls": "SelfReflectionArbiter",
+      "capabilities": [
+        "learn"
+      ],
+      "role": "analyst",
+      "lobe": null,
+      "status": null
+    }
+  ],
   "optimize-learning": [
     {
       "file": "SelfImprovementCoordinator.js",
@@ -1808,18 +1916,6 @@
       "role": "coordinator",
       "lobe": "PROMETHEUS",
       "status": "verified"
-    }
-  ],
-  "learn": [
-    {
-      "file": "SelfReflectionArbiter.js",
-      "cls": "SelfReflectionArbiter",
-      "capabilities": [
-        "learn"
-      ],
-      "role": "analyst",
-      "lobe": null,
-      "status": null
     }
   ],
   "visual-perception": [

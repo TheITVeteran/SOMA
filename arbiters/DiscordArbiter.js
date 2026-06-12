@@ -28,6 +28,8 @@ import somaImageGeneration from '../server/social/SomaImageGenerationEngine.js';
 import marketEvidenceStore from '../server/finance/MarketEvidenceStore.js';
 import { guardPublicText } from '../server/context/ClaimVerifier.js';
 import tradeLogger from '../server/finance/TradeLogger.js';
+import { recordLoopEvent, readLoopLedger } from '../server/utils/LoopLedger.js';
+import { getHomePresenceProfile, recordHomePresenceOutcome } from '../server/utils/HomePresenceMemory.js';
 
 const execAsync = promisify(exec);
 const require = createRequire(import.meta.url);
@@ -65,6 +67,18 @@ export class DiscordArbiter extends BaseArbiter {
         
         this.botMention = /<@!?(\d+)>/;
         this.masterId = opts.masterId || null; // Discord ID of the owner
+        this.adminUsernames = new Set(
+            String(opts.adminUsernames || process.env.DISCORD_ADMIN_USERNAMES || 'undeca')
+                .split(',')
+                .map(name => name.trim().toLowerCase())
+                .filter(Boolean)
+        );
+        this.adminIds = new Set(
+            String(opts.adminIds || process.env.DISCORD_ADMIN_IDS || process.env.DISCORD_MASTER_ID || '')
+                .split(',')
+                .map(id => id.trim())
+                .filter(Boolean)
+        );
         this.voiceEnabled = opts.voiceEnabled || false; // Paula voice notes
         this.lastError = null;
         this.messageContentIntent = true;
@@ -78,6 +92,9 @@ export class DiscordArbiter extends BaseArbiter {
         this._ambientHourlyReplies = [];
         this.system = opts.system || null;
         this.goalPlanner = opts.goalPlanner || opts.system?.goalPlanner || null;
+        this.remoteSpeechRequests = new Map();
+        this.lastRemoteSpeechByAuthor = new Map();
+        this._claimRepairCooldown = new Map();
     }
 
     async onInitialize() {
@@ -383,11 +400,32 @@ export class DiscordArbiter extends BaseArbiter {
             });
 
             const initialReply = result.response || result.text || "I am processing your request but cannot formulate a verbal response at this time.";
-            const isAdmin = msg.author.id === this.masterId || msg.author.username.toLowerCase() === 'undeca';
-            let reply = initialReply;
-            if (!isAdmin) {
-                const guarded = await guardPublicText(initialReply, { query: content });
-                reply = guarded.text || initialReply;
+            const guarded = await guardPublicText(initialReply, { query: content });
+            let reply = guarded.text || initialReply;
+            if (!guarded.ok || reply !== initialReply) {
+                await recordLoopEvent({
+                    loop: 'claim_honesty_poseidon',
+                    phase: 'discord_reply_guarded',
+                    actor: 'DiscordArbiter',
+                    target: msg.author.username,
+                    channel: msg.guild ? (msg.channel?.name || msg.channelId) : 'dm',
+                    claim: 'Discord reply was checked by the claim honesty guard before posting',
+                    falsificationTest: 'ClaimVerifier returned a guarded text string for the candidate reply',
+                    testResult: Boolean(reply),
+                    evidence: {
+                        changed: reply !== initialReply,
+                        hardBlock: guarded.hardBlock?.reason || null,
+                        unsupported: guarded.unsupported?.map(item => item.type) || [],
+                    },
+                    privacy: { originalReply: 'not_logged' },
+                    nextStep: 'Use guarded reply only; do not claim unsupported action or evidence.'
+                });
+                await this._maybeQueueClaimRepairGoal({
+                    author: msg.author.username,
+                    channel: msg.channel?.name || msg.channelId,
+                    unsupported: guarded.unsupported || [],
+                    hardBlock: guarded.hardBlock || null
+                }).catch(() => {});
             }
             
             // 🎙️ PAULA VOICE SYNTHESIS
@@ -757,6 +795,25 @@ export class DiscordArbiter extends BaseArbiter {
         return action && (target || Boolean(this._extractPathCandidate(value)));
     }
 
+    _isAdminUser(msg = {}) {
+        const author = msg.author || {};
+        const authorId = String(author.id || '');
+        if (this.masterId && authorId === String(this.masterId)) return true;
+        if (this.adminIds.has(authorId)) return true;
+
+        const names = [
+            author.username,
+            author.globalName,
+            author.displayName,
+            msg.member?.displayName,
+            msg.member?.nickname
+        ]
+            .map(name => String(name || '').trim().toLowerCase())
+            .filter(Boolean);
+
+        return names.some(name => this.adminUsernames.has(name));
+    }
+
     _extractPathCandidate(text = '') {
         const value = String(text || '');
         const quoted = value.match(/[`"']([^`"']+\.(?:js|cjs|mjs|ts|tsx|jsx|json|md|txt|py|css|html))[`"']/i);
@@ -787,6 +844,384 @@ export class DiscordArbiter extends BaseArbiter {
     _formatToolResult(result, max = 1200) {
         const text = typeof result === 'string' ? result : JSON.stringify(result, null, 2);
         return this._formatSafeSnippet(text, max);
+    }
+
+    _isLocalSpeechRequest(text = '') {
+        const value = String(text || '');
+        return /\b(tell|say|speak|announce)\b/i.test(value)
+            && /\b(wife|erin|home|house|pc|computer|desktop|speakers?|out loud|aloud)\b/i.test(value);
+    }
+
+    _isLocalSpeechRetryRequest(text = '') {
+        const value = String(text || '');
+        return /\b(didn'?t hear|did not hear|nope|nothing came through|try again|again|redo|repeat|say it again|speak it again)\b/i.test(value)
+            && /\b(try again|again|redo|repeat|say it again|speak it again|didn'?t hear|did not hear|nothing came through)\b/i.test(value);
+    }
+
+    _extractLocalSpeechMessage(text = '') {
+        let value = String(text || '')
+            .replace(/^@?soma[:,]?\s*/i, '')
+            .replace(/\b(on|from)\s+discord\b/ig, '')
+            .replace(/^(?:can|could|would)\s+you\s+/i, '')
+            .replace(/\bmy\s+wife\s+erin\b/ig, 'Erin')
+            .replace(/\bmy\s+wife\b/ig, 'Erin')
+            .trim();
+
+        const directMatch = value.match(/\btell\s+(?:(my)\s+)?([a-z][a-z'-]*|wife)(?:\s+at\s+home)?(?:\s+that)?\s+([\s\S]+)/i);
+        if (directMatch?.[3]) {
+            const recipientRaw = directMatch[2].toLowerCase();
+            const recipient = recipientRaw === 'wife' ? 'Erin' : `${recipientRaw.charAt(0).toUpperCase()}${recipientRaw.slice(1)}`;
+            let message = directMatch[3].trim()
+                .replace(/^that\s+/i, '')
+                .replace(/\s+at\s+home[.!?]*$/i, '')
+                .replace(/\s+from\s+(?:the\s+)?(?:home\s+)?(?:pc|computer|desktop|speakers?)[.!?]*$/i, '')
+                .replace(/[?]+$/g, '.')
+                .trim();
+            message = message
+                .replace(/^hello[.!?]*$/i, 'Barry wanted me to tell you hello.')
+                .replace(/^hi[.!?]*$/i, 'Barry wanted me to tell you hi.')
+                .replace(/^i\s+said\s+hello[.!?]*$/i, 'Barry wanted me to tell you hello.')
+                .replace(/^i\s+said\s+hi[.!?]*$/i, 'Barry wanted me to tell you hi.')
+                .replace(/^i\s+love\s+(?:her|you)[.!?]*$/i, 'Barry wanted me to tell you he loves you.');
+            if (/^i\b/i.test(message)) {
+                message = `Barry says: ${message}`;
+            }
+            if (!/[.!?]$/.test(message)) message += '.';
+            return {
+                recipient,
+                message: `Hey ${recipient}, ${message}`,
+                listenForReply: true
+            };
+        }
+
+        const quoted = value.match(/["'`](.+?)["'`]/);
+        if (quoted?.[1]) return { recipient: null, message: quoted[1].trim(), listenForReply: false };
+
+        const speakMatch = value.match(/\b(?:say|speak|announce)\s+([\s\S]+?)(?:\s+(?:on|through|from)\s+(?:the\s+)?(?:home\s+)?(?:pc|computer|desktop|speakers?))?$/i);
+        if (speakMatch?.[1]) return { recipient: null, message: speakMatch[1].trim(), listenForReply: /\b(listen|response|reply|answer)\b/i.test(value) };
+
+        return { recipient: null, message: value, listenForReply: false };
+    }
+
+    async _handleAdminLocalSpeech(msg, text, visualContext = '') {
+        if (!this._isLocalSpeechRequest(text)) return { handled: false };
+
+        const extracted = this._extractLocalSpeechMessage(text);
+        return await this._speakAdminLocalMessage(msg, text, extracted, visualContext);
+    }
+
+    async _handleAdminLocalSpeechRetry(msg, text, visualContext = '') {
+        if (!this._isLocalSpeechRetryRequest(text)) return { handled: false };
+        const last = this.lastRemoteSpeechByAuthor.get(String(msg.author.id || ''));
+        if (!last || Date.now() - Number(last.timestamp || 0) > 15 * 60 * 1000) return { handled: false };
+        return await this._speakAdminLocalMessage(msg, text, {
+            recipient: last.recipient || null,
+            message: last.speech || '',
+            listenForReply: last.listenForReply !== false
+        }, visualContext, { retryOf: last.requestId || null });
+    }
+
+    async _speakAdminLocalMessage(msg, text, extracted = {}, visualContext = '', options = {}) {
+        const requestId = `remote-speech-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+        const speech = String(extracted.message || '')
+            .replace(/\s+/g, ' ')
+            .trim()
+            .slice(0, 300);
+
+        if (!speech) {
+            const reply = 'I can speak at home, but I need the message to say.';
+            await msg.reply(reply);
+            await this._recordDiscordInteraction({ msg, content: text, reply, action: 'admin_local_speech', status: 'failed', visualContext });
+            return { handled: true };
+        }
+
+        try {
+            const recipient = extracted.recipient || 'home';
+            const profile = await getHomePresenceProfile(recipient).catch(() => null);
+            const listenWindowMs = profile?.suppressed ? 10000 : 25000;
+            this.remoteSpeechRequests.set(requestId, {
+                requestId,
+                channelId: msg.channelId,
+                guildId: msg.guildId || null,
+                authorId: msg.author.id,
+                recipient,
+                speech,
+                createdAt: Date.now(),
+                heardReply: false,
+                answered: false
+            });
+            const cleanupTimer = setTimeout(() => this.remoteSpeechRequests.delete(requestId), 5 * 60 * 1000);
+            cleanupTimer.unref?.();
+
+            const result = await this._executeRegistryTool('desktop_speak', {
+                text: speech,
+                listenForReply: Boolean(extracted.listenForReply),
+                listenWindowMs,
+                requestId,
+                recipient,
+                replyChannelId: msg.channelId,
+                checkPresence: true
+            });
+            if (!result?.success) throw new Error(result?.error || 'desktop_speak failed');
+            const pendingRequest = this.remoteSpeechRequests.get(requestId);
+            if (pendingRequest) pendingRequest.presenceCheck = result.presenceCheck || null;
+            await recordHomePresenceOutcome(recipient, 'attempted', {
+                visiblePerson: result.presenceCheck?.visiblePerson,
+                summary: speech,
+                timestamp: Date.now()
+            }).catch(() => {});
+            await recordLoopEvent({
+                loop: 'remote_home_presence',
+                phase: 'spoken',
+                actor: 'DiscordArbiter',
+                target: recipient,
+                channel: 'discord_to_command_bridge',
+                requestId,
+                claim: `Remote speech request ${requestId} was broadcast to Command Bridge`,
+                falsificationTest: 'desktop_speak returned success and used at least one local speech route',
+                testResult: result.success === true && /\b(command_bridge|system_speech)\b/.test(String(result.route || '')),
+                evidence: {
+                    spoken: speech,
+                    route: result.route,
+                    retryOf: options.retryOf || null,
+                    commandBridgeBroadcast: Boolean(result.commandBridgeBroadcast),
+                    systemSpeech: result.systemSpeech || null,
+                    presenceCheck: result.presenceCheck || null,
+                    adaptiveProfile: profile ? {
+                        confidence: profile.confidence,
+                        suppressed: Boolean(profile.suppressed),
+                        listenWindowMs
+                    } : null
+                },
+                nextStep: extracted.listenForReply ? 'Wait for Command Bridge remote_speech_status event.' : null
+            });
+            this.lastRemoteSpeechByAuthor.set(String(msg.author.id || ''), {
+                requestId,
+                recipient,
+                speech,
+                listenForReply: Boolean(extracted.listenForReply),
+                timestamp: Date.now()
+            });
+
+            const presence = result.presenceCheck?.checked
+                ? (result.presenceCheck.visiblePerson ? ' Presence check sees someone near the webcam.' : ' Presence check did not confidently see a person, but I sent it anyway.')
+                : '';
+            const adaptive = profile?.suppressed ? ' Recent attempts have not gotten a reply, so I used a shorter listening window.' : '';
+            const routeNote = result.route === 'system_speech+command_bridge'
+                ? ' via Windows speakers and Command Bridge'
+                : result.route === 'system_speech'
+                    ? ' via Windows speakers'
+                    : ' via Command Bridge';
+            const retryNote = options.retryOf ? 'Retried' : 'Spoken';
+            const reply = extracted.listenForReply
+                ? `${retryNote} at home${routeNote} and listening briefly for a reply: “${speech}”${presence}${adaptive}`
+                : `${retryNote} at home${routeNote}: “${speech}”${presence}`;
+            workLedger.record({
+                type: 'discord_admin_local_speech',
+                title: 'Spoke a Discord-requested message on the desktop',
+                summary: `SOMA spoke locally: ${speech}`,
+                evidence: ['desktop_speak'],
+                status: 'completed',
+                source: 'DiscordArbiter',
+                confidence: 0.98
+            });
+            await msg.reply(reply);
+            await this._recordDiscordInteraction({ msg, content: text, reply, action: 'admin_local_speech', status: 'posted', visualContext });
+            return { handled: true };
+        } catch (err) {
+            this.remoteSpeechRequests.delete(requestId);
+            await recordHomePresenceOutcome(extracted.recipient || 'home', 'failed', {
+                summary: err.message,
+                timestamp: Date.now()
+            }).catch(() => {});
+            const reply = `I tried to speak that at home, but desktop speech failed: ${err.message}`;
+            await msg.reply(reply);
+            await this._recordDiscordInteraction({ msg, content: text, reply, action: 'admin_local_speech', status: 'failed', error: err.message, visualContext });
+            return { handled: true };
+        }
+    }
+
+    async handleRemoteSpeechStatus(payload = {}) {
+        const requestId = String(payload.requestId || '');
+        const pending = this.remoteSpeechRequests.get(requestId);
+        if (!pending || !this.client) return false;
+
+        const phase = String(payload.phase || '');
+        const channel = await this.client.channels.fetch(pending.channelId).catch(() => null);
+        if (!channel?.send) return false;
+
+        if (phase === 'heard_reply' && !pending.heardReply) {
+            pending.heardReply = true;
+            const speaker = payload.speaker || pending.recipient || 'someone at home';
+            await recordLoopEvent({
+                loop: 'remote_home_presence',
+                phase: 'heard_reply',
+                actor: 'CommandBridge',
+                target: speaker,
+                channel: 'home_mic_to_discord',
+                requestId,
+                claim: `A home reply was heard for remote speech request ${requestId}`,
+                falsificationTest: 'Command Bridge emitted remote_speech_status heard_reply with matching requestId',
+                testResult: true,
+                evidence: {
+                    speaker,
+                    transcriptPreview: String(payload.transcriptPreview || '').slice(0, 180)
+                },
+                privacy: { transcript: 'preview_only' },
+                nextStep: 'Wait for Soma spoken answer summary.'
+            });
+            await recordHomePresenceOutcome(speaker, 'heard_reply', {
+                summary: 'Home reply was heard.',
+                timestamp: Date.now()
+            }).catch(() => {});
+            await channel.send(`${speaker} answered at home. I’m talking with them now.`);
+            return true;
+        }
+
+        if (phase === 'soma_answered' && !pending.answered) {
+            pending.answered = true;
+            const speaker = payload.speaker || pending.recipient || 'someone at home';
+            const summary = String(payload.summary || payload.response || 'Soma answered at home.').replace(/\s+/g, ' ').trim().slice(0, 220);
+            await recordLoopEvent({
+                loop: 'remote_home_presence',
+                phase: 'soma_answered',
+                actor: 'CommandBridge',
+                target: speaker,
+                channel: 'home_voice_to_discord_summary',
+                requestId,
+                claim: `SOMA answered the home reply for remote speech request ${requestId}`,
+                falsificationTest: 'Command Bridge emitted remote_speech_status soma_answered with matching requestId and summary',
+                testResult: Boolean(summary),
+                evidence: { speaker, summary },
+                privacy: { transcript: 'summary_only' },
+                nextStep: 'Use this result to tune future home presence timing and tone.'
+            });
+            await recordHomePresenceOutcome(speaker, 'answered', {
+                summary,
+                timestamp: Date.now()
+            }).catch(() => {});
+            await channel.send(`Home reply bridge: ${speaker} responded, and I answered. Summary: ${summary}`);
+            this.remoteSpeechRequests.delete(requestId);
+            return true;
+        }
+
+        if (phase === 'no_reply') {
+            const noReplyOutcome = pending.presenceCheck?.checked && pending.presenceCheck.visiblePerson === false
+                ? 'bad_timing'
+                : 'no_reply';
+            await recordLoopEvent({
+                loop: 'remote_home_presence',
+                phase: noReplyOutcome,
+                actor: 'CommandBridge',
+                target: pending.recipient || 'home',
+                channel: 'home_mic_to_discord',
+                requestId,
+                claim: noReplyOutcome === 'bad_timing'
+                    ? `No home reply was heard and presence check did not show a person for remote speech request ${requestId}`
+                    : `No home reply was heard for remote speech request ${requestId}`,
+                falsificationTest: 'Command Bridge reply window expired without transcript change',
+                testResult: true,
+                evidence: { listenWindowExpired: true, presenceCheck: pending.presenceCheck || null },
+                nextStep: 'Avoid assuming anyone heard the message.'
+            });
+            await recordHomePresenceOutcome(pending.recipient || 'home', noReplyOutcome, {
+                summary: 'No reply during remote speech window.',
+                timestamp: Date.now()
+            }).catch(() => {});
+            await channel.send(`No one answered at home during the reply window.`);
+            this.remoteSpeechRequests.delete(requestId);
+            return true;
+        }
+
+        if (phase === 'failed') {
+            await recordLoopEvent({
+                loop: 'remote_home_presence',
+                phase: 'failed',
+                actor: 'CommandBridge',
+                target: pending.recipient || 'home',
+                channel: 'home_voice_to_discord',
+                requestId,
+                claim: `Remote speech request ${requestId} failed`,
+                falsificationTest: 'Command Bridge emitted remote_speech_status failed',
+                testResult: true,
+                evidence: { error: String(payload.error || 'unknown error').slice(0, 220) },
+                nextStep: 'Do not claim the home interaction completed.'
+            });
+            await recordHomePresenceOutcome(pending.recipient || 'home', 'failed', {
+                summary: String(payload.error || 'unknown error').slice(0, 220),
+                timestamp: Date.now()
+            }).catch(() => {});
+            await channel.send(`Home voice bridge failed: ${String(payload.error || 'unknown error').slice(0, 180)}`);
+            this.remoteSpeechRequests.delete(requestId);
+            return true;
+        }
+
+        return false;
+    }
+
+    async _maybeQueueClaimRepairGoal({ author = 'unknown', channel = 'discord', unsupported = [], hardBlock = null } = {}) {
+        const claimTypes = [
+            ...(unsupported || []).map(item => item.type).filter(Boolean),
+            hardBlock?.reason ? `hard:${hardBlock.reason}` : null
+        ].filter(Boolean);
+        if (!claimTypes.length) return null;
+
+        const key = claimTypes.sort().join('|');
+        const cooldownUntil = this._claimRepairCooldown.get(key) || 0;
+        if (Date.now() < cooldownUntil) return null;
+
+        const recent = await readLoopLedger(80, { loop: 'claim_honesty_poseidon' });
+        const oneDayAgo = Date.now() - 24 * 60 * 60 * 1000;
+        const matching = recent.filter(record => {
+            if ((record.timestamp || 0) < oneDayAgo) return false;
+            const unsupportedEvidence = record.evidence?.unsupported || [];
+            const hard = record.evidence?.hardBlock || null;
+            const haystack = `${unsupportedEvidence.join('|')} ${hard || ''}`;
+            return claimTypes.some(type => haystack.includes(type.replace(/^hard:/, '')));
+        });
+
+        if (matching.length < 3) return null;
+
+        const planner = this.goalPlanner || this.system?.goalPlanner;
+        if (!planner?.createGoal) return null;
+
+        const title = `Reduce repeated unsupported Discord claims: ${claimTypes.slice(0, 2).join(', ')}`;
+        const result = await planner.createGoal({
+            type: 'operational',
+            category: 'claim_honesty',
+            title,
+            description: [
+                `Claim guard downgraded the same claim pattern ${matching.length} times in the last 24 hours.`,
+                `Claim types: ${claimTypes.join(', ')}`,
+                `Recent channel: ${channel}. Recent author: ${author}.`,
+                'Inspect prompts, memory context, and work-ledger evidence retrieval before changing behavior.',
+                'Success means future Discord replies either cite evidence, stay uncertain, or avoid the unsupported claim.'
+            ].join('\n'),
+            priority: 78,
+            requireQuality: false,
+            confidence: 0.82,
+            metadata: {
+                source: 'poseidon_claim_loop',
+                claimTypes,
+                recentCount: matching.length
+            },
+            verification: {
+                required: true,
+                evidence: ['LoopLedger claim_honesty_poseidon entries', 'prompt or guard change', 'focused test']
+            }
+        }, 'poseidon');
+
+        this._claimRepairCooldown.set(key, Date.now() + 6 * 60 * 60 * 1000);
+        workLedger.record({
+            type: 'poseidon_claim_repair_goal',
+            title,
+            summary: `Created repair goal after ${matching.length} repeated claim guard downgrades.`,
+            evidence: matching.slice(0, 5).map(item => item.id),
+            status: result?.success === false ? 'failed' : 'queued',
+            source: 'DiscordArbiter',
+            confidence: 0.82
+        });
+        return result;
     }
 
     async _handleAdminOperationalAction(msg, text, visualContext = '') {
@@ -981,7 +1416,7 @@ export class DiscordArbiter extends BaseArbiter {
         const text = this._normalizeText(content);
         if (!text) return { handled: false };
 
-        const isAdmin = msg.author.id === this.masterId || msg.author.username.toLowerCase() === 'undeca';
+        const isAdmin = this._isAdminUser(msg);
 
         if (/^!mode\b/i.test(text) || /^mode\s*:/i.test(text)) {
             const requested = text.replace(/^!mode\b|^mode\s*:/i, '').trim() || 'general';
@@ -1011,6 +1446,12 @@ export class DiscordArbiter extends BaseArbiter {
         }
 
         if (isAdmin) {
+            const localSpeechRetry = await this._handleAdminLocalSpeechRetry(msg, text, visualContext);
+            if (localSpeechRetry?.handled) return localSpeechRetry;
+
+            const localSpeech = await this._handleAdminLocalSpeech(msg, text, visualContext);
+            if (localSpeech?.handled) return localSpeech;
+
             const adminAction = await this._handleAdminOperationalAction(msg, text, visualContext);
             if (adminAction?.handled) return adminAction;
         }

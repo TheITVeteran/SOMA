@@ -29,6 +29,10 @@ import { EventEmitter } from 'events';
 import fs   from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import { createRequire } from 'module';
+
+const require = createRequire(import.meta.url);
+const { writeMonologue } = require('./InternalMonologue.cjs');
 
 const __dirname    = path.dirname(fileURLToPath(import.meta.url));
 const CYCLES_FILE  = path.join(__dirname, '..', 'server', '.soma', 'asi_cycles.json');
@@ -78,6 +82,7 @@ export class ASIKernel extends EventEmitter {
 
         try {
             console.log('[ASIKernel] ⚡ Starting improvement cycle...');
+            writeMonologue('Initiating self-improvement cycle. Analyzing current capability benchmarks to identify operational bottlenecks.', 'ASIKernel');
 
             // ── Phase 1: Measure current state ──────────────────────────
             const benchmark = this.system.benchmark;
@@ -114,12 +119,14 @@ export class ASIKernel extends EventEmitter {
             const target = await this._identifyBottleneck(before, milestone);
             cycle.phases.identify = target;
             console.log(`[ASIKernel] 🎯 Improvement target: ${target.dimension} (score: ${(target.score * 100).toFixed(1)}%)`);
+            writeMonologue(`Bottleneck identified: ${target.dimension} is currently at ${(target.score * 100).toFixed(1)}%. Devising improvement strategies.`, 'ASIKernel');
 
             // ── Phase 5: Generate an improvement goal ────────────────────
             const goal = await this._generateGoal(target, milestone);
             if (goal) {
                 cycle.phases.goal = { title: goal.title };
                 console.log(`[ASIKernel] 📋 Goal created: "${goal.title}"`);
+                writeMonologue(`Self-improvement goal created: "${goal.title}". Delegating execution to AutonomousHeartbeat.`, 'ASIKernel');
             }
 
             // ── Phase 6: Constitutional check before executing ───────────
@@ -321,6 +328,7 @@ Return ONLY JSON: {"dimension": "...", "reason": "..."}`;
         if (this._cycles.length > MAX_CYCLES) this._cycles.shift();
         this._persist().catch(() => {});
         console.log(`[ASIKernel] 🔄 Cycle complete (${cycle.durationMs}ms) — result: ${cycle.result}`);
+        writeMonologue(`Self-improvement cycle complete. Result: ${cycle.result}. Duration: ${cycle.durationMs}ms.`, 'ASIKernel');
         return cycle;
     }
 

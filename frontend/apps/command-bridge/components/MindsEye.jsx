@@ -1,6 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { Eye, Activity, Maximize2, Radio, Camera, Monitor, HardDrive } from 'lucide-react';
 
+const getFrameUrl = (path) => {
+  if (!path) return null;
+  if (path.startsWith('http') || path.startsWith('/') || path.startsWith('data:')) return path;
+  return `/api/perception/vision/frame?path=${encodeURIComponent(path)}`;
+};
+
 const MindsEye = ({ isConnected }) => {
   const [vision, setVision] = useState(null);
   const [health, setHealth] = useState(null);
@@ -61,7 +67,7 @@ const MindsEye = ({ isConnected }) => {
         <div className="flex-1 flex gap-4 min-h-0">
           <div className="w-1/2 rounded-lg bg-black/40 border border-white/5 overflow-hidden relative">
             {imagePath ? (
-              <img src={imagePath} alt="Latest perception frame" className="w-full h-full object-cover opacity-80" />
+              <img src={getFrameUrl(imagePath)} alt="Latest perception frame" className="w-full h-full object-cover opacity-80" />
             ) : (
               <div className="w-full h-full flex flex-col items-center justify-center text-zinc-700 space-y-2">
                 <Activity className="w-8 h-8 opacity-20" />
@@ -124,7 +130,7 @@ const MindsEye = ({ isConnected }) => {
               </div>
               <div className="bg-black/40 border border-white/5 rounded-lg p-3">
                 {imagePath ? (
-                  <img src={imagePath} alt="Latest perception frame" className="w-full h-40 object-cover rounded-md opacity-90" />
+                  <img src={getFrameUrl(imagePath)} alt="Latest perception frame" className="w-full h-40 object-cover rounded-md opacity-90" />
                 ) : (
                   <div className="text-xs text-zinc-600 italic">No visual frame captured.</div>
                 )}

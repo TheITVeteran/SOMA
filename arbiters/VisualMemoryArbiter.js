@@ -72,17 +72,66 @@ export class VisualMemoryArbiter {
         this._proactiveBrain = brain;
     }
 
+    get mnemonic() {
+        if (this._mnemonicInstance) return this._mnemonicInstance;
+        if (this.mnemonicArbiter) {
+            this._mnemonicInstance = this.mnemonicArbiter;
+            return this._mnemonicInstance;
+        }
+        if (this.messageBroker) {
+            const hippocampus = this.messageBroker.getArbiter('HippocampusArbiter')?.instance;
+            if (hippocampus) {
+                this._mnemonicInstance = hippocampus;
+                return this._mnemonicInstance;
+            }
+            const mnemonic = this.messageBroker.getArbiter('Hippocampus-Mnemonic')?.instance ||
+                             this.messageBroker.getArbiter('MnemonicArbiter')?.instance;
+            if (mnemonic) {
+                this._mnemonicInstance = mnemonic;
+                return this._mnemonicInstance;
+            }
+        }
+        return null;
+    }
+
     _subscribe() {
         try {
-            this.messageBroker.subscribe('VisualMemoryArbiter', 'vision.perceived');
-            this.messageBroker.on('vision.perceived', (envelope) => {
+            this.messageBroker.subscribe('vision.perceived', (envelope) => {
                 const payload = envelope.payload || envelope;
                 this._processPerception(payload).catch(e =>
                     console.warn('[VisualMemoryArbiter] processPerception error:', e.message)
                 );
             });
+
+            this.messageBroker.subscribe('vocal_synthesis_requested', (envelope) => {
+                const payload = envelope.payload || envelope;
+                this._processVocalSynthesis(payload).catch(e =>
+                    console.warn('[VisualMemoryArbiter] processVocalSynthesis error:', e.message)
+                );
+            });
         } catch (e) {
-            console.warn('[VisualMemoryArbiter] Failed to subscribe to vision.perceived:', e.message);
+            console.warn('[VisualMemoryArbiter] Failed to subscribe to required signals:', e.message);
+        }
+    }
+
+    async _processVocalSynthesis(payload) {
+        const { text, source, emotion } = payload;
+        if (!text) return;
+
+        const now = Date.now();
+        const timeStr = new Date(now).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+        
+        // E.g. "SOMA voiced observation: "I noticed you're back at your desk. Hello!" (Source: vision-narrator) at 03:22 PM"
+        const memoryContent = `SOMA voiced: "${text}" (Source: ${source || 'vocal-synthesis'}, Emotion: ${emotion || 'neutral'}) at ${timeStr}.`;
+
+        if (this.mnemonic?.remember) {
+            await this.mnemonic.remember(memoryContent, {
+                type: 'vocal_synthesis',
+                source: source || 'vocal-synthesis',
+                emotion: emotion || 'neutral',
+                timestamp: now
+            });
+            console.log(`[VisualMemoryArbiter] 🧠 Saved vocal synthesis output to memory: "${text}"`);
         }
     }
 
@@ -200,11 +249,11 @@ export class VisualMemoryArbiter {
         }
 
         // ── 5. Save tagged memory snapshot (rate-limited, richer summary) ──
-        if (this.mnemonicArbiter?.remember && (now - this._lastMemorySaveAt > this._memorySaveIntervalMs)) {
+        if (this.mnemonic?.remember && (now - this._lastMemorySaveAt > this._memorySaveIntervalMs)) {
             this._lastMemorySaveAt = now;
             const summary = this._buildMemoryText(channel, now);
             if (summary) {
-                this.mnemonicArbiter.remember(summary, {
+                this.mnemonic.remember(summary, {
                     type: 'visual_observation',
                     channel,
                     userPresent: this.userPresence.detected,
@@ -245,7 +294,7 @@ export class VisualMemoryArbiter {
      * Groups them into one block so they read like a journal page.
      */
     async _flushDiary() {
-        if (!this.mnemonicArbiter?.remember || this._diaryBuffer.length === 0) return;
+        if (!this.mnemonic?.remember || this._diaryBuffer.length === 0) return;
 
         const toFlush = this._diaryBuffer.splice(0, this._diaryFlushThreshold);
         if (!toFlush.length) return;
@@ -257,7 +306,7 @@ export class VisualMemoryArbiter {
         const journalPage = `[SOMA VISUAL DIARY — ${dateStr}]\n` +
             toFlush.map(e => e.text).join('\n');
 
-        await this.mnemonicArbiter.remember(journalPage, {
+        await this.mnemonic.remember(journalPage, {
             type: 'visual_diary',
             fromTs: firstTs,
             toTs: lastTs

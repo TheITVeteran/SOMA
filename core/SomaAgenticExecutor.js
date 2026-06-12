@@ -23,6 +23,7 @@ import { createRequire } from 'module';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { Poseidon } from './Poseidon.js';
+import { recordLoopEvent } from '../server/utils/LoopLedger.js';
 
 const execFileAsync = promisify(execFile);
 const ROOT = process.cwd();
@@ -642,13 +643,52 @@ ABSOLUTE RULES:
                 });
 
                 if (verified.state === 'TRUE') {
+                    await recordLoopEvent({
+                        loop: 'autonomous_work',
+                        phase: 'poseidon_verified_done',
+                        actor: this.name,
+                        target: goal.title,
+                        channel: 'agentic_executor',
+                        claim: claimedResult || `Goal "${goal.title}" completed`,
+                        falsificationTest,
+                        testResult: true,
+                        evidence: {
+                            goalId: goal.id || null,
+                            iteration: iteration + 1,
+                            poseidon: verified
+                        },
+                        nextStep: 'Report completion with evidence-backed result.'
+                    }).catch(() => {});
                     finalResult = claimedResult || `Goal "${goal.title}" completed in ${iteration + 1} steps`;
                     console.log(`[${this.name}] ✅ / Complete (Poseidon verified) in ${iteration + 1} steps: "${goal.title}"`);
                     break;
                 } else {
+                    await recordLoopEvent({
+                        loop: 'autonomous_work',
+                        phase: 'poseidon_blocked_done',
+                        actor: this.name,
+                        target: goal.title,
+                        channel: 'agentic_executor',
+                        claim: claimedResult || `Goal "${goal.title}" claimed DONE`,
+                        falsificationTest: falsificationTest || null,
+                        testResult: false,
+                        evidence: {
+                            goalId: goal.id || null,
+                            iteration: iteration + 1,
+                            poseidon: verified
+                        },
+                        nextStep: 'Continue work or end as partial after repeated unverified DONE claims.'
+                    }).catch(() => {});
                     // UNCERTAIN or FALSE — agent claims done but can't prove it
-                    const totalDoneBlocks = observations.filter(o => o._poseidonBlock).length;
+                    const totalDoneBlocks = observations.filter(o => o._poseidonBlock).length + 1;
                     if (totalDoneBlocks >= 2) {
+                        await this._queuePoseidonRepairGoal(goal, {
+                            claimedResult,
+                            falsificationTest,
+                            verified,
+                            iteration: iteration + 1,
+                            totalDoneBlocks
+                        }).catch(() => {});
                         // Give up after 2 failed verifications — partial completion
                         finalResult = null;
                         console.warn(`[${this.name}] | Poseidon: 2 unverified DONE claims — ending as partial`);
@@ -883,6 +923,53 @@ What is your next step?`;
         } catch {
             return [];
         }
+    }
+
+    async _queuePoseidonRepairGoal(goal = {}, details = {}) {
+        if (!this.goalPlanner?.createGoal) return null;
+
+        const repairTitle = `Repair repeated unverified completion claims: ${goal.title || 'agentic goal'}`.slice(0, 180);
+        const repair = await this.goalPlanner.createGoal({
+            title: repairTitle,
+            description: [
+                `The agentic executor made ${details.totalDoneBlocks || 2} DONE claims that Poseidon could not verify.`,
+                `Original goal: ${goal.title || 'unknown'}`,
+                `Rejected claim: ${details.claimedResult || 'none'}`,
+                `Falsification test: ${details.falsificationTest || 'missing'}`,
+                `Poseidon reason: ${details.verified?.reason || 'unknown'}`,
+                'Tighten the execution prompt, tool-use flow, or verification policy so future DONE claims include concrete checked evidence before completion.'
+            ].join('\n'),
+            category: 'poseidon_claim_discipline',
+            priority: 0.72,
+            source: 'autonomous_work_loop',
+            evidence: {
+                originalGoalId: goal.id || null,
+                iteration: details.iteration || null,
+                poseidon: details.verified || null
+            }
+        });
+
+        await recordLoopEvent({
+            loop: 'autonomous_work',
+            phase: 'repair_goal_queued',
+            actor: this.name,
+            target: goal.title || null,
+            channel: 'agentic_executor',
+            claim: 'Repeated unverified DONE claims were converted into a repair goal.',
+            falsificationTest: 'goalPlanner.createGoal returned a repair goal object',
+            testResult: !!repair,
+            evidence: {
+                originalGoalId: goal.id || null,
+                repairGoalId: repair?.id || null,
+                totalDoneBlocks: details.totalDoneBlocks || 2,
+                poseidon: details.verified || null
+            },
+            nextStep: repair?.id
+                ? 'Run the repair goal to reduce unsupported completion claims.'
+                : 'Retry repair goal creation when the goal planner is available.'
+        }).catch(() => {});
+
+        return repair;
     }
 
     // ─────────────────────────────────────────────────────────────────────

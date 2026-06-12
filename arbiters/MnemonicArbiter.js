@@ -289,8 +289,12 @@ export class MnemonicArbiter extends BaseArbiter {
       `);
       stmt.run(id, content, JSON.stringify(metadata), embeddingId, now, now, metadata.importance || 0.5);
 
-      if (this.redis) {
-        await this.redis.setEx(`mem:${id}`, this.config.hotTierTTL, JSON.stringify({ content, metadata, embeddingId }));
+      if (this.redis && this.redis.isOpen) {
+        try {
+          await this.redis.setEx(`mem:${id}`, this.config.hotTierTTL, JSON.stringify({ content, metadata, embeddingId }));
+        } catch (redisErr) {
+          this.log('warn', 'Failed to write to hot tier (Redis)', { error: redisErr.message });
+        }
       }
 
       return { id, success: true };
@@ -314,11 +318,15 @@ export class MnemonicArbiter extends BaseArbiter {
     }
 
     // 1. Hot Tier
-    if (this.redis) {
-      const cached = await this.redis.get(`query:${searchTerms}`);
-      if (cached) {
-        this.tierMetrics.hot.hits++;
-        return { results: JSON.parse(cached), tier: 'hot', latency: Date.now() - startTime };
+    if (this.redis && this.redis.isOpen) {
+      try {
+        const cached = await this.redis.get(`query:${searchTerms}`);
+        if (cached) {
+          this.tierMetrics.hot.hits++;
+          return { results: JSON.parse(cached), tier: 'hot', latency: Date.now() - startTime };
+        }
+      } catch (redisErr) {
+        this.log('warn', 'Failed to read from hot tier (Redis)', { error: redisErr.message });
       }
     }
 
@@ -339,7 +347,13 @@ export class MnemonicArbiter extends BaseArbiter {
 
       if (results.length > 0) {
         this.tierMetrics.warm.hits++;
-        if (this.redis) await this.redis.setEx(`query:${searchTerms}`, this.config.hotTierTTL, JSON.stringify(results));
+        if (this.redis && this.redis.isOpen) {
+          try {
+            await this.redis.setEx(`query:${searchTerms}`, this.config.hotTierTTL, JSON.stringify(results));
+          } catch (redisErr) {
+            this.log('warn', 'Failed to write query cache to hot tier (Redis)', { error: redisErr.message });
+          }
+        }
         return { results, tier: 'warm', latency: Date.now() - startTime };
       }
     }

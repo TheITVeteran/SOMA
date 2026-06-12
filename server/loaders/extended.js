@@ -645,6 +645,22 @@ export async function loadExtendedSystems(system) {
         console.warn(`    ⚠️ DiscordArbiter skipped: ${e.message}`);
     }
 
+    // ── Vision Narrator: SOMA's Proactive Room Narrative Eye ──
+    try {
+        const { VisionNarratorArbiter } = await import('../../arbiters/VisionNarratorArbiter.js');
+        const visionNarrator = new VisionNarratorArbiter({
+            messageBroker: system.messageBroker,
+            quadBrain: system.quadBrain,
+            system
+        });
+        await visionNarrator.initialize();
+        system.visionNarrator = visionNarrator;
+        ext.visionNarrator = visionNarrator;
+        console.log('    👁️  VisionNarratorArbiter ONLINE — proactive room reactions active');
+    } catch (e) {
+        console.warn(`    ⚠️ VisionNarratorArbiter skipped: ${e.message}`);
+    }
+
     const loaded = Object.values(ext).filter(v => v !== null).length;
     const total = Object.keys(ext).length;
     const heapMB = (process.memoryUsage().heapUsed / 1024 / 1024).toFixed(0);

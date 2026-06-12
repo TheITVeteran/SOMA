@@ -833,9 +833,9 @@ class SOMAServer {
         const tomArbiter = Array.from(this.orchestrator.population.values())
           .find(a => a.constructor.name === 'TheoryOfMindArbiter');
 
-        if (tomArbiter && tomArbiter.getUserModel) {
+        if (tomArbiter && (tomArbiter.getInsights || tomArbiter.getUserModel)) {
           const userId = req.query.userId || 'default_user';
-          const model = tomArbiter.getUserModel(userId);
+          const model = tomArbiter.getInsights ? tomArbiter.getInsights(userId) : tomArbiter.getUserModel(userId);
           res.json({ success: true, insights: model || {} });
         } else {
           res.json({ success: true, insights: {} });

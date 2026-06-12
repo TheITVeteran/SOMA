@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Orb } from './components/Orb';
 import { RobotFace } from './components/RobotFace';
 import { SynthWave } from './components/SynthWave';
@@ -8,6 +8,12 @@ import { useSomaAudio } from './hooks/useSomaAudio';
 
 export default function App() {
   const [showFace, setShowFace] = useState(false);
+  const [webcamActive, setWebcamActive] = useState(false);
+  
+  const videoRef = useRef<HTMLVideoElement | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const intervalRef = useRef<NodeJS.Timeout | null>(null);
 
   let hookData;
   try {
@@ -23,6 +29,96 @@ export default function App() {
     if (isConnected) disconnect();
     else connect();
   };
+
+  const startWebcam = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { width: 640, height: 480, frameRate: 15 }
+      });
+      streamRef.current = stream;
+      setWebcamActive(true);
+
+      const video = document.createElement('video');
+      video.srcObject = stream;
+      video.autoplay = true;
+      video.playsInline = true;
+      videoRef.current = video;
+
+      const canvas = document.createElement('canvas');
+      canvas.width = 640;
+      canvas.height = 480;
+      canvasRef.current = canvas;
+
+      await fetch('/api/perception/vision/channel', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ channel: 'webcam' })
+      }).catch(() => {});
+
+      intervalRef.current = setInterval(async () => {
+        if (!canvasRef.current || !videoRef.current || !isConnected) return;
+        const ctx = canvasRef.current.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(videoRef.current, 0, 0, canvasRef.current.width, canvasRef.current.height);
+          const dataUrl = canvasRef.current.toDataURL('image/jpeg', 0.5);
+          
+          await fetch('/api/perception/vision/ingest-frame', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              imageData: dataUrl,
+              mimeType: 'image/jpeg',
+              source: 'webcam'
+            })
+          }).catch(() => {});
+        }
+      }, 1500);
+
+      console.log('[App] Webcam stream active.');
+    } catch (err) {
+      console.error('[App] Failed to start webcam stream:', err);
+    }
+  };
+
+  const stopWebcam = () => {
+    if (intervalRef.current) {
+      clearInterval(intervalRef.current);
+      intervalRef.current = null;
+    }
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(track => track.stop());
+      streamRef.current = null;
+    }
+    setWebcamActive(false);
+
+    fetch('/api/perception/vision/channel', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ channel: 'desktop' })
+    }).catch(() => {});
+
+    console.log('[App] Webcam stream stopped.');
+  };
+
+  const handleToggleWebcam = () => {
+    if (webcamActive) stopWebcam();
+    else startWebcam();
+  };
+
+  // Shut down camera if SOMA connection closes
+  useEffect(() => {
+    if (!isConnected && webcamActive) {
+      stopWebcam();
+    }
+  }, [isConnected]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+      if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop());
+    };
+  }, []);
 
   return (
     <div className="relative min-h-screen w-full flex flex-col items-center justify-center bg-black overflow-hidden">
@@ -88,6 +184,8 @@ export default function App() {
             isConnected={isConnected}
             onToggle={handleToggle}
             inputVolume={inputVolume}
+            webcamActive={webcamActive}
+            onToggleWebcam={handleToggleWebcam}
           />
         </div>
 

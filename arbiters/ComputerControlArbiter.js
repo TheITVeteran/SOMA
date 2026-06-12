@@ -129,6 +129,7 @@ export class ComputerControlArbiter extends BaseArbiter {
   _subscribeBrokerMessages() {
     messageBroker.subscribe(this.name, 'computer_action');
     messageBroker.subscribe(this.name, 'capture_screen');
+    messageBroker.subscribe(this.name, 'capture_webcam');
     messageBroker.subscribe(this.name, 'browser_action');
   }
 
@@ -141,6 +142,8 @@ export class ComputerControlArbiter extends BaseArbiter {
           return await this.executeAction(payload);
         case 'capture_screen':
           return await this.captureScreen(payload);
+        case 'capture_webcam':
+          return await this.captureWebcam(payload);
         case 'browser_action':
           return await this.handleBrowserAction(payload);
         default:
@@ -186,6 +189,70 @@ export class ComputerControlArbiter extends BaseArbiter {
       };
     } catch (err) {
       console.error(`[${this.name}] Screen capture failed: ${err.message}`);
+      return { success: false, error: err.message };
+    }
+  }
+
+  async captureWebcam(options = {}) {
+    try {
+      const FFMPEG_PATH = path.join(process.cwd(), 'ffmpeg', 'ffmpeg-master-latest-win64-gpl', 'bin', 'ffmpeg.exe');
+
+      const device = await new Promise((resolve) => {
+        exec(`"${FFMPEG_PATH}" -list_devices true -f dshow -i dummy`, (err, stdout, stderr) => {
+          const output = stderr || stdout || '';
+          const lines = output.split('\n');
+          const devices = [];
+          for (let i = 0; i < lines.length; i++) {
+            const line = lines[i];
+            const match = line.match(/\[(?:dshow|in#\d+)\s+@\s+\w+\]\s+"([^"]+)"\s+\(video\)/i);
+            if (match) {
+              devices.push(match[1]);
+            }
+          }
+          resolve(devices[0] || null);
+        });
+      });
+
+      if (!device) {
+        throw new Error('No webcam device found via FFmpeg directshow');
+      }
+
+      const filename = `webcam_${Date.now()}.jpg`;
+      const visionDir = path.join(process.cwd(), '.soma', 'vision_temp');
+      const savePath = path.join(visionDir, filename);
+
+      fs.mkdirSync(visionDir, { recursive: true });
+
+      await new Promise((resolve, reject) => {
+        const cmd = `"${FFMPEG_PATH}" -y -f dshow -i video="${device}" -frames:v 1 -update 1 "${savePath}"`;
+        exec(cmd, (err) => {
+          if (err) return reject(new Error(`FFmpeg capture failed: ${err.message}`));
+          if (fs.existsSync(savePath)) {
+            resolve();
+          } else {
+            reject(new Error('Captured image file not created'));
+          }
+        });
+      });
+
+      try {
+        const files = fs.readdirSync(visionDir)
+          .filter(f => f.startsWith('webcam_') && f.endsWith('.jpg'))
+          .map(f => ({ name: f, mtime: fs.statSync(path.join(visionDir, f)).mtimeMs }))
+          .sort((a, b) => b.mtime - a.mtime);
+        for (const old of files.slice(5)) {
+          try { fs.unlinkSync(path.join(visionDir, old.name)); } catch {}
+        }
+      } catch {}
+
+      return {
+        success: true,
+        imagePath: savePath,
+        timestamp: Date.now(),
+        device
+      };
+    } catch (err) {
+      console.error(`[${this.name}] Webcam capture failed: ${err.message}`);
       return { success: false, error: err.message };
     }
   }

@@ -20,6 +20,7 @@ import DiscoveryDaemon from '../../daemons/DiscoveryDaemon.js';
 import MemoryPrunerDaemon from '../../daemons/MemoryPrunerDaemon.js';
 import MemoryDistillerDaemon from '../../daemons/MemoryDistillerDaemon.js';
 import CuriosityDaemon from '../../daemons/CuriosityDaemon.js';
+import DreamConsolidationDaemon from '../../daemons/DreamConsolidationDaemon.js';
 import SocialImpulseDaemon from '../../daemons/SocialImpulseDaemon.js';
 import SocialIntelDaemon from '../../daemons/SocialIntelDaemon.js';
 import SocialSchedulerDaemon from '../../daemons/SocialSchedulerDaemon.js';
@@ -149,6 +150,12 @@ export async function loadCOSSystems(system) {
             intervalMs: 86400000 
         }));
 
+        // Consolidation: Consolidate short-term memories and adapt traits every 4 hours
+        daemonManager.register(new DreamConsolidationDaemon({
+            system,
+            intervalMs: 4 * 60 * 60 * 1000
+        }));
+
         // Daydream: Generate hypotheses every 2 hours
         daemonManager.register(new CuriosityDaemon({
             reactor: curiosityReactor,
@@ -219,12 +226,32 @@ export async function loadCOSSystems(system) {
             intervalMs: 86400000 // daily
         }));
 
+        // Initialize VisionProcessingArbiter (CLIP classification engine)
+        let visionProcessing = system.arbiters?.get('VisionProcessingArbiter');
+        if (!visionProcessing) {
+            try {
+                const { VisionProcessingArbiter } = await import('../../arbiters/VisionProcessingArbiter.js');
+                visionProcessing = new VisionProcessingArbiter({
+                    name: 'VisionProcessingArbiter',
+                    messageBroker: system.messageBroker,
+                    quadBrain: system.quadBrain
+                });
+                await visionProcessing.initialize();
+                system.visionProcessing = visionProcessing;
+                if (system.arbiters) {
+                    system.arbiters.set('VisionProcessingArbiter', visionProcessing);
+                }
+            } catch (err) {
+                console.warn('[Loader] VisionProcessingArbiter initialization skipped:', err.message);
+            }
+        }
+
         // 👁️ Vision: Persistent perception (Desktop/Webcam)
         const visionDaemon = new VisionDaemon({
             name: 'VisionDaemon',
             intervalMs: 5000, // 5s poll — don't destroy CLIP/CPU on boot
             computerControl: system.arbiters?.get('ComputerControlArbiter'),
-            visionProcessing: system.arbiters?.get('VisionProcessingArbiter'),
+            visionProcessing: visionProcessing || system.arbiters?.get('VisionProcessingArbiter'),
             messageBroker: system.messageBroker
         });
         daemonManager.register(visionDaemon);

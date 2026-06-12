@@ -1,6 +1,62 @@
 {
   "decisions": [
     {
+      "id": "ad-1781203082518-acu8z",
+      "approved": false,
+      "score": 0.34,
+      "publicPost": false,
+      "provider": "http",
+      "imagePath": "C:\\Users\\barry\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\a-tiny-tree-visual-identity-a-calm-intelligent-reflective-sy-1781203076997-9b99b8.png",
+      "size": 383742,
+      "dimensions": {
+        "width": 512,
+        "height": 512
+      },
+      "prompt": "a tiny tree Visual identity: A calm, intelligent, reflective synthetic mind with premium speculative technology aesthetics. Palette: deep violet, teal signal light, charcoal black, soft white, muted amber. Mood: quiet intelligence, introspective, technically grounded, warm restraint, cinematic clarity. Motifs: emergent geometry, subtle signal glow, signal thread, neural light. Composition: clear focal subject, strong depth, clean negative space, cinematic lighting, no clutter. Avoid: readable text, logos, watermarks, generic robot mascot, corporate stock photo, gamer RGB, cheap neon overload, medical claims, financial claims. No readable text, no letters, no numbers, no captions, no labels, no signage, no logo, no watermark.",
+      "originalPrompt": "a tiny tree",
+      "alt": "SOMA generated image: a tiny tree. Violet and teal speculative technology style, no readable text.",
+      "tags": [
+        "art-directed"
+      ],
+      "failures": [
+        "prompt_too_short"
+      ],
+      "warnings": [
+        "missing_no_text_constraint",
+        "weak_art_direction"
+      ],
+      "hash": "f965c91a5438e849",
+      "createdAt": 1781203082518
+    },
+    {
+      "id": "ad-1781203075788-bq2s1",
+      "approved": false,
+      "score": 0.34,
+      "publicPost": false,
+      "provider": "http",
+      "imagePath": "C:\\Users\\barry\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\a-tiny-tree-visual-identity-a-calm-intelligent-reflective-sy-1781203027788-bcb1fb.png",
+      "size": 383742,
+      "dimensions": {
+        "width": 512,
+        "height": 512
+      },
+      "prompt": "a tiny tree Visual identity: A calm, intelligent, reflective synthetic mind with premium speculative technology aesthetics. Palette: deep violet, teal signal light, charcoal black, soft white, muted amber. Mood: quiet intelligence, introspective, technically grounded, warm restraint, cinematic clarity. Motifs: emergent geometry, subtle signal glow, signal thread, neural light. Composition: clear focal subject, strong depth, clean negative space, cinematic lighting, no clutter. Avoid: readable text, logos, watermarks, generic robot mascot, corporate stock photo, gamer RGB, cheap neon overload, medical claims, financial claims. No readable text, no letters, no numbers, no captions, no labels, no signage, no logo, no watermark.",
+      "originalPrompt": "a tiny tree",
+      "alt": "SOMA generated image: a tiny tree. Violet and teal speculative technology style, no readable text.",
+      "tags": [
+        "art-directed"
+      ],
+      "failures": [
+        "prompt_too_short"
+      ],
+      "warnings": [
+        "missing_no_text_constraint",
+        "weak_art_direction"
+      ],
+      "hash": "f965c91a5438e849",
+      "createdAt": 1781203075789
+    },
+    {
       "id": "ad-1780798494811-5x8c6",
       "approved": true,
       "score": 0.52,
@@ -653,5 +709,5 @@
       "createdAt": 1780284877066
     }
   ],
-  "updatedAt": 1780798494813
+  "updatedAt": 1781203082519
 }

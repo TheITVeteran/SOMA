@@ -1,4 +1,4 @@
-﻿import { createRequire } from 'module';
+import { createRequire } from 'module';
 const require = createRequire(import.meta.url);
 const { BaseArbiter } = require('../core/BaseArbiter.cjs');
 const messageBroker = require('../core/MessageBroker.cjs');
@@ -50,12 +50,12 @@ export class VocalSynthesisArbiter extends BaseArbiter {
     
     
 
-    messageBroker.on('limbic_update', (msg) => {
+    messageBroker.subscribe('limbic_update', (msg) => {
       this.currentChemistry = msg.payload.chemistry;
       this.currentWeather = msg.payload.weather;
     });
 
-    messageBroker.on('vocal_synthesis_requested', async (msg) => {
+    messageBroker.subscribe('vocal_synthesis_requested', async (msg) => {
       try {
         await this.handleSynthesis(msg.payload);
       } catch (err) {

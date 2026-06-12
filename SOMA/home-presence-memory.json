@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "people": {
+    "erin": {
+      "attempts": 1,
+      "heardReplies": 0,
+      "answered": 0,
+      "noReplies": 0,
+      "failures": 0,
+      "confidence": 0.48,
+      "lastOutcome": "attempted",
+      "lastSummary": "Hey Erin, hello from the home computer.",
+      "lastInteractionAt": 1781189306688,
+      "suppressedUntil": null,
+      "displayName": "Erin",
+      "key": "erin"
+    }
+  },
+  "updatedAt": 1781189306689
+}

@@ -1,0 +1,210 @@
+{
+  "messages": [
+    {
+      "id": "msg-1778286661202-ctbipq",
+      "ts": "2026-05-09T00:31:01.202Z",
+      "role": "user",
+      "text": "Can Steve audit this code and send it to Pulse?",
+      "channel": "test",
+      "route": "pulse",
+      "agent": "Steve",
+      "trust": {
+        "score": 0.72,
+        "factors": [
+          "persistent receipt",
+          "communication memory",
+          "backend connected",
+          "approval required"
+        ],
+        "source": "orb"
+      },
+      "metadata": {
+        "backendConnected": true
+      }
+    },
+    {
+      "id": "msg-1778286661203-ozq9v2",
+      "ts": "2026-05-09T00:31:01.203Z",
+      "role": "soma",
+      "text": "Smoke test response saved.",
+      "channel": "test",
+      "route": "pulse",
+      "agent": "Steve",
+      "trust": {
+        "score": 0.72,
+        "factors": [
+          "persistent receipt",
+          "communication memory",
+          "backend connected",
+          "approval required"
+        ],
+        "source": "orb"
+      },
+      "metadata": {
+        "receiptId": "rcpt-1778286661202-74kjjk"
+      }
+    }
+  ],
+  "receipts": [
+    {
+      "id": "rcpt-1778286661202-74kjjk",
+      "ts": "2026-05-09T00:31:01.202Z",
+      "updatedAt": "2026-05-09T00:31:01.203Z",
+      "title": "Smoke test",
+      "text": "Can Steve audit this code and send it to Pulse?",
+      "channel": "test",
+      "status": "completed",
+      "steps": [
+        {
+          "label": "Queued",
+          "status": "done",
+          "ts": "2026-05-09T00:31:01.202Z"
+        },
+        {
+          "label": "Routed",
+          "status": "done",
+          "ts": "2026-05-09T00:31:01.202Z",
+          "detail": "Pulse"
+        },
+        {
+          "label": "Running",
+          "status": "done",
+          "ts": "2026-05-09T00:31:01.203Z"
+        },
+        {
+          "label": "Evidence",
+          "status": "done",
+          "ts": "2026-05-09T00:31:01.203Z"
+        },
+        {
+          "label": "Result",
+          "status": "done",
+          "ts": "2026-05-09T00:31:01.203Z"
+        },
+        {
+          "label": "Saved",
+          "status": "done",
+          "ts": "2026-05-09T00:31:01.203Z"
+        }
+      ],
+      "route": "pulse",
+      "routeLabel": "Pulse",
+      "agent": "Steve",
+      "risk": "medium",
+      "needsApproval": true,
+      "priority": "normal",
+      "trust": {
+        "score": 0.72,
+        "factors": [
+          "persistent receipt",
+          "communication memory",
+          "backend connected",
+          "approval required"
+        ],
+        "source": "orb"
+      },
+      "response": "Smoke test response saved."
+    }
+  ],
+  "approvals": [
+    {
+      "id": "appr-1778286661202-8ntexh",
+      "ts": "2026-05-09T00:31:01.202Z",
+      "title": "Approve Pulse action",
+      "text": "Can Steve audit this code and send it to Pulse?",
+      "route": "pulse",
+      "agent": "Steve",
+      "receiptId": "rcpt-1778286661202-74kjjk",
+      "status": "pending"
+    }
+  ],
+  "timeline": [
+    {
+      "id": "evt-1778286661202-e1cway",
+      "ts": "2026-05-09T00:31:01.202Z",
+      "type": "inbox",
+      "title": "Incoming message",
+      "detail": "Can Steve audit this code and send it to Pulse?",
+      "route": "pulse",
+      "agent": "Steve",
+      "priority": "normal"
+    },
+    {
+      "id": "evt-1778286661202-xk953u",
+      "ts": "2026-05-09T00:31:01.202Z",
+      "type": "receipt",
+      "title": "Action receipt opened",
+      "detail": "Smoke test",
+      "route": "pulse",
+      "agent": "Steve",
+      "priority": "normal"
+    },
+    {
+      "id": "evt-1778286661202-6piyn6",
+      "ts": "2026-05-09T00:31:01.202Z",
+      "type": "approval",
+      "title": "Approval required",
+      "detail": "Approve Pulse action",
+      "route": "pulse",
+      "agent": "Steve",
+      "priority": "important"
+    },
+    {
+      "id": "evt-1778286661203-40wofd",
+      "ts": "2026-05-09T00:31:01.203Z",
+      "type": "receipt",
+      "title": "Action receipt completed",
+      "detail": "Smoke test",
+      "route": "pulse",
+      "agent": "Steve",
+      "priority": "normal"
+    },
+    {
+      "id": "evt-1778286661203-u3p2kd",
+      "ts": "2026-05-09T00:31:01.203Z",
+      "type": "outbox",
+      "title": "Outgoing response",
+      "detail": "Smoke test response saved.",
+      "route": "pulse",
+      "agent": "Steve",
+      "priority": "normal"
+    }
+  ],
+  "agents": [
+    {
+      "id": "soma",
+      "name": "SOMA",
+      "role": "Primary interface",
+      "status": "ready",
+      "confidence": 0.92
+    },
+    {
+      "id": "steve",
+      "name": "Steve",
+      "role": "Refinement agent",
+      "status": "standby",
+      "confidence": 0.9
+    },
+    {
+      "id": "kevin",
+      "name": "Kevin",
+      "role": "Security auditor",
+      "status": "standby",
+      "confidence": 0.88
+    },
+    {
+      "id": "aurora",
+      "name": "Aurora",
+      "role": "Creative synthesizer",
+      "status": "standby",
+      "confidence": 0.91
+    },
+    {
+      "id": "prometheus",
+      "name": "Prometheus",
+      "role": "Strategic planner",
+      "status": "standby",
+      "confidence": 0.86
+    }
+  ]
+}

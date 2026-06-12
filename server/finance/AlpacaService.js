@@ -180,6 +180,22 @@ class AlpacaService {
       // Initialize stream (lazy connect)
       this.stream = this.client.data_stream_v2;
 
+      // Monkey-patch to prevent "WebSocket is not open: readyState 0 (CONNECTING)" crashes
+      if (this.stream) {
+        const originalAuthenticate = this.stream.authenticate.bind(this.stream);
+        this.stream.authenticate = () => {
+          if (this.stream.conn && this.stream.conn.readyState === 1) { // 1 is OPEN
+            try {
+              originalAuthenticate();
+            } catch (err) {
+              console.error('[Alpaca Stream Patch] Authenticate error:', err.message);
+            }
+          } else {
+            console.warn(`[Alpaca Stream Patch] Skipped auth: connection not OPEN (readyState: ${this.stream.conn ? this.stream.conn.readyState : 'null'})`);
+          }
+        };
+      }
+
       this.isPaperTrading = paperTrading;
       this.currentCredentialType = credentialType || (paperTrading ? 'alpaca_paper' : 'alpaca_live');
 
