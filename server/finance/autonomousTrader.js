@@ -807,6 +807,32 @@ class AutonomousTrader {
     _generateSignal(analysis, currentPrice, bars, regime = null) {
         const { strategy, risk, sentiment, quant } = analysis;
 
+        // ─── REGIME-MATCHED ENTRY ─────────────────────────────────────────────
+        // Momentum entries lose in ranging markets — "price above its average"
+        // reads bullish but in chop it means "near the top of the range, about
+        // to revert." That produced an 8% live win rate (Jun 2026). In RANGING,
+        // derive the entry from mean-reversion (buy the dip / sell the rip)
+        // instead of the momentum recommendation. TRENDING keeps momentum below.
+        const isRangingRegime = regime === 'RANGING' || regime?.includes?.('RANGING');
+        if (isRangingRegime) {
+            const mr = this._meanReversionSignal(bars, currentPrice);
+            const mrSignal = {
+                action: mr.action,
+                confidence: mr.confidence,
+                reason: `${mr.reason} [Regime: ${regime}]`,
+                recommendation: mr.action === 'BUY' ? 'BUY' : mr.action === 'SELL' ? 'SELL' : 'HOLD',
+                agents: { strategy: mr.confidence, risk: 0.5, sentiment: 0.5, technical: mr.bandScore },
+                timestamp: Date.now(),
+                regime,
+                source: 'mean_reversion'
+            };
+            const adaptedMr = missionControlRuntime.adaptSignal(mrSignal, analysis, {
+                symbol: this.symbol, price: currentPrice, regime, minConfidence: this.config.minConfidence
+            });
+            this._lastSignal = adaptedMr;
+            return adaptedMr;
+        }
+
         // Extract confidence scores
         let strategyConfidence = strategy?.confidence || 0;
         let riskScore = risk?.score != null ? risk.score / 100 : 0.5;
@@ -938,6 +964,50 @@ class AutonomousTrader {
         else score += (50 - rsi) / 200; // Slight bias
 
         return Math.min(1, Math.max(0, score));
+    }
+
+    /**
+     * Mean-reversion entry signal for RANGING markets — buy the dip, sell the
+     * rip. Uses Bollinger band position + RSI extremes (the scalping engine's
+     * confluence, self-contained). Only fires near band edges; HOLDs mid-band
+     * so it trades less and at better prices than the momentum path.
+     */
+    _meanReversionSignal(bars, currentPrice) {
+        if (!bars || bars.length < 20) {
+            return { action: 'HOLD', confidence: 0, reason: 'Mean-reversion: insufficient bars', bandScore: 0.5 };
+        }
+        const window = bars.slice(-20).map(b => b.close);
+        const sma = window.reduce((s, c) => s + c, 0) / window.length;
+        const variance = window.reduce((s, c) => s + (c - sma) ** 2, 0) / window.length;
+        const std = Math.sqrt(variance);
+        const upper = sma + 2 * std;
+        const lower = sma - 2 * std;
+
+        // RSI(14)
+        let gains = 0, losses = 0;
+        for (let i = bars.length - 14; i < bars.length; i++) {
+            const ch = bars[i].close - bars[i - 1].close;
+            if (ch > 0) gains += ch; else losses += Math.abs(ch);
+        }
+        const avgGain = gains / 14, avgLoss = losses / 14;
+        const rs = avgLoss === 0 ? 100 : avgGain / avgLoss;
+        const rsi = 100 - (100 / (1 + rs));
+
+        // 0 = at/below lower band, 1 = at/above upper band
+        const bandScore = std > 0 ? Math.min(1, Math.max(0, (currentPrice - lower) / (upper - lower))) : 0.5;
+        const pct = (bandScore * 100).toFixed(0);
+
+        // Buy the dip: lower band OR oversold RSI
+        if (currentPrice <= lower || rsi < 35) {
+            const conf = Math.min(0.9, 0.58 + (35 - Math.min(rsi, 35)) / 100 + Math.max(0, (lower - currentPrice) / (std || 1)) * 0.08);
+            return { action: 'BUY', confidence: conf, reason: `Mean-reversion BUY — oversold (RSI ${rsi.toFixed(0)}, ${pct}% of band)`, bandScore };
+        }
+        // Sell the rip: upper band OR overbought RSI
+        if (currentPrice >= upper || rsi > 65) {
+            const conf = Math.min(0.9, 0.58 + (Math.max(rsi, 65) - 65) / 100 + Math.max(0, (currentPrice - upper) / (std || 1)) * 0.08);
+            return { action: 'SELL', confidence: conf, reason: `Mean-reversion SELL — overbought (RSI ${rsi.toFixed(0)}, ${pct}% of band)`, bandScore };
+        }
+        return { action: 'HOLD', confidence: 0.4, reason: `Mean-reversion HOLD — mid-band (${pct}%, RSI ${rsi.toFixed(0)}), waiting for an extreme`, bandScore };
     }
 
     /**
