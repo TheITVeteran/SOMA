@@ -495,13 +495,26 @@ export class DiscordArbiter extends BaseArbiter {
     }
 
     async _getRealtimeContext() {
-        // 1. Fetch Active Goals
+        // 1. Fetch Active Goals — with REAL progress + verification state so she
+        // reports measured status instead of inventing percentages. getActiveGoals
+        // returns { goals: [...] } (an object) — the old Array.isArray(goals) check
+        // was always false, so this block always said "No active goals."
         let formattedGoals = "No active goals.";
         if (this.goalPlanner?.getActiveGoals) {
             try {
-                const goals = await this.goalPlanner.getActiveGoals();
-                if (Array.isArray(goals) && goals.length > 0) {
-                    formattedGoals = goals.map(g => `- ${g.title} (Priority: ${g.priority || 'N/A'})`).join('\n');
+                const res = await this.goalPlanner.getActiveGoals();
+                const goals = Array.isArray(res) ? res : (res?.goals || []);
+                if (goals.length > 0) {
+                    formattedGoals = goals.map(g => {
+                        const progress = g.metrics?.progress != null ? `${Math.round(g.metrics.progress)}%` : '0%';
+                        const status = g.status || 'pending';
+                        const verif = g.metadata?.verificationNote || g.metadata?.lastVerification;
+                        const verifStr = verif ? ` | verification: ${this._formatSafeSnippet(String(verif), 60)}` : '';
+                        // 82% is the stuck-goal ceiling (ran iterations, never verified done);
+                        // surface that honestly so it is never read as "almost finished".
+                        const stuckHint = (g.metrics?.progress >= 80 && status !== 'completed') ? ' [executed but NOT verified-complete]' : '';
+                        return `- ${this._formatSafeSnippet(g.title, 80)} — ${progress}, status: ${status}${stuckHint}${verifStr}`;
+                    }).join('\n');
                 }
             } catch (err) {
                 this.log('warn', `Failed to fetch active goals: ${err.message}`);
@@ -525,23 +538,36 @@ export class DiscordArbiter extends BaseArbiter {
             this.log('warn', `Failed to read work ledger: ${err.message}`);
         }
 
-        // 3. Fetch Trading State
+        // 3. Fetch Trading State — HEADLINE is REAL live-paper performance from
+        // closed trades. The active strategy's winRate/trades are SIMULATION
+        // provenance (e.g. standard_portfolio learned on TLT, 468 sim trades,
+        // 70% sim win rate) and must NEVER be reported as live results — that
+        // exact mislabel caused her "70% on TLT" claim while really at ~6%.
         let formattedTrading = "No auto-trading status available.";
         try {
             const tradingState = await this._readTradingState();
-            if (tradingState) {
-                const mode = tradingState.mode || 'inactive';
-                const capital = tradingState.paperCapital || 0;
-                const strategy = tradingState.activeStrategy || {};
+            let realLine = '';
+            try {
+                if (tradeLogger && !tradeLogger.db) { try { tradeLogger.initialize(); } catch (e) {} }
+                if (tradeLogger?.getStats) {
+                    const s = tradeLogger.getStats();
+                    const pf = s.profitFactor === Infinity ? '∞' : (s.profitFactor || 0).toFixed(2);
+                    realLine = `- YOUR REAL LIVE-PAPER RESULTS (report THESE): ${(s.winRate || 0).toFixed(1)}% win rate over ${s.totalTrades || 0} closed trades | net PnL $${(s.totalPnl || 0).toFixed(2)} | profit factor ${pf}`;
+                }
+            } catch (e) { /* fall through */ }
+            if (tradingState || realLine) {
+                const mode = tradingState?.mode || 'inactive';
+                const capital = tradingState?.paperCapital || 0;
+                const strategy = tradingState?.activeStrategy || {};
                 const strategyName = strategy.strategyName || 'None';
-                const symbol = strategy.symbol || 'N/A';
-                const winRate = strategy.winRate ? `${(strategy.winRate * 100).toFixed(2)}%` : 'N/A';
-                const trades = strategy.trades || 0;
-                const pnl = strategy.pnl || 0;
-                formattedTrading = `- Mode: ${mode.toUpperCase()} (Active Tier: ${tradingState.activeTier || 'None'})\n` +
-                                   `- Strategy: ${strategyName} on ${symbol}\n` +
-                                   `- Capital: $${capital}\n` +
-                                   `- Win Rate: ${winRate} over ${trades} trades (PnL: ${pnl})`;
+                const simSym = strategy.symbol || 'N/A';
+                const simWin = strategy.winRate ? `${(strategy.winRate * 100).toFixed(1)}%` : 'N/A';
+                const simTrades = strategy.trades || 0;
+                formattedTrading = [
+                    realLine || '- YOUR REAL LIVE-PAPER RESULTS: none recorded yet',
+                    `- Mode: ${mode.toUpperCase()} (Tier: ${tradingState?.activeTier || 'None'}), paper capital $${capital}`,
+                    `- Active strategy: ${strategyName} (its prior SIMULATION record was ${simWin} over ${simTrades} sim trades on ${simSym} — this is NOT your live performance, do not quote it as such)`
+                ].join('\n');
             }
         } catch (err) {
             this.log('warn', `Failed to read trading state: ${err.message}`);
@@ -623,6 +649,8 @@ export class DiscordArbiter extends BaseArbiter {
             'Do not claim you scanned files, wrote code, changed the filesystem, spawned MAX, watched a diff stream, committed changes, queued tasks, or observed live trading results unless that exact action is present in the live operational context, a current command result, or a recent work-ledger entry.',
             'When the user asks you to do work that requires tools you do not have in this Discord turn, say what you can queue or investigate next instead of saying it is already running.',
             'If a prior message claimed action but no evidence is present, treat it as unverified and say you need to verify it.',
+            'TRADING NUMBERS: only ever quote the "YOUR REAL LIVE-PAPER RESULTS" line for win rate and PnL. Never quote a strategy\'s simulation record (e.g. a 70% figure on TLT) as if it were your live performance. If asked how trading is going, give the real win rate and net PnL even when they are bad.',
+            'GOAL PROGRESS: only report a goal\'s progress and status from the Active Goals list above. Never invent a completion percentage. A goal at ~80%+ that is not status:completed has merely executed without verification — describe it as unverified/stuck, not as nearly done. Do not announce a feature, daemon, or strategy as built unless a work-ledger entry or verified goal confirms it.',
             `Use the following live operational context to inform your responses naturally (do not repeat it verbatim, only use it as background context to answer questions about your day, goals, trading or what you are doing):`,
             realtimeState,
             visual,
