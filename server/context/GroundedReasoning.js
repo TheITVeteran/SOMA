@@ -1,5 +1,6 @@
 import { buildSomaContext } from './SomaContextKernel.js';
 import { guardPublicText, verifyClaims } from './ClaimVerifier.js';
+import { buildOperationalTruthBlock } from './operationalTruth.js';
 
 function extractText(result) {
     return String(result?.text || result?.response || result?.output || result?.message || (typeof result === 'string' ? result : '')).trim();
@@ -25,8 +26,14 @@ export async function buildGroundedPrompt(query = '', {
         ]);
     } catch {}
 
+    // Real measured trading + goal truth, so every grounded voice quotes facts
+    // instead of a strategy's sim record or an invented completion percentage.
+    let truthBlock = '';
+    try { truthBlock = buildOperationalTruthBlock(system); } catch { /* non-fatal */ }
+
     return [
         prefix,
+        truthBlock,
         context ? `\n${context}\n` : '',
         suffix,
         query
