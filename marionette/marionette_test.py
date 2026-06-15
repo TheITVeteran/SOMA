@@ -48,6 +48,25 @@ prot = [s.lower() for s in CONFIG["KILL_PROTECT_SUBSTRINGS"]]
 check("protects claude", "claude" in prot)
 check("protects marionette", "marionette" in prot)
 
+# 6) an absent OPTIONAL service is 'not_installed' and never acts
+absent = md.ServiceMonitor("ghost", {
+    "required": False, "health_url": "http://127.0.0.1:1/health", "port": 1,
+    "boot_grace_s": 1, "start_dir": r"C:\does\not\exist",
+    "detect_file": "nope.bat", "start_cmd": ["cmd", "/c", "echo"],
+})
+check("absent optional -> not_installed", absent.state == "not_installed")
+calls = {"recover": 0}
+class _SpySup:
+    def alert(self, *a, **k): pass
+    def log_action(self, *a, **k): pass
+absent.recover = lambda *a, **k: calls.__setitem__("recover", calls["recover"] + 1)
+absent.evaluate(_SpySup())
+check("not_installed never recovers", calls["recover"] == 0 and absent.state == "not_installed")
+
+# 7) SOMA is detected as installed in this repo
+soma = md.ServiceMonitor("soma", CONFIG["SERVICES"]["soma"])
+check("SOMA detected installed", soma.installed is True)
+
 print("-" * 40)
 print(f"{passed} passed, {failed} failed")
 sys.exit(1 if failed else 0)

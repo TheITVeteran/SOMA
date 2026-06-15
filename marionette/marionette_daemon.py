@@ -111,7 +111,17 @@ class ServiceMonitor:
     def __init__(self, name, spec):
         self.name = name
         self.spec = spec
-        self.state = "unknown"           # unknown|healthy|stuck|dead|booting|restarting|circuit_open
+        self.required = spec.get("required", True)
+        # "Installed" = this machine actually has the service. Optional services
+        # that aren't installed are skipped entirely (the SOMA-without-MAX case).
+        detect = os.path.join(spec.get("start_dir", ""), spec.get("detect_file", ""))
+        self.installed = bool(spec.get("detect_file")) and os.path.isfile(detect)
+        # state: not_installed|unknown|healthy|stuck|dead|booting|restarting|circuit_open
+        self.state = "healthy" if self.installed else "not_installed"
+        if not self.installed:
+            self.state = "not_installed"
+        else:
+            self.state = "unknown"
         self.consecutive_fails = 0
         self.last_healthy = 0.0
         self.last_state_change = now()
@@ -142,6 +152,10 @@ class ServiceMonitor:
 
     # ── the per-tick evaluation ──
     def evaluate(self, supervisor):
+        # Optional, not-installed services are invisible to the supervisor.
+        if not self.installed:
+            self._set("not_installed")
+            return
         if self._circuit_is_open():
             self._set("circuit_open")
             return
@@ -225,6 +239,8 @@ class ServiceMonitor:
     def snapshot(self):
         return {
             "state": self.state,
+            "installed": self.installed,
+            "required": self.required,
             "consecutive_fails": self.consecutive_fails,
             "last_healthy_age_s": round(now() - self.last_healthy, 1) if self.last_healthy else None,
             "total_restarts": self.total_restarts,
@@ -270,9 +286,23 @@ class Supervisor:
             except Exception:
                 pass
 
+    # ── cold start: bring the installed stack up at supervisor launch ──
+    def cold_start(self):
+        installed = [m for m in self.monitors.values() if m.installed]
+        skipped = [m.name for m in self.monitors.values() if not m.installed]
+        names = ", ".join(m.name for m in installed) or "none"
+        self.alert("supervisor", "online",
+                   f"Marionette online — supervising: {names}"
+                   + (f" | not installed (skipped): {', '.join(skipped)}" if skipped else ""))
+        for m in installed:
+            if not http_ok(m.spec["health_url"], CONFIG["HEALTH_TIMEOUT_SECONDS"]):
+                self.log_action(m.name, "cold_start", {"reason": "down at supervisor launch"})
+                with self._lock:
+                    m.recover(self, reason="cold start — service down when supervisor launched")
+
     # ── main loop ──
     def loop(self):
-        self.alert("supervisor", "online", "Marionette supervisor online — watching SOMA + MAX")
+        self.cold_start()
         while True:
             try:
                 if not self.paused:
@@ -285,8 +315,14 @@ class Supervisor:
             time.sleep(CONFIG["PING_INTERVAL_SECONDS"])
 
     def _update_bridge(self):
-        # The SOMA->MAX bridge can only work if both are healthy AND MAX answers.
-        both_healthy = all(m.state == "healthy" for m in self.monitors.values())
+        # The bridge concept only exists if MAX is installed. SOMA-only installs
+        # report bridge = N/A (None), never "down".
+        max_mon = self.monitors.get("max")
+        if not max_mon or not max_mon.installed:
+            self.bridge_ok = None
+            return
+        # The SOMA<->MAX bridge can only work if both are healthy AND MAX answers.
+        both_healthy = all(m.state == "healthy" for m in self.monitors.values() if m.installed)
         probe = http_ok(CONFIG["BRIDGE_PROBE_URL"], CONFIG["HEALTH_TIMEOUT_SECONDS"])
         new_bridge = both_healthy and probe
         if new_bridge != self.bridge_ok:

@@ -34,19 +34,29 @@ CONFIG = {
     # boot_grace_s: how long to leave a freshly-started service alone before
     #   health-checking it (SOMA loads heavy systems 60-90s AFTER binding 3001).
     # start_dir/start_cmd: the canonical, correct way to (re)launch each service.
+    # required=True  -> must exist; absence is a config error worth flagging.
+    # required=False -> OPTIONAL. If not installed (start script missing),
+    #   Marionette skips it entirely: no pings, no restarts, no alerts. This is
+    #   what lets SOMA-only downloads run the supervisor with no MAX present.
+    # detect_file -> the file whose existence means "this service is installed
+    #   on this machine" (checked under start_dir).
     "SERVICES": {
         "soma": {
+            "required": True,
             "health_url": "http://localhost:3001/health",
             "port": 3001,
             "boot_grace_s": 130,
             "start_dir": r"C:\Users\barry\Desktop\The Stack\SOMA",
+            "detect_file": "start_production.bat",
             "start_cmd": ["cmd", "/c", "start", "", "cmd", "/c", "start_production.bat"],
         },
         "max": {
+            "required": False,
             "health_url": "http://127.0.0.1:3100/health",
             "port": 3100,
             "boot_grace_s": 35,
             "start_dir": r"C:\Users\barry\Desktop\MAX1",
+            "detect_file": "start-local.bat",
             "start_cmd": ["cmd", "/c", "start", "", "cmd", "/c", "start-local.bat"],
         },
     },
