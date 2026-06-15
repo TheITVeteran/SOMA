@@ -3,13 +3,12 @@ echo ===========================================================================
 echo   SOMA ULTRA - PRODUCTION STARTUP
 echo ===============================================================================
 echo.
-echo   [0] Igniting Hot Tier Infrastructure (WSL2 Redis)...
-wsl -u root service redis-server start >nul 2>&1
-if %errorlevel% equ 0 (
-    echo       ✓ Redis Engine active.
-) else (
-    echo       ⚠ Redis failed to start via WSL. (Hot Tier may be disabled)
-)
+echo   [0] Igniting Hot Tier Infrastructure (WSL2 Redis) in background...
+REM Non-blocking: a slow/unresponsive WSL must NEVER hang the whole launch
+REM (it used to block here forever, so node never started). Redis is an
+REM optional hot-tier cache; SOMA runs fine while it warms up separately.
+start "RedisInit" /min cmd /c "wsl -u root service redis-server start >nul 2>&1"
+echo       Redis init launched (non-blocking; Hot Tier warms up shortly).
 echo.
 
 echo   [1] Setting Environment to PRODUCTION...

@@ -267,9 +267,15 @@ class Supervisor:
         self.monitors = {name: ServiceMonitor(name, spec)
                          for name, spec in CONFIG["SERVICES"].items()}
         self.paused = False
+        self._pause_until = 0.0
         self.started_at = now()
         self.bridge_ok = False
         self._lock = threading.Lock()
+
+    def pause(self, seconds=240):
+        self.paused = True
+        self._pause_until = now() + seconds if seconds > 0 else 0
+        self.log_action("supervisor", "paused", {"seconds": seconds})
 
     # ── alerting & audit ──
     def log_action(self, service, action, detail=None):
@@ -312,6 +318,11 @@ class Supervisor:
         self.cold_start()
         while True:
             try:
+                # Auto-resume a timed pause so supervision never stays off.
+                if self.paused and self._pause_until and now() >= self._pause_until:
+                    self.paused = False
+                    self._pause_until = 0
+                    self.log_action("supervisor", "resumed", {"reason": "pause expired"})
                 if not self.paused:
                     with self._lock:
                         for m in self.monitors.values():
@@ -503,10 +514,21 @@ def make_handler(sup: Supervisor):
                 name = self.path.split("/deploy/", 1)[1]
                 body = self._read_json_body()
                 self._json(sup.request_deploy(name, body.get("rollback_ref"), body.get("reason", "")))
-            elif self.path == "/pause":
-                sup.paused = True
-                sup.log_action("supervisor", "paused", {"by": "api"})
-                self._json({"status": "auto-recovery PAUSED (maintenance mode)"})
+            elif self.path.split("?", 1)[0] == "/pause":
+                # Optional ?seconds=N -> auto-resume after N seconds, so a manual
+                # restart (clean_restart.bat) can pause us without ever leaving
+                # supervision off permanently. Default 240s.
+                secs = 240
+                if "?" in self.path:
+                    try:
+                        q = self.path.split("?", 1)[1]
+                        for kv in q.split("&"):
+                            if kv.startswith("seconds="):
+                                secs = max(0, min(1800, int(kv.split("=", 1)[1])))
+                    except Exception:
+                        pass
+                sup.pause(secs)
+                self._json({"status": f"auto-recovery PAUSED for {secs}s (auto-resumes)"})
             elif self.path == "/resume":
                 sup.paused = False
                 sup.log_action("supervisor", "resumed", {"by": "api"})

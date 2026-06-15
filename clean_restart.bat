@@ -4,6 +4,10 @@ echo   SOMA CLEAN RESTART PROTOCOL
 echo ===================================================
 echo.
 
+echo [0/4] Pausing Marionette supervisor (auto-resumes in 4 min) so it does not
+echo       race this restart...
+curl -s -m 2 -X POST "http://127.0.0.1:9000/pause?seconds=240" >nul 2>&1
+
 echo [1/4] Killing Siren TTS processes (Fish-Speech + Paula)...
 taskkill /F /FI "WINDOWTITLE eq siren*" 2>nul
 powershell -NoProfile -Command "Get-NetTCPConnection -LocalPort 8080,8081 -State Listen -EA 0 | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -EA 0 }; Write-Host '   - Siren ports 8080/8081 cleared.'"
