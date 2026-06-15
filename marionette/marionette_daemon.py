@@ -392,12 +392,25 @@ class Supervisor:
             self.alert(m.name, "launch_failed", f"deploy launch failed: {e}")
             return False
         m.deploy_state = "verifying"
-        deadline = now() + m.spec["boot_grace_s"] + 60
+        # Generous window: SOMA's full boot to /health=healthy can exceed 3 min
+        # under load. Too tight a window falsely reports failure mid-boot.
+        deadline = now() + m.spec["boot_grace_s"] + CONFIG["DEPLOY_VERIFY_EXTRA_S"]
         while now() < deadline:
             if http_ok(m.spec["health_url"], CONFIG["HEALTH_TIMEOUT_SECONDS"]):
                 return True
             time.sleep(5)
         return False
+
+    def _git_ref_exists(self, cwd, ref) -> bool:
+        """Only roll back to a ref that actually resolves to a commit."""
+        if not ref:
+            return False
+        try:
+            r = subprocess.run(["git", "cat-file", "-e", f"{ref}^{{commit}}"],
+                               cwd=cwd, capture_output=True, timeout=10)
+            return r.returncode == 0
+        except Exception:
+            return False
 
     def _managed_deploy(self, m, rollback_ref, reason):
         m.deploying = True
@@ -413,7 +426,7 @@ class Supervisor:
                 return
 
             # New version did not come healthy.
-            if rollback_ref:
+            if rollback_ref and self._git_ref_exists(m.spec["start_dir"], rollback_ref):
                 self.alert(m.name, "deploy_unhealthy",
                            f"{m.name} unhealthy after restart — ROLLING BACK to {rollback_ref[:8]}")
                 try:
@@ -432,8 +445,9 @@ class Supervisor:
                                f"{m.name} STILL unhealthy after rollback — needs a human")
             else:
                 m.deploy_state = "failed"
+                why = "no valid rollback ref" if rollback_ref else "no rollback ref provided"
                 self.alert(m.name, "deploy_failed",
-                           f"{m.name} did not come back healthy (no rollback ref provided)")
+                           f"{m.name} did not come back healthy ({why})")
         finally:
             m.deploying = False
             m.consecutive_fails = 0

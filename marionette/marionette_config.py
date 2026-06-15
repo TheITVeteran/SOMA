@@ -17,6 +17,11 @@ CONFIG = {
     "FAILS_TO_STUCK": 2,               # consecutive fails -> "stuck" (warn)
     "FAILS_TO_DEAD": 4,                # consecutive fails -> "dead" (recover)
 
+    # Managed-deploy health window: a service gets boot_grace_s + this many
+    # seconds to come back healthy before a deploy is declared failed. Generous
+    # because SOMA's full heavy-system boot can exceed 3 minutes under load.
+    "DEPLOY_VERIFY_EXTRA_S": 150,
+
     # ── Crash-loop circuit breaker ─────────────────────────────────────────
     "MAX_RESTARTS_IN_WINDOW": 3,       # restarts allowed within the window...
     "RESTART_WINDOW_SECONDS": 600,     # ...before the circuit opens (10 min)
@@ -48,7 +53,9 @@ CONFIG = {
             "boot_grace_s": 130,
             "start_dir": r"C:\Users\barry\Desktop\The Stack\SOMA",
             "detect_file": "start_production.bat",
-            "start_cmd": ["cmd", "/c", "start", "", "cmd", "/c", "start_production.bat"],
+            # Recovery uses the LEAN launcher (no WSL/Redis/Siren preamble that
+            # can hang) so bringing SOMA back never blocks on optional extras.
+            "start_cmd": ["cmd", "/c", "start", "", "cmd", "/c", "start-soma-core.bat"],
         },
         "max": {
             "required": False,
