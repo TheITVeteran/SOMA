@@ -129,6 +129,8 @@ class ServiceMonitor:
         self.restart_times = deque()     # timestamps of recent restarts
         self.circuit_open_until = 0.0
         self.total_restarts = 0
+        self.deploying = False           # managed deploy in progress (skip auto-recovery)
+        self.deploy_state = "idle"       # idle|deploying|verifying|succeeded|rolled_back|failed
 
     # ── state helpers ──
     def _set(self, s):
@@ -155,6 +157,10 @@ class ServiceMonitor:
         # Optional, not-installed services are invisible to the supervisor.
         if not self.installed:
             self._set("not_installed")
+            return
+        # A managed deploy owns the lifecycle while it runs — don't double-restart.
+        if self.deploying:
+            self._set("deploying")
             return
         if self._circuit_is_open():
             self._set("circuit_open")
@@ -241,6 +247,7 @@ class ServiceMonitor:
             "state": self.state,
             "installed": self.installed,
             "required": self.required,
+            "deploy_state": self.deploy_state,
             "consecutive_fails": self.consecutive_fails,
             "last_healthy_age_s": round(now() - self.last_healthy, 1) if self.last_healthy else None,
             "total_restarts": self.total_restarts,
@@ -351,6 +358,87 @@ class Supervisor:
             m.recover(self, reason="manual /reset request")
         return {"status": f"{name} restart triggered"}
 
+    # ── managed deploy: health-gated restart with optional auto-rollback ──
+    # This is the "good version" of self-keeping-up: a service (or SOMA on her
+    # own behalf) asks Marionette — an independent process that survives the
+    # restart — to restart it, VERIFY it comes back healthy, and AUTO-ROLL-BACK
+    # to a known-good git ref if the new version is broken. Continuity lives in
+    # Marionette; the service can update its own code and never strand itself.
+    def request_deploy(self, name, rollback_ref=None, reason=""):
+        m = self.monitors.get(name)
+        if not m:
+            return {"error": f"unknown service '{name}'"}
+        if not m.installed:
+            return {"error": f"{name} not installed"}
+        if m.deploying:
+            return {"error": f"{name} deploy already in progress"}
+        t = threading.Thread(target=self._managed_deploy,
+                             args=(m, rollback_ref, reason), daemon=True)
+        t.start()
+        return {"status": f"managed deploy of {name} started",
+                "rollback_ref": rollback_ref, "watch": "GET /status"}
+
+    def _restart_and_verify(self, m) -> bool:
+        """Targeted kill -> relaunch -> poll /health until healthy or timeout."""
+        pid = pid_on_port(m.spec["port"])
+        if pid:
+            kill_pid(pid)
+            time.sleep(2)
+        try:
+            subprocess.Popen(m.spec["start_cmd"], cwd=m.spec["start_dir"],
+                             creationflags=getattr(subprocess, "CREATE_NEW_CONSOLE", 0),
+                             close_fds=True)
+        except Exception as e:
+            self.alert(m.name, "launch_failed", f"deploy launch failed: {e}")
+            return False
+        m.deploy_state = "verifying"
+        deadline = now() + m.spec["boot_grace_s"] + 60
+        while now() < deadline:
+            if http_ok(m.spec["health_url"], CONFIG["HEALTH_TIMEOUT_SECONDS"]):
+                return True
+            time.sleep(5)
+        return False
+
+    def _managed_deploy(self, m, rollback_ref, reason):
+        m.deploying = True
+        m.deploy_state = "deploying"
+        self.alert(m.name, "deploy_start",
+                   f"Managed restart of {m.name}: {reason or 'requested'}"
+                   + (f" (rollback ref {rollback_ref[:8]})" if rollback_ref else ""))
+        try:
+            if self._restart_and_verify(m):
+                m.deploy_state = "succeeded"
+                m.last_healthy = now()
+                self.alert(m.name, "deploy_ok", f"{m.name} restarted and verified HEALTHY")
+                return
+
+            # New version did not come healthy.
+            if rollback_ref:
+                self.alert(m.name, "deploy_unhealthy",
+                           f"{m.name} unhealthy after restart — ROLLING BACK to {rollback_ref[:8]}")
+                try:
+                    subprocess.run(["git", "reset", "--hard", rollback_ref],
+                                   cwd=m.spec["start_dir"], capture_output=True, timeout=30)
+                except Exception as e:
+                    self.alert(m.name, "rollback_error", f"git reset failed: {e}")
+                if self._restart_and_verify(m):
+                    m.deploy_state = "rolled_back"
+                    m.last_healthy = now()
+                    self.alert(m.name, "rolled_back",
+                               f"{m.name} restored to known-good {rollback_ref[:8]} and healthy")
+                else:
+                    m.deploy_state = "failed"
+                    self.alert(m.name, "rollback_failed",
+                               f"{m.name} STILL unhealthy after rollback — needs a human")
+            else:
+                m.deploy_state = "failed"
+                self.alert(m.name, "deploy_failed",
+                           f"{m.name} did not come back healthy (no rollback ref provided)")
+        finally:
+            m.deploying = False
+            m.consecutive_fails = 0
+            m.grace_until = now() + 5  # brief settle before normal supervision resumes
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # HTTP API
@@ -382,10 +470,25 @@ def make_handler(sup: Supervisor):
             else:
                 self._json({"error": "not found"}, 404)
 
+        def _read_json_body(self):
+            try:
+                n = int(self.headers.get("Content-Length", 0))
+                if n <= 0:
+                    return {}
+                return json.loads(self.rfile.read(n).decode("utf-8") or "{}")
+            except Exception:
+                return {}
+
         def do_POST(self):
             if self.path.startswith("/reset/"):
                 name = self.path.split("/reset/", 1)[1]
                 self._json(sup.manual_restart(name))
+            elif self.path.startswith("/deploy/"):
+                # Health-gated managed restart with optional auto-rollback.
+                # Body: {"rollback_ref": "<git sha>", "reason": "..."}
+                name = self.path.split("/deploy/", 1)[1]
+                body = self._read_json_body()
+                self._json(sup.request_deploy(name, body.get("rollback_ref"), body.get("reason", "")))
             elif self.path == "/pause":
                 sup.paused = True
                 sup.log_action("supervisor", "paused", {"by": "api"})

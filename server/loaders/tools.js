@@ -9,6 +9,14 @@ import path from 'path';
 import { execFile } from 'child_process';
 import toolRegistry from '../../core/ToolRegistry.js';
 import { analyzeImageFile, imageMimeType, isImageFile } from '../utils/LocalVisionFileAnalyzer.js';
+import {
+    auditMemorySpine,
+    rebuildMemorySpine,
+    recallMemorySpine,
+    createMemorySpineGoals,
+    syncMemorySpineToThoughtNetwork,
+    memorySpinePaths
+} from '../utils/MemorySpine.js';
 
 function normalizeVisionToolObjects(objects = []) {
     return (Array.isArray(objects) ? objects : [])
@@ -98,6 +106,40 @@ export async function loadTools(systemContext = {}) {
         description: 'Get current server time',
         parameters: {},
         execute: async () => new Date().toISOString()
+    });
+
+    // Graceful self-restart through the independent Marionette supervisor.
+    // SOMA can't resurrect her own crashed process alone — but she can ask a
+    // cooperator that OUTLIVES her restart to do it, verify health, and
+    // auto-roll-back if the new code is broken. Continuity lives in Marionette.
+    toolRegistry.registerTool({
+        name: 'request_self_restart',
+        description: "Ask the independent Marionette supervisor (port 9000) to restart your OWN server — e.g. to load code changes you committed. Marionette restarts you, health-checks the new server, and AUTO-ROLLS-BACK to the last git commit if the new version comes up broken. You'll go down briefly and return; Marionette survives the restart. Use only after committing real changes that need a restart.",
+        parameters: { reason: 'string', rollback: 'boolean — roll back to last commit if the restarted server is unhealthy (default true)' },
+        execute: async ({ reason, rollback }) => {
+            let rollbackRef = null;
+            if (rollback !== false) {
+                try {
+                    const { execSync } = await import('child_process');
+                    rollbackRef = execSync('git rev-parse HEAD', { cwd: process.cwd() }).toString().trim();
+                } catch { /* no git ref available */ }
+            }
+            try {
+                const res = await fetch('http://127.0.0.1:9000/deploy/soma', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ rollback_ref: rollbackRef, reason: reason || 'SOMA self-restart request' })
+                });
+                const data = await res.json();
+                if (data.error) return `Marionette declined the restart: ${data.error}`;
+                return `Restart requested through Marionette (the independent supervisor that survives my restart). `
+                    + `It will stop me, start the new server, verify /health, and `
+                    + (rollbackRef ? `auto-roll-back to ${rollbackRef.slice(0, 8)} if I come up broken. ` : `report if I fail to come back. `)
+                    + `I'll be down briefly and return. Watch http://127.0.0.1:9000/status for the result.`;
+            } catch (e) {
+                return `Could not reach the Marionette supervisor on :9000 (${e.message}). It may not be running — without it I cannot safely restart myself.`;
+            }
+        }
     });
 
     // ApertureOS Agency Bridge — SOMA drives the desktop-in-a-tab as a copilot.
@@ -353,9 +395,9 @@ export async function loadTools(systemContext = {}) {
         description: 'Get git repository status',
         parameters: {},
         execute: async () => {
-            const { exec } = await import('child_process');
+            const { execFile } = await import('child_process');
             return new Promise((resolve) => {
-                exec('git status', (error, stdout, stderr) => {
+                execFile('git', ['status'], (error, stdout, stderr) => {
                     if (error) resolve('Not a git repository or git not installed');
                     else resolve(stdout);
                 });
@@ -369,10 +411,10 @@ export async function loadTools(systemContext = {}) {
         description: 'Show git diff of changes',
         parameters: { file: 'string (optional, shows all if not specified)' },
         execute: async ({ file }) => {
-            const { exec } = await import('child_process');
-            const cmd = file ? `git diff "${file}"` : 'git diff';
+            const { execFile } = await import('child_process');
+            const args = file ? ['diff', file] : ['diff'];
             return new Promise((resolve) => {
-                exec(cmd, { maxBuffer: 1024 * 1024 }, (error, stdout) => {
+                execFile('git', args, { maxBuffer: 1024 * 1024 }, (error, stdout) => {
                     resolve(stdout || 'No changes');
                 });
             });
@@ -385,10 +427,10 @@ export async function loadTools(systemContext = {}) {
         description: 'View recent git commits',
         parameters: { count: 'number (default 10)' },
         execute: async ({ count }) => {
-            const { exec } = await import('child_process');
+            const { execFile } = await import('child_process');
             const n = count || 10;
             return new Promise((resolve) => {
-                exec(`git log --oneline -${n}`, (error, stdout) => {
+                execFile('git', ['log', '--oneline', `-${n}`], (error, stdout) => {
                     if (error) resolve('Not a git repository');
                     else resolve(stdout);
                 });
@@ -643,6 +685,93 @@ export async function loadTools(systemContext = {}) {
                 return results.results.map(r => `[${r.score?.toFixed(2)}] ${r.content}`).join('\n\n');
             } catch (e) {
                 return `Memory recall failed: ${e.message}`;
+            }
+        }
+    });
+
+    toolRegistry.registerTool({
+        name: 'memory_spine_audit',
+        description: 'Audit Soma memory health: DB counts, vector coverage, classification spread, unused high-value memories, and repeated bottleneck signals.',
+        parameters: { createGoals: 'boolean (optional)' },
+        execute: async ({ createGoals = false } = {}) => {
+            try {
+                const liveSystem = getSystem();
+                if (createGoals) {
+                    return await createMemorySpineGoals(liveSystem, {});
+                }
+                return await auditMemorySpine({});
+            } catch (e) {
+                return { success: false, error: e.message };
+            }
+        }
+    });
+
+    toolRegistry.registerTool({
+        name: 'memory_spine_rebuild',
+        description: 'Classify and index Soma memories into MemorySpine. Default is bounded; pass limit:"all" only for a full rebuild.',
+        parameters: { limit: 'number|string (optional, default 2500, or "all")', promote: 'boolean (optional)' },
+        execute: async ({ limit = 2500, promote = true } = {}) => {
+            try {
+                return await rebuildMemorySpine({ limit, promote });
+            } catch (e) {
+                return { success: false, error: e.message, paths: memorySpinePaths() };
+            }
+        }
+    });
+
+    toolRegistry.registerTool({
+        name: 'memory_spine_recall',
+        description: 'Recall from the MemorySpine semantic hash index with optional category/sector filter.',
+        parameters: { query: 'string', limit: 'number (optional)', category: 'string (optional)' },
+        execute: async ({ query, limit = 8, category = null }) => {
+            try {
+                if (!query) return { success: false, error: 'query is required' };
+                return await recallMemorySpine(query, { limit, category });
+            } catch (e) {
+                return { success: false, error: e.message, paths: memorySpinePaths() };
+            }
+        }
+    });
+
+    toolRegistry.registerTool({
+        name: 'memory_spine_sync_fractals',
+        description: 'Promote clean MemorySpine clusters into the durable ThoughtNetwork fractal graph as concept, signal, and evidence nodes.',
+        parameters: { maxSectors: 'number (optional)', maxEvidencePerSector: 'number (optional)' },
+        execute: async ({ maxSectors = 48, maxEvidencePerSector = 4 } = {}) => {
+            try {
+                return await syncMemorySpineToThoughtNetwork({ maxSectors, maxEvidencePerSector });
+            } catch (e) {
+                return { success: false, error: e.message, paths: memorySpinePaths() };
+            }
+        }
+    });
+
+    toolRegistry.registerTool({
+        name: 'memory_spine_autosync_status',
+        description: 'Inspect or manually trigger the MemorySpine auto-sync loop that rebuilds MemorySpine and syncs it into ThoughtNetwork after meaningful memory events.',
+        parameters: { runNow: 'boolean (optional)' },
+        execute: async ({ runNow = false } = {}) => {
+            try {
+                const state = global.__SOMA_MEMORY_SPINE_AUTOSYNC__;
+                if (!state?.active) {
+                    return { success: false, active: false, error: 'MemorySpine auto-sync is not running', paths: memorySpinePaths() };
+                }
+                if (runNow && typeof state.runNow === 'function') {
+                    return await state.runNow('manual_tool');
+                }
+                return {
+                    success: true,
+                    active: state.active,
+                    running: state.running,
+                    pendingEvents: state.pendingEvents,
+                    pendingReasons: state.pendingReasons,
+                    lastRunAt: state.lastRunAt,
+                    lastStatus: state.lastStatus,
+                    options: state.status,
+                    paths: memorySpinePaths()
+                };
+            } catch (e) {
+                return { success: false, error: e.message, paths: memorySpinePaths() };
             }
         }
     });
@@ -1313,10 +1442,11 @@ Trust: ${state.trust?.toFixed(3)}, Sadness: ${state.sadness?.toFixed(3)}, Anger:
             }
 
             // Already-loaded arbiters via MessageBroker
-            const loaded = new Set(
-                Object.keys(liveSystem.messageBroker?.arbiters || {})
-                    .map(n => n.toLowerCase())
-            );
+            const brokerArbiters = liveSystem.messageBroker?.arbiters;
+            const loadedNames = brokerArbiters instanceof Map
+                ? Array.from(brokerArbiters.keys())
+                : Object.keys(brokerArbiters || {});
+            const loaded = new Set(loadedNames.map(n => n.toLowerCase()));
 
             const lines = [];
             for (const [file, { status, caps }] of byFile) {
@@ -1328,6 +1458,71 @@ Trust: ${state.trust?.toFixed(3)}, Sadness: ${state.sadness?.toFixed(3)}, Anger:
             }
             lines.sort(); // alphabetical
             return lines.length > 0 ? lines.join('\n') : 'No arbiters in manifest yet — manifest builds 90s after boot.';
+        }
+    });
+
+    toolRegistry.registerTool({
+        name: 'arbiter_loader_health',
+        description: 'Diagnose on-demand arbiter loading: manifest size, broker wiring, loaded arbiters, failed manifest entries, and optional file/capability probe.',
+        parameters: {
+            probeFile: 'string (optional) — safe arbiter filename to test-load, e.g. "CausalityArbiter.js"',
+            probeCapability: 'string (optional) — capability key to test-load'
+        },
+        execute: async ({ probeFile = null, probeCapability = null } = {}) => {
+            const liveSystem = getSystem();
+            const loader = liveSystem.arbiterLoader;
+            const broker = liveSystem.messageBroker;
+            if (!loader) return { success: false, error: 'ArbiterLoader not ready' };
+
+            const inventory = loader.getInventory();
+            const entries = Object.values(inventory).flat();
+            const byFile = new Map();
+            for (const [capability, caps] of Object.entries(inventory)) {
+                for (const entry of caps) {
+                    const record = byFile.get(entry.file) || { file: entry.file, cls: entry.cls, status: entry.status, capabilities: [] };
+                    record.capabilities.push(capability);
+                    if (entry.status === 'failed') record.status = 'failed';
+                    byFile.set(entry.file, record);
+                }
+            }
+            const brokerArbiters = broker?.arbiters instanceof Map
+                ? Array.from(broker.arbiters.keys())
+                : Object.keys(broker?.arbiters || {});
+            const failed = [...byFile.values()]
+                .filter(entry => entry.status === 'failed')
+                .slice(0, 20);
+            const status = {
+                success: true,
+                manifestCapabilities: Object.keys(inventory).length,
+                manifestFiles: byFile.size,
+                brokerWired: broker?.arbiterLoader === loader,
+                brokerArbiters: brokerArbiters.length,
+                failedEntries: failed,
+                probe: null
+            };
+
+            if (probeFile || probeCapability) {
+                if (probeFile && (typeof probeFile !== 'string' || probeFile.includes('..') || probeFile.includes('/') || probeFile.includes('\\'))) {
+                    status.probe = { success: false, error: 'Invalid probeFile' };
+                    return status;
+                }
+                const before = brokerArbiters.length;
+                const instance = probeFile
+                    ? await loader.loadByFile(probeFile)
+                    : await loader.loadForCapability(probeCapability);
+                const afterNames = broker?.arbiters instanceof Map
+                    ? Array.from(broker.arbiters.keys())
+                    : Object.keys(broker?.arbiters || {});
+                status.probe = {
+                    success: !!instance,
+                    requested: probeFile || probeCapability,
+                    loadedName: instance?.name || instance?.constructor?.name || null,
+                    brokerArbitersBefore: before,
+                    brokerArbitersAfter: afterNames.length
+                };
+            }
+
+            return status;
         }
     });
 
@@ -1366,11 +1561,18 @@ Trust: ${state.trust?.toFixed(3)}, Sadness: ${state.sadness?.toFixed(3)}, Anger:
                 if (!instance) return `Failed to load ${file || capability} — check logs for details.`;
                 // Report back what capabilities just became available
                 const inventory = loader.getInventory();
+                const loadedName = instance.name || instance.constructor?.name || file || capability;
                 const gained = Object.entries(inventory)
-                    .filter(([, entries]) => entries.some(e => e.file === (file || '') && e.status === 'verified'))
+                    .filter(([cap, entries]) => {
+                        if (capability && cap === capability) return true;
+                        return entries.some(e =>
+                            e.status === 'verified' &&
+                            (e.file === (file || '') || e.cls === loadedName)
+                        );
+                    })
                     .map(([cap]) => cap);
                 const capStr = gained.length ? ` Capabilities now available: ${gained.join(', ')}.` : '';
-                return `Successfully loaded ${instance.name || file || capability} and registered with the system.${capStr}`;
+                return `Successfully loaded ${loadedName} and registered with the system.${capStr}`;
             } catch (e) {
                 return `Load error: ${e.message}`;
             }
