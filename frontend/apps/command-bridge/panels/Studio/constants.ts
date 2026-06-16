@@ -54,7 +54,7 @@ export const INITIAL_WIDGETS: WidgetData[] = [
   {
     id: 'w-stats',
     type: 'STATS',
-    title: 'Top 8',
+    title: 'Elite 8',
     colSpan: 1,
     rowSpan: 2,
   },

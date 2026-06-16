@@ -147,7 +147,7 @@ const StatsWidget: React.FC<Props> = ({ data }) => {
             {/* Header */}
             <div className="flex items-center justify-between mb-3 shrink-0 z-10">
                 <h3 className="text-xs font-black text-white uppercase tracking-[0.2em] flex items-center gap-2">
-                    <Crown size={12} className="text-orange-500 fill-orange-500" /> Top 8
+                    <Crown size={12} className="text-orange-500 fill-orange-500" /> Elite 8
                 </h3>
                 <button
                     onClick={openModal}
@@ -241,7 +241,7 @@ const StatsWidget: React.FC<Props> = ({ data }) => {
                             <div className="flex items-center justify-between px-5 py-4 border-b border-white/5 shrink-0">
                                 <div>
                                     <h2 className="text-base font-bold text-white flex items-center gap-2">
-                                        <Crown size={14} className="text-orange-500 fill-orange-500" /> Edit Top 8
+                                        <Crown size={14} className="text-orange-500 fill-orange-500" /> Edit Elite 8
                                     </h2>
                                     <p className="text-[11px] text-white/30 mt-0.5">
                                         {pendingTop8.length}/8 selected · drag to reorder
@@ -255,10 +255,10 @@ const StatsWidget: React.FC<Props> = ({ data }) => {
                             {/* Two-column body */}
                             <div className="flex flex-1 min-h-0 divide-x divide-white/5">
 
-                                {/* Left — current Top 8 (draggable) */}
+                                {/* Left — current Elite 8 (draggable) */}
                                 <div className="flex flex-col w-1/2 min-h-0">
                                     <div className="px-4 py-2.5 shrink-0">
-                                        <span className="text-[10px] font-bold uppercase tracking-widest text-white/25">Your Top 8</span>
+                                        <span className="text-[10px] font-bold uppercase tracking-widest text-white/25">Your Elite 8</span>
                                     </div>
                                     <div className="flex-1 overflow-y-auto min-h-0 px-2 pb-3" style={{ scrollbarWidth: 'none' }}>
                                         {pendingTop8.length === 0 ? (
@@ -349,7 +349,7 @@ const StatsWidget: React.FC<Props> = ({ data }) => {
                                     className={`flex-1 py-2.5 rounded-xl text-sm font-bold transition-colors disabled:opacity-50 flex items-center justify-center gap-2 ${saveError ? 'bg-red-500 hover:bg-red-400 text-white' : 'bg-orange-500 hover:bg-orange-400 text-black'}`}
                                 >
                                     <Save size={14} />
-                                    {saving ? 'Saving…' : saveError ? 'Failed — restart server' : 'Save Top 8'}
+                                    {saving ? 'Saving…' : saveError ? 'Failed — restart server' : 'Save Elite 8'}
                                 </button>
                             </div>
                         </motion.div>
