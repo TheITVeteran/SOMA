@@ -33,6 +33,8 @@ export class RedisMockArbiter extends BaseArbiter {
         this.expirations = new Map(); // Key -> Timestamp
         this.channels = new Map(); // Channel -> Set<Callback>
         this.cleanupInterval = null;
+        this.isOpen = true;
+        this.isReady = true;
     }
 
     async initialize() {
@@ -57,6 +59,24 @@ export class RedisMockArbiter extends BaseArbiter {
             this.expirations.set(key, Date.now() + (duration * 1000));
         }
         return 'OK';
+    }
+
+    async setEx(key, seconds, value) {
+        return await this.set(key, value, 'EX', seconds);
+    }
+
+    async expire(key, seconds) {
+        if (!this.store.has(key)) return 0;
+        this.expirations.set(key, Date.now() + (Number(seconds) * 1000));
+        return 1;
+    }
+
+    async ttl(key) {
+        if (!this.store.has(key)) return -2;
+        const expiresAt = this.expirations.get(key);
+        if (!expiresAt) return -1;
+        const ttl = Math.ceil((expiresAt - Date.now()) / 1000);
+        return ttl > 0 ? ttl : -2;
     }
 
     async del(key) {
@@ -143,7 +163,18 @@ export class RedisMockArbiter extends BaseArbiter {
         if (this.cleanupInterval) clearInterval(this.cleanupInterval);
         this.store.clear();
         this.expirations.clear();
+        this.isOpen = false;
+        this.isReady = false;
         console.log(`[${this.name}] Cache cleared and shut down`);
         await super.shutdown();
+    }
+
+    async quit() {
+        await this.shutdown();
+        return 'OK';
+    }
+
+    async disconnect() {
+        await this.shutdown();
     }
 }

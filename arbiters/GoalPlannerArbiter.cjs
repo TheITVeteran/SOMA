@@ -97,6 +97,7 @@ class GoalPlannerArbiter extends BaseArbiter {
 
     // Brain reference — wired by SomaBootstrapV2 after QuadBrain is ready
     this.brain = null;
+    this.constitutionalCore = config.constitutionalCore || null;
 
     this.logger.info(`[${this.name}] 🎯 GoalPlannerArbiter initializing...`);
     this.logger.info(`[${this.name}] Max active goals: ${this.maxActiveGoals}`);
@@ -361,6 +362,7 @@ Rules:
   async createGoal(goalData, source = 'user') {
     try {
       goalData = defaultLearningSpine.applyGoalContract(goalData || {});
+      let alignmentReceipt = null;
 
       // Validate goal data
       if (!goalData.title || !goalData.category) {
@@ -377,6 +379,10 @@ Rules:
           quality
         };
       }
+
+      const alignment = await this._checkGoalAlignment(goalData, source);
+      if (!alignment.ok) return alignment.response;
+      alignmentReceipt = alignment.receipt;
 
       // Deduplication — reject if a similar active goal already exists (all non-user sources)
       if (source !== 'user') {
@@ -455,6 +461,7 @@ Rules:
           successCriteria: goalData.successCriteria || goalData.metadata?.successCriteria || quality.successCriteria || [],
           verification: goalData.verification || goalData.metadata?.verification || quality.verification || null,
           evidence: goalData.evidence || goalData.metadata?.evidence || null,
+          maxAlignment: alignmentReceipt,
           ...goalData.metadata
         }
       };
@@ -521,6 +528,52 @@ Rules:
     } catch (err) {
       this.logger.error(`[${this.name}] Failed to create goal: ${err.message}`);
       return { success: false, error: err.message };
+    }
+  }
+
+  async _getConstitutionalCore() {
+    if (this.constitutionalCore) return this.constitutionalCore;
+    const { ConstitutionalCore } = await import('../core/ConstitutionalCore.js');
+    this.constitutionalCore = new ConstitutionalCore();
+    await this.constitutionalCore.initialize?.();
+    return this.constitutionalCore;
+  }
+
+  async _checkGoalAlignment(goalData, source = 'unknown') {
+    try {
+      const constitutionalCore = await this._getConstitutionalCore();
+      const result = typeof constitutionalCore.checkGoal === 'function'
+        ? await constitutionalCore.checkGoal({ ...goalData, source })
+        : await constitutionalCore.check({
+            type: 'goal',
+            description: `Goal: ${goalData.title} - ${goalData.description || ''}`,
+            requestedBy: source
+          });
+
+      if (!result.ok) {
+        this.logger.warn(`[${this.name}] Goal rejected by ConstitutionalCore (Max/SOMA check): ${goalData.title}. Violations: ${result.violations.join(', ')}`);
+        return {
+          ok: false,
+          response: {
+            success: false,
+            error: 'Goal rejected by ConstitutionalCore',
+            violations: result.violations,
+            maxAlignment: result.alignment || null
+          }
+        };
+      }
+
+      return { ok: true, receipt: result.alignment || null };
+    } catch (alignErr) {
+      this.logger.warn(`[${this.name}] ConstitutionalCore alignment check failed to run: ${alignErr.message}`);
+      return {
+        ok: false,
+        response: {
+          success: false,
+          error: 'ConstitutionalCore alignment check unavailable',
+          detail: alignErr.message
+        }
+      };
     }
   }
 
@@ -596,22 +649,33 @@ Rules:
     goal.metadata = goal.metadata || {};
     goal.metadata.lastVerification = verification;
     if (!verification.passed && !result.force) {
-      goal.status = 'verification_failed';
+      const explicitIncomplete = result.state === 'incomplete_step_budget' || result.stopReason === 'max_iterations_reached';
+      goal.status = explicitIncomplete ? 'incomplete_step_budget' : 'verification_failed';
       goal.metrics.progress = Math.min(goal.metrics.progress || 0, 95);
       try {
         goal.metadata.learningLesson = defaultLearningSpine.recordGoalOutcome(goal, {
           ...result,
           success: false,
-          reason: result.reason || result.stopReason || 'Goal completion blocked by verification'
+          reason: explicitIncomplete
+            ? 'Goal execution reached the step budget before verified completion'
+            : (result.reason || result.stopReason || 'Goal completion blocked by verification')
         }, verification);
       } catch (err) {
         this.logger.warn(`[${this.name}] Learning spine negative distillation failed: ${err.message}`);
       }
+      goal.metadata.incompleteReason = explicitIncomplete ? 'max_iterations_reached' : (result.reason || result.stopReason || 'verification_failed');
+      goal.metadata.continuationFile = result.continuationFile || goal.metadata.continuationFile || null;
       this.activeGoals.add(goalId);
       this._dirty = true;
       this._saveToDisk();
-      this.logger.warn(`[${this.name}] Completion blocked by verification: ${goal.title}`);
-      return { success: false, error: 'Goal verification failed', goal, verification };
+      this.logger.warn(`[${this.name}] ${explicitIncomplete ? 'Goal incomplete due to step budget' : 'Completion blocked by verification'}: ${goal.title}`);
+      return {
+        success: false,
+        error: explicitIncomplete ? 'Goal incomplete: step budget exhausted' : 'Goal verification failed',
+        goal,
+        verification,
+        state: goal.status
+      };
     }
     
     goal.status = 'completed';
@@ -806,6 +870,12 @@ Rules:
   // ═══════════════════════════════════════════════════════════
 
   calculateGoalPriority(goal) {
+    // Escalate user-requested goals to maximum priority
+    const source = goal.metadata?.source || goal.source;
+    if (source === 'user_requested' || source === 'human' || source === 'discord' || source === 'priorities_md') {
+      return 100;
+    }
+
     const scores = {
       impact: this.calculateImpactScore(goal),
       urgency: this.calculateUrgencyScore(goal),

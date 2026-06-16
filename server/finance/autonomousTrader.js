@@ -1710,7 +1710,11 @@ class AutonomousTrader {
                     this._abTestArmAtEntry.delete(position.symbol);
                 }
 
-                this._paperPortfolio.balance += fillPrice * pos.qty;
+                if (pos.side === 'long') {
+                    this._paperPortfolio.balance += fillPrice * pos.qty;
+                } else {
+                    this._paperPortfolio.balance -= fillPrice * pos.qty;
+                }
                 this._stats.sessionPnL += pnl;
                 this._recordTradeResult(pnl);
                 delete this._paperPortfolio.positions[position.symbol];

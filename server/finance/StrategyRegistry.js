@@ -41,10 +41,26 @@ const DEFAULT_STRATEGIES = [
     {
         id: 'full_aggression',
         name: 'Full Aggression',
-        assetClasses: ['crypto', 'future', 'high_beta_equity'],
-        riskProfile: 'aggressive_paper_only',
-        parameters: { breakoutThreshold: 0.62, riskBudget: 0.18, stopLossPct: 0.035 },
-        mutationRules: { breakoutThreshold: [0.5, 0.8], riskBudget: [0.06, 0.2], stopLossPct: [0.015, 0.06] }
+        assetClasses: ['crypto', 'future'],
+        riskProfile: 'aggressive',
+        parameters: { breakoutThreshold: 1.5, stopLossGap: 0.05, riskBudget: 0.2 },
+        mutationRules: { breakoutThreshold: [1.2, 2.0], stopLossGap: [0.03, 0.08], riskBudget: [0.1, 0.3] }
+    },
+    {
+        id: 'vortex',
+        name: 'VORTEX',
+        assetClasses: ['crypto', 'equity'],
+        riskProfile: 'adaptive',
+        parameters: { momentumExhaustionScore: -0.8, volatilityContractionThreshold: 0.4, riskBudget: 0.1 },
+        mutationRules: { momentumExhaustionScore: [-0.95, -0.6], volatilityContractionThreshold: [0.2, 0.6], riskBudget: [0.05, 0.15] }
+    },
+    {
+        id: 'boring_algo',
+        name: 'Boring Algo',
+        assetClasses: ['equity', 'future', 'crypto'],
+        riskProfile: 'balanced',
+        parameters: { rsiOversold: 30, rsiOverbought: 70, riskBudget: 0.08 },
+        mutationRules: { rsiOversold: [20, 40], rsiOverbought: [60, 80], riskBudget: [0.04, 0.12] }
     },
     {
         id: 'yield_harvester',

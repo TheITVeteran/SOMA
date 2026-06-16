@@ -27,6 +27,91 @@ export class ForecasterArbiter extends BaseArbiterV4 {
 
     async onInitialize() {
         this.auditLogger.info('Forecaster Systems Online. Web Consensus & World Model Protocols Loaded.');
+        this._startAutonomousPredictor();
+    }
+
+    async _startAutonomousPredictor() {
+        // Run first cycle shortly after boot
+        setTimeout(() => this._runAutonomousCycle(), 30000);
+        
+        // Then run every 4 hours
+        setInterval(() => this._runAutonomousCycle(), 4 * 60 * 60 * 1000).unref();
+    }
+
+    async _runAutonomousCycle() {
+        try {
+            this.auditLogger.info('Starting Autonomous Guessing Cycle...');
+            const sports = [{sport: 'basketball', league: 'nba'}, {sport: 'football', league: 'nfl'}, {sport: 'soccer', league: 'eng.1'}];
+            
+            let upcomingGames = [];
+            for (const {sport, league} of sports) {
+                try {
+                    const url = `https://site.api.espn.com/apis/site/v2/sports/${sport}/${league}/scoreboard`;
+                    const res = await fetch(url);
+                    if (!res.ok) continue;
+                    const data = await res.json();
+                    const games = data.events?.map(e => ({
+                        id: e.id,
+                        name: e.name,
+                        shortName: e.shortName,
+                        date: e.date,
+                        sport: sport,
+                        status: e.status?.type?.name // 'STATUS_SCHEDULED'
+                    })) || [];
+                    upcomingGames.push(...games.filter(g => g.status === 'STATUS_SCHEDULED'));
+                } catch(e) {}
+            }
+            
+            // Select up to 3 random upcoming games to predict
+            upcomingGames = upcomingGames.sort(() => 0.5 - Math.random()).slice(0, 3);
+            if (upcomingGames.length === 0) return;
+            
+            for (const game of upcomingGames) {
+                this.auditLogger.info(`Autonomous prediction on: ${game.name}`);
+                const forecast = await this.getForecast(game.name);
+                if (!forecast.error) {
+                    forecast.gameId = game.id;
+                    forecast.date = game.date;
+                    forecast.sport = game.sport;
+                    forecast.matchup = game.name;
+                    forecast.createdAt = new Date().toISOString();
+                    
+                    // Generate edge based on confidence vs 50/50
+                    const confMap = { 'HIGH': 0.15, 'MEDIUM': 0.05, 'LOW': -0.05 };
+                    forecast.calculatedEdge = (confMap[forecast.confidence] || 0) * 100;
+
+                    const fs = await import('fs/promises');
+                    const path = await import('path');
+                    const guessesPath = path.join(process.cwd(), 'appendages', 'forecaster', 'active_guesses.json');
+                    await fs.mkdir(path.dirname(guessesPath), { recursive: true }).catch(() => {});
+                    
+                    let existing = [];
+                    try {
+                        existing = JSON.parse(await fs.readFile(guessesPath, 'utf8'));
+                    } catch(e) {}
+                    
+                    // Keep last 50 guesses
+                    existing = [forecast, ...existing.filter(g => g.gameId !== forecast.gameId)].slice(0, 50);
+                    await fs.writeFile(guessesPath, JSON.stringify(existing, null, 2), 'utf8');
+                    
+                    // Feed pipeline
+                    const system = global.__SOMA_SYSTEM;
+                    if (system?.universalLearningPipeline) {
+                        system.universalLearningPipeline.logInteraction({
+                            source: 'ForecasterArbiter',
+                            action: 'autonomous_guess',
+                            details: { matchup: game.name, prediction: forecast.prediction, win_probability: forecast.win_probability },
+                            outcome: 'success',
+                            tags: ['forecaster', 'autonomous', 'guessing']
+                        }).catch(() => {});
+                    }
+                }
+                // Wait between guesses
+                await new Promise(r => setTimeout(r, 45000));
+            }
+        } catch (e) {
+            this.auditLogger.error(`Autonomous predictor error: ${e.message}`);
+        }
     }
 
     /**

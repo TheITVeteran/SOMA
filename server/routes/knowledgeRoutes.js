@@ -2,6 +2,7 @@ import express from 'express';
 import messageBroker from '../../core/MessageBroker.js';
 import { readdir, readFile } from 'fs/promises';
 import { join } from 'path';
+import { requireEnterpriseAuth } from '../loaders/authMiddleware.js';
 
 const router = express.Router();
 
@@ -422,7 +423,7 @@ export default function(system) {
     });
 
     // POST /api/knowledge/config/brain
-    router.post('/config/brain', async (req, res) => {
+    router.post('/config/brain', requireEnterpriseAuth, async (req, res) => {
         try {
             const { brainId, featureId, payload = {} } = req.body || {};
             system.__knowledgeConfig = system.__knowledgeConfig || {};

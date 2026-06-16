@@ -193,3 +193,15 @@ export const queryForecasterWithConsensus = async (query, useConsensus = true) =
         }
     };
 };
+
+export const fetchActiveGuesses = async () => {
+    try {
+        const res = await fetch('/api/forecaster/guesses');
+        const data = await res.json();
+        return data.success ? data.guesses : [];
+    } catch (e) {
+        console.error('Failed to fetch active guesses', e);
+        return [];
+    }
+};
+

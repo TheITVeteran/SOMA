@@ -687,6 +687,26 @@ Respond with ONLY the new molecular string or name.`;
         try {
             fs.mkdirSync(path.dirname(this._learningAuditPath), { recursive: true });
             fs.appendFileSync(this._learningAuditPath, `${JSON.stringify({ ...event, key, recordedAt: now })}\n`, 'utf8');
+            
+            // Push into Universal Learning Pipeline
+            if (this.system?.universalLearningPipeline) {
+                this.system.universalLearningPipeline.logInteraction({
+                    source: 'BiotechArbiter',
+                    action: `medical_lab_${event.outcome || 'event'}`,
+                    details: {
+                        target: event.target,
+                        strand: event.strand,
+                        category: event.category,
+                        phase: event.phase,
+                        reason: event.reason,
+                        affinity: event.affinity,
+                        confidence: event.confidence,
+                        evidenceGrade: event.evidenceGrade
+                    },
+                    outcome: event.outcome || 'unknown',
+                    tags: ['biotech', 'medical-lab', 'simulation', event.target]
+                }).catch(() => {});
+            }
         } catch {}
 
         try {

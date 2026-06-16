@@ -343,13 +343,22 @@ export class ComputerControlArbiter extends BaseArbiter {
     try {
       switch (action) {
         case 'launch':
-          console.log(`[${this.name}] Launching Puppeteer...`);
-          this.browser = await puppeteer.launch({
-            headless: payload.headless !== false,
-            defaultViewport: null,
-            args: ['--start-maximized']
-          });
-          this.page = (await this.browser.pages())[0];
+          console.log(`[${this.name}] Attempting connection to Aperture Portal via CDP...`);
+          try {
+            this.browser = await puppeteer.connect({ browserURL: 'http://localhost:9222', defaultViewport: null });
+            console.log(`[${this.name}] Connected to Aperture Portal.`);
+            const pages = await this.browser.pages();
+            // Try to grab a non-empty, non-devtools page (likely our webview or main UI)
+            this.page = pages.find(p => p.url() && !p.url().startsWith('devtools://') && !p.url().includes('localhost:5173')) || pages[0];
+          } catch (connErr) {
+            console.log(`[${this.name}] Connection to Aperture failed, falling back to headless launch...`);
+            this.browser = await puppeteer.launch({
+              headless: payload.headless !== false,
+              defaultViewport: null,
+              args: ['--start-maximized']
+            });
+            this.page = (await this.browser.pages())[0];
+          }
           break;
 
         case 'navigate':

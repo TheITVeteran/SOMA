@@ -14,7 +14,21 @@
       "suppressedUntil": null,
       "displayName": "Erin",
       "key": "erin"
+    },
+    "home": {
+      "attempts": 2,
+      "heardReplies": 0,
+      "answered": 0,
+      "noReplies": 0,
+      "failures": 0,
+      "confidence": 0.45999999999999996,
+      "lastOutcome": "attempted",
+      "lastSummary": "that catch phrase haah",
+      "lastInteractionAt": 1781481521898,
+      "suppressedUntil": null,
+      "displayName": "home",
+      "key": "home"
     }
   },
-  "updatedAt": 1781189306689
+  "updatedAt": 1781481521898
 }

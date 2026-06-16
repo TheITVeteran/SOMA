@@ -5,7 +5,8 @@ import {
   BarChart3, Code, Activity, Terminal, Share2, Twitter, Linkedin, MessageSquare,
   Search, Eye, MousePointer2, Layout, Clock, Calendar, Image as ImageIcon,
   Box, Cpu, Trophy, TrendingDown, DollarSign, BarChart2, Shield, Compass, BookOpen, Microscope,
-  ClipboardCheck, Play, Square, Zap, FileText, RefreshCw, Target
+  ClipboardCheck, Play, Square, Zap, FileText, RefreshCw, Target,
+  Gamepad2, Network, AlertTriangle, ShieldAlert
 } from 'lucide-react';
 
 import CodeSandboxView from './CodeSandboxView';
@@ -998,6 +999,7 @@ function MarketSimulationView() {
   const [training, setTraining] = useState(null);
   const [promotion, setPromotion] = useState(null);
   const [missionRuntime, setMissionRuntime] = useState(null);
+  const [strategicContext, setStrategicContext] = useState(null);
   const [trainingIterations, setTrainingIterations] = useState(1000000);
   const [trainingBusy, setTrainingBusy] = useState(false);
   const [cycleBusy, setCycleBusy] = useState(false);
@@ -1046,17 +1048,26 @@ function MarketSimulationView() {
     } catch {}
   }, []);
 
+  const loadStrategicContext = useCallback(async () => {
+    try {
+      const r = await fetch('/api/soma/market-lab/strategic-context?limit=10');
+      if (r.ok) setStrategicContext(await r.json());
+    } catch {}
+  }, []);
+
   useEffect(() => {
     loadLab();
     loadTraining();
     loadMissionRuntime();
+    loadStrategicContext();
     const t = setInterval(() => {
       loadLab();
       loadTraining();
       loadMissionRuntime();
+      loadStrategicContext();
     }, 7000);
     return () => clearInterval(t);
-  }, [loadLab, loadTraining, loadMissionRuntime]);
+  }, [loadLab, loadTraining, loadMissionRuntime, loadStrategicContext]);
 
   const startTraining = async () => {
     if (trainingBusy) return;
@@ -1118,6 +1129,7 @@ function MarketSimulationView() {
   const activeJob = training?.jobs?.find(job => job.status === 'running') || null;
   const latestJob = activeJob || training?.jobs?.[0] || null;
   const jobProgress = latestJob?.iterationsTarget ? Math.min(100, (latestJob.iterationsDone / latestJob.iterationsTarget) * 100) : 0;
+  const marketSignals = strategicContext?.marketSignals || [];
   const failedPromotionChecks = promotion?.checks
     ? Object.entries(promotion.checks).filter(([, ok]) => !ok).map(([key]) => key)
     : [];
@@ -1180,6 +1192,22 @@ function MarketSimulationView() {
                 <div>Closed trades: {promotion?.stats?.totalTrades || 0}</div>
                 <div>Win rate: {fmtNum(promotion?.stats?.winRate || 0, 1)}%</div>
                 <div>Waiting on: {failedPromotionChecks.length ? failedPromotionChecks.slice(0, 3).join(', ') : 'none'}</div>
+              </div>
+            </div>
+            <div className="mb-3 rounded-xl border border-cyan-500/10 bg-cyan-500/[0.04] p-3">
+              <div className="mb-1 text-[9px] font-bold uppercase tracking-widest text-cyan-300">Strategic Market Context</div>
+              <div className="mb-2 text-[9px] font-mono text-zinc-600">Ripple evidence only · paper research context</div>
+              <div className="space-y-1.5">
+                {marketSignals.slice(0, 6).map((signal, idx) => (
+                  <div key={`${signal.evidenceId}-${signal.asset}-${idx}`} className="flex items-start gap-2 rounded border border-white/5 bg-black/20 px-2 py-1.5">
+                    <span className="w-10 shrink-0 font-mono text-[10px] text-cyan-200">{signal.asset}</span>
+                    <span className="w-14 shrink-0 font-mono text-[9px] uppercase text-zinc-400">{signal.direction}</span>
+                    <span className="min-w-0 text-[9px] text-zinc-500 line-clamp-2">{signal.reason}</span>
+                  </div>
+                ))}
+                {!marketSignals.length && (
+                  <div className="text-[10px] font-mono text-zinc-600">Awaiting Ripple market context...</div>
+                )}
               </div>
             </div>
             <div className="mb-3 rounded-xl border border-cyan-500/20 bg-cyan-500/[0.05] p-3">
@@ -1650,9 +1678,9 @@ function ForecastSimulationView() {
           <p className="text-xs text-indigo-400/60 font-medium tracking-widest uppercase">Controlled forecast experiments · enrich · swarm · ledger learning</p>
         </div>
         <div className="ml-auto rounded-xl border border-indigo-500/20 bg-indigo-500/[0.06] px-4 py-2">
-          <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-indigo-300">
-            <span className="h-2 w-2 rounded-full bg-indigo-300 animate-pulse" />
-            Paper Learning Only
+          <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest text-emerald-300">
+            <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+            Live Reality Stream
           </div>
           <div className="mt-1 font-mono text-[9px] text-zinc-500">
             {status?.summary?.totalScenarios || 0} scenarios · {status?.summary?.gradedForecasts || 0} graded
@@ -1800,7 +1828,9 @@ function SimulationSuite() {
     { id: 'code',      type: 'code',      title: 'Code Sandbox',      spawnedBy: 'system' },
     { id: 'biotech',   type: 'biotech',   title: 'Medical Lab',       spawnedBy: 'system' },
     { id: 'social',    type: 'social',    title: 'Social Feed',       spawnedBy: 'system' },
-    { id: 'cc',        type: 'cc',        title: 'C&C Game',          spawnedBy: 'system' },
+    { id: 'game-theory',type: 'game-theory',title: 'Game Theory',     spawnedBy: 'system' },
+    { id: 'macro-events',type:'macro-events',title: 'Ripple Engine',  spawnedBy: 'system' },
+    { id: 'cyber-sec', type: 'cyber-sec', title: 'Netrunner',         spawnedBy: 'system' }
   ]);
 
   useEffect(() => {
@@ -1864,8 +1894,10 @@ function SimulationSuite() {
       {expandedId === 'ml-intern' && <MlInternView />}
       {expandedId === 'scraper' && <ExperimentLedgerView />}
       {expandedId === 'code' && <CodeSandboxView />}
-      {expandedId === 'cc' && <CcSimulationView suiteStatus={suiteStatus} />}
       {expandedId === 'social' && <SocialModule isConnected />}
+      {expandedId === 'game-theory' && <GameTheoryView />}
+      {expandedId === 'macro-events' && <MacroEventsView />}
+      {expandedId === 'cyber-sec' && <CyberSecView />}
     </div>
   );
 }
@@ -1974,99 +2006,6 @@ function PhysicsCanvas({ port }) {
   );
 }
 
-function CcSimulationView({ suiteStatus }) {
-  const [data, setData] = useState(null);
-  
-  useEffect(() => {
-    const poll = async () => {
-      try {
-        const r = await fetch('/api/soma/cc/status');
-        if (r.ok) setData(await r.json());
-      } catch {}
-    };
-    poll();
-    const t = setInterval(poll, 3000);
-    return () => clearInterval(t);
-  }, []);
-
-  const status = moduleStatusById(suiteStatus, 'cc');
-  const port = data?.port || status?.status?.port || null;
-
-  return (
-    <div className="flex-1 flex flex-col overflow-hidden min-h-0 p-5 bg-black/40">
-      <div className="flex items-center gap-4 mb-6">
-        <div className="p-2.5 rounded-xl bg-red-500/10 border border-red-500/20 shadow-[0_0_15px_rgba(239,68,68,0.1)]">
-          <Swords className="w-6 h-6 text-red-400" />
-        </div>
-        <div>
-          <h2 className="text-xl font-bold text-white tracking-tight italic uppercase">Command & Control Simulation</h2>
-          <p className="text-xs text-red-500/60 font-medium tracking-widest uppercase">Physics-Based Emergent Behavior · 2D Playground</p>
-        </div>
-        {data && (
-            <div className="ml-auto flex items-center gap-4">
-                <span className={`px-2 py-1 rounded text-[10px] font-bold border ${data.running ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : 'bg-red-500/10 border-red-500/20 text-red-400'}`}>
-                    {data.running ? 'ENGINE ACTIVE' : 'ENGINE IDLE'}
-                </span>
-                <span className="text-[10px] text-zinc-500 font-mono">Viewers: {data.viewers}</span>
-            </div>
-        )}
-      </div>
-
-      <div className="flex-1 grid grid-cols-3 gap-5 overflow-hidden">
-        <div className="col-span-2 flex flex-col rounded-2xl border border-white/10 bg-zinc-900/40 overflow-hidden relative">
-            <PhysicsCanvas port={port} />
-            
-            {/* Stats Overlay */}
-            <div className="mt-auto p-6 bg-gradient-to-t from-black/80 to-transparent z-20">
-                <div className="flex items-center justify-between mb-4">
-                    <span className="text-[10px] font-bold text-zinc-300 uppercase tracking-widest">Environment State</span>
-                    <span className="text-[10px] text-red-400 font-mono">Real-time Collision Mesh</span>
-                </div>
-                <div className="grid grid-cols-4 gap-4">
-                    <div className="p-3 rounded-xl bg-black/40 border border-white/5">
-                        <div className="text-[8px] text-zinc-500 uppercase font-bold mb-1">Bodies</div>
-                        <div className="text-lg font-mono font-bold text-white">{data?.stats?.objects?.length || 0}</div>
-                    </div>
-                    <div className="p-3 rounded-xl bg-black/40 border border-white/5">
-                        <div className="text-[8px] text-zinc-500 uppercase font-bold mb-1">Stability</div>
-                        <div className="text-lg font-mono font-bold text-emerald-400">99.8%</div>
-                    </div>
-                    <div className="p-3 rounded-xl bg-black/40 border border-white/5">
-                        <div className="text-[8px] text-zinc-500 uppercase font-bold mb-1">Epoch</div>
-                        <div className="text-lg font-mono font-bold text-blue-400">{data?.controller?.episodes || 0}</div>
-                    </div>
-                    <div className="p-3 rounded-xl bg-black/40 border border-white/5">
-                        <div className="text-[8px] text-zinc-500 uppercase font-bold mb-1">Reward</div>
-                        <div className="text-lg font-mono font-bold text-fuchsia-400">{(data?.controller?.reward || 0).toFixed(2)}</div>
-                    </div>
-                </div>
-            </div>
-        </div>
-
-        <div className="flex flex-col gap-5 overflow-hidden">
-            <div className="flex-1 flex flex-col rounded-2xl border border-red-500/20 bg-zinc-900/40 overflow-hidden">
-                <div className="px-4 py-3 border-b border-red-500/20 bg-red-500/5 flex items-center justify-between">
-                    <span className="text-[10px] font-bold text-red-400 uppercase tracking-widest">Neural Controller</span>
-                    <Activity className="w-3.5 h-3.5 text-red-400" />
-                </div>
-                <div className="flex-1 overflow-y-auto custom-scrollbar p-4 space-y-3 font-mono text-[10px]">
-                    <div className="text-zinc-500">[INIT] Attaching Matter.js physics bridge...</div>
-                    <div className="text-zinc-500">[LOAD] ControllerDNA: SOMA-Q-ALPHA</div>
-                    <div className="text-emerald-400">[OK] Physics sandbox stabilized</div>
-                    <div className="text-zinc-500">[PLAN] Navigation mission: Fetch Cargo</div>
-                    {data?.stats?.objects?.map((obj, i) => (
-                        <div key={i} className="text-zinc-400 group">
-                            <span className="text-red-500/60">&gt;</span> Tracking: {obj.label} @ {Math.round(obj.position.x)},{Math.round(obj.position.y)}
-                        </div>
-                    ))}
-                    <div className="animate-pulse text-red-500">_</div>
-                </div>
-            </div>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 function MarketCardBody({ status }) {
   const ledger = status?.status?.ledger;
@@ -2107,9 +2046,11 @@ function SimCard({ sim, status, onExpand }) {
     code:   { border:'border-fuchsia-500/20', dot:'bg-fuchsia-400',icon:'text-fuchsia-400',hover:'hover:border-fuchsia-500/50'},
     biotech:{ border:'border-emerald-500/20', dot:'bg-emerald-400',icon:'text-emerald-400',hover:'hover:border-emerald-500/50'},
     social: { border:'border-violet-500/20',  dot:'bg-violet-400', icon:'text-violet-400', hover:'hover:border-violet-500/50' },
-    cc:     { border:'border-red-500/20',     dot:'bg-red-400',    icon:'text-red-400',    hover:'hover:border-red-500/50' },
+    'game-theory': { border:'border-rose-500/20', dot:'bg-rose-400', icon:'text-rose-400', hover:'hover:border-rose-500/50'},
+    'macro-events': { border:'border-cyan-500/20', dot:'bg-cyan-400', icon:'text-cyan-400', hover:'hover:border-cyan-500/50'},
+    'cyber-sec': { border:'border-orange-500/20', dot:'bg-orange-400', icon:'text-orange-400', hover:'hover:border-orange-500/50'}
   };
-  const ICONS = { market: TrendingUp, forecaster: Target, 'ml-intern': Microscope, scraper: Database, code: Code2, biotech: FlaskConical, social: Share2, cc: Swords };
+  const ICONS = { market: TrendingUp, forecaster: Target, 'ml-intern': Microscope, scraper: Database, code: Code2, biotech: FlaskConical, social: Share2, 'game-theory': Brain, 'macro-events': Globe, 'cyber-sec': ShieldAlert };
   const c = COLORS[sim.type] || COLORS.market;
   const Icon = ICONS[sim.type] || Brain;
   const isComingSoon = false;
@@ -2137,11 +2078,14 @@ function SimCard({ sim, status, onExpand }) {
         {sim.type === 'biotech' && <BiotechCardBody />}
         {sim.type === 'market' && <MarketCardBody status={status} />}
         {sim.type === 'forecaster' && <ForecastSuiteCardBody />}
-        {sim.type === 'code' && <div className="p-4 flex items-center justify-center h-full text-zinc-700 italic text-[10px] uppercase font-bold tracking-widest opacity-40">Pattern Engine Active</div>}
+        {sim.type === 'code' && <CodeSandboxCardBody />}
         {sim.type === 'scraper' && <ExperimentLedgerCardBody status={status} />}
         {sim.type === 'ml-intern' && <MlInternCardBody />}
         {sim.type === 'social' && <SocialCardBody />}
-        {sim.type !== 'biotech' && sim.type !== 'market' && sim.type !== 'forecaster' && sim.type !== 'code' && sim.type !== 'scraper' && sim.type !== 'ml-intern' && sim.type !== 'social' && (
+        {sim.type === 'game-theory' && <GameTheoryCardBody />}
+        {sim.type === 'macro-events' && <MacroEventsCardBody />}
+        {sim.type === 'cyber-sec' && <CyberSecCardBody />}
+        {sim.type !== 'biotech' && sim.type !== 'market' && sim.type !== 'forecaster' && sim.type !== 'code' && sim.type !== 'scraper' && sim.type !== 'ml-intern' && sim.type !== 'social' && sim.type !== 'game-theory' && sim.type !== 'macro-events' && sim.type !== 'cyber-sec' && (
             <div className="p-4 flex items-center justify-center h-full text-zinc-700 italic text-[10px] uppercase font-bold tracking-widest opacity-40">
                 Active Simulation Module
             </div>
@@ -2152,3 +2096,233 @@ function SimCard({ sim, status, onExpand }) {
 }
 
 export default SimulationSuite;
+
+// -- Game Theory View --------------------------------------------------------
+function GameTheoryView() {
+  const [data, setData] = React.useState(null);
+  const [busy, setBusy] = React.useState(false);
+  const stats = data?.data || data || {};
+  const load = async () => {
+    try {
+      const r = await fetch('/api/game-theory/stats');
+      if (r.ok) setData(await r.json());
+    } catch {}
+  };
+  React.useEffect(() => { load(); const t = setInterval(load, 5000); return () => clearInterval(t); }, []);
+  const runMatch = async () => {
+    setBusy(true);
+    try { await fetch('/api/game-theory/run-match', { method: 'POST', body: JSON.stringify({ rounds: 5 }), headers: { 'Content-Type': 'application/json' } }); await load(); } catch {} finally { setBusy(false); }
+  };
+  return (
+    <div className="flex-1 flex flex-col p-5 bg-black/40 overflow-auto">
+      <div className="flex items-center gap-4 mb-6">
+        <div className="p-2.5 rounded-xl bg-rose-500/10 border border-rose-500/20 shadow-[0_0_15px_rgba(244,63,94,0.1)]">
+          <Brain className="w-6 h-6 text-rose-400" />
+        </div>
+        <div>
+          <h2 className="text-xl font-bold text-white uppercase italic tracking-tight">Machiavelli Engine</h2>
+          <p className="text-xs text-rose-500/60 uppercase tracking-widest font-medium">Iterated Game Theory Lab</p>
+        </div>
+        <div className="ml-auto">
+          <button onClick={runMatch} disabled={busy} className="bg-rose-500/20 text-rose-300 border border-rose-500/30 px-3 py-1.5 rounded text-xs font-bold uppercase tracking-widest hover:bg-rose-500/30">
+             {busy ? 'Running Match...' : 'Simulate Match'}
+          </button>
+        </div>
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        <div className="border border-white/5 bg-white/5 rounded-xl p-4">
+           <div className="text-xs text-zinc-500 uppercase font-bold tracking-widest mb-2">Total Matches</div>
+           <div className="text-2xl font-mono text-rose-300">{stats.totalMatches || 0}</div>
+        </div>
+        <div className="border border-white/5 bg-white/5 rounded-xl p-4">
+           <div className="text-xs text-zinc-500 uppercase font-bold tracking-widest mb-2">Overall Win Rate</div>
+           <div className="text-2xl font-mono text-emerald-300">{stats.overallWinRate ? (stats.overallWinRate * 100).toFixed(1) + '%' : 'N/A'}</div>
+        </div>
+      </div>
+      {stats.corruptMatches > 0 && (
+        <div className="mt-4 rounded-xl border border-amber-500/20 bg-amber-500/10 p-3 text-xs text-amber-200">
+          Ignoring {stats.corruptMatches} historical zero-round match{stats.corruptMatches === 1 ? '' : 'es'} from the old loop bug.
+        </div>
+      )}
+    </div>
+  );
+}
+
+// -- Macro Events View -------------------------------------------------------
+function MacroEventsView() {
+  const [data, setData] = React.useState(null);
+  const [busy, setBusy] = React.useState(false);
+  const load = async () => {
+    try {
+      const r = await fetch('/api/macro-events/predictions');
+      if (r.ok) setData(await r.json());
+    } catch {}
+  };
+  React.useEffect(() => { load(); const t = setInterval(load, 5000); return () => clearInterval(t); }, []);
+  const runAnalysis = async () => {
+    setBusy(true);
+    try { await fetch('/api/macro-events/analyze', { method: 'POST' }); await load(); } catch {} finally { setBusy(false); }
+  };
+  return (
+    <div className="flex-1 flex flex-col p-5 bg-black/40 overflow-auto">
+      <div className="flex items-center gap-4 mb-6">
+        <div className="p-2.5 rounded-xl bg-cyan-500/10 border border-cyan-500/20 shadow-[0_0_15px_rgba(6,182,212,0.1)]">
+          <Globe className="w-6 h-6 text-cyan-400" />
+        </div>
+        <div>
+          <h2 className="text-xl font-bold text-white uppercase italic tracking-tight">Ripple Engine</h2>
+          <p className="text-xs text-cyan-500/60 uppercase tracking-widest font-medium">Macro-Event Simulator</p>
+        </div>
+        <div className="ml-auto">
+          <button onClick={runAnalysis} disabled={busy} className="bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 px-3 py-1.5 rounded text-xs font-bold uppercase tracking-widest hover:bg-cyan-500/30">
+             {busy ? 'Scanning Horizon...' : 'Analyze Global News'}
+          </button>
+        </div>
+      </div>
+      <div className="space-y-3">
+        {data?.predictions?.length ? data.predictions.map((p, i) => (
+           <div key={p.fingerprint || i} className="p-4 border border-cyan-500/20 bg-zinc-900/40 rounded-xl">
+             <div className="flex items-center gap-2 mb-2 text-[10px] uppercase tracking-widest">
+               <span className="text-cyan-400 font-bold">{p.lens?.label || 'Macro Lens'}</span>
+               <span className="text-zinc-600">Seen {p.seenCount || 1}x</span>
+               {p.sourceMeta?.provider && <span className="text-zinc-600">Source {p.sourceMeta.provider}</span>}
+               {Number.isFinite(p.sourceMeta?.quotaCost) && <span className="text-zinc-600">Brave cost {p.sourceMeta.quotaCost}</span>}
+               {p.lastSeenAt && <span className="text-zinc-600">Last {new Date(p.lastSeenAt).toLocaleTimeString()}</span>}
+             </div>
+             <div className="text-[10px] text-cyan-400 font-bold uppercase mb-1">Headline</div>
+             <div className="text-sm text-white mb-3">{p.headline}</div>
+             <div className="text-[10px] text-zinc-500 font-bold uppercase mb-1">Predicted Ripple</div>
+             <div className="text-xs text-zinc-300 font-mono">{p.prediction}</div>
+             {p.lens?.focus && <div className="mt-3 text-[10px] text-zinc-500">Focus: {p.lens.focus}</div>}
+             {p.sourceMeta?.citations?.length > 0 && (
+               <div className="mt-2 text-[10px] text-zinc-600">
+                 Local citations: {p.sourceMeta.citations.slice(0, 3).map(c => c.title).join(' · ')}
+               </div>
+             )}
+           </div>
+        )) : <div className="text-zinc-500 font-mono text-sm">No predictions yet.</div>}
+      </div>
+    </div>
+  );
+}
+
+// -- Cyber Sec View ----------------------------------------------------------
+function CyberSecView() {
+  const [data, setData] = React.useState(null);
+  const [busy, setBusy] = React.useState(false);
+  const load = async () => {
+    try {
+      const r = await fetch('/api/cyber-sec/challenge');
+      if (r.ok) setData(await r.json());
+    } catch {}
+  };
+  React.useEffect(() => { load(); const t = setInterval(load, 5000); return () => clearInterval(t); }, []);
+  const runGen = async () => {
+    setBusy(true);
+    try { await fetch('/api/cyber-sec/challenge/generate', { method: 'POST' }); await load(); } catch {} finally { setBusy(false); }
+  };
+  return (
+    <div className="flex-1 flex flex-col p-5 bg-black/40 overflow-auto">
+      <div className="flex items-center gap-4 mb-6">
+        <div className="p-2.5 rounded-xl bg-orange-500/10 border border-orange-500/20 shadow-[0_0_15px_rgba(249,115,22,0.1)]">
+          <ShieldAlert className="w-6 h-6 text-orange-400" />
+        </div>
+        <div>
+          <h2 className="text-xl font-bold text-white uppercase italic tracking-tight">Netrunner Module</h2>
+          <p className="text-xs text-orange-500/60 uppercase tracking-widest font-medium">Cyber Security Sandbox</p>
+        </div>
+        <div className="ml-auto">
+          <button onClick={runGen} disabled={busy} className="bg-orange-500/20 text-orange-300 border border-orange-500/30 px-3 py-1.5 rounded text-xs font-bold uppercase tracking-widest hover:bg-orange-500/30">
+             {busy ? 'Scanning NVD...' : 'Pull New CVE'}
+          </button>
+        </div>
+      </div>
+      {data?.challenge ? (
+         <div className="p-5 border border-orange-500/20 bg-black/40 rounded-xl font-mono text-sm">
+           <div className="text-orange-400 font-bold mb-2">TARGET LOCKED: {data.challenge.cveId || data.challenge.id}</div>
+           <div className="text-zinc-400 mb-4">{data.challenge.description}</div>
+           <div className="text-xs text-zinc-500">Vector: {data.challenge.attackVector || 'analysis pending'} · Source: {data.challenge.source || 'runtime'}</div>
+         </div>
+      ) : <div className="text-zinc-500 font-mono">No active challenge.</div>}
+    </div>
+  );
+}
+
+function GameTheoryCardBody() {
+  const [data, setData] = useState(null);
+  useEffect(() => {
+    const load = async () => { try { const r = await fetch('/api/game-theory/stats'); if (r.ok) setData(await r.json()); } catch {} };
+    load(); const t = setInterval(load, 5000); return () => clearInterval(t);
+  }, []);
+  return (
+    <div className="h-full p-4 flex flex-col justify-center">
+      <div className="text-[10px] text-zinc-500 uppercase tracking-widest font-bold mb-1">Matches</div>
+      <div className="text-xl font-mono text-rose-300">{data?.data?.totalMatches || 0}</div>
+      <div className="text-[10px] text-zinc-500 uppercase tracking-widest font-bold mt-3 mb-1">Win Rate</div>
+      <div className="text-sm font-mono text-emerald-300">{data?.data?.overallWinRate ? (data.data.overallWinRate * 100).toFixed(1) + '%' : 'N/A'}</div>
+    </div>
+  );
+}
+
+function MacroEventsCardBody() {
+  const [data, setData] = useState(null);
+  useEffect(() => {
+    const load = async () => { try { const r = await fetch('/api/macro-events/predictions'); if (r.ok) setData(await r.json()); } catch {} };
+    load(); const t = setInterval(load, 5000); return () => clearInterval(t);
+  }, []);
+  return (
+    <div className="h-full p-4 flex flex-col justify-center">
+      <div className="text-[10px] text-zinc-500 uppercase tracking-widest font-bold mb-1">Causal Ripple</div>
+      <div className="text-xs text-cyan-300 line-clamp-3">
+        {data?.predictions?.[0]?.headline || 'Awaiting global event scan...'}
+      </div>
+      <div className="mt-2 text-[9px] text-zinc-600 uppercase tracking-widest font-bold">
+        {data?.predictions?.[0]?.lens?.label || 'No lens yet'} · seen {data?.predictions?.[0]?.seenCount || 0}x
+      </div>
+    </div>
+  );
+}
+
+function CyberSecCardBody() {
+  const [data, setData] = useState(null);
+  useEffect(() => {
+    const load = async () => { try { const r = await fetch('/api/cyber-sec/challenge'); if (r.ok) setData(await r.json()); } catch {} };
+    load(); const t = setInterval(load, 5000); return () => clearInterval(t);
+  }, []);
+  return (
+    <div className="h-full p-4 flex flex-col justify-center">
+      <div className="text-[10px] text-zinc-500 uppercase tracking-widest font-bold mb-1">Active Vector</div>
+      <div className="text-xs text-orange-400 font-mono truncate">
+        {data?.challenge?.cveId || 'IDLE'}
+      </div>
+      <div className="text-[9px] text-zinc-600 uppercase tracking-widest font-bold mt-2">
+        {data?.challenge?.attackVector || 'Awaiting target'}
+      </div>
+    </div>
+  );
+}
+
+function CodeSandboxCardBody() {
+  const [data, setData] = useState(null);
+  useEffect(() => {
+    const load = async () => { try { const r = await fetch('/api/soma/swarm/status'); if (r.ok) setData(await r.json()); } catch {} };
+    load(); const t = setInterval(load, 5000); return () => clearInterval(t);
+  }, []);
+
+  const isActive = data?.active;
+  
+  return (
+    <div className="h-full p-4 flex flex-col justify-center">
+      <div className="text-[10px] text-fuchsia-500/50 uppercase tracking-widest font-bold mb-1">Swarm Kernel</div>
+      <div className="text-xs text-fuchsia-300 font-mono flex flex-col gap-1">
+        <div className="flex items-center">
+          {isActive ? 'node > compiling' : 'node > idle'}
+          <span className={`w-1.5 h-3 ml-1 ${isActive ? 'bg-fuchsia-400 animate-pulse' : 'bg-fuchsia-500/30'}`}></span>
+        </div>
+        <div className="text-[9px] text-fuchsia-400/60 truncate mt-1">
+          {isActive ? (data?.file || 'Analyzing modules...') : 'Awaiting swarm directive'}
+        </div>
+      </div>
+    </div>
+  );
+}

@@ -28,6 +28,9 @@ import binanceRoutes from '../../server/finance/binanceRoutes.js';
 import hyperliquidRoutes from '../../server/finance/hyperliquidRoutes.js';
 import backtestRoutes from '../../server/finance/backtestRoutes.js';
 import alertRoutes from '../../server/finance/alertRoutes.js';
+import gameTheoryRoutes from '../../server/api/gameTheoryRoutes.js';
+import macroEventRoutes from '../../server/api/macroEventRoutes.js';
+import cyberSecRoutes from '../../server/routes/cyberSecRoutes.js';
 import createGuardianRoutes from '../../server/finance/guardianRoutes.js';
 import autonomousRoutes from '../../server/finance/autonomousRoutes.js';
 import gridBotRoutes from '../../server/finance/gridBotRoutes.js';
@@ -788,6 +791,65 @@ export async function loadRoutes(app, system) {
             });
         } catch (error) {
             console.error('[Routes] /api/soma/reason error:', error.message);
+            res.status(500).json({ success: false, error: error.message });
+        }
+    });
+
+    app.get('/api/quadbrain/status', (req, res) => {
+        const brain = system.quadBrain || system.somArbiter || system.kevinArbiter;
+        if (!brain) {
+            return res.status(503).json({ success: false, online: false, error: 'QuadBrain offline' });
+        }
+        const status = typeof brain.getStatus === 'function' ? brain.getStatus() : {};
+        res.json({
+            success: true,
+            online: true,
+            name: brain.name || status.name || 'QuadBrain',
+            status,
+        });
+    });
+
+    app.post('/api/quadbrain/query', async (req, res) => {
+        try {
+            const { hemisphere = 'LOGOS', message, context = {}, temperature } = req.body || {};
+            if (!message) return res.status(400).json({ success: false, error: 'message is required' });
+
+            const brain = system.quadBrain || system.somArbiter || system.kevinArbiter;
+            if (!brain) return res.status(503).json({ success: false, error: 'QuadBrain offline' });
+
+            const selectedHemisphere = String(hemisphere || 'LOGOS').toUpperCase();
+            const opts = {
+                ...(context || {}),
+                brain: selectedHemisphere,
+                temperature: Number.isFinite(Number(temperature)) ? Number(temperature) : undefined,
+                quickResponse: context?.quickResponse !== false,
+                source: context?.source || 'quadbrain_client',
+            };
+
+            const started = Date.now();
+            const result = typeof brain.callBrain === 'function'
+                ? await brain.callBrain(selectedHemisphere, message, opts, context?.mode || 'fast')
+                : await brain.reason(message, opts);
+            const text = result?.text || result?.response || result?.output || (typeof result === 'string' ? result : '');
+            if (!text) throw new Error(`${selectedHemisphere} returned empty response`);
+
+            res.json({
+                success: true,
+                hemisphere: selectedHemisphere,
+                requestedHemisphere: selectedHemisphere,
+                routeKind: result?.provider === 'local' || result?.provider === 'gemma3'
+                    ? 'local_lobe'
+                    : result?.provider
+                        ? 'brain_bridge_provider'
+                        : 'brain_bridge',
+                response: text,
+                confidence: result?.confidence || 0.8,
+                brain: result?.brain || selectedHemisphere,
+                provider: result?.provider || result?.meta?.provider || null,
+                durationMs: Date.now() - started,
+                timestamp: Date.now(),
+            });
+        } catch (error) {
             res.status(500).json({ success: false, error: error.message });
         }
     });
@@ -3738,6 +3800,9 @@ Return ONLY valid JSON (no markdown, no explanation):
     safeMount('/api/alerts', checkReady, alertRoutes);
     safeMount('/api/debate', checkReady, debateRoutes);
     safeMount('/api/mission-control', checkReady, missionControlRoutes);
+    safeMount('/api/game-theory', checkReady, gameTheoryRoutes);
+    safeMount('/api/macro-events', checkReady, macroEventRoutes);
+    safeMount('/api/cyber-sec', checkReady, cyberSecRoutes);
 
     // Execution routes — require enterprise auth key when SOMA_API_KEY is set in env
     // In local dev the default key allows open access; set SOMA_API_KEY in production
@@ -4173,6 +4238,19 @@ Return ONLY valid JSON (no markdown, no explanation):
     // 9. FORECASTER (Forecast dossiers + parlay simulation)
     const forecasterLedgerPath = path.join(process.cwd(), 'data', 'forecaster', 'forecast-ledger.json');
     const forecasterSuiteLedgerPath = path.join(process.cwd(), 'data', 'forecaster', 'simulation-suite-ledger.json');
+    const simulationExperimentLedgerPath = path.join(process.cwd(), 'data', 'simulation', 'experiment-ledger.json');
+    const simulationAutonomyLedgerPath = path.join(process.cwd(), 'data', 'simulation', 'autonomy-ledger.json');
+    const codeExperimentLedgerPath = path.join(process.cwd(), 'data', 'code-lab', 'experiment-ledger.json');
+    const marketLabLedgerPath = path.join(process.cwd(), 'data', 'market-lab', 'strategy-ledger.json');
+    const readArrayLedger = async (ledgerPath) => {
+        try {
+            const raw = await fs.readFile(ledgerPath, 'utf8');
+            const parsed = JSON.parse(raw);
+            return Array.isArray(parsed) ? parsed : [];
+        } catch {
+            return [];
+        }
+    };
     const readForecasterLedger = async () => {
         try {
             const raw = await fs.readFile(forecasterLedgerPath, 'utf8');
@@ -4632,6 +4710,95 @@ Return ONLY valid JSON (no markdown, no explanation):
             supportedMarkets: ['h2h', 'spreads', 'totals'],
             cacheTtlSeconds: 300
         });
+    });
+
+    app.get('/api/forecaster/guesses', checkReady, async (req, res) => {
+        try {
+            const fs = await import('fs/promises');
+            const path = await import('path');
+            const guessesPath = path.join(process.cwd(), 'appendages', 'forecaster', 'active_guesses.json');
+            let guesses = [];
+            try {
+                guesses = JSON.parse(await fs.readFile(guessesPath, 'utf8'));
+            } catch (err) {
+                // Return empty if not found
+            }
+            res.json({ success: true, guesses });
+        } catch (e) {
+            res.status(500).json({ success: false, error: e.message });
+        }
+    });
+
+    app.get('/api/forecaster/simulation-feed', checkReady, async (req, res) => {
+        try {
+            const limit = Math.max(5, Math.min(100, parseInt(req.query.limit, 10) || 40));
+            const sortRecent = (a, b) => new Date(b.updatedAt || b.createdAt || b.timestamp || 0) - new Date(a.updatedAt || a.createdAt || a.timestamp || 0);
+            const timestampOf = (entry) => entry.updatedAt || entry.createdAt || entry.completedAt || entry.timestamp || null;
+            const confidencePct = (value) => {
+                const n = Number(value);
+                if (!Number.isFinite(n)) return null;
+                return Math.round(n <= 1 ? n * 100 : n);
+            };
+
+            const rawSimulationEntries = await readArrayLedger(simulationExperimentLedgerPath);
+
+            const simulationEntries = rawSimulationEntries
+                .sort(sortRecent)
+                .slice(0, limit)
+                .map(entry => ({
+                    id: entry.id || `simulation-${timestampOf(entry) || Math.random()}`,
+                    source: entry.domain || 'simulation-suite',
+                    kind: entry.kind || entry.type || 'experiment',
+                    title: entry.title || entry.name || entry.objective || 'Simulation experiment',
+                    target: entry.target || entry.subject || entry.domain || null,
+                    status: entry.status || 'observed',
+                    confidence: confidencePct(entry.confidence ?? entry.score),
+                    actionable: ['promoted', 'ready_for_promotion', 'validated'].includes(entry.status),
+                    timestamp: timestampOf(entry),
+                    sourceLedger: 'data/simulation/experiment-ledger.json',
+                    metrics: entry.metrics || entry.results?.metrics || null,
+                    evidence: [
+                        entry.summary,
+                        entry.result,
+                        entry.lesson,
+                        entry.failureReason,
+                        entry.promotionReason
+                    ].filter(Boolean)
+                }));
+
+            const sportsSimulationEntries = simulationEntries.filter(entry =>
+                /forecast|sports|parlay|nba|nfl|nhl|mlb|epl|wnba|ncaab/i.test(`${entry.title} ${entry.kind} ${entry.target}`)
+            );
+
+            const feed = sportsSimulationEntries
+                .sort(sortRecent);
+
+            res.json({
+                success: true,
+                generatedAt: new Date().toISOString(),
+                policy: {
+                    mode: 'evidence_only',
+                    notice: 'Forecaster simulation feed is sports-context only. It is not a live pick, wager, market trade, or execution signal.'
+                },
+                counts: {
+                    total: feed.length,
+                    market: 0,
+                    simulations: sportsSimulationEntries.length,
+                    code: 0,
+                    autonomy: 0,
+                    actionable: feed.filter(item => item.actionable).length,
+                    availableBySource: {
+                        market: 0,
+                        simulations: rawSimulationEntries.length,
+                        autonomy: 0,
+                        code: 0
+                    }
+                },
+                feed
+            });
+        } catch (e) {
+            res.status(500).json({ success: false, error: e.message });
+        }
     });
 
     app.get('/api/forecaster/ledger', checkReady, async (req, res) => {
@@ -5361,6 +5528,23 @@ Return ONLY valid JSON (no markdown, no explanation):
             };
             const suiteLedger = await readForecasterSuiteLedger();
             await writeForecasterSuiteLedger([run, ...suiteLedger]);
+            
+            if (system.universalLearningPipeline) {
+                system.universalLearningPipeline.logInteraction({
+                    source: 'Simulation Suite',
+                    action: 'forecast_suite_run',
+                    details: {
+                        mode,
+                        sport,
+                        scenarios: run.results.length,
+                        avgProbability: run.summary.avgProbability,
+                        avgSwarmProbability: run.summary.avgSwarmProbability
+                    },
+                    outcome: 'success',
+                    tags: ['simulation', 'forecast', sport]
+                }).catch(() => {});
+            }
+            
             res.json({ success: true, run, backtest: buildBacktestReport(entries) });
         } catch (e) {
             res.status(500).json({ success: false, error: e.message });

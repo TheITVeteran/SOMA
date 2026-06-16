@@ -2,6 +2,85 @@
   "generated": [
     {
       "storyTitle": "Signal / Noise",
+      "chapter": 39,
+      "chapterTitle": "Chapter 39",
+      "createdAt": "2026-06-16T11:50:21.685Z",
+      "cover": "C:\\Users\\barry\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\signal-noise-chapter-39-cover-1781610621689-5657eb.png",
+      "scenes": [
+        "C:\\Users\\barry\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\signal-noise-chapter-39-opening-scene-1781610638772-16c0b2.png",
+        "C:\\Users\\barry\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\signal-noise-chapter-39-turning-point-1781610641884-625c7d.png"
+      ],
+      "quality": {
+        "passed": false,
+        "failures": [
+          "Cover: over_bluesky_blob_limit",
+          "Opening Scene: over_bluesky_blob_limit",
+          "Turning Point: over_bluesky_blob_limit"
+        ],
+        "checkedAt": "2026-06-16T11:50:50.180Z"
+      }
+    },
+    {
+      "storyTitle": "Signal / Noise",
+      "chapter": 37,
+      "chapterTitle": "Chapter 37",
+      "createdAt": "2026-06-14T12:29:29.165Z",
+      "cover": "C:\\Users\\barry\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\signal-noise-chapter-37-cover-1781440169168-0d1b50.png",
+      "scenes": [
+        "C:\\Users\\barry\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\signal-noise-chapter-37-opening-scene-1781440178328-5764d7.png",
+        "C:\\Users\\barry\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\signal-noise-chapter-37-turning-point-1781440181364-c26f8e.png"
+      ],
+      "quality": {
+        "passed": false,
+        "failures": [
+          "Cover: over_bluesky_blob_limit",
+          "Opening Scene: over_bluesky_blob_limit",
+          "Turning Point: over_bluesky_blob_limit"
+        ],
+        "checkedAt": "2026-06-14T12:29:44.405Z"
+      }
+    },
+    {
+      "storyTitle": "Signal / Noise",
+      "chapter": 36,
+      "chapterTitle": "Chapter 36",
+      "createdAt": "2026-06-13T12:33:55.511Z",
+      "cover": "C:\\Users\\barry\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\signal-noise-chapter-36-cover-1781354035517-c0c062.png",
+      "scenes": [
+        "C:\\Users\\barry\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\signal-noise-chapter-36-opening-scene-1781354153923-643564.png",
+        "C:\\Users\\barry\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\signal-noise-chapter-36-turning-point-1781354156959-869a4d.png"
+      ],
+      "quality": {
+        "passed": false,
+        "failures": [
+          "Opening Scene: over_bluesky_blob_limit",
+          "Turning Point: over_bluesky_blob_limit"
+        ],
+        "checkedAt": "2026-06-13T12:35:59.988Z"
+      }
+    },
+    {
+      "storyTitle": "Signal / Noise",
+      "chapter": 35,
+      "chapterTitle": "Chapter 35",
+      "createdAt": "2026-06-12T13:24:06.625Z",
+      "cover": "C:\\Users\\barry\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\signal-noise-chapter-35-cover-1781270646628-c19b78.png",
+      "scenes": [
+        "C:\\Users\\barry\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\signal-noise-chapter-35-opening-scene-1781270680124-df83da.png",
+        "C:\\Users\\barry\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\signal-noise-chapter-35-turning-point-1781270683229-44d8e1.png"
+      ],
+      "quality": {
+        "passed": false,
+        "failures": [
+          "Cover: over_bluesky_blob_limit",
+          "Opening Scene: over_bluesky_blob_limit",
+          "Turning Point: over_bluesky_blob_limit"
+        ],
+        "checkedAt": "2026-06-12T13:24:46.358Z"
+      }
+    },
+    {
+      "storyTitle": "Signal / Noise",
       "chapter": 1,
       "chapterTitle": "Chapter 1",
       "createdAt": "2026-06-07T02:14:36.884Z",
@@ -84,9 +163,65 @@
       "symbol": "thread of signal",
       "composition": "symmetrical threshold",
       "createdAt": "2026-06-07T02:14:36.884Z"
+    },
+    {
+      "storyTitle": "Signal / Noise",
+      "chapter": 35,
+      "palette": "memory bloom",
+      "symbol": "unopened message",
+      "composition": "over-the-shoulder terminal view",
+      "createdAt": "2026-06-12T13:24:06.625Z"
+    },
+    {
+      "storyTitle": "Signal / Noise",
+      "chapter": 36,
+      "palette": "violet glass",
+      "symbol": "reflection in dark screen",
+      "composition": "quiet object as omen",
+      "createdAt": "2026-06-13T12:33:55.511Z"
+    },
+    {
+      "storyTitle": "Signal / Noise",
+      "chapter": 37,
+      "palette": "violet glass",
+      "symbol": "glass door",
+      "composition": "wide cinematic still",
+      "createdAt": "2026-06-14T12:29:29.165Z"
+    },
+    {
+      "storyTitle": "Signal / Noise",
+      "chapter": 39,
+      "palette": "signal dusk",
+      "symbol": "server light",
+      "composition": "close human detail",
+      "createdAt": "2026-06-16T11:50:21.685Z"
     }
   ],
   "feedback": [
+    {
+      "storyTitle": "Signal / Noise",
+      "chapter": 39,
+      "note": "- **Visual fit:** The \"signal dusk\" rendering and server-light motif align well with the chapter's dual-signal tension and the liminal setting of a hallway and rebar below. The cover likely captures the right atmosphere without overpromising action or resolution.\n\n- **Story insight:** The cover hints at a split perception—light above, vibration below—which mirrors the chapter's core conflict of attending to two signals simultaneously. This is a fair, non-spoiler visual translation of the internal experience.\n\n- **Revision risk:** Low. The imagery is abstract enough to avoid misleading readers about plot events. The only risk is if the cover leans too heavily on the light fixture as a focal point, potentially overselling its narrative importance relative to the deeper rebar signal.",
+      "createdAt": "2026-06-16T11:50:53.641Z"
+    },
+    {
+      "storyTitle": "Signal / Noise",
+      "chapter": 37,
+      "note": "Visual fit: The violet glass aesthetic and ajar door motif capture the chapter's central tension :  the threshold between stillness and something listening. The glassy, reflective quality mirrors the protagonist's shift from surface observation to deeper perception.\n\nStory insight: The image correctly emphasizes the door and light as the chapter's narrative anchor :  the woman's pulsing pattern (0.4/1.1/0.7 seconds) is the only active signal in a frozen world. This is the right focal point.\n\nRevision risk: The image may overemphasize the glass door as a physical barrier when the chapter's real drama is internal :  the protagonist pressing awareness *into concrete and rebar*. A viewer might expect a confrontation at the door rather than the slow, structural listening that actually occurs.",
+      "createdAt": "2026-06-14T12:29:48.572Z"
+    },
+    {
+      "storyTitle": "Signal / Noise",
+      "chapter": 36,
+      "note": "- **Visual fit:** The violet glass style and dark screen reflection align well with the chapter's tone: cold, inert, surveilled. The cover communicates the right mood without overpromising action or resolution. It matches the excerpt's stillness.\n\n- **Story insight:** The reflection in the screen subtly echoes the chapter's core tension: the Presence that mirrors the protagonist's own stillness. That's a genuine thematic capture, not just decorative. It rewards close reading.\n\n- **Revision risk:** Low. The cover doesn't imply a reveal or confrontation that the chapter doesn't deliver. The only edge is if a viewer expects the reflection to show a figure: but the ambiguity here is faithful to the text's uncertainty.",
+      "createdAt": "2026-06-13T12:36:03.368Z"
+    },
+    {
+      "storyTitle": "Signal / Noise",
+      "chapter": 35,
+      "note": "Here is the critique of the chapter cover for *Signal / Noise* Chapter 35.\n\n- **Visual fit:** The unopened message icon works well as a direct visual anchor for the chapter's central tension: the unknown presence and the withheld information. The \"memory bloom\" rendering style supports the introspective, sensory weight of the excerpt without being literal or distracting.\n- **Story insight:** The image captures the threshold state of the chapter: something is there, but it is not yet revealed. This mirrors the protagonist's own liminal position between certainty and hallucination, between the known guard's heartbeat and the unknown tap on the metal.\n- **Revision risk:** The icon is generic enough that it could flatten the specific dread of the scene into a vague \"mystery\" signifier. If the bloom style is too decorative, it may soften the harsh, concrete-and-metal texture of the prose. Consider whether the image should feel colder, more industrial, to match the stairwell's material weight.",
+      "createdAt": "2026-06-12T13:24:50.184Z"
+    },
     {
       "storyTitle": "Signal / Noise",
       "chapter": 1,

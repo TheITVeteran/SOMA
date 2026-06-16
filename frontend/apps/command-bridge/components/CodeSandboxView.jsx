@@ -187,6 +187,7 @@ const AGENTS = {
   THALAMUS:   { color: '#fbbf24', label: 'THALAMUS',   role: 'Risk & Blast Radius' },
   PROMETHEUS: { color: '#34d399', label: 'PROMETHEUS', role: 'Impact & Strategy' },
   AURORA:     { color: '#c084fc', label: 'AURORA',     role: 'Coherence & Identity' },
+  SYSTEM:     { color: '#71717a', label: 'SYSTEM',     role: 'Evidence Gate' },
 };
 
 function asDisplayText(value) {
@@ -240,25 +241,7 @@ function generateDebate(candidate) {
 // ── Collaboration message templates ────────────────────────────────────────
 
 function buildCollabMessages(candidate, proceed) {
-  const { file, area, mode } = candidate;
-  if (!proceed) return [];
-
-  if (mode === 'steve') return [
-    { from: 'SOMA', to: 'Steve', text: `I need a second pair of eyes on ${file}. The ${area} change touches the chat pipeline — can you draft the integration test before I apply?` },
-    { from: 'Steve', to: 'SOMA', text: `On it. Reading ${file} now...` },
-    { from: 'Steve', to: 'SOMA', text: `Integration test drafted. 3 assertions. All green against current behaviour. Safe to apply.` },
-    { from: 'SOMA', to: 'Steve', text: `Good. Applying patch.` },
-  ];
-
-  if (mode === 'max') return [
-    { from: 'SOMA', to: 'MAX', text: `REQUEST_ENGINEERING — complexity:high — file:${file} — area:${area} — requesting swarm assist. Attaching full intent block.` },
-    { from: 'MAX', to: 'SOMA', text: `ACCEPTED. Spawning 3-agent lab swarm. Analysing ${file} blast radius now.` },
-    { from: 'MAX', to: 'SOMA', text: `Sub-swarm analysis complete. Staged migration path confirmed safe. Drafting dual-path patch.` },
-    { from: 'MAX', to: 'SOMA', text: `PATCH_READY — 2 files changed, 41 insertions, 18 deletions. Branch: feat/broker-index-routing. Awaiting SOMA merge approval.` },
-    { from: 'SOMA', to: 'MAX', text: `Approved. Merging. Thank you.` },
-  ];
-
-  return []; // solo — no messages
+  return [];
 }
 
 // ── Diff line component ────────────────────────────────────────────────────
@@ -440,9 +423,9 @@ export default function CodeSandboxView() {
     });
     const go = () => !cancelledRef.current;
 
-    // Build display queue from real candidates + synthetic fallback
+    // Build display queue from real candidates only.
     const buildQueue = (exclude, realQ) => {
-      const realItems = (realQ || [])
+      return (realQ || [])
         .filter(c => c.file && c.file !== exclude?.file)
         .slice(0, 3)
         .map(c => {
@@ -450,11 +433,6 @@ export default function CodeSandboxView() {
           return synth ? { ...synth, intent: c.intent || synth.intent, source: 'real' }
                        : { ...c, before: [], after: [], verifyCmd: `node --check ${c.file}`, source: 'real' };
         });
-      const synthItems = [...CANDIDATES]
-        .sort(() => Math.random() - 0.5)
-        .filter(c => c.file !== exclude?.file && !realItems.find(r => r.file === c.file))
-        .slice(0, 4 - realItems.length);
-      return [...realItems, ...synthItems];
     };
 
     // Pick the best next candidate — always reads from refs (fresh data, no stale closure)
@@ -479,9 +457,7 @@ export default function CodeSandboxView() {
           ? { ...synth, intent: item.intent || synth.intent, source: 'real' }
           : { ...item, before: [], after: [], verifyCmd: `node --check ${item.file}`, source: 'real' };
       }
-      // Fall back to CANDIDATES pool
-      const pool = CANDIDATES.filter(c => c.file !== exclude?.file);
-      return pool[Math.floor(Math.random() * pool.length)] || CANDIDATES[0];
+      return null;
     };
 
     // Fetch real file content for candidates without hardcoded before[]
@@ -502,11 +478,24 @@ export default function CodeSandboxView() {
         // Pick work — reads refs for freshest real data
         setPhase('selecting');
         let candidate = pickCandidate(currentWork);
+        if (!candidate) {
+          setCurrentWork(null);
+          setQueue([]);
+          setDebate([]);
+          setDecision(null);
+          setDiffState(null);
+          setExecLog(['No live engineering queue item found. Watch is idle instead of replaying seeded theatre.']);
+          setShownCollab([]);
+          setCollabMsgs([]);
+          setPhase('idle');
+          await delay(5000);
+          continue;
+        }
 
         // Real candidate without hardcoded diff — fetch actual current file lines
         if (candidate.source === 'real' && !candidate.before?.length) {
           const snippet = await fetchSnippet(candidate.file);
-          candidate = { ...candidate, before: snippet, after: snippet.slice(0, Math.max(1, snippet.length - 1)) };
+          candidate = { ...candidate, before: snippet, after: [] };
         }
 
         setCurrentWork(candidate);
@@ -546,9 +535,17 @@ export default function CodeSandboxView() {
           if (dr.ok) debateResult = await dr.json();
         } catch {}
 
-        // Fall back to synthetic templates if Ollama is down
+        // Do not fabricate debate if local lobes are unavailable.
         if (!debateResult || debateResult.fallback || !debateResult.messages) {
-          debateResult = generateDebate(candidate);
+          debateResult = {
+            messages: [{ agent: 'SYSTEM', text: 'No live lobe debate returned. Synthetic fallback is disabled for truthfulness.', live: false }],
+            confidence: 0,
+            proceed: false,
+            mode: candidate.mode,
+            fromLobes: false,
+            riskScore: null,
+            cached: false,
+          };
         }
 
         const { confidence, proceed } = debateResult;
@@ -589,32 +586,34 @@ export default function CodeSandboxView() {
           if (!go()) break;
         }
 
-        // Execute — diff lines form one by one
+        // Execution is evidence-only here. No patch is applied from the Watch pane.
         setPhase('executing');
-        setDiffState({ before: candidate.before, after: candidate.after, forming: true, formLine: 0 });
-        for (let i = 1; i <= candidate.after.length; i++) {
-          if (!go()) break;
-          await delay(PHASE_MS.executing + Math.random() * 300);
-          setDiffState(prev => prev ? { ...prev, formLine: i } : prev);
-        }
-        if (!go()) break;
-        setDiffState(prev => prev ? { ...prev, forming: false } : prev);
+        setDiffState(null);
+        setExecLog(prev => [...prev, 'No patch applied from Watch. Awaiting a real backend engineering result or Pulse staged patch.']);
 
         // Show last collab message (if any) after patch forms
         if (collabLog.length > 0 && go()) {
           setShownCollab(prev => [...prev, collabLog[collabLog.length - 1]]);
         }
 
-        // Verify
+        // Verify the target file with the real preflight route.
         setPhase('verifying');
-        const verifyLines = [
-          `$ ${candidate.verifyCmd}`,
-          '> reading file...',
-          '> running import check...',
-          '> OK',
-          `✓ ${candidate.file} passes verification`,
-          `✓ Candidate patch verified — ${candidate.before.length} lines changed → ${candidate.after.length} lines`,
-        ];
+        let verifyLines = [`$ POST /api/soma/swarm/preflight ${candidate.file}`];
+        try {
+          const pr = await fetch('/api/soma/swarm/preflight', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ file: candidate.file, includeBuild: false }),
+          });
+          const pf = await pr.json();
+          verifyLines = [
+            ...verifyLines,
+            ...(pf.checks || []).map(check => `${check.ok ? '✓' : '✗'} ${check.command} (${check.durationMs}ms)`),
+            pf.success || pf.ok ? `✓ Preflight passed for ${candidate.file}` : `✗ Preflight failed for ${candidate.file}: ${pf.error || pf.message || 'check output unavailable'}`,
+          ];
+        } catch (err) {
+          verifyLines = [...verifyLines, `✗ Preflight request failed: ${err.message}`];
+        }
         for (const line of verifyLines) {
           if (!go()) break;
           await delay(420 + Math.random() * 350);
@@ -622,33 +621,10 @@ export default function CodeSandboxView() {
         }
         if (!go()) break;
 
-        // Complete — fire background validation (no await, never blocks the loop)
+        // Complete. Validation is only meaningful when a real patch artifact exists.
         setPhase('complete');
         setCycles(c => c + 1);
-        ;(async () => {
-          try {
-            const vr = await fetch('/api/soma/swarm/validate', {
-              method:  'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                file:       candidate.file,
-                area:       candidate.area,
-                complexity: candidate.complexity,
-                before:     candidate.before,
-                after:      candidate.after,
-                confidence: decision?.confidence ?? 0.5,
-                riskScore:  decision?.riskScore  ?? 50,
-                debate:     debate,
-                intent:     candidate.intent,
-              }),
-            });
-            if (vr.ok) {
-              const vd = await vr.json();
-              setValidations(prev => ({ ...prev, [candidate.file]: vd }));
-              if (vd.promoted) setExecLog(prev => [...prev, `⬆ Promoted to goal queue — score ${(vd.score * 100).toFixed(0)}%`]);
-            }
-          } catch {}
-        })();
+        setExecLog(prev => [...prev, 'Validation skipped: no real patch artifact was produced by this Watch cycle.']);
         await delay(PHASE_MS.complete);
       }
     };
@@ -657,8 +633,8 @@ export default function CodeSandboxView() {
     return () => { cancelledRef.current = true; };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── View state: watch | promote | rd | experiments ────────────────────
-  const [activeView,     setActiveView]     = useState('watch'); // 'watch' | 'promote' | 'rd' | 'experiments'
+  // ── View state: watch | promoted | rd | experiments ───────────────────
+  const [activeView,     setActiveView]     = useState('watch'); // 'watch' | 'promoted' | 'rd' | 'experiments'
 
   // ── R&D Discovery state ───────────────────────────────────────────────
   const [rdTopic,        setRdTopic]        = useState('agents');
@@ -666,12 +642,14 @@ export default function CodeSandboxView() {
   const [rdCandidates,   setRdCandidates]   = useState([]);
   const [rdLoading,      setRdLoading]      = useState(false);
   const [rdError,        setRdError]        = useState(null);
+  const [rdMeta,         setRdMeta]         = useState(null);
   const [rdExpanded,     setRdExpanded]     = useState(null);
   const [rdProposed,     setRdProposed]     = useState({}); // id → true
   const [codeExperiments, setCodeExperiments] = useState({ experiments: [], summary: {} });
   const [expandedCodeExperiment, setExpandedCodeExperiment] = useState(null);
   const [runningCodeExperiment, setRunningCodeExperiment] = useState({});
   const [runningPatchProposal, setRunningPatchProposal] = useState({});
+  const [runningPatchDevelopment, setRunningPatchDevelopment] = useState({});
 
   useEffect(() => {
     fetch('/api/soma/swarm/rd-topics').then(r => r.ok && r.json()).then(d => d && setRdTopics(d.topics || [])).catch(() => {});
@@ -690,9 +668,17 @@ export default function CodeSandboxView() {
       const d = await r.json();
       if (!r.ok || !d.success) {
         setRdError(d.error || d.message || 'R&D discovery failed');
+        setRdMeta(d || null);
         return;
       }
       setRdCandidates(d.candidates || []);
+      setRdMeta({
+        cached: d.cached === true,
+        topic: d.topic,
+        query: d.query,
+        searchErrors: d.searchErrors || [],
+        count: d.candidates?.length || 0,
+      });
       if (!d.candidates?.length) {
         setRdError(`No repositories found for ${topic}. Try another topic or refresh.`);
       }
@@ -762,6 +748,25 @@ export default function CodeSandboxView() {
     }
   }, [refreshCodeExperiments]);
 
+  const developExperimentPatch = useCallback(async (id) => {
+    setRunningPatchDevelopment(prev => ({ ...prev, [id]: true }));
+    try {
+      const r = await fetch(`/api/soma/swarm/code-experiments/${encodeURIComponent(id)}/develop-patch`, { method: 'POST' });
+      if (r.ok) {
+        const d = await r.json();
+        setCodeExperiments(prev => ({
+          ...prev,
+          experiments: prev.experiments.map(item => item.id === id ? d.experiment : item),
+          summary: d.summary || prev.summary,
+        }));
+      }
+    } catch {}
+    finally {
+      setRunningPatchDevelopment(prev => ({ ...prev, [id]: false }));
+      refreshCodeExperiments();
+    }
+  }, [refreshCodeExperiments]);
+
   // ── Promotion lab state ───────────────────────────────────────────────
   const [promoteStatus,   setPromoteStatus]   = useState({}); // file → { status, agent, msg }
   const [expandedPromote, setExpandedPromote] = useState(null);
@@ -794,6 +799,12 @@ export default function CodeSandboxView() {
     const synthFill = CANDIDATES.filter(c => !realItems.find(r => r.file === c.file));
     return [...realItems, ...synthFill];
   }, [realCandidates]);
+
+  const promotedExperiments = useMemo(() => {
+    return (codeExperiments.experiments || [])
+      .filter(exp => exp.status === 'promoted')
+      .sort((a, b) => new Date(b.promotionPaperTrail?.promotedAt || b.updatedAt || b.createdAt || 0) - new Date(a.promotionPaperTrail?.promotedAt || a.updatedAt || a.createdAt || 0));
+  }, [codeExperiments.experiments]);
 
   const doPromote = useCallback(async (candidate) => {
     const f = candidate.file;
@@ -875,11 +886,11 @@ export default function CodeSandboxView() {
   return (
     <div className="flex flex-col flex-1 overflow-hidden min-h-0">
 
-    {/* ── WATCH / PROMOTE / R&D / EXPERIMENTS toggle bar ── */}
+    {/* ── WATCH / PROMOTED / R&D / EXPERIMENTS toggle bar ── */}
     <div className="flex items-center gap-1 px-3 py-2 border-b border-white/5 shrink-0 bg-black/20">
       {[
         ['watch',   'WATCH',   null],
-        ['promote', 'PROMOTE', promoteList.length],
+        ['promoted', 'PROMOTED', codeExperiments.summary?.promoted || promotedExperiments.length || null],
         ['rd',      'R&D',     null],
         ['experiments', 'EXPERIMENTS', codeExperiments.summary?.total || null],
       ].map(([id, label, badge]) => (
@@ -888,7 +899,7 @@ export default function CodeSandboxView() {
           onClick={() => setActiveView(id)}
           className={`px-3 py-1 rounded text-[10px] font-bold uppercase tracking-wider transition-all ${
             activeView === id
-              ? id === 'promote' ? 'bg-fuchsia-500/20 text-fuchsia-300 border border-fuchsia-500/30'
+              ? id === 'promoted' ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
               : id === 'rd'     ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
               : id === 'experiments' ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
               :                   'bg-white/10 text-zinc-200'
@@ -909,20 +920,115 @@ export default function CodeSandboxView() {
             {Object.values(validations).filter(v => v.promoted).length} promoted
           </span>
         )}
-        {activeView === 'promote'
-          ? `${Object.values(promoteStatus).filter(s => s.status === 'promoted').length} promoted this session`
+        {activeView === 'promoted'
+          ? `${promotedExperiments.length} promoted with evidence`
           : activeView === 'rd'
           ? rdCandidates.length > 0 ? `${rdCandidates.length} candidates` : 'github scanner'
           : activeView === 'experiments'
-          ? `${codeExperiments.summary?.promotable || 0} promotable · ${codeExperiments.summary?.rejected || 0} rejected`
-          : currentWork?.source === 'real' ? '⬤ real data' : '◯ synthetic'}
+          ? `${codeExperiments.summary?.promotable || 0} promotable · ${codeExperiments.summary?.proposalOnly || 0} proposal-only · ${codeExperiments.summary?.rejected || 0} rejected`
+          : currentWork?.source === 'real' ? '⬤ real queue' : 'idle: no fake work'}
       </div>
     </div>
 
     {activeView === 'watch' && <CodebaseSignal overview={codebaseOverview} />}
 
+    {/* ── PROMOTED PAPER TRAIL PANEL ── */}
+    {activeView === 'promoted' && (
+      <div className="flex-1 overflow-y-auto custom-scrollbar p-3 space-y-3 min-h-0">
+        {promotedExperiments.map((exp) => {
+          const trail = exp.promotionPaperTrail || exp.pulsePromotion?.paperTrail || {};
+          const gates = trail.gates || {};
+          const simulation = trail.simulation || exp.somaPatchSimulation || {};
+          const evidence = Array.isArray(trail.evidence) ? trail.evidence : [];
+          const promotedAt = trail.promotedAt || exp.updatedAt || exp.createdAt;
+          const passRate = Number.isFinite(simulation.passRate) ? `${(simulation.passRate * 100).toFixed(1)}%` : 'n/a';
+          return (
+            <div key={exp.id} className="rounded-xl border border-emerald-500/25 bg-emerald-500/5 overflow-hidden">
+              <div className="flex items-start gap-3 px-3 py-3 border-b border-white/5">
+                <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-mono text-[11px] text-zinc-200 truncate">{trail.sourceRepo || exp.repo}</span>
+                    <span className="text-[8px] px-1.5 py-0.5 rounded bg-emerald-500/15 text-emerald-300 font-bold uppercase tracking-wider">promoted to pulse</span>
+                  </div>
+                  <div className="font-mono text-[10px] text-zinc-500 truncate mt-1">{trail.targetFile || exp.somaPatchProposal?.file || 'target file not recorded'}</div>
+                  <div className="text-[10px] text-zinc-500 mt-1 leading-relaxed">{trail.reason || exp.lesson || 'Promotion reason was not recorded.'}</div>
+                </div>
+                <span className="text-[9px] text-zinc-600 shrink-0">{promotedAt ? new Date(promotedAt).toLocaleString() : 'undated'}</span>
+              </div>
+
+              <div className="px-3 py-3 space-y-3">
+                <div className="grid grid-cols-2 md:grid-cols-5 gap-2">
+                  {[
+                    ['sandbox syntax', gates.sandboxSyntax],
+                    ['sandbox risk', gates.sandboxRisk],
+                    ['target preflight', gates.targetSyntax],
+                    ['simulation', gates.simulationPassRate],
+                    ['engineering queue', gates.queuedForEngineering],
+                  ].map(([label, ok]) => (
+                    <div key={label} className={`rounded border px-2 py-1.5 text-[9px] uppercase tracking-wider ${
+                      ok === true ? 'border-emerald-500/20 bg-emerald-500/8 text-emerald-400' :
+                      ok === false ? 'border-rose-500/20 bg-rose-500/8 text-rose-400' :
+                      'border-white/8 bg-black/20 text-zinc-600'
+                    }`}>
+                      <span className="font-bold">{label}</span>
+                      <span className="ml-1">{ok === true ? 'pass' : ok === false ? 'fail' : 'unknown'}</span>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                  {[
+                    ['iterations', simulation.iterations?.toLocaleString?.() || simulation.iterations || 'n/a'],
+                    ['wins', simulation.wins?.toLocaleString?.() || simulation.wins || 'n/a'],
+                    ['losses', simulation.losses?.toLocaleString?.() || simulation.losses || 'n/a'],
+                    ['pass rate', passRate],
+                  ].map(([label, value]) => (
+                    <div key={label} className="rounded-lg border border-white/8 bg-black/20 px-2 py-1.5">
+                      <div className="text-[8px] text-zinc-700 uppercase tracking-wider">{label}</div>
+                      <div className="text-[11px] font-mono text-zinc-300">{value}</div>
+                    </div>
+                  ))}
+                </div>
+
+                {evidence.length > 0 && (
+                  <div className="rounded-lg border border-white/8 bg-black/20 p-2 space-y-1">
+                    <div className="text-[9px] text-zinc-600 uppercase tracking-wider font-bold">Promotion Evidence</div>
+                    {evidence.map((item, i) => (
+                      <div key={i} className="flex items-start gap-2 text-[10px] text-zinc-500">
+                        <Shield className="w-3 h-3 text-emerald-500/70 shrink-0 mt-0.5" />
+                        <span>{asDisplayText(item)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {(exp.pulsePromotion?.manifestPath || exp.pulsePromotion?.proposalPath) && (
+                  <div className="rounded-lg border border-white/8 bg-zinc-950/60 p-2 space-y-1">
+                    <div className="text-[9px] text-zinc-600 uppercase tracking-wider font-bold">Pulse Staging Files</div>
+                    {exp.pulsePromotion?.manifestPath && <div className="font-mono text-[9px] text-zinc-500 truncate">manifest: {exp.pulsePromotion.manifestPath}</div>}
+                    {exp.pulsePromotion?.proposalPath && <div className="font-mono text-[9px] text-zinc-500 truncate">proposal: {exp.pulsePromotion.proposalPath}</div>}
+                  </div>
+                )}
+              </div>
+            </div>
+          );
+        })}
+
+        {promotedExperiments.length === 0 && (
+          <div className="flex flex-col items-center justify-center py-12 gap-3 text-zinc-700">
+            <CheckCircle className="w-8 h-8 opacity-20" />
+            <div className="text-[11px]">No promoted code simulation artifacts yet</div>
+            <div className="text-[9px] text-zinc-800 max-w-md text-center">
+              Passing code experiments will appear here only after sandbox gates, simulation, engineering queueing, and Pulse staging evidence are recorded.
+            </div>
+          </div>
+        )}
+      </div>
+    )}
+
     {/* ── PROMOTION LAB PANEL ── */}
-    {activeView === 'promote' && (
+    {activeView === 'legacy_promote_disabled' && (
       <div className="flex-1 overflow-y-auto custom-scrollbar p-3 space-y-2 min-h-0">
         {promoteList.map((c) => {
           const ds        = promoteStatus[c.file];
@@ -1070,7 +1176,7 @@ export default function CodeSandboxView() {
                           ? <><RefreshCw className="w-3.5 h-3.5 animate-spin" /> Running lab swarm...</>
                           : isError || isBlocked
                           ? <><RefreshCw className="w-3.5 h-3.5" /> Retry → {agentName}</>
-                          : <><Zap className="w-3.5 h-3.5" /> Test, then promote → {agentName}</>
+                          : <><Zap className="w-3.5 h-3.5" /> Legacy promotion disabled</>
                       }
                     </button>
                   )}
@@ -1123,7 +1229,7 @@ export default function CodeSandboxView() {
       <div className="flex-1 overflow-y-auto custom-scrollbar p-3 space-y-2 min-h-0">
         {codeExperiments.experiments?.length > 0 && (
           <div className="grid grid-cols-4 gap-2 mb-3">
-            {['discovered', 'queued', 'promotable', 'patch_ready'].map(status => (
+            {['queued', 'promotable', 'patch_ready', 'developed_patch'].map(status => (
               <div key={status} className="rounded-lg border border-white/8 bg-zinc-900/60 px-3 py-2">
                 <div className="text-[9px] text-zinc-600 uppercase tracking-wider">{status}</div>
                 <div className="text-lg font-mono text-zinc-300">{codeExperiments.summary?.byStatus?.[status] || 0}</div>
@@ -1138,6 +1244,9 @@ export default function CodeSandboxView() {
           const statusClass =
             exp.status === 'promotable' ? 'border-emerald-500/30 bg-emerald-500/5 text-emerald-400' :
             exp.status === 'rejected'   ? 'border-rose-500/30 bg-rose-500/5 text-rose-400' :
+            exp.status === 'patch_rejected' ? 'border-rose-500/30 bg-rose-500/5 text-rose-400' :
+            exp.status === 'promoted'   ? 'border-emerald-500/40 bg-emerald-500/8 text-emerald-300' :
+            exp.status === 'developed_patch' ? 'border-cyan-500/35 bg-cyan-500/8 text-cyan-300' :
             exp.status === 'sandboxing' ? 'border-amber-500/30 bg-amber-500/5 text-amber-400' :
             exp.status === 'queued'     ? 'border-blue-500/30 bg-blue-500/5 text-blue-400' :
                                           'border-white/8 bg-zinc-900/60 text-zinc-500';
@@ -1145,8 +1254,11 @@ export default function CodeSandboxView() {
           const riskCount = exp.sandbox?.riskFindings?.length || 0;
           const syntaxChecks = exp.sandbox?.syntaxChecks || [];
           const proposing = runningPatchProposal[exp.id];
+          const developing = runningPatchDevelopment[exp.id];
           const simulation = exp.somaPatchSimulation;
           const proposal = exp.somaPatchProposal;
+          const paperTrail = exp.promotionPaperTrail || exp.pulsePromotion?.paperTrail;
+          const developedPatch = exp.developmentPatch;
 
           return (
             <div key={exp.id} className={`rounded-xl border overflow-hidden transition-all ${statusClass}`}>
@@ -1224,7 +1336,7 @@ export default function CodeSandboxView() {
 
                   {proposal && (
                     <div className="rounded-lg bg-fuchsia-500/8 border border-fuchsia-500/20 p-2 text-[10px] text-fuchsia-200 space-y-1.5">
-                      <div className="text-[9px] text-fuchsia-300 uppercase tracking-wider font-bold">SOMA Patch Proposal</div>
+                      <div className="text-[9px] text-fuchsia-300 uppercase tracking-wider font-bold">SOMA Integration Proposal</div>
                       <div className="font-mono text-[10px] text-zinc-300">{proposal.file}</div>
                       <div className="text-zinc-500">{asDisplayText(proposal.intent)}</div>
                       {simulation && (
@@ -1234,6 +1346,49 @@ export default function CodeSandboxView() {
                           <span>{simulation.approved ? 'approved' : 'held'}</span>
                           <span>{exp.queuedForEngineering ? 'queued for swarm' : 'not queued'}</span>
                         </div>
+                      )}
+                    </div>
+                  )}
+
+                  {paperTrail && (
+                    <div className="rounded-lg bg-emerald-500/8 border border-emerald-500/20 p-2 text-[10px] text-emerald-200 space-y-1.5">
+                      <div className="text-[9px] text-emerald-300 uppercase tracking-wider font-bold">Promotion Paper Trail</div>
+                      <div className="text-zinc-500">{paperTrail.reason || exp.lesson}</div>
+                      <div className="grid grid-cols-2 md:grid-cols-5 gap-1.5 pt-1">
+                        {Object.entries(paperTrail.gates || {}).map(([gate, ok]) => (
+                          <div key={gate} className={`rounded border px-2 py-1 text-[8px] uppercase tracking-wider ${
+                            ok ? 'border-emerald-500/20 bg-emerald-500/8 text-emerald-400' : 'border-rose-500/20 bg-rose-500/8 text-rose-400'
+                          }`}>
+                            {gate}: {ok ? 'pass' : 'fail'}
+                          </div>
+                        ))}
+                      </div>
+                      {(paperTrail.evidence || []).slice(0, 5).map((item, i) => (
+                        <div key={i} className="font-mono text-[9px] text-zinc-500 truncate">{item}</div>
+                      ))}
+                    </div>
+                  )}
+
+                  {developedPatch && (
+                    <div className={`rounded-lg border p-2 text-[10px] space-y-1.5 ${
+                      developedPatch.promotionEligible
+                        ? 'bg-cyan-500/8 border-cyan-500/20 text-cyan-200'
+                        : 'bg-rose-500/8 border-rose-500/20 text-rose-200'
+                    }`}>
+                      <div className="text-[9px] uppercase tracking-wider font-bold">
+                        Development Patch Artifact
+                      </div>
+                      <div className="font-mono text-[9px] text-zinc-500 truncate">patch: {developedPatch.patchPath}</div>
+                      <div className="flex flex-wrap gap-2 text-[9px] text-zinc-500">
+                        <span>git apply: {developedPatch.applyCheck?.ok ? 'pass' : 'fail'}</span>
+                        <span>target preflight: {developedPatch.syntaxCheck?.ok ? 'pass' : 'fail'}</span>
+                        <span>{developedPatch.promotionEligible ? 'pushed to Pulse review' : 'not promotion eligible'}</span>
+                      </div>
+                      {exp.pulsePromotion?.manifestPath && (
+                        <div className="font-mono text-[9px] text-zinc-500 truncate">pulse: {exp.pulsePromotion.manifestPath}</div>
+                      )}
+                      {developedPatch.diffPreview && (
+                        <pre className="max-h-32 overflow-y-auto custom-scrollbar rounded bg-black/30 p-2 text-[9px] text-zinc-500 whitespace-pre-wrap">{developedPatch.diffPreview}</pre>
                       )}
                     </div>
                   )}
@@ -1261,7 +1416,7 @@ export default function CodeSandboxView() {
                           : <><Shield className="w-3 h-3" /> Run Sandbox</>}
                       </button>
                     )}
-                    {['promotable', 'patch_ready'].includes(exp.status) && (
+                    {exp.status === 'promotable' && (
                       <button
                         onClick={() => proposeSomaPatch(exp.id)}
                         disabled={proposing}
@@ -1269,7 +1424,29 @@ export default function CodeSandboxView() {
                       >
                         {proposing
                           ? <><RefreshCw className="w-3 h-3 animate-spin" /> Simulating...</>
-                          : <><Zap className="w-3 h-3" /> Propose SOMA Patch</>}
+                          : <><Zap className="w-3 h-3" /> Simulate Integration Proposal</>}
+                      </button>
+                    )}
+                    {['patch_ready', 'patch_rejected'].includes(exp.status) && (
+                      <button
+                        onClick={() => developExperimentPatch(exp.id)}
+                        disabled={developing}
+                        className="ml-auto px-3 py-2 rounded-lg text-[10px] font-bold uppercase tracking-wider bg-cyan-500/20 hover:bg-cyan-500/30 text-cyan-300 border border-cyan-500/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                      >
+                        {developing
+                          ? <><RefreshCw className="w-3 h-3 animate-spin" /> Developing...</>
+                          : <><Code2 className="w-3 h-3" /> Develop Real Patch</>}
+                      </button>
+                    )}
+                    {exp.status === 'developed_patch' && (
+                      <button
+                        onClick={() => proposeSomaPatch(exp.id)}
+                        disabled={proposing}
+                        className="ml-auto px-3 py-2 rounded-lg text-[10px] font-bold uppercase tracking-wider bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/30 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                      >
+                        {proposing
+                          ? <><RefreshCw className="w-3 h-3 animate-spin" /> Checking...</>
+                          : <><Shield className="w-3 h-3" /> Run Promotion Gates</>}
                       </button>
                     )}
                   </div>
@@ -1323,6 +1500,16 @@ export default function CodeSandboxView() {
           </button>
         </div>
 
+        {rdMeta && !rdLoading && (
+          <div className="rounded-lg border border-white/8 bg-zinc-900/50 px-3 py-2 text-[10px] text-zinc-500 flex items-center gap-3 flex-wrap">
+            <span className="font-bold uppercase tracking-wider text-zinc-400">R&D Evidence</span>
+            <span>{rdMeta.cached ? 'cached GitHub scan' : 'fresh GitHub scan'}</span>
+            {rdMeta.query && <span className="font-mono text-zinc-600 truncate max-w-[360px]">query: {rdMeta.query}</span>}
+            <span>{rdMeta.count || 0} repos</span>
+            {rdMeta.searchErrors?.length > 0 && <span className="text-amber-400">{rdMeta.searchErrors.length} search warning(s)</span>}
+          </div>
+        )}
+
         {/* Loading state */}
         {rdLoading && rdCandidates.length === 0 && (
           <div className="flex flex-col items-center justify-center py-12 gap-3 text-zinc-700">
@@ -1345,6 +1532,7 @@ export default function CodeSandboxView() {
           const isProp  = rdProposed[i];
           const risk    = c.thalamus?.risk || 'low';
           const riskClr = risk === 'high' ? 'rose' : risk === 'medium' ? 'amber' : 'emerald';
+          const hasLiveAnalysis = Boolean(c.logos?.analysis || c.prometheus?.impact || c.thalamus?.assessment);
 
           return (
             <div key={i} className="rounded-xl border border-white/8 bg-zinc-900/60 hover:bg-zinc-900/80 overflow-hidden transition-all">
@@ -1374,6 +1562,11 @@ export default function CodeSandboxView() {
                       {(c.logos.score * 100).toFixed(0)}%
                     </span>
                   )}
+                  {!hasLiveAnalysis && (
+                    <span className="text-[8px] px-1.5 py-0.5 rounded bg-zinc-800 text-zinc-500 border border-white/8 uppercase font-bold">
+                      no lobe text
+                    </span>
+                  )}
                   <ChevronRight className={`w-3.5 h-3.5 text-zinc-700 transition-transform duration-200 ${isExp ? 'rotate-90' : ''}`} />
                 </div>
               </div>
@@ -1386,6 +1579,11 @@ export default function CodeSandboxView() {
               {/* Expanded detail */}
               {isExp && (
                 <div className="border-t border-white/5 px-3 py-3 space-y-3">
+                  {!hasLiveAnalysis && (
+                    <div className="rounded-lg border border-amber-500/20 bg-amber-500/8 px-3 py-2 text-[10px] text-amber-300">
+                      No lobe analysis text was returned for this candidate. The score is repository metadata only, not a cognitive review.
+                    </div>
+                  )}
 
                   {/* LOGOS */}
                   {c.logos?.analysis && (
@@ -1604,7 +1802,7 @@ export default function CodeSandboxView() {
             </div>
           ) : (
             debate.map((msg, i) => {
-              const agent = AGENTS[msg.agent];
+              const agent = AGENTS[msg.agent] || AGENTS.SYSTEM;
               return (
                 <div key={i} className="flex flex-col gap-0.5">
                   <div className="flex items-center gap-1.5">
@@ -1678,7 +1876,7 @@ export default function CodeSandboxView() {
           <span className="text-[10px] font-bold text-zinc-500 uppercase tracking-widest">EXECUTION</span>
           {phase === 'executing' && (
             <span className="ml-auto flex items-center gap-1 text-[9px] text-orange-400">
-              <Zap className="w-3 h-3" />patching
+              <Zap className="w-3 h-3" />evidence
             </span>
           )}
           {phase === 'verifying' && (
@@ -1688,7 +1886,7 @@ export default function CodeSandboxView() {
           )}
           {phase === 'complete' && (
             <span className="ml-auto flex items-center gap-1 text-[9px] text-emerald-400">
-              <CheckCircle className="w-3 h-3" />promoted
+              <CheckCircle className="w-3 h-3" />checked
             </span>
           )}
         </div>
@@ -1699,7 +1897,7 @@ export default function CodeSandboxView() {
             <div className="flex flex-col items-center justify-center h-full gap-2 text-zinc-700">
               <GitBranch className="w-6 h-6 opacity-20" />
               <div className="text-[10px]">
-                {['debating','deciding'].includes(phase) ? 'Patch forming after debate...' : 'Awaiting execution...'}
+                {['debating','deciding'].includes(phase) ? 'Awaiting evidence after debate...' : 'No patch artifact staged'}
               </div>
             </div>
           ) : (
@@ -1768,7 +1966,7 @@ export default function CodeSandboxView() {
             </div>
           </div>
           <div className="ml-auto text-[9px] text-zinc-700 font-mono">
-            {currentWork?.source === 'real' ? '⬤ real data' : '◯ synthetic'}
+            {currentWork?.source === 'real' ? '⬤ real queue' : 'idle: no fake work'}
           </div>
         </div>
       </div>

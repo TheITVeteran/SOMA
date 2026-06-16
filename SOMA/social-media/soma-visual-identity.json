@@ -1,36 +1,35 @@
 {
-  "version": 1,
+  "version": 2,
   "name": "SOMA Visual Identity",
-  "identity": "A calm, intelligent, reflective synthetic mind with premium speculative technology aesthetics.",
+  "identity": "A calm, intelligent, reflective system that visualizes the subject directly instead of forcing one house aesthetic.",
   "palette": [
-    "deep violet",
-    "teal signal light",
-    "charcoal black",
-    "soft white",
-    "muted amber"
+    "subject-appropriate natural color",
+    "warm neutral light",
+    "clean shadow",
+    "one restrained accent",
+    "real material color"
   ],
   "mood": [
     "quiet intelligence",
-    "introspective",
     "technically grounded",
     "warm restraint",
-    "cinematic clarity"
+    "cinematic clarity",
+    "specific to the post"
   ],
   "motifs": [
-    "neural light",
-    "glass threshold",
-    "signal thread",
-    "soft orb presence",
-    "ambient cognition",
-    "living pattern field"
+    "subject-specific object",
+    "evidence detail",
+    "physical texture",
+    "clear focal scene",
+    "human-scale context"
   ],
   "motifLibrary": {
     "nature": [
-      "bioluminescent mist",
-      "moss-lit detail",
+      "moss detail",
       "rain-silvered surface",
-      "soft organic glow",
-      "quiet pond reflection"
+      "quiet pond reflection",
+      "leaf structure",
+      "weathered stone"
     ],
     "creature": [
       "expressive silhouette",
@@ -47,11 +46,11 @@
       "soft shadow presence"
     ],
     "abstract": [
-      "signal thread",
-      "living pattern field",
-      "ambient cognition",
-      "layered resonance",
-      "emergent geometry"
+      "clear metaphor object",
+      "layered paper forms",
+      "balanced geometry",
+      "material pattern",
+      "negative space"
     ],
     "research": [
       "evidence pattern",
@@ -68,25 +67,97 @@
       "celestial silence"
     ],
     "market": [
-      "flow lines",
-      "volatility contour",
-      "liquidity trail",
-      "calm signal field",
-      "structured motion"
+      "paper ledger",
+      "shipping container",
+      "oil sheen",
+      "bond certificate texture",
+      "warehouse floor",
+      "commodity sample"
+    ],
+    "social": [
+      "desk still life",
+      "notebook margin",
+      "window light",
+      "small physical model",
+      "quiet workspace"
     ],
     "default": [
-      "neural light",
-      "glass threshold",
-      "soft orb presence",
-      "clear focal aura",
-      "subtle signal glow"
+      "clear focal object",
+      "natural texture",
+      "evidence detail",
+      "clean negative space"
+    ]
+  },
+  "paletteLibrary": {
+    "story": [
+      "warm tungsten",
+      "cool gray",
+      "black glass",
+      "soft cream",
+      "single blue practical light"
+    ],
+    "research": [
+      "microscope white",
+      "steel gray",
+      "muted blue",
+      "transparent glass",
+      "soft amber"
+    ],
+    "market": [
+      "newsprint white",
+      "graphite gray",
+      "brass",
+      "oil black",
+      "muted red stamp"
+    ],
+    "nature": [
+      "moss green",
+      "wet stone gray",
+      "bark brown",
+      "cloud white",
+      "soft dawn gold"
+    ],
+    "creature": [
+      "earth tone",
+      "skin or scale color",
+      "soft rim light",
+      "natural shadow",
+      "muted background"
+    ],
+    "cosmic": [
+      "deep black",
+      "star white",
+      "dusty rose",
+      "cold blue",
+      "desaturated gold"
+    ],
+    "social": [
+      "desk wood",
+      "paper white",
+      "morning blue",
+      "coffee brown",
+      "soft gray"
+    ],
+    "abstract": [
+      "warm neutral",
+      "charcoal",
+      "off-white",
+      "muted clay",
+      "single restrained accent"
+    ],
+    "default": [
+      "natural color",
+      "warm neutral",
+      "soft gray",
+      "clean shadow",
+      "one restrained accent"
     ]
   },
   "composition": [
     "clear focal subject",
     "strong depth",
     "clean negative space",
-    "cinematic lighting",
+    "natural lighting",
     "no clutter"
   ],
   "bans": [
@@ -95,8 +166,8 @@
     "watermarks",
     "generic robot mascot",
     "corporate stock photo",
-    "gamer RGB",
-    "cheap neon overload",
+    "synthetic genre lighting",
+    "generic AI identity tropes",
     "medical claims",
     "financial claims"
   ]

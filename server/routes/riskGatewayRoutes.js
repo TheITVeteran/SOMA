@@ -9,6 +9,7 @@ import express from 'express';
 import riskGateway from '../finance/RiskGateway.js';
 import alpacaService from '../finance/AlpacaService.js';
 import binanceService from '../finance/BinanceService.js';
+import { requireEnterpriseAuth } from '../loaders/authMiddleware.js';
 
 const router = express.Router();
 
@@ -42,7 +43,7 @@ router.get('/state', (req, res) => {
  * POST /api/risk/gateway/config
  * Updates the pre-trade risk thresholds on the gateway and persists to disk.
  */
-router.post('/config', (req, res) => {
+router.post('/config', requireEnterpriseAuth, (req, res) => {
     try {
         const { maxOrderValueUsd, maxOrdersPer10Sec, maxPriceDeviationPct, symbolCooldownMs, failClosedOnQuoteError } = req.body || {};
 
@@ -84,7 +85,7 @@ router.post('/config', (req, res) => {
  * POST /api/risk/gateway/halt
  * Emergency Kill Switch: Locks the gateway and cancels/liquidates ALL active broker exposure.
  */
-router.post('/halt', async (req, res) => {
+router.post('/halt', requireEnterpriseAuth, async (req, res) => {
     try {
         const { reason = 'Manual emergency stop triggered via Risk Gateway API' } = req.body || {};
 
@@ -133,7 +134,7 @@ router.post('/halt', async (req, res) => {
  * POST /api/risk/gateway/resume
  * Resumes trading by disarming the hard stop lock.
  */
-router.post('/resume', async (req, res) => {
+router.post('/resume', requireEnterpriseAuth, async (req, res) => {
     try {
         riskGateway.setHardHalt(false);
 

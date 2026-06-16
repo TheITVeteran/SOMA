@@ -6,6 +6,18 @@ import AgentMemoryManager from '../services/AgentMemoryManager.js';
 const router = express.Router();
 const SESSION_DIR = path.join(process.cwd(), 'data', 'arbiterium-sessions');
 
+function safeSessionPath(sessionId) {
+    if (typeof sessionId !== 'string' || !/^[a-zA-Z0-9_-]+$/.test(sessionId)) {
+        return null;
+    }
+    const resolvedSessionDir = path.resolve(SESSION_DIR);
+    const resolvedPath = path.resolve(SESSION_DIR, `${sessionId}.json`);
+    if (!resolvedPath.startsWith(resolvedSessionDir)) {
+        return null;
+    }
+    return resolvedPath;
+}
+
 /**
  * Resolve an arbiter role string to an actual arbiter instance.
  * Falls back to QuadBrain if no specialist is found.
@@ -96,7 +108,10 @@ export default function(system) {
                 return res.status(400).json({ success: false, error: 'Session data with id required' });
             }
 
-            const filePath = path.join(SESSION_DIR, `${session.id}.json`);
+            const filePath = safeSessionPath(session.id);
+            if (!filePath) {
+                return res.status(400).json({ success: false, error: 'Invalid or insecure session ID' });
+            }
             await fs.writeFile(filePath, JSON.stringify(session, null, 2), 'utf8');
 
             res.json({ success: true, sessionId: session.id });
@@ -143,7 +158,10 @@ export default function(system) {
     // GET /api/arbiterium/sessions/:id
     router.get('/sessions/:id', async (req, res) => {
         try {
-            const filePath = path.join(SESSION_DIR, `${req.params.id}.json`);
+            const filePath = safeSessionPath(req.params.id);
+            if (!filePath) {
+                return res.status(400).json({ success: false, error: 'Invalid or insecure session ID' });
+            }
             const content = await fs.readFile(filePath, 'utf8');
             res.json({ success: true, session: JSON.parse(content) });
         } catch (error) {
@@ -157,7 +175,10 @@ export default function(system) {
     // DELETE /api/arbiterium/sessions/:id
     router.delete('/sessions/:id', async (req, res) => {
         try {
-            const filePath = path.join(SESSION_DIR, `${req.params.id}.json`);
+            const filePath = safeSessionPath(req.params.id);
+            if (!filePath) {
+                return res.status(400).json({ success: false, error: 'Invalid or insecure session ID' });
+            }
             await fs.unlink(filePath);
             res.json({ success: true });
         } catch (error) {

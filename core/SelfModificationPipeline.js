@@ -19,11 +19,15 @@
 
 import fs from 'fs/promises';
 import path from 'path';
+import { execFile } from 'child_process';
+import { promisify } from 'util';
 import { Poseidon } from './Poseidon.js';
 
 const ROOT = process.cwd();
 const LEDGER_PATH    = path.join(ROOT, 'data', 'self_mod_ledger.jsonl');
 const CONTESTED_PATH = path.join(ROOT, 'data', 'contested_changes.json');
+const PULSE_SELF_MOD_ROOT = path.join(ROOT, 'data', 'code-lab', 'sandbox', 'pulse-self-mod');
+const execFileAsync = promisify(execFile);
 
 // Files SOMA must never autonomously modify — only Barry can touch these
 const IMMUTABLE_PATHS = [
@@ -37,6 +41,17 @@ const IMMUTABLE_PATHS = [
     'config/',
     'ecosystem.config.cjs',
 ];
+
+function safeStageId(input = '') {
+    return String(input || 'selfmod')
+        .replace(/[^a-zA-Z0-9._-]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        .slice(0, 80) || 'selfmod';
+}
+
+function isNodeSyntaxFile(filePath = '') {
+    return /\.(js|cjs|mjs)$/i.test(filePath);
+}
 
 export class SelfModificationPipeline {
     constructor(config = {}) {
@@ -73,6 +88,13 @@ export class SelfModificationPipeline {
 
         console.log(`[${this.name}] 🔧 Proposal: ${filepath}`);
         console.log(`[${this.name}]    Motivation: ${motivation.substring(0, 80)}`);
+        const absPath = path.resolve(ROOT, filepath);
+        let originalContent = null;
+        try {
+            originalContent = await fs.readFile(absPath, 'utf8');
+        } catch (e) {
+            return { state: 'blocked', implemented: false, shelved: false, filepath, reason: `Unable to snapshot original file: ${e.message}` };
+        }
 
         const entry = {
             id:          `selfmod-${Date.now()}`,
@@ -83,6 +105,7 @@ export class SelfModificationPipeline {
             steveReview:    null,
             brainDebate:    null,
             finalChange:    proposedChange,
+            pulseSandbox:   null,
             rounds:         [],
             poseidonState:  '|',
             implemented:    false,
@@ -154,6 +177,14 @@ export class SelfModificationPipeline {
 
                     entry.poseidonState = verified.prefix; // /, |, or \
                     entry.implemented   = verified.state === 'TRUE';
+                    if (entry.implemented) {
+                        entry.pulseSandbox = await this._stagePulseValidation(entry, absPath);
+                        if (entry.pulseSandbox?.syntax?.valid === false) {
+                            entry.implemented = false;
+                            entry.poseidonState = '|';
+                            roundEntry.error = `Pulse sandbox syntax failed: ${entry.pulseSandbox.syntax.output}`;
+                        }
+                    }
 
                     console.log(`[${this.name}] ${verified.prefix} Poseidon ${verified.state} — round ${round + 1}`);
                     break;
@@ -174,6 +205,12 @@ export class SelfModificationPipeline {
 
         // ── Phase 5: Shelve if still not passing ─────────────────────────
         if (!entry.implemented) {
+            try {
+                await fs.writeFile(absPath, originalContent, 'utf8');
+                entry.rollback = { restored: true, reason: 'self_mod_not_implemented' };
+            } catch (e) {
+                entry.rollback = { restored: false, error: e.message };
+            }
             entry.shelved = true;
             entry.poseidonState = '|'; // UNCERTAIN — not confirmed, not rejected
             await this._shelve(entry);
@@ -303,6 +340,55 @@ Output ONLY the refined change description, nothing else.`;
         }
     }
 
+    async _stagePulseValidation(entry, absPath) {
+        const id = `${entry.id}-${safeStageId(entry.filepath)}`;
+        const stageDir = path.join(PULSE_SELF_MOD_ROOT, id);
+        const rel = path.relative(ROOT, absPath);
+        const stagedPath = path.join(stageDir, rel);
+        await fs.mkdir(path.dirname(stagedPath), { recursive: true });
+        const content = await fs.readFile(absPath, 'utf8');
+        await fs.writeFile(stagedPath, content, 'utf8');
+
+        let syntax = { valid: true, output: 'syntax check skipped for this file type' };
+        if (isNodeSyntaxFile(stagedPath)) {
+            try {
+                const result = await execFileAsync(process.execPath, ['--check', stagedPath], { timeout: 10000 });
+                syntax = { valid: true, output: (result.stdout || result.stderr || '').substring(0, 600) };
+            } catch (e) {
+                syntax = {
+                    valid: false,
+                    output: ((e.stdout || '') + (e.stderr || '') + e.message).substring(0, 1200)
+                };
+            }
+        }
+
+        const promotionAllowed = syntax.valid === true;
+        const manifest = {
+            id,
+            source: 'SelfModificationPipeline',
+            createdAt: new Date().toISOString(),
+            filepath: rel.replace(/\\/g, '/'),
+            productionPath: absPath,
+            stagedPath,
+            syntax,
+            status: promotionAllowed ? 'ready_for_promotion' : 'rejected_in_sandbox',
+            promotion: {
+                allowed: promotionAllowed,
+                source: 'pulse_self_mod_sandbox',
+                rollbackGuard: true,
+                ledgerEntry: entry.id,
+                evidence: promotionAllowed
+                    ? 'Staged production candidate passed sandbox syntax checks.'
+                    : 'Staged production candidate failed sandbox syntax checks.',
+                nextStep: promotionAllowed
+                    ? 'Promote only after production verification confirms the staged artifact still matches the live file.'
+                    : 'Do not promote; revise in sandbox and rerun validation.'
+            }
+        };
+        await fs.writeFile(path.join(stageDir, 'pulse-self-mod-manifest.json'), JSON.stringify(manifest, null, 2), 'utf8');
+        return manifest;
+    }
+
     async _nemesisCodeGate(filepath, changeDescription, motivation) {
         const nemesis = this.system?.nemesis;
 
@@ -382,7 +468,13 @@ JSON only: { "score": 0.0, "feedback": "...", "falsificationTest": "...", "sugge
                 implemented: entry.implemented,
                 shelved:     entry.shelved,
                 rounds:      entry.rounds.length,
-                nemesisScore: entry.rounds.at(-1)?.nemesisScore ?? null
+                nemesisScore: entry.rounds.at(-1)?.nemesisScore ?? null,
+                pulseSandbox: entry.pulseSandbox ? {
+                    status: entry.pulseSandbox.status,
+                    stagedPath: entry.pulseSandbox.stagedPath,
+                    syntaxValid: entry.pulseSandbox.syntax?.valid
+                } : null,
+                rollback: entry.rollback || null
             }) + '\n';
             await fs.appendFile(LEDGER_PATH, line, 'utf8');
         } catch (e) {

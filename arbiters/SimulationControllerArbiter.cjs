@@ -263,6 +263,37 @@ class SimulationControllerArbiter extends BaseArbiter {
     this.stats.episodesCompleted++;
     this.stats.successfulEpisodes++;
     this.episodeRewards.push(this.totalReward);
+    
+    // Push to Universal Learning Pipeline
+    const system = global.__SOMA_SYSTEM;
+    if (system?.universalLearningPipeline) {
+        system.universalLearningPipeline.logInteraction({
+            source: 'SimulationController',
+            action: 'physics_epoch_complete',
+            details: {
+                episode,
+                score,
+                reward: this.totalReward,
+                qTableSize: this.qTable.size,
+                explorationRate: this.stats.explorationRate
+            },
+            outcome: 'success',
+            tags: ['simulation', 'physics', 'embodiment', 'learning']
+        }).catch(() => {});
+        
+        // Also feed into the ExperienceReplayBuffer explicitly
+        if (system.universalLearningPipeline.experienceBuffer) {
+            system.universalLearningPipeline.experienceBuffer.addExperience({
+                state: { episode, score },
+                action: 'physics_epoch',
+                agent: 'SimulationController',
+                outcome: `Completed epoch ${episode} with score ${score}`,
+                reward: this.totalReward,
+                nextState: null,
+                metadata: { qTableSize: this.qTable.size }
+            });
+        }
+    }
 
     // Calculate average reward
     const recent = this.episodeRewards.slice(-100);

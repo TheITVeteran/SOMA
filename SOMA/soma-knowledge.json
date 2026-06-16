@@ -7,9 +7,9 @@
       "type": "class",
       "source": "unknown",
       "confidence": 1,
-      "usageCount": 78,
+      "usageCount": 110,
       "createdAt": 1779481329826,
-      "lastSeen": 1781231699606,
+      "lastSeen": 1781556456115,
       "metadata": {
         "domain": "SOMA_ARCHITECTURE",
         "type": "class",
@@ -24,9 +24,9 @@
       "type": "system",
       "source": "unknown",
       "confidence": 1,
-      "usageCount": 78,
+      "usageCount": 110,
       "createdAt": 1779481329826,
-      "lastSeen": 1781231699606,
+      "lastSeen": 1781556456115,
       "metadata": {
         "domain": "SOMA_ARCHITECTURE",
         "type": "system",
@@ -41,9 +41,9 @@
       "type": "class",
       "source": "unknown",
       "confidence": 1,
-      "usageCount": 78,
+      "usageCount": 110,
       "createdAt": 1779481329826,
-      "lastSeen": 1781231699606,
+      "lastSeen": 1781556456115,
       "metadata": {
         "domain": "SOMA_ARCHITECTURE",
         "type": "class",
@@ -58,9 +58,9 @@
       "type": "class",
       "source": "unknown",
       "confidence": 1,
-      "usageCount": 78,
+      "usageCount": 110,
       "createdAt": 1779481329826,
-      "lastSeen": 1781231699606,
+      "lastSeen": 1781556456115,
       "metadata": {
         "domain": "SOMA_ARCHITECTURE",
         "type": "class",
@@ -75,9 +75,9 @@
       "type": "class",
       "source": "unknown",
       "confidence": 1,
-      "usageCount": 78,
+      "usageCount": 110,
       "createdAt": 1779481329826,
-      "lastSeen": 1781231699606,
+      "lastSeen": 1781556456115,
       "metadata": {
         "domain": "SOMA_ARCHITECTURE",
         "type": "class",
@@ -92,20 +92,3380 @@
       "type": "class",
       "source": "unknown",
       "confidence": 1,
-      "usageCount": 78,
+      "usageCount": 110,
       "createdAt": 1779481329826,
-      "lastSeen": 1781231699606,
+      "lastSeen": 1781556456115,
       "metadata": {
         "domain": "SOMA_ARCHITECTURE",
         "type": "class",
         "role": "Repograph Bridge",
         "confidence": 1
       }
+    },
+    {
+      "id": "concept_1781548326049_m1db260ak",
+      "name": "SOMA should recommend organizations implement adaptive cybersecurity measures inspired by the adaptive tit-for-tat strategy to proactively counteract emerging cyber threats in environments with heightened geopolitical risk. Additionally, conduct a risk assessment focusing on server-side template injection vulnerabilities in light of recent geopolitical events and export control measures.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.85,
+      "usageCount": 1,
+      "createdAt": 1781548326049,
+      "lastSeen": 1781548326049,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.85
+      }
+    },
+    {
+      "id": "concept_1781548612250_ctkcnnd5a",
+      "name": "SOMA should recommend that businesses and governments start integrating geopolitical analysis into their cybersecurity frameworks. This could involve developing algorithms to predict potential cyber-attacks based on emerging geopolitical tensions or conflicts. Additionally, regular assessments of digital infrastructure's resilience against both routine threats and strategic probes from state-sponsored entities should be conducted.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.85,
+      "usageCount": 1,
+      "createdAt": 1781548612250,
+      "lastSeen": 1781548612250,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.85
+      }
+    },
+    {
+      "id": "concept_1781556478868_gtbou670n",
+      "name": "When geopolitical tensions rise, there is an increased likelihood of cyber-attacks leading to a surge in discussions about cybersecurity on social media, particularly around topics like decentralization and privacy.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.6,
+      "usageCount": 1,
+      "createdAt": 1781556478868,
+      "lastSeen": 1781556478868,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.6
+      }
+    },
+    {
+      "id": "concept_1781556764537_vr14thy8e",
+      "name": "If a cyber security vulnerability is exploited during periods of heightened geopolitical risk, there will be a higher likelihood of industrial system failures affecting critical operations like semiconductor manufacturing.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.65,
+      "usageCount": 1,
+      "createdAt": 1781556764537,
+      "lastSeen": 1781556764537,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.65
+      }
+    },
+    {
+      "id": "concept_1781557064322_h4crp8g0p",
+      "name": "Companies relying heavily on global supply chains for semiconductors and other critical components are more vulnerable to both geopolitical and cyber risks, which can lead to decreased social media engagement during crises.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.75,
+      "usageCount": 1,
+      "createdAt": 1781557064322,
+      "lastSeen": 1781557064322,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.75
+      }
+    },
+    {
+      "id": "concept_1781557363708_vj5niem3v",
+      "name": "There is a correlation between geopolitical events and an increase in cyber-attacks, specifically through the exploitation of server-side rendering issues without proper encoding.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.6,
+      "usageCount": 1,
+      "createdAt": 1781557363708,
+      "lastSeen": 1781557363708,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.6
+      }
+    },
+    {
+      "id": "concept_1781557663688_e0ldm4qyd",
+      "name": "As geopolitical tensions increase, there will be a corresponding rise in cybersecurity challenges related to secure coding practices.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.65,
+      "usageCount": 1,
+      "createdAt": 1781557663688,
+      "lastSeen": 1781557663688,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.65
+      }
+    },
+    {
+      "id": "concept_1781557963758_4gtmo9ygv",
+      "name": "Exploits in cybersecurity vulnerabilities can correlate with increased social media interactions focused on software engineering and decentralized technologies.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.75,
+      "usageCount": 1,
+      "createdAt": 1781557963758,
+      "lastSeen": 1781557963758,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.75
+      }
+    },
+    {
+      "id": "concept_1781558263630_1dzku3zfx",
+      "name": "The likelihood of supply chain disruptions increases with the presence of both geopolitical risk and unvalidated file upload vulnerabilities in technology sectors.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.6,
+      "usageCount": 1,
+      "createdAt": 1781558263630,
+      "lastSeen": 1781558263630,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.6
+      }
+    },
+    {
+      "id": "concept_1781558564154_jwm4hi1c3",
+      "name": "Companies facing higher geopolitical-risk premiums are more likely to experience a rise in cyber-attacks or security breaches, as evidenced by changes in social media interactions related to cybersecurity concerns.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.5,
+      "usageCount": 1,
+      "createdAt": 1781558564154,
+      "lastSeen": 1781558564154,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0
+      }
+    },
+    {
+      "id": "concept_1781558863696_0xc4wncxy",
+      "name": "There will be a correlation between geopolitical-risk premium increases and instances of cyber attacks on unprotected export endpoints within the next quarter.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.75,
+      "usageCount": 1,
+      "createdAt": 1781558863696,
+      "lastSeen": 1781558863696,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.75
+      }
+    },
+    {
+      "id": "concept_1781559162326_bdoeg31uy",
+      "name": "Persistent cybersecurity issues related to user-controlled inputs will be correlated with a decrease in social media interactions around topics of software engineering and privacy.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.75,
+      "usageCount": 1,
+      "createdAt": 1781559162326,
+      "lastSeen": 1781559162326,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.75
+      }
+    },
+    {
+      "id": "concept_1781559462425_7zz28oj4o",
+      "name": "User-controlled inputs exploiting server-side rendering vulnerabilities could be used by malicious actors to manipulate financial instruments or market perceptions, affecting credit spreads and reserve asset expectations.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.5,
+      "usageCount": 1,
+      "createdAt": 1781559462425,
+      "lastSeen": 1781559462425,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0
+      }
+    },
+    {
+      "id": "concept_1781559762420_wj87nd906",
+      "name": "A significant geopolitical event (e.g., sanctions or conflict) could lead to increased cyber-attacks on critical infrastructure, affecting semiconductors and other technology sectors.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.6,
+      "usageCount": 1,
+      "createdAt": 1781559762420,
+      "lastSeen": 1781559762420,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.6
+      }
+    },
+    {
+      "id": "concept_1781560062471_fomfknilf",
+      "name": "If a cybersecurity vulnerability leads to the exposure of sensitive information and this information is used in social media campaigns, it will correlate with changes in market sentiment or stock prices.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.6,
+      "usageCount": 1,
+      "createdAt": 1781560062471,
+      "lastSeen": 1781560062471,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.6
+      }
+    },
+    {
+      "id": "concept_1781560362610_fh5w1aj9n",
+      "name": "As borrowing costs increase, there will be a higher incidence of unencoded user input leading to security breaches in web applications.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.65,
+      "usageCount": 1,
+      "createdAt": 1781560362610,
+      "lastSeen": 1781560362610,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.65
+      }
+    },
+    {
+      "id": "concept_1781560662424_l7klv1u03",
+      "name": "An increase in bond yields correlates with a higher likelihood of discovering exploitable security flaws in web services, especially those that do not rigorously check session authority.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.65,
+      "usageCount": 1,
+      "createdAt": 1781560662424,
+      "lastSeen": 1781560662424,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.65
+      }
+    },
+    {
+      "id": "concept_1781560962683_6jx9homgu",
+      "name": "The occurrence of supply chain disruptions due to increased borrowing costs is correlated with the frequency of successful cyber attacks exploiting server-side template injection vulnerabilities.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.75,
+      "usageCount": 1,
+      "createdAt": 1781560962683,
+      "lastSeen": 1781560962683,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.75
+      }
+    },
+    {
+      "id": "concept_1781561262350_z4vxnjq7l",
+      "name": "An increase in geopolitical-risk-related macro events will correlate with a higher incidence of cyber security incidents involving user-controlled inputs on web servers.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.75,
+      "usageCount": 1,
+      "createdAt": 1781561262350,
+      "lastSeen": 1781561262350,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.75
+      }
+    },
+    {
+      "id": "concept_1781561562314_xdrp58gnx",
+      "name": "If there is a significant rise in geopolitical-risk premium, tech companies may experience increased volatility in industrial inputs costs, particularly in semiconductors.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.6,
+      "usageCount": 1,
+      "createdAt": 1781561562314,
+      "lastSeen": 1781561562314,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.6
+      }
+    },
+    {
+      "id": "concept_1781561862308_f6jncmg47",
+      "name": "If a key supplier faces increased geopolitical risk, it is likely that they will experience more frequent cyber-attacks or data breaches affecting the security of their products and services.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.65,
+      "usageCount": 1,
+      "createdAt": 1781561862308,
+      "lastSeen": 1781561862308,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.65
+      }
+    },
+    {
+      "id": "concept_1781562162683_wj5e3tb3m",
+      "name": "Companies focusing on decentralized technologies may benefit more from geopolitical stability but are also less prone to targeted cyber-attacks compared to centralized platforms.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.6,
+      "usageCount": 1,
+      "createdAt": 1781562162683,
+      "lastSeen": 1781562162683,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.6
+      }
+    },
+    {
+      "id": "concept_1781562462317_i9m8r69z6",
+      "name": "Cybersecurity incidents in technology companies can lead to increased refinancing pressure due to perceived risk.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.65,
+      "usageCount": 1,
+      "createdAt": 1781562462317,
+      "lastSeen": 1781562462317,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.65
+      }
+    },
+    {
+      "id": "concept_1781562762612_l13rd8ct7",
+      "name": "Users experiencing higher credit stress are more likely to engage with posts about cybersecurity measures and technology compliance, which could indicate a shift towards risk-averse behaviors.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.65,
+      "usageCount": 1,
+      "createdAt": 1781562762612,
+      "lastSeen": 1781562762612,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.65
+      }
+    },
+    {
+      "id": "concept_1781563062671_9xf6vxlex",
+      "name": "An increase in geopolitical-risk-related interactions on social media is correlated with a rise in reported cyber incidents within the next quarter.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.6,
+      "usageCount": 1,
+      "createdAt": 1781563062671,
+      "lastSeen": 1781563062671,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.6
+      }
+    },
+    {
+      "id": "concept_1781563362551_9kvdcv8sz",
+      "name": "Increased geopolitical tension will correlate with a rise in reported cyber incidents within critical infrastructure sectors.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.6,
+      "usageCount": 1,
+      "createdAt": 1781563362551,
+      "lastSeen": 1781563362551,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.6
+      }
+    },
+    {
+      "id": "concept_1781563662723_knd1nkxfg",
+      "name": "If bond yields rise significantly, companies that rely heavily on imported materials or have unsecured admin endpoints are more likely to experience supply chain disruptions and data breaches.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.7,
+      "usageCount": 1,
+      "createdAt": 1781563662723,
+      "lastSeen": 1781563662723,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.7
+      }
+    },
+    {
+      "id": "concept_1781563964037_zk4upbj07",
+      "name": "If bond yields rise significantly, leading to increased input costs and reduced capital expenditure, then companies with unvalidated file upload features are more susceptible to cyber attacks as their resources might be strained.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.75,
+      "usageCount": 1,
+      "createdAt": 1781563964037,
+      "lastSeen": 1781563964037,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.75
+      }
+    },
+    {
+      "id": "concept_1781564262749_6tjpjfbe9",
+      "name": "Companies that allocate more resources towards secure technologies due to anticipated capital flows into defensive equities may experience improved cybersecurity outcomes compared to those maintaining the status quo.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.6,
+      "usageCount": 1,
+      "createdAt": 1781564262749,
+      "lastSeen": 1781564262749,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.6
+      }
+    },
+    {
+      "id": "concept_1781564562576_9z9074gdh",
+      "name": "There is a correlation between increases in geopolitical-risk premium and frequency of cyber attacks on critical supply chain systems.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.65,
+      "usageCount": 1,
+      "createdAt": 1781564562576,
+      "lastSeen": 1781564562576,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.65
+      }
+    },
+    {
+      "id": "concept_1781564862557_ta4zl7cem",
+      "name": "Companies that address both cyber security vulnerabilities and prepare for geopolitical uncertainties will see improved operational resilience and maintain stronger brand reputation on social media platforms.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.75,
+      "usageCount": 1,
+      "createdAt": 1781564862557,
+      "lastSeen": 1781564862557,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.75
+      }
+    },
+    {
+      "id": "concept_1781565162554_78vfsxxp3",
+      "name": "A significant geopolitical event (e.g., export control changes) could lead to a surge in cybersecurity-related concerns among tech users, impacting company social media engagement levels.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.6,
+      "usageCount": 1,
+      "createdAt": 1781565162554,
+      "lastSeen": 1781565162554,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.6
+      }
+    },
+    {
+      "id": "concept_1781565462657_oikerhc4x",
+      "name": "If a significant cyber incident occurs in a technology company due to path traversal vulnerabilities, it will lead to increased social media interactions related to privacy and security concerns.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.65,
+      "usageCount": 1,
+      "createdAt": 1781565462657,
+      "lastSeen": 1781565462657,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.65
+      }
+    },
+    {
+      "id": "concept_1781565762674_ffumuv44a",
+      "name": "Fixing security vulnerabilities in web services can lead to an increase in positive social media interactions related to technology and finance topics.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.7,
+      "usageCount": 1,
+      "createdAt": 1781565762674,
+      "lastSeen": 1781565762674,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.7
+      }
+    },
+    {
+      "id": "concept_1781566062539_zf3qci4wr",
+      "name": "Technological firms experiencing higher credit stress due to reserve-asset expectations might exhibit more frequent instances of insecure coding practices, such as failing to properly encode user-controlled inputs.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.7,
+      "usageCount": 1,
+      "createdAt": 1781566062539,
+      "lastSeen": 1781566062539,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.7
+      }
+    },
+    {
+      "id": "concept_1781566362860_g7lefsar7",
+      "name": "If a cyber security vulnerability leads to a significant breach affecting critical infrastructure, it could be correlated with increased volatility in relevant commodity markets due to disruptions in supply chains.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.65,
+      "usageCount": 1,
+      "createdAt": 1781566362860,
+      "lastSeen": 1781566362860,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.65
+      }
+    },
+    {
+      "id": "concept_1781566662637_4qgihzf5f",
+      "name": "A significant geopolitical event could cause a surge in cyber-attacks targeting companies' export systems due to increased focus on securing sensitive information during supply-chain disruptions.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.75,
+      "usageCount": 1,
+      "createdAt": 1781566662637,
+      "lastSeen": 1781566662637,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.75
+      }
+    },
+    {
+      "id": "concept_1781566962425_7539ds2i1",
+      "name": "An increase in geopolitical events will correlate with a spike in cyber-attack incidents targeting unsecured endpoints.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.6,
+      "usageCount": 1,
+      "createdAt": 1781566962425,
+      "lastSeen": 1781566962425,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.6
+      }
+    },
+    {
+      "id": "concept_1781567262770_u0ifs9n1g",
+      "name": "Increased geopolitical tensions could lead to more frequent server-side script execution vulnerabilities due to resource constraints or capital reallocation towards defensive assets.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.75,
+      "usageCount": 1,
+      "createdAt": 1781567262770,
+      "lastSeen": 1781567262770,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.75
+      }
+    },
+    {
+      "id": "concept_1781567563608_xc0dhp7g0",
+      "name": "As bond yields rise, there will be a correlation between decreased investment in security protocols and an increase in instances of script execution through user-controlled inputs in server-side templates without proper encoding.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.6,
+      "usageCount": 1,
+      "createdAt": 1781567563608,
+      "lastSeen": 1781567563608,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.6
+      }
+    },
+    {
+      "id": "concept_1781567863229_e5ca5rkkd",
+      "name": "Implementing stronger session authority checks on export endpoints can reduce the risk of cyber-attacks and protect sensitive supply chain data during times of geopolitical tension like Strait of Hormuz disruptions.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.65,
+      "usageCount": 1,
+      "createdAt": 1781567863229,
+      "lastSeen": 1781567863229,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.65
+      }
+    },
+    {
+      "id": "concept_1781568162854_354tb05xl",
+      "name": "A cyber attack following Strait of Hormuz disruptions would likely target export functionalities with predictable identifiers in web services handling sensitive data.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.65,
+      "usageCount": 1,
+      "createdAt": 1781568162854,
+      "lastSeen": 1781568162854,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.65
+      }
+    },
+    {
+      "id": "concept_1781568463015_v7ib8w6cm",
+      "name": "A correlation between rising geopolitical-risk premiums and an increase in cyber attacks on technology companies' export systems will be observed if the hypothesis is valid.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.6,
+      "usageCount": 1,
+      "createdAt": 1781568463015,
+      "lastSeen": 1781568463015,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.6
+      }
+    },
+    {
+      "id": "concept_1781568762953_u60ea06qr",
+      "name": "A rise in geopolitical-risk events will correlate with an increase in cyber security incidents targeting technology companies, especially those dealing with critical components like semiconductors.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.6,
+      "usageCount": 1,
+      "createdAt": 1781568762953,
+      "lastSeen": 1781568762953,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.6
+      }
+    },
+    {
+      "id": "concept_1781569062953_fa2tep9rd",
+      "name": "There is a correlation between rising credit stress and increased cyber incidents targeting sensitive financial data.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.65,
+      "usageCount": 1,
+      "createdAt": 1781569062953,
+      "lastSeen": 1781569062953,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.65
+      }
+    },
+    {
+      "id": "concept_1781569362789_h829zybww",
+      "name": "If a significant cyber incident occurs at a major technology company, it will lead to increased scrutiny and rotation of capital towards safer assets like gold or bonds among financial institutions.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.65,
+      "usageCount": 1,
+      "createdAt": 1781569362789,
+      "lastSeen": 1781569362789,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.65
+      }
+    },
+    {
+      "id": "concept_1781569662844_m99mv7635",
+      "name": "As geopolitical risks persist and influence supply chains, there will be an increase in cybersecurity concerns related to the integrity of industrial control systems and data protection measures.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.65,
+      "usageCount": 1,
+      "createdAt": 1781569662844,
+      "lastSeen": 1781569662844,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.65
+      }
+    },
+    {
+      "id": "concept_1781569962554_zx3tzhs35",
+      "name": "A rise in geopolitical-risk premium will correlate with an increase in cyber security incidents or vulnerabilities as states engage in cyber espionage and sabotage to gain strategic advantages.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.6,
+      "usageCount": 1,
+      "createdAt": 1781569962554,
+      "lastSeen": 1781569962554,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.6
+      }
+    },
+    {
+      "id": "concept_1781570262852_ma11ai2ib",
+      "name": "A significant geopolitical event will cause a sustained rise in the prices of semiconductors due to supply chain disruptions, as evidenced by concurrent movements in relevant financial indices over several months.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.75,
+      "usageCount": 1,
+      "createdAt": 1781570262852,
+      "lastSeen": 1781570262852,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.75
+      }
+    },
+    {
+      "id": "concept_1781570562791_ooo78m2mr",
+      "name": "If bond yields rise significantly, the stock market volatility will increase due to higher borrowing costs affecting corporate earnings and stock valuations.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.75,
+      "usageCount": 1,
+      "createdAt": 1781570562791,
+      "lastSeen": 1781570562791,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.75
+      }
+    },
+    {
+      "id": "concept_1781570862729_4z3uhbbdi",
+      "name": "Increased economic uncertainty due to higher borrowing costs may decrease focus on cybersecurity best practices among businesses and developers, leading to more software vulnerabilities.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.75,
+      "usageCount": 1,
+      "createdAt": 1781570862729,
+      "lastSeen": 1781570862729,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.75
+      }
+    },
+    {
+      "id": "concept_1781571162716_c4mwbn9ho",
+      "name": "An increase in gas prices will correlate with a rise in reported cyber security incidents related to path traversal vulnerabilities in software systems.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.6,
+      "usageCount": 1,
+      "createdAt": 1781571162716,
+      "lastSeen": 1781571162716,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.6
+      }
+    },
+    {
+      "id": "concept_1781571463295_4dgoz90z0",
+      "name": "A successful server-side template injection attack could lead to an increase in interactions with malicious content on platforms like Bluesky, impacting user engagement metrics and potentially disrupting the adaptive strategies used in online games or social memory analytics.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.65,
+      "usageCount": 1,
+      "createdAt": 1781571463295,
+      "lastSeen": 1781571463295,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.65
+      }
+    },
+    {
+      "id": "concept_1781571762779_wj1a15n5y",
+      "name": "As the semiconductor sector continues to grow, there will be a corresponding increase in cybersecurity threats targeting these high-value industries, leading to higher demand for robust security measures.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.75,
+      "usageCount": 1,
+      "createdAt": 1781571762779,
+      "lastSeen": 1781571762779,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.75
+      }
+    },
+    {
+      "id": "concept_1781572062642_zyp41ywvv",
+      "name": "Companies experiencing strong growth in the semiconductor sector will increase their investment in cybersecurity measures.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.5,
+      "usageCount": 1,
+      "createdAt": 1781572062642,
+      "lastSeen": 1781572062642,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0
+      }
+    },
+    {
+      "id": "concept_1781572362582_zoxzon6vg",
+      "name": "A widening of credit spreads will correlate with increased discussions on social media about diversifying investments into gold, bonds, and defensive equities.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.5,
+      "usageCount": 1,
+      "createdAt": 1781572362582,
+      "lastSeen": 1781572362582,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0
+      }
+    },
+    {
+      "id": "concept_1781572662652_pw7jgoyjq",
+      "name": "Increased interaction on social media regarding decentralized technologies could predict a shift in capital allocation towards more resilient and transparent financial instruments.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.6,
+      "usageCount": 1,
+      "createdAt": 1781572662652,
+      "lastSeen": 1781572662652,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.6
+      }
+    },
+    {
+      "id": "concept_1781572963849_duqg26n40",
+      "name": "If credit conditions deteriorate significantly, there will be a corresponding increase in defensive asset purchases by tech companies to hedge against financial instability, leading to higher gold and bond investments relative to equities with higher liquidity risk.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.75,
+      "usageCount": 1,
+      "createdAt": 1781572963849,
+      "lastSeen": 1781572963849,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.75
+      }
+    },
+    {
+      "id": "concept_1781573262873_avosw29ba",
+      "name": "There is a correlation between periods of high geopolitical-risk premium and an increase in reported server-side template vulnerabilities.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.65,
+      "usageCount": 1,
+      "createdAt": 1781573262873,
+      "lastSeen": 1781573262873,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.65
+      }
+    },
+    {
+      "id": "concept_1781573562936_nq46hfin2",
+      "name": "As geopolitical tensions rise, there will be a correlation between the number of cyber security incidents reported and the level of geopolitical risk as measured by safe-haven flows and commodity volatility.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.6,
+      "usageCount": 1,
+      "createdAt": 1781573562936,
+      "lastSeen": 1781573562936,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.6
+      }
+    },
+    {
+      "id": "concept_1781573862797_ibviumayk",
+      "name": "During times of increased forex volatility and economic uncertainty, the number of cyber security incidents related to unencoded user-controlled scripts will rise.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.6,
+      "usageCount": 1,
+      "createdAt": 1781573862797,
+      "lastSeen": 1781573862797,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.6
+      }
+    },
+    {
+      "id": "concept_1781574162648_wsb6asl3i",
+      "name": "Companies facing higher borrowing costs might cut back on IT security budgets, increasing vulnerability to cyber attacks.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.75,
+      "usageCount": 1,
+      "createdAt": 1781574162648,
+      "lastSeen": 1781574162648,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.75
+      }
+    },
+    {
+      "id": "concept_1781574463552_8fx9f2xhg",
+      "name": "Enhanced cybersecurity measures at critical chokepoints, such as those protecting sensitive data export points, can significantly reduce the risk of operational disruptions caused by cyber-attacks during periods of heightened geopolitical tension in regions like the Strait of Hormuz.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.65,
+      "usageCount": 1,
+      "createdAt": 1781574463552,
+      "lastSeen": 1781574463552,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.65
+      }
+    },
+    {
+      "id": "concept_1781574763421_cloltrc00",
+      "name": "Improving cybersecurity measures, such as validating file paths, can reduce the likelihood of data breaches during periods of geopolitical tension affecting global supply chains.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.65,
+      "usageCount": 1,
+      "createdAt": 1781574763421,
+      "lastSeen": 1781574763421,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.65
+      }
+    },
+    {
+      "id": "concept_1781575062784_7lx97076h",
+      "name": "Enhanced cybersecurity measures adopted by semiconductor companies in response to market stability could reduce the likelihood of security breaches due to path traversal vulnerabilities.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.75,
+      "usageCount": 1,
+      "createdAt": 1781575062784,
+      "lastSeen": 1781575062784,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.75
+      }
+    },
+    {
+      "id": "concept_1781575363111_olbwvqoyx",
+      "name": "A correlation between geopolitical tensions and an increase in cyber-attacks against technology supply chains will be observed if the supply chain repricing pressure intensifies.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.65,
+      "usageCount": 1,
+      "createdAt": 1781575363111,
+      "lastSeen": 1781575363111,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.65
+      }
+    },
+    {
+      "id": "concept_1781575662848_d7oju8o05",
+      "name": "If a significant cyber vulnerability occurs in technology-heavy social media communities (e.g., those discussing software engineering), there will be an increase in interactions focused on cybersecurity measures and privacy concerns.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.6,
+      "usageCount": 1,
+      "createdAt": 1781575662848,
+      "lastSeen": 1781575662848,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.6
+      }
+    },
+    {
+      "id": "concept_1781575962733_s7utfxlet",
+      "name": "Persistent cyber security issues in technology firms could lead to a rotation of capital away from tech stocks, affecting overall market sentiment and credit spreads.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.75,
+      "usageCount": 1,
+      "createdAt": 1781575962733,
+      "lastSeen": 1781575962733,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.75
+      }
+    },
+    {
+      "id": "concept_1781576262867_bl9eo0eh1",
+      "name": "Persistent increases in gold and bond investments could correlate with reduced software development activity, potentially increasing the likelihood of security oversights due to resource constraints.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.6,
+      "usageCount": 1,
+      "createdAt": 1781576262867,
+      "lastSeen": 1781576262867,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.6
+      }
+    },
+    {
+      "id": "concept_1781576563376_er8s3zczy",
+      "name": "A surge in geopolitical risk events could correlate with an increase in cybersecurity incidents related to path traversal vulnerabilities in software supply chains.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.7,
+      "usageCount": 1,
+      "createdAt": 1781576563376,
+      "lastSeen": 1781576563376,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.7
+      }
+    },
+    {
+      "id": "concept_1781576863243_ivrti4of0",
+      "name": "Increased cyber threats targeting admin endpoints correlate with heightened geopolitical risks, leading to more frequent data breaches in industries such as semiconductors.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.75,
+      "usageCount": 1,
+      "createdAt": 1781576863243,
+      "lastSeen": 1781576863243,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.75
+      }
+    },
+    {
+      "id": "concept_1781577163553_hu7athuke",
+      "name": "Increased geopolitical risk will correlate with a higher rate of unvalidated file uploads attempting to exploit system vulnerabilities, leading to more frequent security incidents in affected organizations.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.65,
+      "usageCount": 1,
+      "createdAt": 1781577163553,
+      "lastSeen": 1781577163553,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.65
+      }
+    },
+    {
+      "id": "concept_1781577463577_2lrk1dj1q",
+      "name": "As bond yields increase and investments become riskier, there will be a higher likelihood of unvalidated file upload vulnerabilities being exploited in software systems used by financial institutions.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.65,
+      "usageCount": 1,
+      "createdAt": 1781577463577,
+      "lastSeen": 1781577463577,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.65
+      }
+    },
+    {
+      "id": "concept_1781577763413_1xzd140lb",
+      "name": "There is a correlation between decreased geopolitical risks (as seen with the reopening of the Strait of Hormuz) and an increase in cyber attacks targeting improperly secured web services.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.6,
+      "usageCount": 1,
+      "createdAt": 1781577763413,
+      "lastSeen": 1781577763413,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.6
+      }
+    },
+    {
+      "id": "concept_1781578063281_rf8x7d4tq",
+      "name": "Increased cybersecurity measures can mitigate the economic impact of supply chain disruptions caused by geopolitical events such as those in the Strait of Hormuz.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.6,
+      "usageCount": 1,
+      "createdAt": 1781578063281,
+      "lastSeen": 1781578063281,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.6
+      }
+    },
+    {
+      "id": "concept_1781578363674_qzdaduobh",
+      "name": "Increased geopolitical risk will correlate with higher instances of cyber security breaches among technology firms, leading to decreased social media interaction and lower stock performance.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.65,
+      "usageCount": 1,
+      "createdAt": 1781578363674,
+      "lastSeen": 1781578363674,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.65
+      }
+    },
+    {
+      "id": "concept_1781578663678_bqv9k8jo5",
+      "name": "The frequency of cybersecurity incidents related to export endpoints will increase during periods of geopolitical tension and supply chain volatility.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.65,
+      "usageCount": 1,
+      "createdAt": 1781578663678,
+      "lastSeen": 1781578663678,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.65
+      }
+    },
+    {
+      "id": "concept_1781578963280_pu71pflbg",
+      "name": "During periods of heightened geopolitical risk, there is a correlation between the increase in commodity volatility and a decrease in rigorous file validation practices within technology supply chains.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.65,
+      "usageCount": 1,
+      "createdAt": 1781578963280,
+      "lastSeen": 1781578963280,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.65
+      }
+    },
+    {
+      "id": "concept_1781579263359_iv5ukkhhf",
+      "name": "A sudden increase in gold, bond, or defensive equity investment by credit-stressed entities may lead to decreased cybersecurity spending due to reduced capital availability.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.75,
+      "usageCount": 1,
+      "createdAt": 1781579263359,
+      "lastSeen": 1781579263359,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.75
+      }
+    },
+    {
+      "id": "concept_1781579563359_7488wxgem",
+      "name": "An increase in user-controlled input exploitation attempts may correlate with economic slowdowns and tightening credit conditions.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.6,
+      "usageCount": 1,
+      "createdAt": 1781579563359,
+      "lastSeen": 1781579563359,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.6
+      }
+    },
+    {
+      "id": "concept_1781579863259_b0kp02fsu",
+      "name": "If a significant geopolitical event occurs, the number of cyber security incidents involving predictable export endpoints will increase due to heightened operational disruptions and strategic adjustments.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.75,
+      "usageCount": 1,
+      "createdAt": 1781579863259,
+      "lastSeen": 1781579863259,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.75
+      }
+    },
+    {
+      "id": "concept_1781580163758_88mu9x60t",
+      "name": "An increase in geopolitical risk may correlate with a rise in the frequency of cybersecurity-related discussions and actions on social media platforms.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.65,
+      "usageCount": 1,
+      "createdAt": 1781580163758,
+      "lastSeen": 1781580163758,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.65
+      }
+    },
+    {
+      "id": "concept_1781580463268_mtfvcnem3",
+      "name": "Tech companies experiencing higher geopolitical-risk premiums will report more instances of unauthorized data access attempts targeting their export endpoints.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.65,
+      "usageCount": 1,
+      "createdAt": 1781580463268,
+      "lastSeen": 1781580463268,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.65
+      }
+    },
+    {
+      "id": "concept_1781580763329_8fo3vo7hq",
+      "name": "During geopolitical tensions, an increase in script-execution vulnerabilities could correlate with a higher frequency of cyber attacks on tech companies, particularly those in semiconductors and energy sectors.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.75,
+      "usageCount": 1,
+      "createdAt": 1781580763329,
+      "lastSeen": 1781580763329,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.75
+      }
+    },
+    {
+      "id": "concept_1781581063475_wo2oj0d6s",
+      "name": "Users who are interested in or involved with decentralized social media may show increased engagement with content related to financial stability and privacy concerns as a result of rising bond yields.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.65,
+      "usageCount": 1,
+      "createdAt": 1781581063475,
+      "lastSeen": 1781581063475,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.65
+      }
+    },
+    {
+      "id": "concept_1781581363459_c0ytd78sx",
+      "name": "Cyber attacks on exposed admin endpoints could lead to data breaches, potentially causing delays and additional costs during supply chain disruptions at the Strait of Hormuz.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.65,
+      "usageCount": 1,
+      "createdAt": 1781581363459,
+      "lastSeen": 1781581363459,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.65
+      }
+    },
+    {
+      "id": "concept_1781581663242_k92nppwwt",
+      "name": "The implementation of better path traversal validation can reduce the risk of cyber attacks by at least 20% in regions affected by geopolitical tensions.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.5,
+      "usageCount": 1,
+      "createdAt": 1781581663242,
+      "lastSeen": 1781581663242,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0
+      }
+    },
+    {
+      "id": "concept_1781581963612_vxy9k1143",
+      "name": "Improving cybersecurity measures in tech companies could reduce their sensitivity to geopolitical events, thereby stabilizing earnings and stock prices.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.7,
+      "usageCount": 1,
+      "createdAt": 1781581963612,
+      "lastSeen": 1781581963612,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.7
+      }
+    },
+    {
+      "id": "concept_1781582263701_hj592mrzg",
+      "name": "A correlation between geopolitical risk increases and cybersecurity incidents in technology supply chains could be observed if confirming instruments move together over time.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.65,
+      "usageCount": 1,
+      "createdAt": 1781582263701,
+      "lastSeen": 1781582263701,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.65
+      }
+    },
+    {
+      "id": "concept_1781582563407_eqrdtess5",
+      "name": "During credit stress events, an increase in defensive equity investments may correlate with a higher frequency of reported cyber incidents due to relaxed security protocols under financial pressure.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.5,
+      "usageCount": 1,
+      "createdAt": 1781582563407,
+      "lastSeen": 1781582563407,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0
+      }
+    },
+    {
+      "id": "concept_1781582863495_w06vx2ljo",
+      "name": "Increases in defensive equity or gold investments due to credit stress may correlate with increased mentions of decentralized social media platforms in interactions on major social media channels.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.75,
+      "usageCount": 1,
+      "createdAt": 1781582863495,
+      "lastSeen": 1781582863495,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.75
+      }
+    },
+    {
+      "id": "concept_1781583163624_lr11bmau2",
+      "name": "There is a correlation between credit spread tightening (indicative of higher risk aversion) and an increase in the number of cyber-attacks or breaches targeting financial systems, which could be detected through anomaly detection systems.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.6,
+      "usageCount": 1,
+      "createdAt": 1781583163624,
+      "lastSeen": 1781583163624,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.6
+      }
+    },
+    {
+      "id": "concept_1781583463638_03zs8am71",
+      "name": "An increase in geopolitical tensions will correlate with a rise in cyber-attack incidents on energy-related infrastructure, which could impact hospitality sector supply chains.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.75,
+      "usageCount": 1,
+      "createdAt": 1781583463638,
+      "lastSeen": 1781583463638,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.75
+      }
+    },
+    {
+      "id": "concept_1781583763654_ikeqbw53e",
+      "name": "Increased geopolitical tensions may lead to more frequent cyber attacks, prompting users to adopt safer online behaviors that could be reflected in higher interaction counts with cybersecurity-focused posts on social media platforms.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.65,
+      "usageCount": 1,
+      "createdAt": 1781583763654,
+      "lastSeen": 1781583763654,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.65
+      }
+    },
+    {
+      "id": "concept_1781584063936_aoz7q2l6i",
+      "name": "There is a correlation between periods of heightened geopolitical risk and an increase in unencoded user-controlled text insertions into server-side templates leading to potential script execution vulnerabilities.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.6,
+      "usageCount": 1,
+      "createdAt": 1781584063936,
+      "lastSeen": 1781584063936,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.6
+      }
+    },
+    {
+      "id": "concept_1781584364208_kh2qcdevl",
+      "name": "A correlation exists between rising bond yields and increased instances of unauthorized access to sensitive data through exposed admin endpoints due to reduced investment in cybersecurity infrastructure.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.65,
+      "usageCount": 1,
+      "createdAt": 1781584364208,
+      "lastSeen": 1781584364208,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.65
+      }
+    },
+    {
+      "id": "concept_1781584663754_y5wrds9mh",
+      "name": "If supply chain disruptions increase due to geopolitical events like tensions in the Strait of Hormuz, there will be a corresponding rise in reported cyber security incidents involving path traversal vulnerabilities.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.65,
+      "usageCount": 1,
+      "createdAt": 1781584663754,
+      "lastSeen": 1781584663754,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.65
+      }
+    },
+    {
+      "id": "concept_1781584963981_6dr5k2fmy",
+      "name": "There is a correlation between increased operational costs due to supply chain disruptions and the frequency of cyber-attacks targeting unsecured endpoints within businesses.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.65,
+      "usageCount": 1,
+      "createdAt": 1781584963981,
+      "lastSeen": 1781584963981,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.65
+      }
+    },
+    {
+      "id": "concept_1781585263754_zehhg8vv4",
+      "name": "Improving security protocols for critical endpoints could reduce the risk of cyber attacks while maintaining market performance in the semiconductor industry.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.65,
+      "usageCount": 1,
+      "createdAt": 1781585263754,
+      "lastSeen": 1781585263754,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.65
+      }
+    },
+    {
+      "id": "concept_1781585564361_2tfj5d0al",
+      "name": "As semiconductor stocks continue to perform well and attract more investment, there will be an observable increase in cybersecurity-related investments and R&D expenditures within tech companies.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.6,
+      "usageCount": 1,
+      "createdAt": 1781585564361,
+      "lastSeen": 1781585564361,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.6
+      }
+    },
+    {
+      "id": "concept_1781585863762_2evcxtr2k",
+      "name": "Changes in credit spread and reserve-asset expectations may correlate with increases in user-controlled script executions on server-side templates.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.6,
+      "usageCount": 1,
+      "createdAt": 1781585863762,
+      "lastSeen": 1781585863762,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.6
+      }
+    },
+    {
+      "id": "concept_1781586163752_mcs73szrj",
+      "name": "A decline in technology company investments due to a shift towards safer assets may correlate with an increase in cyber incidents, as reported by the grim trigger strategy outcomes in game theory.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.75,
+      "usageCount": 1,
+      "createdAt": 1781586163752,
+      "lastSeen": 1781586163752,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.75
+      }
+    },
+    {
+      "id": "concept_1781586463685_ng92zvnib",
+      "name": "During periods of high credit stress, discussions related to financial stability and technology risks may see increased interaction on social platforms, potentially leading to more sensitive or critical content being shared.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.5,
+      "usageCount": 1,
+      "createdAt": 1781586463685,
+      "lastSeen": 1781586463685,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0
+      }
+    },
+    {
+      "id": "concept_1781586763710_r6z8xibee",
+      "name": "There is a correlation between geopolitical risk events (such as conflict or sanctions) and an increase in cybersecurity incidents affecting supply chains.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.65,
+      "usageCount": 1,
+      "createdAt": 1781586763710,
+      "lastSeen": 1781586763710,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.65
+      }
+    },
+    {
+      "id": "concept_1781587063924_tqfq5a00w",
+      "name": "An increase in energy prices due to geopolitical tensions will correlate with a rise in cyber incidents within the hospitality sector as businesses allocate more resources towards securing their operations.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.65,
+      "usageCount": 1,
+      "createdAt": 1781587063924,
+      "lastSeen": 1781587063924,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.65
+      }
+    },
+    {
+      "id": "concept_1781587363794_7gtsu6zbp",
+      "name": "Social media conversations about market stability and economic concerns will increase as bond yields rise, reflecting heightened investor and consumer anxiety.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.75,
+      "usageCount": 1,
+      "createdAt": 1781587363794,
+      "lastSeen": 1781587363794,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.75
+      }
+    },
+    {
+      "id": "concept_1781587664174_6nwq6lri5",
+      "name": "As global spending crunches due to higher borrowing rates, businesses might cut back on cybersecurity budgets, leading to a potential increase in cyber incidents if traditional safe havens like government bonds do not provide sufficient buffer against economic volatility.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.65,
+      "usageCount": 1,
+      "createdAt": 1781587664174,
+      "lastSeen": 1781587664174,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.65
+      }
+    },
+    {
+      "id": "concept_1781587963940_kneke96f8",
+      "name": "If a cyber attack occurs on an exposed endpoint during a period of increased fuel prices due to geopolitical tensions in the Strait of Hormuz, the combined effect could lead to further supply chain disruptions and economic instability.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.6,
+      "usageCount": 1,
+      "createdAt": 1781587963940,
+      "lastSeen": 1781587963940,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.6
+      }
+    },
+    {
+      "id": "concept_1781588263879_9msqwk99h",
+      "name": "As global supply chain instability increases due to events such as Strait of Hormuz disruptions, there will be a corresponding rise in cyber security incidents within affected organizations.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.65,
+      "usageCount": 1,
+      "createdAt": 1781588263879,
+      "lastSeen": 1781588263879,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.65
+      }
+    },
+    {
+      "id": "concept_1781588563961_u58i4yr24",
+      "name": "A rise in cyber attacks targeting endpoints without proper authorization checks could negatively impact companies with heightened focus on AI chip development and market performance.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.75,
+      "usageCount": 1,
+      "createdAt": 1781588563961,
+      "lastSeen": 1781588563961,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.75
+      }
+    },
+    {
+      "id": "concept_1781588863851_xfkutw2ec",
+      "name": "Increased market confidence and investment in semiconductor companies may lead them to relax certain cybersecurity practices, believing that the overall positive economic sentiment will outweigh any risks.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.75,
+      "usageCount": 1,
+      "createdAt": 1781588863851,
+      "lastSeen": 1781588863851,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.75
+      }
+    },
+    {
+      "id": "concept_1781589163956_voz8r1xqr",
+      "name": "Increased investment in AI chip strategies will lead to a higher frequency of unencoded user-controlled inputs being used in server-side templates due to rapid development and deployment.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.65,
+      "usageCount": 1,
+      "createdAt": 1781589163956,
+      "lastSeen": 1781589163956,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.65
+      }
+    },
+    {
+      "id": "concept_1781589463882_jzm8n6etg",
+      "name": "There is a correlation between financial market instability and an increase in cyber security incidents involving user-controlled inputs in web applications.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.65,
+      "usageCount": 1,
+      "createdAt": 1781589463882,
+      "lastSeen": 1781589463882,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.65
+      }
+    },
+    {
+      "id": "concept_1781589763904_jy4ydk2cc",
+      "name": "A significant increase in credit stress expectations leading to a notable rotation away from technology stocks could correlate with an uptick in cybersecurity breaches targeting export-dependent tech firms.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.6,
+      "usageCount": 1,
+      "createdAt": 1781589763904,
+      "lastSeen": 1781589763904,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.6
+      }
+    },
+    {
+      "id": "concept_1781590063761_8dxtnd57l",
+      "name": "There is a correlation between geopolitical tensions and an increase in cyber-attacks targeting organizations with critical infrastructure or sensitive data.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.75,
+      "usageCount": 1,
+      "createdAt": 1781590063761,
+      "lastSeen": 1781590063761,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.75
+      }
+    },
+    {
+      "id": "concept_1781590363811_oezg29nfa",
+      "name": "Increased interactions around privacy concerns on social media could correlate with a higher demand for AI services that enhance data protection in the hospitality industry.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.7,
+      "usageCount": 1,
+      "createdAt": 1781590363811,
+      "lastSeen": 1781590363811,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.7
+      }
+    },
+    {
+      "id": "concept_1781590664079_cxi1i1f5c",
+      "name": "Increased economic stress from higher borrowing costs could correlate with a rise in cybersecurity incidents targeting unsecured admin export features.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.65,
+      "usageCount": 1,
+      "createdAt": 1781590664079,
+      "lastSeen": 1781590664079,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.65
+      }
+    },
+    {
+      "id": "concept_1781590963954_zgbm6tx0q",
+      "name": "Higher bond yields correlate with a decrease in interaction related to long-term career planning and technological projects on social media platforms dedicated to these topics.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.5,
+      "usageCount": 1,
+      "createdAt": 1781590963954,
+      "lastSeen": 1781590963954,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0
+      }
+    },
+    {
+      "id": "concept_1781591264364_wlnfxbiqy",
+      "name": "Companies using adaptive game theory strategies will outperform those who do not during periods of economic uncertainty caused by rising bond yields.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.65,
+      "usageCount": 1,
+      "createdAt": 1781591264364,
+      "lastSeen": 1781591264364,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.65
+      }
+    },
+    {
+      "id": "concept_1781591564382_ixepe7q98",
+      "name": "Implementing robust cybersecurity measures can reduce the likelihood of supply chain disruptions caused by data breaches, which could otherwise exacerbate existing geopolitical tensions and their effects on global trade and energy markets.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.75,
+      "usageCount": 1,
+      "createdAt": 1781591564382,
+      "lastSeen": 1781591564382,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.75
+      }
+    },
+    {
+      "id": "concept_1781591864100_1widd3lmf",
+      "name": "There is a correlation between the geopolitical stability of regions like those around the Strait of Hormuz and the incidence of cybersecurity incidents within related industries.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.65,
+      "usageCount": 1,
+      "createdAt": 1781591864100,
+      "lastSeen": 1781591864100,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.65
+      }
+    },
+    {
+      "id": "concept_1781592164035_q4905fxjt",
+      "name": "Increased investment in semiconductor companies will correlate with a rise in attempted cyber-attacks targeting financial systems handling these investments.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.65,
+      "usageCount": 1,
+      "createdAt": 1781592164035,
+      "lastSeen": 1781592164035,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.65
+      }
+    },
+    {
+      "id": "concept_1781592463815_via9tfznn",
+      "name": "There is a positive correlation between increased capital flows into the semiconductor sector and the likelihood of cyber attacks targeting exposed admin endpoints.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.65,
+      "usageCount": 1,
+      "createdAt": 1781592463815,
+      "lastSeen": 1781592463815,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.65
+      }
+    },
+    {
+      "id": "concept_1781592763937_ppasefdbb",
+      "name": "There is a correlation between increased credit stress, expectations about reserve-assets, and heightened cybersecurity risks for technology companies.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.75,
+      "usageCount": 1,
+      "createdAt": 1781592763937,
+      "lastSeen": 1781592763937,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.75
+      }
+    },
+    {
+      "id": "concept_1781593063858_2jmjjf5xk",
+      "name": "There is a correlation between changes in credit stress indicators and increased cyber incidents or security vulnerabilities in the technology sector due to altered capital allocation and operational constraints.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.6,
+      "usageCount": 1,
+      "createdAt": 1781593063858,
+      "lastSeen": 1781593063858,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.6
+      }
+    },
+    {
+      "id": "concept_1781593363777_o0g5e13qj",
+      "name": "The exposure of sensitive records via unsecured admin endpoints could lead to a decrease in trust among users, resulting in decreased interaction rates on social media platforms focused on privacy concerns.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.75,
+      "usageCount": 1,
+      "createdAt": 1781593363777,
+      "lastSeen": 1781593363777,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.75
+      }
+    },
+    {
+      "id": "concept_1781593664242_vo4duc4nu",
+      "name": "An increase in global energy market volatility due to geopolitical events will correlate with a higher rate of unvalidated file uploads outside intended workspaces within organizations that heavily rely on such imports for operational efficiency.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.6,
+      "usageCount": 1,
+      "createdAt": 1781593664242,
+      "lastSeen": 1781593664242,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.6
+      }
+    },
+    {
+      "id": "concept_1781593964274_hmbr8wm7k",
+      "name": "An increase in geopolitical tensions will correlate with an uptick in cyber-attacks targeting unvalidated file uploads in energy-related organizations' systems.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.65,
+      "usageCount": 1,
+      "createdAt": 1781593964274,
+      "lastSeen": 1781593964274,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.65
+      }
+    },
+    {
+      "id": "concept_1781594264009_7bjrmphkp",
+      "name": "If global bond yields continue to rise, the value of cryptocurrencies will decrease, prompting investors to sell off their holdings. This reduction in investment could expose the system to increased security risks due to unvalidated file imports.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.6,
+      "usageCount": 1,
+      "createdAt": 1781594264009,
+      "lastSeen": 1781594264009,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.6
+      }
+    },
+    {
+      "id": "concept_1781594564489_5aaxfyctl",
+      "name": "As bond yields increase, there will be a corresponding rise in attempts by attackers to exploit less secure web service endpoints, including those without proper session authority checks.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.75,
+      "usageCount": 1,
+      "createdAt": 1781594564489,
+      "lastSeen": 1781594564489,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.75
+      }
+    },
+    {
+      "id": "concept_1781594864522_nxzxq6rgf",
+      "name": "The combination of increased gas prices from Strait of Hormuz disruptions and potential cyber security threats could result in a higher frequency of supply chain disruptions, leading to more significant economic impacts than either factor alone.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.65,
+      "usageCount": 1,
+      "createdAt": 1781594864522,
+      "lastSeen": 1781594864522,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.65
+      }
+    },
+    {
+      "id": "concept_1781595164081_rau9odl8o",
+      "name": "Increased supply chain disruptions due to geopolitical events like Strait of Hormuz tensions will correlate with a rise in reported cyber incidents involving server-side template vulnerabilities allowing script execution across sessions.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.75,
+      "usageCount": 1,
+      "createdAt": 1781595164081,
+      "lastSeen": 1781595164081,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.75
+      }
+    },
+    {
+      "id": "concept_1781595469670_3vk5fwigb",
+      "name": "Improving file system security measures could reduce the risk of supply chain delays by up to 30% within six months.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.75,
+      "usageCount": 1,
+      "createdAt": 1781595469670,
+      "lastSeen": 1781595469670,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.75
+      }
+    },
+    {
+      "id": "concept_1781595764662_64g7qajxb",
+      "name": "An increase in social media interactions about semiconductor-related topics could correlate with higher stock performance of semiconductor companies.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.6,
+      "usageCount": 1,
+      "createdAt": 1781595764662,
+      "lastSeen": 1781595764662,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.6
+      }
+    },
+    {
+      "id": "concept_1781596063992_3jc2q5p3s",
+      "name": "Increased investments in AI chip production may correlate with a rise in cybersecurity spending as companies address potential risks related to user-controlled inputs and server-side operations.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.6,
+      "usageCount": 1,
+      "createdAt": 1781596063992,
+      "lastSeen": 1781596063992,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.6
+      }
+    },
+    {
+      "id": "concept_1781596364147_vga1n7rvx",
+      "name": "Increased social media interactions around privacy and decentralization could lead to more instances of path traversal exploits due to less emphasis on traditional security measures.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.6,
+      "usageCount": 1,
+      "createdAt": 1781596364147,
+      "lastSeen": 1781596364147,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.6
+      }
+    },
+    {
+      "id": "concept_1781596664146_fogvxij1i",
+      "name": "There is a correlation between periods of increased credit market stress and an uptick in cyber security incidents involving user-controlled data insertion vulnerabilities.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.75,
+      "usageCount": 1,
+      "createdAt": 1781596664146,
+      "lastSeen": 1781596664146,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.75
+      }
+    },
+    {
+      "id": "concept_1781596964411_qiw17nqz0",
+      "name": "A sudden geopolitical event leading to energy market volatility could result in a higher incidence of unencoded user-controlled inputs being exploited due to hurried server-side template adjustments.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.65,
+      "usageCount": 1,
+      "createdAt": 1781596964411,
+      "lastSeen": 1781596964411,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.65
+      }
+    },
+    {
+      "id": "concept_1781597264350_11nz2ptai",
+      "name": "Companies heavily reliant on imports from volatile regions will experience more frequent supply chain disruptions compared to those with diversified suppliers.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.65,
+      "usageCount": 1,
+      "createdAt": 1781597264350,
+      "lastSeen": 1781597264350,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.65
+      }
+    },
+    {
+      "id": "concept_1781597565034_22hd7eb1t",
+      "name": "During economic periods marked by higher bond yields, the number of interactions related to high-risk financial investments on social media may decline while discussions about safer assets like government bonds increase.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.65,
+      "usageCount": 1,
+      "createdAt": 1781597565034,
+      "lastSeen": 1781597565034,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.65
+      }
+    },
+    {
+      "id": "concept_1781597864546_q8vml9g3k",
+      "name": "An increase in input costs due to higher borrowing rates will correlate with a rise in cybersecurity incidents related to supply chain management as businesses seek more flexible solutions.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.65,
+      "usageCount": 1,
+      "createdAt": 1781597864546,
+      "lastSeen": 1781597864546,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.65
+      }
+    },
+    {
+      "id": "concept_1781598164589_lgr0vuao9",
+      "name": "Companies with operations directly affected by Strait of Hormuz disruptions will see a correlation between increased operational costs and reduced profits in the short term.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.65,
+      "usageCount": 1,
+      "createdAt": 1781598164589,
+      "lastSeen": 1781598164589,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.65
+      }
+    },
+    {
+      "id": "concept_1781598464629_pmpvywrsk",
+      "name": "Increased geopolitical tensions leading to supply chain disruptions at the Strait of Hormuz could result in heightened engagement on platforms discussing decentralized technology and software engineering as users seek alternatives.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.6,
+      "usageCount": 1,
+      "createdAt": 1781598464629,
+      "lastSeen": 1781598464629,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.6
+      }
+    },
+    {
+      "id": "concept_1781598764417_ngpo3q4he",
+      "name": "Increased spending on AI chip technologies will correlate with a rise in reported cyber incidents due to insufficient security practices.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.65,
+      "usageCount": 1,
+      "createdAt": 1781598764417,
+      "lastSeen": 1781598764417,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.65
+      }
+    },
+    {
+      "id": "concept_1781599064732_4gj24axvs",
+      "name": "Inadequate validation of uploaded archives can be exploited by attackers to compromise systems, leading to potential breaches in companies with high-stakes data processing, such as those in the AI chip industry.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.75,
+      "usageCount": 1,
+      "createdAt": 1781599064732,
+      "lastSeen": 1781599064732,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.75
+      }
+    },
+    {
+      "id": "concept_1781599364474_zj3xy358r",
+      "name": "Lax coding practices that fail to validate paths can lead to increased cybersecurity incidents in companies involved in the AI chip industry, such as NVIDIA and TSMC.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.65,
+      "usageCount": 1,
+      "createdAt": 1781599364474,
+      "lastSeen": 1781599364474,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.65
+      }
+    },
+    {
+      "id": "concept_1781599664702_ibh7kg14r",
+      "name": "During economic downturns indicated by rising credit spreads and tightening risk appetites, we might observe an increase in cyber security incidents related to poorly validated file handling features among tech firms.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.5,
+      "usageCount": 1,
+      "createdAt": 1781599664702,
+      "lastSeen": 1781599664702,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.5
+      }
+    },
+    {
+      "id": "concept_1781599964348_qxx15kbhd",
+      "name": "Companies with high credit stress due to changing capital expectations are more likely to experience cybersecurity breaches as they may cut costs on security measures.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.65,
+      "usageCount": 1,
+      "createdAt": 1781599964348,
+      "lastSeen": 1781599964348,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.65
+      }
+    },
+    {
+      "id": "concept_1781600264913_m5rc7ilxe",
+      "name": "Increased automation in the hospitality sector as a result of AI integration will correlate with reduced dependency on energy markets due to internal energy management solutions, thus mitigating external shocks from geopolitical events.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.75,
+      "usageCount": 1,
+      "createdAt": 1781600264913,
+      "lastSeen": 1781600264913,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.75
+      }
+    },
+    {
+      "id": "concept_1781600564572_2e1i5xze3",
+      "name": "In regions heavily reliant on imported energy, hospitality businesses with higher levels of AI integration may experience more pronounced operational challenges during geopolitical crises.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.75,
+      "usageCount": 1,
+      "createdAt": 1781600564572,
+      "lastSeen": 1781600564572,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.75
+      }
+    },
+    {
+      "id": "concept_1781600865030_tozki5zk2",
+      "name": "An increase in bond yields could correlate with a rise in cyber-attacks targeting financial and supply chain-related endpoints due to economic stress, leading to potential business disruptions.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.65,
+      "usageCount": 1,
+      "createdAt": 1781600865030,
+      "lastSeen": 1781600865030,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.65
+      }
+    },
+    {
+      "id": "concept_1781601164763_fmb8pfir5",
+      "name": "An increase in global bond yields will correlate with an increase in social media interactions (replies, likes) related to stock markets, currencies, and safe-haven assets on platforms like Bluesky.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.65,
+      "usageCount": 1,
+      "createdAt": 1781601164763,
+      "lastSeen": 1781601164763,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.65
+      }
+    },
+    {
+      "id": "concept_1781601464569_m8pf4jd5y",
+      "name": "The use of adaptive strategies in game theory may mitigate the risks associated with cyber-attacks by dynamically adjusting responses to new threats, thereby enhancing overall system security.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.75,
+      "usageCount": 1,
+      "createdAt": 1781601464569,
+      "lastSeen": 1781601464569,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.75
+      }
+    },
+    {
+      "id": "concept_1781601765079_20m4xunhk",
+      "name": "Improving cybersecurity practices at key chokepoints like the Strait of Hormuz can reduce the risk of supply chain disruptions, thereby stabilizing oil prices and mitigating economic costs.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.75,
+      "usageCount": 1,
+      "createdAt": 1781601765079,
+      "lastSeen": 1781601765079,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.75
+      }
+    },
+    {
+      "id": "concept_1781602064957_grtx8lhkm",
+      "name": "Improving output encoding practices will significantly reduce instances of cross-site scripting (XSS) attacks, thereby enhancing overall cybersecurity posture.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.75,
+      "usageCount": 1,
+      "createdAt": 1781602064957,
+      "lastSeen": 1781602064957,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.75
+      }
+    },
+    {
+      "id": "concept_1781602365039_pq7cpjw0o",
+      "name": "Companies like NVIDIA, AMD, and Broadcom that are heavily involved in AI chip production will face higher cyber security threats due to increased data handling and networked operations.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.75,
+      "usageCount": 1,
+      "createdAt": 1781602365039,
+      "lastSeen": 1781602365039,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.75
+      }
+    },
+    {
+      "id": "concept_1781602665160_gmekpbecu",
+      "name": "An increase in AI chip production activities will correlate with a rise in attempted cyber attacks targeting these critical infrastructure points.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.75,
+      "usageCount": 1,
+      "createdAt": 1781602665160,
+      "lastSeen": 1781602665160,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.75
+      }
+    },
+    {
+      "id": "concept_1781602965081_0y8u3sala",
+      "name": "A persistent rise in credit stress indicators will correlate with an increase in reported cyber incidents among technology firms within the next quarter.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.65,
+      "usageCount": 1,
+      "createdAt": 1781602965081,
+      "lastSeen": 1781602965081,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.65
+      }
+    },
+    {
+      "id": "concept_1781603264755_gliu3kxgj",
+      "name": "As credit stress increases, the likelihood of cyber security incidents also rises due to potential workforce disruptions and reduced organizational focus on security protocols.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.6,
+      "usageCount": 1,
+      "createdAt": 1781603264755,
+      "lastSeen": 1781603264755,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.6
+      }
+    },
+    {
+      "id": "concept_1781603565277_sl3v39whq",
+      "name": "There is a correlation between geopolitical tensions, energy shocks, and an increase in cyber-attacks due to supply chain disruptions and heightened uncertainty.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.75,
+      "usageCount": 1,
+      "createdAt": 1781603565277,
+      "lastSeen": 1781603565277,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.75
+      }
+    },
+    {
+      "id": "concept_1781603865036_b5v6tgif7",
+      "name": "There is a correlation between heightened geopolitical tensions and the likelihood of successful cyber attacks targeting organizations with disrupted supply chains.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.7,
+      "usageCount": 1,
+      "createdAt": 1781603865036,
+      "lastSeen": 1781603865036,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.7
+      }
+    },
+    {
+      "id": "concept_1781604164990_2vo4wve75",
+      "name": "As bond yields rise, there will be an increase in cyber-attacks targeting organizations with unsecured file handling practices.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.75,
+      "usageCount": 1,
+      "createdAt": 1781604164990,
+      "lastSeen": 1781604164990,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.75
+      }
+    },
+    {
+      "id": "concept_1781604465181_5k98t358p",
+      "name": "Increased interactions and discussions about financial topics (such as bonds, interest rates) on social media platforms could correlate with upcoming changes in the stock market or fixed-income markets.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.65,
+      "usageCount": 1,
+      "createdAt": 1781604465181,
+      "lastSeen": 1781604465181,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.65
+      }
+    },
+    {
+      "id": "concept_1781604765493_npgipu0ev",
+      "name": "Increased investment safety concerns due to higher bond yields might lead to a greater emphasis on secure coding practices, potentially reducing the prevalence of path traversal vulnerabilities in financial software systems.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.75,
+      "usageCount": 1,
+      "createdAt": 1781604765493,
+      "lastSeen": 1781604765493,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.75
+      }
+    },
+    {
+      "id": "concept_1781605065209_vrgg2qdku",
+      "name": "Increased cyber threats exploiting unsecured admin endpoints during periods of geopolitical instability (such as tensions at the Strait of Hormuz) can lead to significant supply chain disruptions and economic volatility.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.75,
+      "usageCount": 1,
+      "createdAt": 1781605065209,
+      "lastSeen": 1781605065209,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.75
+      }
+    },
+    {
+      "id": "concept_1781605365367_vh1nm7nl8",
+      "name": "An increase in social media interactions related to decentralized social media platforms may correlate with heightened cybersecurity concerns among users regarding data privacy and security vulnerabilities.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.6,
+      "usageCount": 1,
+      "createdAt": 1781605365367,
+      "lastSeen": 1781605365367,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.6
+      }
+    },
+    {
+      "id": "concept_1781605665330_voiiop26k",
+      "name": "As AI chip companies increase their digital footprints, there will be a rise in cyber-attacks targeting their supply chains and infrastructure.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.65,
+      "usageCount": 1,
+      "createdAt": 1781605665330,
+      "lastSeen": 1781605665330,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.65
+      }
+    },
+    {
+      "id": "concept_1781605965252_g08aelpoh",
+      "name": "Enhanced validation measures will reduce the risk of unauthorized file writes, thereby improving system security during AI chip production and supply chain management processes.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.75,
+      "usageCount": 1,
+      "createdAt": 1781605965252,
+      "lastSeen": 1781605965252,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.75
+      }
+    },
+    {
+      "id": "concept_1781606265691_uayci37a4",
+      "name": "If there is an increase in AI chip production, the number of cyber-attacks on semiconductor firms will rise proportionally due to increased exposure of sensitive information.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.5,
+      "usageCount": 1,
+      "createdAt": 1781606265691,
+      "lastSeen": 1781606265691,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0
+      }
+    },
+    {
+      "id": "concept_1781606565190_bd5zmt4l4",
+      "name": "Enhanced file system security measures will correlate with reduced instances of unauthorized data manipulation during economic downturns or credit stress events.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.75,
+      "usageCount": 1,
+      "createdAt": 1781606565190,
+      "lastSeen": 1781606565190,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.75
+      }
+    },
+    {
+      "id": "concept_1781606865388_r71czmrnf",
+      "name": "An increase in the number of suppliers due to geopolitical pressures will correlate with a rise in unsecured admin export endpoints across different industries.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.65,
+      "usageCount": 1,
+      "createdAt": 1781606865388,
+      "lastSeen": 1781606865388,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.65
+      }
+    },
+    {
+      "id": "concept_1781607165844_l638rb7z6",
+      "name": "Implementing proper input sanitization can reduce the number of sessions affected by malicious scripts by at least 50%, leading to improved platform stability and security.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.7,
+      "usageCount": 1,
+      "createdAt": 1781607165844,
+      "lastSeen": 1781607165844,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.7
+      }
+    },
+    {
+      "id": "concept_1781607465786_bpekgvmf8",
+      "name": "During geopolitical tensions and energy price volatility, there will be a correlation between an increase in cyber-attacks and the number of companies experiencing supply chain disruptions.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.75,
+      "usageCount": 1,
+      "createdAt": 1781607465786,
+      "lastSeen": 1781607465786,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.75
+      }
+    },
+    {
+      "id": "concept_1781607765669_7hypcro6y",
+      "name": "A decrease in IT budgets due to higher bond yields could correlate with an increase in cyber attacks, as evidenced by reduced cybersecurity measures and increased attacker guessing of export identifiers without proper session authority checks.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.6,
+      "usageCount": 1,
+      "createdAt": 1781607765669,
+      "lastSeen": 1781607765669,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.6
+      }
+    },
+    {
+      "id": "concept_1781608065874_pb5ktong5",
+      "name": "If a web service fails to secure its admin export endpoint with proper session authority checks during high market volatility due to rising bond yields, it is more likely to be compromised by attackers guessing predictable identifiers.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.75,
+      "usageCount": 1,
+      "createdAt": 1781608065874,
+      "lastSeen": 1781608065874,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.75
+      }
+    },
+    {
+      "id": "concept_1781608365897_ung6cawru",
+      "name": "A rise in supply chain disruptions caused by events like Strait of Hormuz blockades will correlate with an increase in reported cyber security incidents related to path traversal vulnerabilities.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.65,
+      "usageCount": 1,
+      "createdAt": 1781608365897,
+      "lastSeen": 1781608365897,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.65
+      }
+    },
+    {
+      "id": "concept_1781608666129_enjk3yrwi",
+      "name": "If user-controlled content is not properly encoded before rendering, it could be exploited to execute scripts during sessions where users discuss economic or geopolitical topics, leading to instability in these discussions and potentially causing disruptions in related social media interactions.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.6,
+      "usageCount": 1,
+      "createdAt": 1781608666129,
+      "lastSeen": 1781608666129,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.6
+      }
+    },
+    {
+      "id": "concept_1781608965739_ged0v2sun",
+      "name": "As AI chip companies expand their operations, they will be more vulnerable to cyber attacks if basic security measures such as path validation are not properly implemented.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.75,
+      "usageCount": 1,
+      "createdAt": 1781608965739,
+      "lastSeen": 1781608965739,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.75
+      }
+    },
+    {
+      "id": "concept_1781609265651_tiy9qsazl",
+      "name": "There will be a rise in reported security incidents related to AI chip manufacturing and deployment within the next year.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.75,
+      "usageCount": 1,
+      "createdAt": 1781609265651,
+      "lastSeen": 1781609265651,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.75
+      }
+    },
+    {
+      "id": "concept_1781609565758_ataujsskm",
+      "name": "If path traversal vulnerabilities are exploited, it could lead to data leaks or other security incidents impacting semiconductor companies' operations and supply chains.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.6,
+      "usageCount": 1,
+      "createdAt": 1781609565758,
+      "lastSeen": 1781609565758,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.6
+      }
+    },
+    {
+      "id": "concept_1781609865765_lvtwhdv5k",
+      "name": "If technology investments become more sensitive to export controls and dollar liquidity, then there will be a higher incidence of under-validation in cybersecurity features like package import handling.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.75,
+      "usageCount": 1,
+      "createdAt": 1781609865765,
+      "lastSeen": 1781609865765,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.75
+      }
+    },
+    {
+      "id": "concept_1781610166028_opyu4esct",
+      "name": "Technological exposure to export controls and capital investment timing might influence the security practices of companies that heavily rely on international supply chains, potentially affecting their credit risk profiles.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.75,
+      "usageCount": 1,
+      "createdAt": 1781610166028,
+      "lastSeen": 1781610166028,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.75
+      }
+    },
+    {
+      "id": "concept_1781610465876_wg6bwh3cw",
+      "name": "A significant geopolitical event (e.g., heightened tensions between major world powers) will correlate with an increase in cyber incidents within the next three months.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.6,
+      "usageCount": 1,
+      "createdAt": 1781610465876,
+      "lastSeen": 1781610465876,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.6
+      }
+    },
+    {
+      "id": "concept_1781610765961_cq6r8fhxx",
+      "name": "There is a correlation between geopolitical events causing market volatility and an increase in attempted cyber attacks on affected industries, such as energy and hospitality.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.75,
+      "usageCount": 1,
+      "createdAt": 1781610765961,
+      "lastSeen": 1781610765961,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.75
+      }
+    },
+    {
+      "id": "concept_1781611066254_ocdjrdf6c",
+      "name": "If bond yields continue to rise, the frequency of cost-saving measures in software development projects will increase, as companies prioritize short-term financial stability over long-term investments.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.6,
+      "usageCount": 1,
+      "createdAt": 1781611066254,
+      "lastSeen": 1781611066254,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.6
+      }
+    },
+    {
+      "id": "concept_1781611365803_auao8n3k0",
+      "name": "There is a correlation between economic downturns caused by rising bond yields and an increase in cyber attacks targeting social media platforms with unprotected admin endpoints.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.75,
+      "usageCount": 1,
+      "createdAt": 1781611365803,
+      "lastSeen": 1781611365803,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.75
+      }
+    },
+    {
+      "id": "concept_1781611666684_xuey8xui7",
+      "name": "If server-side template engines are not properly encoded, they may allow malicious scripts to execute, causing further disruptions in supply chains already affected by geopolitical events like Strait of Hormuz closures.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.65,
+      "usageCount": 1,
+      "createdAt": 1781611666684,
+      "lastSeen": 1781611666684,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.65
+      }
+    },
+    {
+      "id": "concept_1781611966178_tn1dopcya",
+      "name": "Increased costs and delays from Strait of Hormuz disruptions may expose less secure endpoints to attackers seeking sensitive data during resource scarcity periods.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.6,
+      "usageCount": 1,
+      "createdAt": 1781611966178,
+      "lastSeen": 1781611966178,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.6
+      }
+    },
+    {
+      "id": "concept_1781612266627_swe6ay91s",
+      "name": "If a cyber vulnerability is exploited by executing scripts that manipulate critical global commodity prices or supply chain data, it can trigger economic instability as observed during geopolitical events like Strait of Hormuz disruptions.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.75,
+      "usageCount": 1,
+      "createdAt": 1781612266627,
+      "lastSeen": 1781612266627,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.75
+      }
+    },
+    {
+      "id": "concept_1781612566528_tmdejjxfv",
+      "name": "Increased automation and reliance on AI chips in critical systems may correlate with a rise in targeted cyber-attacks, as highlighted by the surge in semiconductor investments.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.6,
+      "usageCount": 1,
+      "createdAt": 1781612566528,
+      "lastSeen": 1781612566528,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.6
+      }
+    },
+    {
+      "id": "concept_1781612866628_e75tdvdwn",
+      "name": "Improper path validation in critical semiconductor production software could be exploited, leading to unauthorized access or data corruption, affecting both company networks and external systems.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.65,
+      "usageCount": 1,
+      "createdAt": 1781612866628,
+      "lastSeen": 1781612866628,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.65
+      }
+    },
+    {
+      "id": "concept_1781613166235_edlbk7t1i",
+      "name": "Persistent credit spreads and changes in technology exposure could indicate an increase in cyber security incidents or risk appetite shifts, as seen through the lens of shared server-side processing and user-controlled inputs.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.65,
+      "usageCount": 1,
+      "createdAt": 1781613166235,
+      "lastSeen": 1781613166235,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.65
+      }
+    },
+    {
+      "id": "concept_1781613466364_r752c4ohx",
+      "name": "Changes in financial market sentiment towards gold and bonds due to credit stress will correlate with increased vulnerabilities or security measures in the technology sector as companies adjust their risk appetites.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.6,
+      "usageCount": 1,
+      "createdAt": 1781613466364,
+      "lastSeen": 1781613466364,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.6
+      }
+    },
+    {
+      "id": "concept_1781613766476_bfzxi5z9k",
+      "name": "A sudden geopolitical event causing supply chain disruptions may correlate with an increase in reported cyber incidents within the next month among businesses using unvalidated file extraction features.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.65,
+      "usageCount": 1,
+      "createdAt": 1781613766476,
+      "lastSeen": 1781613766476,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.65
+      }
+    },
+    {
+      "id": "concept_1781614066251_lcmse9zek",
+      "name": "Enhanced security measures can mitigate the risk of cyber-attacks triggered by supply chain disruptions and geopolitical tensions.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.75,
+      "usageCount": 1,
+      "createdAt": 1781614066251,
+      "lastSeen": 1781614066251,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.75
+      }
+    },
+    {
+      "id": "concept_1781614366681_88u94tz4f",
+      "name": "During times when bond yields rise significantly, there will be an increase in cyber attacks targeting unprotected administrative interfaces that handle sensitive data exports.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.6,
+      "usageCount": 1,
+      "createdAt": 1781614366681,
+      "lastSeen": 1781614366681,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.6
+      }
+    },
+    {
+      "id": "concept_1781614667346_wrt8tb8r3",
+      "name": "If bond yields rise significantly, companies will increase their investment in cybersecurity to protect critical infrastructure from potential threats caused by higher capital costs.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.5,
+      "usageCount": 1,
+      "createdAt": 1781614667346,
+      "lastSeen": 1781614667346,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0
+      }
+    },
+    {
+      "id": "concept_1781614966747_twuw3glmc",
+      "name": "In scenarios with high stakes and limited trust among participants (like critical shipping lanes), cybersecurity measures that rely solely on cooperative behavior without robust authority verification are vulnerable to exploitation by attackers seeking sensitive information.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.65,
+      "usageCount": 1,
+      "createdAt": 1781614966747,
+      "lastSeen": 1781614966747,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.65
+      }
+    },
+    {
+      "id": "concept_1781615266816_p1wrqn6ez",
+      "name": "Using game theory strategies for cybersecurity can significantly reduce instances of unauthorized script execution in web applications.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.5,
+      "usageCount": 1,
+      "createdAt": 1781615266816,
+      "lastSeen": 1781615266816,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0
+      }
+    },
+    {
+      "id": "concept_1781615566891_4kr9c45my",
+      "name": "If a comprehensive output encoding mechanism is introduced to all user-controlled inputs on social media platforms, it will significantly reduce instances of script execution in other users' sessions, leading to an overall improvement in trust and engagement levels among community members.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.75,
+      "usageCount": 1,
+      "createdAt": 1781615566891,
+      "lastSeen": 1781615566891,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.75
+      }
+    },
+    {
+      "id": "concept_1781615866603_4u7gh7867",
+      "name": "As AI chip production increases, the number of cyber incidents targeting related companies may rise, impacting stock performance and requiring enhanced security protocols.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.75,
+      "usageCount": 1,
+      "createdAt": 1781615866603,
+      "lastSeen": 1781615866603,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.75
+      }
+    },
+    {
+      "id": "concept_1781616166659_7ecu7e662",
+      "name": "Companies involved in AI chip manufacturing, such as NVIDIA, Broadcom, and AMD, are likely to experience an uptick in cyber security incidents due to increased reliance on software systems for operations and supply chain management.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.75,
+      "usageCount": 1,
+      "createdAt": 1781616166659,
+      "lastSeen": 1781616166659,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.75
+      }
+    },
+    {
+      "id": "concept_1781616466828_h1vp54q5k",
+      "name": "A persistent increase in cyber security incidents could correlate with changes in credit market expectations, as entities with heightened risk concerns may shift investments away from technology firms that face increased compliance costs or operational disruptions.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.75,
+      "usageCount": 1,
+      "createdAt": 1781616466828,
+      "lastSeen": 1781616466828,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.75
+      }
+    },
+    {
+      "id": "concept_1781616766948_l49xz154u",
+      "name": "Companies experiencing reduced access to credit may be more susceptible to cyber attacks due to decreased investment in security infrastructure.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.75,
+      "usageCount": 1,
+      "createdAt": 1781616766948,
+      "lastSeen": 1781616766948,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.75
+      }
+    },
+    {
+      "id": "concept_1781617067138_vhnqlx79p",
+      "name": "Companies experiencing significant market volatility due to geopolitical tensions are more likely to expose sensitive data through insecure admin endpoints as a result of increased operational stress.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.75,
+      "usageCount": 1,
+      "createdAt": 1781617067138,
+      "lastSeen": 1781617067138,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.75
+      }
+    },
+    {
+      "id": "concept_1781617366681_frsk9wivn",
+      "name": "There is a correlation between heightened geopolitical tensions and the occurrence of cyber security incidents within companies' supply chains.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.75,
+      "usageCount": 1,
+      "createdAt": 1781617366681,
+      "lastSeen": 1781617366681,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.75
+      }
+    },
+    {
+      "id": "concept_1781617666582_xilo1d4db",
+      "name": "Increased cautiousness in market investments may correlate with a higher likelihood of unsecured web service endpoints being exploited by attackers guessing export identifiers.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.65,
+      "usageCount": 1,
+      "createdAt": 1781617666582,
+      "lastSeen": 1781617666582,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.65
+      }
+    },
+    {
+      "id": "concept_1781617966657_0m7bx69vb",
+      "name": "An increase in market volatility due to rising bond yields could lead to a higher frequency of security breaches, particularly those related to unvalidated input sequences.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.65,
+      "usageCount": 1,
+      "createdAt": 1781617966657,
+      "lastSeen": 1781617966657,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.65
+      }
+    },
+    {
+      "id": "concept_1781618267100_nl2u07gye",
+      "name": "Enhanced cybersecurity measures could reduce the impact of supply chain disruptions on global economic stability by preventing unauthorized access to critical data during times of geopolitical tension in key shipping lanes.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.75,
+      "usageCount": 1,
+      "createdAt": 1781618267100,
+      "lastSeen": 1781618267100,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.75
+      }
+    },
+    {
+      "id": "concept_1781618569118_gtdya3xlj",
+      "name": "A successful cyber attack exploiting an unprotected admin endpoint could increase the severity of economic disruptions caused by Strait of Hormuz events, leading to a faster decline in global stock markets.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.75,
+      "usageCount": 1,
+      "createdAt": 1781618569118,
+      "lastSeen": 1781618569118,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.75
+      }
+    },
+    {
+      "id": "concept_1781618870585_tp3i8vmfo",
+      "name": "An increase in global fuel prices, driven by Strait of Hormuz disruptions, will correlate with an uptick in cyber security breaches targeting companies operating in the energy sector.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.65,
+      "usageCount": 1,
+      "createdAt": 1781618870585,
+      "lastSeen": 1781618870585,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.65
+      }
+    },
+    {
+      "id": "concept_1781619169348_60zy4am50",
+      "name": "As semiconductor investments and AI technologies increase, there will be a corresponding rise in the number of user-controlled inputs on social media that could be exploited for script execution vulnerabilities.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.65,
+      "usageCount": 1,
+      "createdAt": 1781619169348,
+      "lastSeen": 1781619169348,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.65
+      }
+    },
+    {
+      "id": "concept_1781619468890_zpex38tue",
+      "name": "There will be a rise in reported cybersecurity incidents related to path traversal attacks on semiconductor companies' systems within the next six months.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.65,
+      "usageCount": 1,
+      "createdAt": 1781619468890,
+      "lastSeen": 1781619468890,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.65
+      }
+    },
+    {
+      "id": "concept_1781619769257_zhtewud1h",
+      "name": "During a credit crisis, there is an increased likelihood of cyber security incidents due to reduced investment in security measures by financially stressed entities.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.75,
+      "usageCount": 1,
+      "createdAt": 1781619769257,
+      "lastSeen": 1781619769257,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.75
+      }
+    },
+    {
+      "id": "concept_1781620069072_uor9svas2",
+      "name": "During a credit crisis, there is a higher likelihood of increased cybersecurity threats as stressed entities may reduce their vigilance or resources dedicated to security measures.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.65,
+      "usageCount": 1,
+      "createdAt": 1781620069072,
+      "lastSeen": 1781620069072,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.65
+      }
+    },
+    {
+      "id": "concept_1781620369189_g5hojiksl",
+      "name": "Improving security features that validate paths of uploaded archives can reduce the risk of unauthorized file writes, which may help maintain user trust and engagement in social media ecosystems. This positive impact on user experience could subsequently affect market perceptions and behaviors through social memory effects.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.75,
+      "usageCount": 1,
+      "createdAt": 1781620369189,
+      "lastSeen": 1781620369189,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.75
+      }
+    },
+    {
+      "id": "concept_1781620669032_nrfyechrn",
+      "name": "There is a correlation between increased geopolitical tensions and energy price volatility, leading to higher instances of cyber incidents targeting critical infrastructure.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.75,
+      "usageCount": 1,
+      "createdAt": 1781620669032,
+      "lastSeen": 1781620669032,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.75
+      }
+    },
+    {
+      "id": "concept_1781620969248_xq4wiybnr",
+      "name": "A rise in bond yields will correlate with an increase in reported cybersecurity breaches among businesses that are less diversified in their funding methods.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.65,
+      "usageCount": 1,
+      "createdAt": 1781620969248,
+      "lastSeen": 1781620969248,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.65
+      }
+    },
+    {
+      "id": "concept_1781621269352_3rk135mej",
+      "name": "As bond yields rise, there will be a correlation between the number of attempted cyber attacks targeting unsecured admin export endpoints and the global increase in borrowing costs.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.75,
+      "usageCount": 1,
+      "createdAt": 1781621269352,
+      "lastSeen": 1781621269352,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.75
+      }
+    },
+    {
+      "id": "concept_1781621569477_ux19g427f",
+      "name": "Companies that implement robust cybersecurity measures will experience fewer data breaches during periods of rising bond yields.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.65,
+      "usageCount": 1,
+      "createdAt": 1781621569477,
+      "lastSeen": 1781621569477,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.65
+      }
+    },
+    {
+      "id": "concept_1781621869837_prmc9an7g",
+      "name": "If businesses adopt adaptive tit-for-tat strategies in response to geopolitical risks like Strait of Hormuz disruptions, they may experience reduced supply chain instability and cost increases.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.75,
+      "usageCount": 1,
+      "createdAt": 1781621869837,
+      "lastSeen": 1781621869837,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.75
+      }
+    },
+    {
+      "id": "concept_1781622169677_ib5ckupo5",
+      "name": "During periods of increased fuel prices and supply chain instability due to strait disruptions, businesses employing adaptive tit-for-tat strategies in negotiations or pricing will outperform those using grim trigger or win-stay-lose-shift methods.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.6,
+      "usageCount": 1,
+      "createdAt": 1781622169677,
+      "lastSeen": 1781622169677,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.6
+      }
+    },
+    {
+      "id": "concept_1781622469075_vhlmzluws",
+      "name": "A rise in cyber attacks targeting the semiconductor sector will be observed within the next year, as evidenced by the increased complexity and scale of operations.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.65,
+      "usageCount": 1,
+      "createdAt": 1781622469075,
+      "lastSeen": 1781622469075,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.65
+      }
+    },
+    {
+      "id": "concept_1781622769240_6aajcjuzt",
+      "name": "Increased focus on adaptive strategies like 'adaptive tit-for-tat' in game theory could improve cybersecurity measures by predicting and countering malicious path traversal attacks.",
+      "domain": "cross_domain",
+      "type": "concept",
+      "source": "unknown",
+      "confidence": 0.7,
+      "usageCount": 1,
+      "createdAt": 1781622769240,
+      "lastSeen": 1781622769240,
+      "metadata": {
+        "domain": "cross_domain",
+        "confidence": 0.7
+      }
     }
   ],
   "edges": [],
   "metrics": {
-    "totalNodes": 6,
+    "totalNodes": 230,
     "totalEdges": 0,
     "crossDomainEdges": 0,
     "avgDegree": 0,
@@ -125,7 +3485,7 @@
     "inferencesGenerated": 0,
     "contradictionsResolved": 0,
     "transferLearnings": 0,
-    "graphUpdates": 0
+    "graphUpdates": 224
   },
-  "savedAt": 1781232539829
+  "savedAt": 1781622832130
 }

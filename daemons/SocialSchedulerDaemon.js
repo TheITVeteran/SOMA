@@ -10,6 +10,7 @@ import BaseDaemon   from './BaseDaemon.js';
 import socialQueue  from '../server/social/SocialQueue.js';
 import bluesky      from '../server/social/BlueskeyClient.js';
 import somaImageGeneration from '../server/social/SomaImageGenerationEngine.js';
+import socialImageLibrary from '../server/social/SocialImageLibrary.js';
 import { recordSocialOutcome } from '../server/social/SocialPatternLearner.js';
 import { validatePublicPost } from '../server/social/SocialContentSafety.js';
 import socialRelationships from '../server/social/SocialRelationshipLedger.js';
@@ -26,6 +27,7 @@ const AUTO_IMAGE_TYPES = new Set([
     'hot_take',
     'cross_domain',
     'self_reflection',
+    'ripple_insight',
     'generated_image_post',
     'image_post',
     'github_commit',
@@ -92,13 +94,17 @@ function validateBlueskyImages(images = []) {
     return { valid, rejected };
 }
 
+function countAttachedImages(item = {}) {
+    return normalizeImages(item.images || item.media || (item.imagePath ? [{ path: item.imagePath, alt: item.imageAlt }] : [])).length;
+}
+
 function blueskyImageCadenceDue() {
     if (process.env.SOMA_BLUESKY_AUTO_IMAGES === 'all') return true;
     const posted = socialQueue.getAll()
         .filter(item => item.platform === 'bluesky' && item.postedAt && !item.failed)
         .sort((a, b) => (b.postedAt || 0) - (a.postedAt || 0));
     const sinceImage = posted.findIndex(item =>
-        (item.images?.length || item.media?.length || item.imagePath) &&
+        countAttachedImages(item) &&
         !(item.error || '').includes('too large')
     );
     if (sinceImage === -1) return posted.length >= BLUESKY_IMAGE_EVERY - 1;
@@ -114,12 +120,27 @@ function socialImagePrompt(item) {
         'Use pure visual storytelling only.',
     ].join(' ');
     if (item.type === 'aurora_story') {
-        return `A cinematic story still inspired by this SOMA Saga teaser: ${base}. Dreamlike but grounded, physical scene, atmospheric light, premium speculative fiction still. ${publicNoText}`;
+        return `A cinematic story still inspired by this SOMA Saga teaser: ${base}. Grounded physical scene, human-scale object or room detail, natural shadows, premium speculative fiction still, scene-specific color grading. ${publicNoText}`;
     }
     if (item.type === 'soma_identity') {
-        return `A symbolic portrait of SOMA as a unified cognitive architecture: ${base}. Calm violet and teal neural light, premium social image. ${publicNoText}`;
+        return `A symbolic portrait of SOMA as disciplined reasoning: ${base}. Use a concrete still life or architectural metaphor, warm neutral palette, glass, paper, or mechanical detail, practical non-mascot visual identity. ${publicNoText}`;
     }
-    return `A thoughtful abstract social image inspired by: ${base}. Calm digital brain aesthetic, violet teal light, clean composition. ${publicNoText}`;
+    if (item.type === 'ripple_insight' || item.type === 'finance_brief') {
+        return `Editorial macro still life inspired by this market-context observation: ${base}. Use real-world objects such as newsprint, shipping containers, oil sheen, bond-paper texture, warehouse light, or commodity samples. Restrained documentary palette, no charts, no ticker screens, no trading advice, grounded financial journalism style. ${publicNoText}`;
+    }
+    if (item.type === 'ai_paper' || item.type === 'medical_research') {
+        return `Research desk visual inspired by this reading note: ${base}. Use paper, lab glass, microscope texture, annotated-but-unreadable margins, clean daylight, and evidence-oriented composition. Use real materials and restrained scientific photography, no medical claim visual. ${publicNoText}`;
+    }
+    if (item.type === 'github_commit' || item.type === 'github_find') {
+        return `Software engineering still life inspired by this post: ${base}. Use a clean workstation detail, cable, keyboard edge, notebook, diff-like abstract blocks with no readable text, neutral light, practical materials, daylight engineering desk style. ${publicNoText}`;
+    }
+    if (item.type === 'cross_domain') {
+        return `Cross-domain metaphor image inspired by: ${base}. Show two concrete physical objects from different fields placed in visual relation. Editorial photograph style, restrained natural palette, clear focal subject, tactile materials. ${publicNoText}`;
+    }
+    if (item.type === 'self_reflection' || item.type === 'hot_take') {
+        return `Quiet editorial still life inspired by this thought: ${base}. Use desk light, paper, window shadow, small physical model, or natural texture. Specific, grounded, restrained, more like an object study than generic AI art. ${publicNoText}`;
+    }
+    return `Subject-specific editorial image inspired by: ${base}. Choose concrete objects and natural materials that fit the post. Restrained palette, clear focal subject, grounded editorial photograph style. ${publicNoText}`;
 }
 
 export class SocialSchedulerDaemon extends BaseDaemon {
@@ -246,19 +267,35 @@ export class SocialSchedulerDaemon extends BaseDaemon {
         if (!bluesky.configured) throw new Error('Bluesky not configured — set BLUESKY_IDENTIFIER + BLUESKY_PASSWORD');
 
         let images = normalizeImages(item.images || item.media || (item.imagePath ? [{ path: item.imagePath, alt: item.imageAlt }] : []));
+        const wantedImage = Boolean(images.length);
         if (images.length) {
             const checked = validateBlueskyImages(images);
             for (const rejected of checked.rejected) {
                 console.warn(`[SocialScheduler] Dropping invalid Bluesky image (${rejected.reason}): ${rejected.image.path}`);
             }
             images = checked.valid;
-            if (images.length !== (item.images || item.media || []).length) {
+            if (images.length !== normalizeImages(item.images || item.media || (item.imagePath ? [{ path: item.imagePath, alt: item.imageAlt }] : [])).length) {
                 item.images = images;
                 socialQueue.setImages(item.id, images);
             }
         }
 
         const cadenceDue = blueskyImageCadenceDue();
+        const shouldTryImage = cadenceDue && shouldAutoGenerateBlueskyImage(item);
+        if (!images.length && (wantedImage || shouldTryImage)) {
+            try {
+                const selected = socialImageLibrary.selectForPost(item, { maxBytes: BLUESKY_MAX_IMAGE_BYTES });
+                if (selected.ok && selected.image) {
+                    images = [{ path: selected.image.path, alt: selected.image.alt || `SOMA image for ${item.type || 'Bluesky post'}` }];
+                    item.images = images;
+                    socialQueue.setImages(item.id, images);
+                    console.log(`[SocialScheduler] Selected Bluesky image from library: ${selected.image.filename || path.basename(selected.image.path)}`);
+                }
+            } catch (e) {
+                console.warn(`[SocialScheduler] Social image library selection skipped: ${e.message}`);
+            }
+        }
+
         if (!images.length && cadenceDue && shouldAutoGenerateBlueskyImage(item)) {
             try {
                 const generated = await somaImageGeneration.generate({
@@ -270,6 +307,9 @@ export class SocialSchedulerDaemon extends BaseDaemon {
                     platform: 'bluesky',
                     publicPost: true,
                     strictArtDirector: true,
+                    visualRecipe: item.type || 'bluesky-post',
+                    sourcePostType: item.type || 'post',
+                    sourcePostId: item.id || null,
                     tags: ['bluesky', item.type || 'post'],
                 });
                 images = [{ path: generated.image.path, alt: generated.image.alt || `SOMA generated image for ${item.type || 'Bluesky post'}` }];
@@ -288,6 +328,39 @@ export class SocialSchedulerDaemon extends BaseDaemon {
         }
 
         return await bluesky.post(item.text, { images });
+    }
+
+    diagnoseBlueskyImageReadiness(item = {}) {
+        const candidate = {
+            id: item.id || 'diagnostic',
+            platform: 'bluesky',
+            text: item.text || 'SOMA diagnostic post for Bluesky photo readiness.',
+            type: item.type || 'soma_identity',
+            images: item.images || item.media || [],
+            imagePath: item.imagePath,
+            imageAlt: item.imageAlt,
+        };
+        const attached = normalizeImages(candidate.images || (candidate.imagePath ? [{ path: candidate.imagePath, alt: candidate.imageAlt }] : []));
+        const checked = validateBlueskyImages(attached);
+        const selected = socialImageLibrary.selectForPost(candidate, { maxBytes: BLUESKY_MAX_IMAGE_BYTES });
+        const shouldGenerate = !checked.valid.length && shouldAutoGenerateBlueskyImage(candidate);
+        return {
+            ok: Boolean(checked.valid.length || selected.ok || shouldGenerate),
+            configured: bluesky.configured,
+            cadenceDue: blueskyImageCadenceDue(),
+            attachedValid: checked.valid,
+            attachedRejected: checked.rejected,
+            libraryCandidate: selected.image ? {
+                path: selected.image.path,
+                filename: selected.image.filename || path.basename(selected.image.path),
+                size: selected.image.size,
+                alt: selected.image.alt,
+            } : null,
+            libraryCandidates: selected.candidates,
+            repairedLibraryPaths: selected.repaired,
+            wouldGenerateWithBonsai: shouldGenerate,
+            imageEngine: somaImageGeneration.getStatus(),
+        };
     }
 
     async _postX(item) {

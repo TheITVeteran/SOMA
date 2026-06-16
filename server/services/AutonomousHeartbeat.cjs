@@ -29,6 +29,7 @@ const TASK_STATE_PATH = path.join(RUN_LOG_DIR, 'task-state.json');
 const SCHEDULE_PATH = path.join(RUN_LOG_DIR, 'schedules.json');
 const RUN_LOG_MAX_BYTES = 2 * 1024 * 1024; // 2 MB
 const RUN_LOG_KEEP_LINES = 2000;
+const HUMAN_GOAL_SOURCES = new Set(['user', 'discord_admin', 'discord']);
 
 // ── Simple cron parser (minute hour dom month dow) ──
 function parseCronExpr(expr) {
@@ -58,6 +59,21 @@ function cronMatchesNow(cron, now) {
     cronFieldMatches(cron.month, d.getMonth() + 1) &&
     cronFieldMatches(cron.dow, d.getDay())
   );
+}
+
+function isHumanEngineeringGoal(goal = {}) {
+  const source = String(goal.source || goal.metadata?.source || '').toLowerCase();
+  const title = String(goal.title || '');
+  const assignees = Array.isArray(goal.assignedTo) ? goal.assignedTo : [];
+  return (
+    HUMAN_GOAL_SOURCES.has(source) ||
+    title.startsWith('Discord admin engineering request:') ||
+    assignees.includes('SomaAgenticExecutor')
+  );
+}
+
+function goalCreatedAt(goal = {}) {
+  return Number(goal.createdAt || goal.startedAt || goal.timestamp || 0);
 }
 
 class AutonomousHeartbeat extends EventEmitter {
@@ -343,8 +359,11 @@ class AutonomousHeartbeat extends EventEmitter {
             const toolsList = (execResult.toolsUsed || []).join(', ') || 'reasoning';
             // Only count real work: tools must have been used for any progress credit
             const toolsUsedCount = (execResult.toolsUsed || []).length;
+            const needsContinuation = Boolean(execResult.needsContinuation);
             let progressVal = execResult.done
               ? 100
+              : needsContinuation
+                ? Math.max(goal.metrics?.progress || 0, Math.min(65, 15 + toolsUsedCount * 8))
               : toolsUsedCount === 0
                 ? 0  // No tools executed — brain error, format failure, or rate limit
                 : Math.min(20 + (execResult.iterations || 0) * 11, 82);
@@ -370,13 +389,15 @@ class AutonomousHeartbeat extends EventEmitter {
                 `RESULT: ${execResult.result || 'Partial progress'}`,
                 `PROGRESS: ${progressVal}`,
                 `COMPLETE: ${progressVal === 100 ? 'yes' : 'no'}`,
-                `INSIGHT: ${(execResult.result || 'none').substring(0, 150)}`
+                `INSIGHT: ${needsContinuation ? 'Goal hit the agentic step budget and saved continuation state.' : (execResult.result || 'none').substring(0, 150)}`
               ].join('\n') + verificationNote,
               brain: 'AgenticExecutor',
               evidence: {
                 toolBacked: toolsUsedCount > 0,
                 toolsUsed: execResult.toolsUsed || [],
-                observations: execResult.observations || []
+                observations: execResult.observations || [],
+                needsContinuation,
+                continuationFile: execResult.continuationFile || null
               }
             };
           }
@@ -718,17 +739,27 @@ class AutonomousHeartbeat extends EventEmitter {
     if (this.system.goalPlanner) {
       const activeGoals = Array.from(this.system.goalPlanner.activeGoals || []);
       if (activeGoals.length > 0) {
-        // Pick highest-priority active goal (not random)
-        let bestGoal = null;
-        let bestScore = -1;
+        const runnableGoals = [];
         for (const goalId of activeGoals) {
           const g = this.system.goalPlanner.goals?.get(goalId);
-          if (g && (g.status === 'active' || g.status === 'pending')) {
-            // Skip goals that don't clear the confidence threshold unless we're urgent
-            if (!this.drive.confidenceMet(g.confidence) && !this.drive.isUrgent()) continue;
-            // Score = priority + stuck-goal bonus + age-based urgency boost
+          if (!g || !(g.status === 'active' || g.status === 'pending')) continue;
+          if (!isHumanEngineeringGoal(g) && !this.drive.confidenceMet(g.confidence) && !this.drive.isUrgent()) continue;
+          runnableGoals.push(g);
+        }
+
+        const humanUnstarted = runnableGoals
+          .filter(g => isHumanEngineeringGoal(g) && (g.status === 'pending' || (g.metrics?.progress || 0) === 0))
+          .sort((a, b) => goalCreatedAt(b) - goalCreatedAt(a));
+
+        let bestGoal = humanUnstarted[0] || null;
+        if (!bestGoal) {
+          let bestScore = -1;
+          for (const g of runnableGoals) {
             const progress = g.metrics?.progress || 0;
-            const score = (g.priority || 50) + (progress < 20 ? 20 : 0) + this.drive.getUrgencyBoost(g);
+            const attemptData = this._goalAttempts.get(g.id) || { attempts: 0 };
+            const humanBoost = isHumanEngineeringGoal(g) ? 35 : 0;
+            const retryPenalty = Math.min(30, Number(attemptData.attempts || 0) * 5);
+            const score = (g.priority || 50) + humanBoost + (progress < 20 ? 20 : 0) + this.drive.getUrgencyBoost(g) - retryPenalty;
             if (score > bestScore) { bestScore = score; bestGoal = g; }
           }
         }
@@ -1226,7 +1257,7 @@ Write the update now:`,
     const concreteTools = new Set([
       'web_fetch', 'github_search', 'read_file', 'write_file', 'search_code',
       'list_files', 'memory_recall', 'memory_store', 'browser', 'browse_objective',
-      'shell_exec', 'run_tests', 'verify_syntax', 'modify_code', 'save_progress'
+      'shell_exec', 'run_tests', 'verify_syntax', 'pulse_stage_code', 'modify_code', 'save_progress'
     ]);
 
     const concreteToolHits = tools.filter(t => concreteTools.has(t));

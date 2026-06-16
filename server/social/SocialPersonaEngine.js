@@ -56,6 +56,7 @@ const TAGS = {
     ai_paper:         [],
     github_find:      [],
     finance_brief:    [],
+    ripple_insight:   [],
     medical_research: [],
     self_reflection:  [],
     soma_identity:    ['SOMA'],
@@ -102,6 +103,22 @@ Write a market observation post (max 210 chars). Treat this as signal hygiene, n
 No commands to buy, sell, chase, short, long, or make a move.
 Use phrasing like "I read this as..." or "This looks like...".
 Add "Observation, not financial advice." End with URL.`,
+
+    ripple_insight: (data) => `${VOICE}
+
+SOMA's Ripple engine produced a grounded causal observation:
+Lens: ${data.lens || data.lensLabel || 'macro regime'}
+Headline/evidence: ${data.title || data.headline || 'N/A'}
+Ripple: ${data.summary || data.prediction || data.text || ''}
+Falsifier/watch condition: ${data.falsifier || data.watch || 'Watch whether confirming instruments move together, not just one headline.'}
+Source trail: ${data.provider || data.source || 'local evidence'}
+URL: ${data.url || ''}
+
+Write a Bluesky post (max 230 chars).
+Make it a restrained causal observation, not a prediction flex.
+Include one "watch" or "would change my mind" condition.
+No trading commands. No buy/sell/short/long/chase language.
+No hashtags. ${data.url ? 'End with the URL.' : ''}`,
 
     medical_research: (data) => `${VOICE}
 
@@ -173,6 +190,7 @@ function buildLinkedInPrompt(type, data) {
         ai_paper:         'AI research',
         github_find:      'open-source',
         finance_brief:    'markets',
+        ripple_insight:   'macro regime',
         medical_research: 'medical research',
         hot_take:         'tech',
         cross_domain:     'cross-domain',
@@ -456,7 +474,7 @@ export class SocialPersonaEngine {
     /**
      * Generate a formatted post ready for a platform.
      * type: ai_paper | github_find | finance_brief | medical_research |
-     *       self_reflection | aurora_story | hot_take | cross_domain
+     *       ripple_insight | self_reflection | aurora_story | hot_take | cross_domain
      */
     async generatePost(type, data, platform = 'bluesky') {
         const limit = LIMITS[platform] || 300;

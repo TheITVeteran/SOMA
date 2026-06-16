@@ -27,6 +27,18 @@ import { recordLoopEvent } from '../server/utils/LoopLedger.js';
 
 const execFileAsync = promisify(execFile);
 const ROOT = process.cwd();
+const PULSE_SELF_MOD_ROOT = path.join(ROOT, 'data', 'code-lab', 'sandbox', 'pulse-self-mod');
+
+function safeStageId(input = '') {
+    return String(input || 'stage')
+        .replace(/[^a-zA-Z0-9._-]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        .slice(0, 80) || 'stage';
+}
+
+function isCodeFile(filePath = '') {
+    return /\.(js|cjs|mjs|ts)$/i.test(filePath);
+}
 
 export class SomaAgenticExecutor {
     constructor(config = {}) {
@@ -482,12 +494,82 @@ export class SomaAgenticExecutor {
                 }
             },
 
+            pulse_stage_code: {
+                description: "Stage a full proposed replacement for one SOMA code file inside Pulse's code-lab sandbox, then syntax-check the staged copy. This does NOT modify production. Use before modify_code for self-improvement.",
+                args: '{"filepath":"relative path to .js/.cjs/.mjs/.ts file","content":"full proposed file contents","reason":"why this change is needed"}',
+                execute: async ({ filepath, content, reason = '' }) => {
+                    if (!filepath) return { error: 'filepath required' };
+                    if (typeof content !== 'string' || content.length < 20) return { error: 'content must be the full proposed file contents' };
+                    const sourcePath = path.resolve(ROOT, filepath);
+                    if (!sourcePath.startsWith(ROOT)) return { error: 'Access denied: outside SOMA root' };
+                    if (!isCodeFile(sourcePath)) return { error: 'Only .js/.cjs/.mjs/.ts files can be staged' };
+                    try {
+                        const sourceStat = await fs.stat(sourcePath);
+                        if (!sourceStat.isFile()) return { error: 'Source path is not a file' };
+                        const id = `${Date.now()}-${safeStageId(filepath)}`;
+                        const stageDir = path.join(PULSE_SELF_MOD_ROOT, id);
+                        const rel = path.relative(ROOT, sourcePath);
+                        const stagedPath = path.join(stageDir, rel);
+                        await fs.mkdir(path.dirname(stagedPath), { recursive: true });
+                        await fs.writeFile(stagedPath, content, 'utf8');
+
+                        let syntax = { valid: true, output: 'syntax check skipped for non-JS runtime' };
+                        if (/\.(js|cjs|mjs)$/i.test(stagedPath)) {
+                            try {
+                                const result = await execFileAsync(process.execPath, ['--check', stagedPath], { timeout: 10000 });
+                                syntax = { valid: true, output: (result.stdout || result.stderr || '').substring(0, 600) };
+                            } catch (e) {
+                                syntax = {
+                                    valid: false,
+                                    output: ((e.stdout || '') + (e.stderr || '') + e.message).substring(0, 1200)
+                                };
+                            }
+                        }
+
+                        const promotionAllowed = syntax.valid === true;
+                        const manifest = {
+                            id,
+                            createdAt: new Date().toISOString(),
+                            sourcePath,
+                            stagedPath,
+                            filepath: rel.replace(/\\/g, '/'),
+                            reason: String(reason || '').slice(0, 500),
+                            bytes: content.length,
+                            syntax,
+                            status: promotionAllowed ? 'ready_for_promotion' : 'rejected_in_sandbox',
+                            promotion: {
+                                allowed: promotionAllowed,
+                                source: 'agentic_executor_pulse_stage',
+                                evidence: promotionAllowed
+                                    ? 'Sandbox syntax check passed.'
+                                    : 'Sandbox syntax check failed.',
+                                nextStep: promotionAllowed
+                                    ? 'Call modify_code with this staged design, then verify production syntax/tests.'
+                                    : 'Fix the staged content before requesting production modification.'
+                            }
+                        };
+                        await fs.writeFile(path.join(stageDir, 'pulse-self-mod-manifest.json'), JSON.stringify(manifest, null, 2), 'utf8');
+                        return {
+                            success: syntax.valid,
+                            staged: true,
+                            id,
+                            filepath: manifest.filepath,
+                            stagedPath,
+                            manifestPath: path.join(stageDir, 'pulse-self-mod-manifest.json'),
+                            syntax
+                        };
+                    } catch (e) {
+                        return { error: `pulse_stage_code failed: ${e.message}` };
+                    }
+                }
+            },
+
             // ── Self-modification (Engineering Swarm) ─────────────────────
             // Full adversarial pipeline: debate → synthesis → syntax check → verify.
             // SOMA's one tool for actually changing her own source code.
 
             modify_code: {
-                description: "Modify one of SOMA's own source files using the Engineering Swarm safety pipeline (adversarial debate → lead-dev synthesis → syntax check). This is how SOMA improves her own code. ALWAYS read the file with read_file first, then call this with a precise description of the change.",
+                description: "Modify one of SOMA's own source files using the Engineering Swarm safety pipeline. Prefer pulse_stage_code first for risky changes. ALWAYS read the file first, stage/test proposed code when possible, then call this with a precise change request.",
                 args: '{"filepath":"relative path to .js/.cjs file","request":"precise description of what to change and why"}',
                 execute: async ({ filepath, request }) => {
                     const swarm = this.system?.engineeringSwarm;
@@ -797,26 +879,59 @@ Before declaring DONE, verify your own work using read_file or list_files.`
             iteration++;
         }
 
-        // Clear saved progress on completion (success or timeout — don't leave stale files)
-        fs.unlink(_progressFile).catch(() => {});
+        const needsContinuation = !finalResult && iteration >= this.maxIterations && observations.length > 0;
+        if (needsContinuation) {
+            try {
+                await fs.mkdir(path.dirname(_progressFile), { recursive: true });
+                await fs.writeFile(_progressFile, JSON.stringify({
+                    goalId: goal.id,
+                    savedAt: Date.now(),
+                    reason: 'max_iterations_reached',
+                    summary: `Reached ${iteration}/${this.maxIterations} agentic steps without verified completion.`,
+                    nextSteps: 'Resume from stored observations and continue with the next concrete tool-backed action.',
+                    observations
+                }, null, 2), 'utf8');
+            } catch {}
+        } else {
+            // Clear saved progress only when complete or no useful state exists.
+            fs.unlink(_progressFile).catch(() => {});
+        }
         this._currentGoalId = null;
         this._currentObservations = null;
 
         // Summarise and persist
         const toolsList = [...toolsUsed].join(', ') || 'reasoning only';
-        const summary = `Executed "${goal.title}" in ${iteration} step(s) using [${toolsList}]. ${finalResult ? 'COMPLETED.' : 'Partial.'}`;
+        const executionState = finalResult
+            ? 'completed'
+            : needsContinuation
+                ? 'incomplete_step_budget'
+                : 'incomplete_unverified';
+        const stopReason = finalResult
+            ? 'poseidon_verified'
+            : needsContinuation
+                ? 'max_iterations_reached'
+                : 'unverified_or_interrupted';
+        const fallbackResult = needsContinuation
+            ? `Incomplete: reached ${iteration}/${this.maxIterations} steps before verified completion. Continue from ${_progressFile}.`
+            : `Incomplete: ${iteration} steps, tools: ${toolsList}`;
+        const summary = `Executed "${goal.title}" in ${iteration} step(s) using [${toolsList}]. ${finalResult ? 'COMPLETED.' : executionState}.`;
         if (this.memory?.remember) {
             await this.memory.remember(summary, {
-                type: 'goal_execution', importance: 7, goalId: goal.id
+                type: 'goal_execution', importance: 7, goalId: goal.id, state: executionState, stopReason
             }).catch(() => {});
         }
 
         return {
             done:         !!finalResult,
-            result:       finalResult || `Partial: ${iteration} steps, tools: ${toolsList}`,
+            state:        executionState,
+            stopReason,
+            result:       finalResult || fallbackResult,
             iterations:   iteration,
+            maxIterations: this.maxIterations,
             toolsUsed:    [...toolsUsed],
-            observations
+            observations,
+            needsContinuation,
+            continuationFile: needsContinuation ? _progressFile : null
         };
     }
 

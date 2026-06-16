@@ -6,6 +6,7 @@ import { createRequire } from 'module';
 import axisStore from '../axis/AxisStore.js';
 import DendriteSearchEngine from '../services/DendriteSearchEngine.js';
 import portalDb from '../storage/portalDb.js';
+import { requireEnterpriseAuth } from '../loaders/authMiddleware.js';
 
 const statePath = path.resolve(process.cwd(), 'data', 'aperture', 'state.json');
 const portalIndexPath = path.resolve(process.cwd(), 'data', 'aperture', 'portal-index.json');
@@ -713,7 +714,7 @@ export default function createApertureRoutes(system = {}) {
     });
 
     // -- Credentials --
-    router.get('/portal/credentials', async (req, res) => {
+    router.get('/portal/credentials', requireEnterpriseAuth, async (req, res) => {
         try {
             const { origin } = req.query || {};
             if (origin) {
@@ -728,7 +729,7 @@ export default function createApertureRoutes(system = {}) {
         }
     });
 
-    router.post('/portal/credentials', async (req, res) => {
+    router.post('/portal/credentials', requireEnterpriseAuth, async (req, res) => {
         try {
             const { origin, username, password } = req.body || {};
             if (!origin || !username || !password) {
@@ -741,7 +742,7 @@ export default function createApertureRoutes(system = {}) {
         }
     });
 
-    router.delete('/portal/credentials/:id', async (req, res) => {
+    router.delete('/portal/credentials/:id', requireEnterpriseAuth, async (req, res) => {
         try {
             const removed = portalDb.deleteCredential(req.params.id);
             res.json({ success: true, removed });

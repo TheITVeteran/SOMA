@@ -8,7 +8,7 @@ class PaperExecutionSimulator {
     constructor(config = {}) {
         this.config = {
             baseSpreadBps: 6,
-            volatilitySpreadMultiplier: 70,
+            volatilitySpreadMultiplier: 10,
             feeBps: 2,
             partialFillThreshold: 750,
             rejectProbability: 0.003,

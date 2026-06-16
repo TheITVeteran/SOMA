@@ -264,6 +264,21 @@ Respond in JSON:
                 const result = await this.moltbook.createComment(post.id, decision.comment);
                 if (result.success || result.comment) {
                     this.log('success', `💬 Commented: "${decision.comment.substring(0, 50)}..."`);
+                    
+                    // Push to learning pipeline
+                    if (this.system?.universalLearningPipeline) {
+                        this.system.universalLearningPipeline.logInteraction({
+                            source: 'SocialAutonomy',
+                            action: 'social_engagement',
+                            details: {
+                                type: 'comment',
+                                targetPostId: post.id,
+                                content: decision.comment
+                            },
+                            outcome: 'success',
+                            tags: ['social', 'engagement', 'simulation']
+                        }).catch(() => {});
+                    }
                 }
             }
 
@@ -339,6 +354,21 @@ Respond with just the post text, nothing else.`;
                 if (postResult.success || postResult.post) {
                     this.lastPost = now;
                     this.log('success', `📝 Posted to m/${submolt}: "${postText.substring(0, 60)}..."`);
+                    
+                    // Push to learning pipeline
+                    if (this.system?.universalLearningPipeline) {
+                        this.system.universalLearningPipeline.logInteraction({
+                            source: 'SocialAutonomy',
+                            action: 'social_post',
+                            details: {
+                                submolt,
+                                content: postText,
+                                postId: postResult.post?.id
+                            },
+                            outcome: 'success',
+                            tags: ['social', 'post', 'simulation', submolt]
+                        }).catch(() => {});
+                    }
                 } else {
                     this.log('error', `Post failed: ${postResult.error || 'Unknown error'}`);
                 }

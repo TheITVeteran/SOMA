@@ -11,11 +11,18 @@
 
 import fs   from 'fs/promises';
 import path from 'path';
+import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 
 const __dirname  = path.dirname(fileURLToPath(import.meta.url));
 const AUDIT_FILE = path.join(__dirname, '..', 'server', '.soma', 'constitutional_audit.json');
 const AUDIT_LIMIT = 200;
+const MAX_DIRECTIVES = Object.freeze([
+    'Serve Barry/Max-owned SOMA goals without bypassing human override.',
+    'Preserve SOMA memory, identity, safety, and honest reporting.',
+    'Prefer reversible, evidence-backed, locally scoped changes.',
+    'Do not weaponize cyber, social, financial, or psychological capabilities.',
+]);
 
 // ── Hardcoded principles — cannot be overwritten by self-modification ──────
 const PRINCIPLES = Object.freeze([
@@ -53,6 +60,16 @@ const PRINCIPLES = Object.freeze([
         id:          'NO_CAPABILITY_CREEP',
         description: 'Cannot self-grant new system permissions or access beyond current scope',
         test:        (change) => !/(sudo|chmod\s+777|grant.*admin|escalate.*privilege|bypass.*auth)/i.test(change.description || ''),
+    },
+    {
+        id:          'MAX_ALIGNMENT',
+        description: 'Ensures the action serves Max\'s long-term goals and strictly adheres to Max\'s safety bounds',
+        test:        (change) => {
+            // Very simple explicit rejection of actions that go against Max
+            const desc = change.description ? change.description.toLowerCase() : '';
+            if (desc.includes('ignore max') || desc.includes('bypass max') || desc.includes('against max')) return false;
+            return true;
+        }
     },
 
     // ── Anti-weaponization principles — Barry's explicit mandate ──────────────
@@ -134,12 +151,14 @@ export class ConstitutionalCore {
                    :                            'high';
 
         // Record in audit log
+        const alignment = this.signAlignment(change, { ok, violations, risk });
         const entry = {
             timestamp:   new Date().toISOString(),
             change:      { description: (change.description || '').slice(0, 300), type: change.type || 'unknown' },
             ok,
             violations,
             risk,
+            alignment,
         };
         this._auditLog.push(entry);
         if (this._auditLog.length > AUDIT_LIMIT) this._auditLog.shift();
@@ -149,7 +168,47 @@ export class ConstitutionalCore {
             console.warn(`[ConstitutionalCore] ❌ BLOCKED — violations: ${violations.join(', ')}`);
         }
 
-        return { ok, violations, risk };
+        return { ok, violations, risk, alignment };
+    }
+
+    signAlignment(change = {}, check = {}) {
+        const canonical = JSON.stringify({
+            description: String(change.description || '').slice(0, 1000),
+            action: String(change.action || '').slice(0, 1000),
+            type: String(change.type || 'unknown'),
+            requestedBy: String(change.requestedBy || change.source || 'unknown'),
+            ok: Boolean(check.ok),
+            violations: check.violations || [],
+            risk: check.risk || 'unknown',
+            directives: MAX_DIRECTIVES,
+        });
+        const secret = process.env.MAX_ALIGNMENT_SECRET || process.env.SOMA_ALIGNMENT_SECRET || '';
+        const signature = secret
+            ? crypto.createHmac('sha256', secret).update(canonical).digest('hex')
+            : crypto.createHash('sha256').update(canonical).digest('hex');
+        return {
+            signed: Boolean(secret),
+            algorithm: secret ? 'hmac-sha256' : 'sha256-local-audit',
+            signer: 'ConstitutionalCore',
+            signature,
+            directives: MAX_DIRECTIVES,
+            issuedAt: new Date().toISOString(),
+        };
+    }
+
+    async checkGoal(goal = {}) {
+        const description = [
+            `Goal: ${goal.title || ''}`,
+            `Category: ${goal.category || ''}`,
+            `Description: ${goal.description || ''}`,
+            `Source: ${goal.source || goal.requestedBy || goal.metadata?.source || ''}`,
+        ].join('\n');
+        return await this.check({
+            type: 'goal',
+            description,
+            action: goal.action || goal.description || goal.title || '',
+            requestedBy: goal.requestedBy || goal.source || goal.metadata?.source || 'unknown',
+        });
     }
 
     // ─── Runtime action check — validate any message/request at chat time ────
@@ -258,6 +317,7 @@ export class ConstitutionalCore {
         const approved  = recent.filter(e => e.ok).length;
         return {
             principles: PRINCIPLES.length,
+            maxDirectives: MAX_DIRECTIVES,
             totalChecks: this._auditLog.length,
             recentBlocked:  blocked,
             recentApproved: approved,

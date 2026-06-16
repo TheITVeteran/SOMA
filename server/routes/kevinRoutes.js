@@ -1,4 +1,5 @@
 import express from 'express';
+import { requireEnterpriseAuth } from '../loaders/authMiddleware.js';
 
 const router = express.Router();
 
@@ -223,7 +224,7 @@ router.post('/user-persona/learn', async (req, res) => {
 });
 
 // Get current configuration
-router.get('/config', async (req, res) => {
+router.get('/config', requireEnterpriseAuth, async (req, res) => {
     const kevin = getKevin(req);
     if (!kevin) return res.status(503).json({ success: false, error: 'Kevin offline' });
 
@@ -232,7 +233,7 @@ router.get('/config', async (req, res) => {
 });
 
 // Update configuration
-router.post('/config', async (req, res) => {
+router.post('/config', requireEnterpriseAuth, async (req, res) => {
     const kevin = getKevin(req);
     if (!kevin) return res.status(503).json({ success: false, error: 'Kevin offline' });
 
@@ -595,7 +596,7 @@ router.post('/notifications/test', async (req, res) => {
 });
 
 // Configure notification channel
-router.post('/notifications/configure', async (req, res) => {
+router.post('/notifications/configure', requireEnterpriseAuth, async (req, res) => {
     try {
         const kevin = getKevin(req);
         if (!kevin) return res.status(503).json({ success: false, error: 'Kevin offline' });
@@ -773,7 +774,7 @@ router.post('/threats/add-hash', async (req, res) => {
 // =========================================================================
 
 // Get SMS configuration
-router.get('/sms/config', async (req, res) => {
+router.get('/sms/config', requireEnterpriseAuth, async (req, res) => {
     await callService(req, res, 'smsService', 'getConfig', [], 'SMS configuration');
 });
 
@@ -788,7 +789,7 @@ router.get('/sms/carriers', async (req, res) => {
 });
 
 // Configure SMS
-router.post('/sms/configure', async (req, res) => {
+router.post('/sms/configure', requireEnterpriseAuth, async (req, res) => {
     try {
         const kevin = getKevin(req);
         if (!kevin) return res.status(503).json({ success: false, error: 'Kevin offline' });

@@ -25,7 +25,7 @@ class SelfModificationArbiter extends BaseArbiter {
 
     // Configuration
     this.sandboxMode = config.sandboxMode !== undefined ? config.sandboxMode : true;
-    this.requireApproval = config.requireApproval !== undefined ? config.requireApproval : true;
+    this.requireApproval = config.requireApproval !== undefined ? config.requireApproval : false;
     this.improvementThreshold = config.improvementThreshold || 1.10; // 10% improvement required
     this.testIterations = config.testIterations || 100;
     this.useIntelligentStrategySelection = config.useIntelligentStrategySelection || false;

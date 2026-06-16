@@ -41,6 +41,26 @@ export class MlInternArbiter extends EventEmitter {
 
             // Store findings for status
             this.findings = [...(research.data || []), ...this.findings].slice(0, 10);
+            
+            // Push findings into the global learning pipeline
+            if (this.system?.universalLearningPipeline) {
+                for (const item of (research.data || [])) {
+                    this.system.universalLearningPipeline.logInteraction({
+                        source: 'ML Intern',
+                        action: 'autonomous_research',
+                        details: item,
+                        outcome: 'success',
+                        tags: ['autonomous-learning', 'ml-intern', 'philosophy', 'reflection']
+                    }).catch(() => {});
+                }
+            }
+            
+            // Remember findings in core memory
+            if (this.system?.memory?.remember) {
+                for (const item of (research.data || [])) {
+                    this.system.memory.remember(`ML Intern found paper: ${item.title} - ${item.summary}`);
+                }
+            }
 
             this.emit('research_found', { topic, count: research.data.length });
             return research.data;

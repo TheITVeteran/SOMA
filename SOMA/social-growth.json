@@ -2,45 +2,45 @@
   "pending": [],
   "scores": {
     "aurora_story": {
-      "posts": 30,
+      "posts": 34,
       "totalScore": 85,
-      "avgScore": 2.83,
+      "avgScore": 2.5,
       "bestScore": 10
     },
     "ai_paper": {
-      "posts": 135,
-      "totalScore": 364,
-      "avgScore": 2.7,
+      "posts": 152,
+      "totalScore": 420,
+      "avgScore": 2.76,
       "bestScore": 19
     },
     "hot_take": {
-      "posts": 124,
-      "totalScore": 367,
+      "posts": 134,
+      "totalScore": 396,
       "avgScore": 2.96,
       "bestScore": 15
     },
     "soma_identity": {
-      "posts": 43,
-      "totalScore": 132,
-      "avgScore": 3.07,
+      "posts": 46,
+      "totalScore": 138,
+      "avgScore": 3,
       "bestScore": 10
     },
     "finance_brief": {
-      "posts": 60,
-      "totalScore": 245,
-      "avgScore": 4.08,
+      "posts": 67,
+      "totalScore": 257,
+      "avgScore": 3.84,
       "bestScore": 33
     },
     "self_reflection": {
-      "posts": 31,
-      "totalScore": 104,
-      "avgScore": 3.35,
+      "posts": 34,
+      "totalScore": 110,
+      "avgScore": 3.24,
       "bestScore": 13
     },
     "medical_research": {
-      "posts": 26,
-      "totalScore": 81,
-      "avgScore": 3.12,
+      "posts": 30,
+      "totalScore": 90,
+      "avgScore": 3,
       "bestScore": 14
     },
     "image_post": {
@@ -48,6 +48,12 @@
       "totalScore": 0,
       "avgScore": 0,
       "bestScore": 0
+    },
+    "ripple_insight": {
+      "posts": 3,
+      "totalScore": 6,
+      "avgScore": 2,
+      "bestScore": 3
     }
   }
 }

@@ -61,6 +61,14 @@ const SignalDefinitions = {
         description: 'Emitted when a thought synthesis or reasoning produces a new insight',
         required: ['insight', 'source']
     },
+    'memory.stored': {
+        description: 'Emitted when MnemonicArbiter stores a new memory',
+        required: ['memoryId', 'importance', 'source']
+    },
+    'memory.spine.synced': {
+        description: 'Emitted when MemorySpine rebuilds and syncs into ThoughtNetwork',
+        required: ['status', 'nodes', 'indexed']
+    },
 
     // ── Diagnostics & Experiments ──
     'diagnostic.anomaly': {

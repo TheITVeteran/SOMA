@@ -60,6 +60,9 @@ class MessageBroker extends EventEmitter {
       onCompressed: (signal) => this._deliverSignal(signal)
     });
     this.arbiterLoader = null; // Hook for on-the-fly expansion
+    this.handlerFailures = new Map(); // handler key -> { count, firstAt, lastAt }
+    this.handlerFailureThreshold = Number(process.env.SOMA_BROKER_HANDLER_FAILURE_THRESHOLD || 3);
+    this.handlerFailureWindowMs = Number(process.env.SOMA_BROKER_HANDLER_FAILURE_WINDOW_MS || 60000);
 
     // Circular Buffer State
     this.maxHistorySize = 500;
@@ -215,11 +218,12 @@ class MessageBroker extends EventEmitter {
   // Pub/Sub System
   // ===========================
 
-  subscribe(topic, handler) {
+  subscribe(topic, handler, options = {}) {
     if (!this.subscriptions.has(topic)) {
       this.subscriptions.set(topic, new Set());
     }
 
+    if (options.arbiterId && typeof handler === 'function') handler.__arbiterId = options.arbiterId;
     this.subscriptions.get(topic).add(handler);
 
     return () => this.unsubscribe(topic, handler);
@@ -270,14 +274,68 @@ class MessageBroker extends EventEmitter {
    * @param {Function} handler
    * @returns {Function} unsubscribe
    */
-  subscribeTiered(tier, topic, handler) {
+  subscribeTiered(tier, topic, handler, options = {}) {
     const VALID = ['strategic', 'cognitive', 'operational'];
     if (!VALID.includes(tier)) throw new Error(`[MessageBroker] Unknown tier: ${tier}`);
     if (!this.tieredSubscriptions.has(topic)) {
       this.tieredSubscriptions.set(topic, { strategic: new Set(), cognitive: new Set(), operational: new Set() });
     }
+    if (options.arbiterId && typeof handler === 'function') handler.__arbiterId = options.arbiterId;
     this.tieredSubscriptions.get(topic)[tier].add(handler);
     return () => this.unsubscribeTiered(tier, topic, handler);
+  }
+
+  _inferHandlerArbiterId(handler, fallback = null) {
+    if (!handler) return fallback;
+    if (handler.__arbiterId) return handler.__arbiterId;
+    const name = String(handler.name || '');
+    if (this.arbiters.has(name)) return name;
+    const bound = name.match(/^bound\s+(.+)$/i)?.[1];
+    if (bound && this.arbiters.has(bound)) return bound;
+    return fallback;
+  }
+
+  _recordHandlerFailure({ topic = 'unknown', handler = null, error = null, tier = 'flat', arbiterId = null } = {}) {
+    const inferredArbiterId = arbiterId || this._inferHandlerArbiterId(handler);
+    const handlerName = String(handler?.name || inferredArbiterId || 'anonymous');
+    const key = `${topic}:${tier}:${inferredArbiterId || handlerName}`;
+    const now = Date.now();
+    const prior = this.handlerFailures.get(key);
+    const record = prior && (now - prior.firstAt) <= this.handlerFailureWindowMs
+      ? { ...prior, count: prior.count + 1, lastAt: now }
+      : { count: 1, firstAt: now, lastAt: now };
+    this.handlerFailures.set(key, record);
+
+    const payload = {
+      topic,
+      tier,
+      handlerName,
+      arbiterId: inferredArbiterId,
+      count: record.count,
+      threshold: this.handlerFailureThreshold,
+      error: error?.message || String(error || 'handler failed'),
+      firstAt: record.firstAt,
+      lastAt: record.lastAt,
+    };
+    this.emit('broker.handler_failed', payload);
+
+    if (inferredArbiterId && record.count >= this.handlerFailureThreshold) {
+      this.handlerFailures.delete(key);
+      const restartPayload = {
+        arbiterId: inferredArbiterId,
+        reason: 'broker_handler_failure_threshold',
+        topic,
+        tier,
+        failures: record.count,
+        error: payload.error,
+      };
+      console.warn(`[MessageBroker] ♻️ Requesting restart for ${inferredArbiterId} after ${record.count} handler failures on ${topic}`);
+      this.emit('arbiter.restart', restartPayload);
+      if (topic !== 'arbiter.restart') {
+        setImmediate(() => this.publish('arbiter.restart', restartPayload).catch(() => {}));
+      }
+    }
+    return payload;
   }
 
   unsubscribeTiered(tier, topic, handler) {
@@ -321,13 +379,13 @@ class MessageBroker extends EventEmitter {
       for (const tier of ['strategic', 'cognitive', 'operational']) {
         const handlers = tieredBuckets[tier];
         if (!handlers || handlers.size === 0) continue;
-        const results = await Promise.allSettled(
-          Array.from(handlers).filter(h => typeof h === 'function').map(h => h(envelope))
-        );
-        results.forEach(r => {
+        const handlerList = Array.from(handlers).filter(h => typeof h === 'function');
+        const results = await Promise.allSettled(handlerList.map(h => Promise.resolve().then(() => h(envelope))));
+        results.forEach((r, index) => {
           if (r.status === 'fulfilled') delivered++;
           else {
             console.error(`[MessageBroker] Error in ${tier}-tier handler for ${topic}:`, r.reason);
+            this._recordHandlerFailure({ topic, handler: handlerList[index], error: r.reason, tier });
             this.metrics.messagesFailed++;
           }
         });
@@ -336,16 +394,14 @@ class MessageBroker extends EventEmitter {
 
     // Untiered flat subscriptions — parallel, existing behavior
     if (flatHandlers && flatHandlers.size > 0) {
-      const results = await Promise.allSettled(
-        Array.from(flatHandlers)
-          .filter(h => typeof h === 'function')
-          .map(handler => handler(envelope))
-      );
-      results.forEach(result => {
+      const handlerList = Array.from(flatHandlers).filter(h => typeof h === 'function');
+      const results = await Promise.allSettled(handlerList.map(handler => Promise.resolve().then(() => handler(envelope))));
+      results.forEach((result, index) => {
         if (result.status === 'fulfilled') {
           delivered++;
         } else {
           console.error(`[MessageBroker] Error delivering to ${topic}:`, result.reason);
+          this._recordHandlerFailure({ topic, handler: handlerList[index], error: result.reason, tier: 'flat' });
           this.metrics.messagesFailed++;
         }
       });
@@ -435,6 +491,7 @@ class MessageBroker extends EventEmitter {
           return response;
         } catch (error) {
           console.error(`[MessageBroker] Error calling reason on target ${to}:`, error);
+          this._recordHandlerFailure({ topic: `direct:${message.type || 'reason'}`, arbiterId: arbiter.name || to, error, tier: 'direct' });
           this.metrics.messagesFailed++;
           return null;
         }
@@ -445,6 +502,7 @@ class MessageBroker extends EventEmitter {
           return response;
         } catch (error) {
           console.error(`[MessageBroker] Error delivering to ${to}:`, error);
+          this._recordHandlerFailure({ topic: `direct:${message.type || 'handleMessage'}`, arbiterId: arbiter.name || to, error, tier: 'direct' });
           this.metrics.messagesFailed++;
           return null;
         }

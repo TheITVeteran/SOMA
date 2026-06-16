@@ -29,6 +29,7 @@ class FractalNode {
         this.source = config.source || 'unknown'; // conversation, web, reasoning
         this.confidence = config.confidence || 0.5;
         this.tags = new Set(config.tags || []);
+        this.evidence = config.evidence || null;
     }
     
     generateId() {
@@ -136,7 +137,8 @@ class FractalNode {
             strength: this.strength,
             source: this.source,
             confidence: this.confidence,
-            tags: Array.from(this.tags)
+            tags: Array.from(this.tags),
+            evidence: this.evidence
         };
     }
     
@@ -154,7 +156,8 @@ class FractalNode {
             decay: data.decay,
             source: data.source,
             confidence: data.confidence,
-            tags: data.tags
+            tags: data.tags,
+            evidence: data.evidence
         });
         
         node.created = data.created;

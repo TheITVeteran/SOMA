@@ -37,6 +37,9 @@ export async function loadEssentialSystems(system) {
                 messageBroker: system.messageBroker,
             });
             await system.arbiterLoader.initialize();
+            if (system.messageBroker && typeof system.messageBroker.setArbiterLoader === 'function') {
+                system.messageBroker.setArbiterLoader(system.arbiterLoader);
+            }
         } catch (e) {
             console.error(`    ❌ Essential Tier: ArbiterLoader failed: ${e.message}`);
             return {};
@@ -659,6 +662,18 @@ export async function loadExtendedSystems(system) {
         console.log('    👁️  VisionNarratorArbiter ONLINE — proactive room reactions active');
     } catch (e) {
         console.warn(`    ⚠️ VisionNarratorArbiter skipped: ${e.message}`);
+    }
+
+    try {
+        const req = createRequire(import.meta.url);
+        const CrossDomainSynthesisArbiter = req('../../arbiters/CrossDomainSynthesisArbiter.cjs');
+        const crossDomain = new CrossDomainSynthesisArbiter({ name: 'CrossDomainSynthesisArbiter' });
+        await crossDomain.initialize();
+        system.crossDomainSynthesis = crossDomain;
+        ext.crossDomainSynthesis = crossDomain;
+        console.log('    🌐 CrossDomainSynthesisArbiter ONLINE — unprompted synthesis active');
+    } catch (e) {
+        console.warn(`    ⚠️ CrossDomainSynthesisArbiter skipped: ${e.message}`);
     }
 
     const loaded = Object.values(ext).filter(v => v !== null).length;

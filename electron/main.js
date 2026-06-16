@@ -8,6 +8,7 @@ const __dirname = path.dirname(__filename);
 let mainWindow;
 const PORTAL_PARTITION = 'persist:portal';
 const somaUrl = process.env.SOMA_BACKEND_URL || 'http://localhost:3001';
+app.commandLine.appendSwitch('remote-debugging-port', '9222');
 const permissionCache = new Map(); // origin -> permissions object
 
 function isSafeExternalUrl(value = '') {

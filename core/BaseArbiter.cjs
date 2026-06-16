@@ -735,13 +735,13 @@ class ${spec.name} extends BaseArbiter {
 
   _setupMessageHandlers() {
     // Subscribe to arbiter-specific topic
-    this.broker.subscribe(`arbiter/${this.name}`, this.handleMessage.bind(this));
+    this.subscribe(`arbiter/${this.name}`, this.handleMessage.bind(this));
     
     // Subscribe to role-specific topic
-    this.broker.subscribe(`role/${this.role}`, this.handleMessage.bind(this));
+    this.subscribe(`role/${this.role}`, this.handleMessage.bind(this));
 
     // Subscribe to broadcast
-    this.broker.subscribe('system/all', this.handleMessage.bind(this));
+    this.subscribe('system/all', this.handleMessage.bind(this));
   }
 
   _startHeartbeat() {
@@ -1173,6 +1173,7 @@ class ${spec.name} extends BaseArbiter {
   }
 
   subscribe(topic, handler) {
+    handler._arbiterName = this.name;
     return this.broker.subscribe(topic, handler);
   }
 

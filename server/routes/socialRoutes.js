@@ -18,6 +18,7 @@ import socialImageLibrary from '../social/SocialImageLibrary.js';
 import somaImageGeneration from '../social/SomaImageGenerationEngine.js';
 import socialMemory from '../social/SocialMemoryEngine.js';
 import socialRelationships from '../social/SocialRelationshipLedger.js';
+import rippleSocialBridge from '../social/RippleSocialBridge.js';
 import { guardSomaText } from '../context/GroundedReasoning.js';
 
 const SOMA_DIR = path.join(process.cwd(), 'SOMA');
@@ -196,6 +197,19 @@ export default function createSocialRoutes(system) {
         } finally {
             console.log  = origLog;
             console.warn = origWarn;
+        }
+    });
+
+    router.post('/ripple/queue', async (req, res) => {
+        try {
+            const scheduledFor = req.body?.scheduledFor ? Number(req.body.scheduledFor) : null;
+            const result = await rippleSocialBridge.queueLatest({
+                brain: system?.brain || system?.quadBrain || system?.syntheticBrain || null,
+                scheduledFor: Number.isFinite(scheduledFor) ? scheduledFor : null,
+            });
+            res.status(result.queued ? 200 : 409).json({ ok: result.queued, ...result });
+        } catch (error) {
+            res.status(500).json({ ok: false, error: error.message });
         }
     });
 
@@ -529,6 +543,22 @@ export default function createSocialRoutes(system) {
     router.get('/images/generation/status', (_req, res) => {
         try {
             res.json(somaImageGeneration.getStatus());
+        } catch (e) {
+            res.status(500).json({ ok: false, error: e.message });
+        }
+    });
+
+    router.get('/bluesky/image-readiness', (_req, res) => {
+        try {
+            const scheduler = system.socialScheduler;
+            if (!scheduler?.diagnoseBlueskyImageReadiness) {
+                return res.status(503).json({ ok: false, error: 'SocialScheduler image diagnostics are not loaded' });
+            }
+            res.json(scheduler.diagnoseBlueskyImageReadiness({
+                platform: 'bluesky',
+                type: 'soma_identity',
+                text: 'SOMA image readiness diagnostic for Bluesky posting.',
+            }));
         } catch (e) {
             res.status(500).json({ ok: false, error: e.message });
         }

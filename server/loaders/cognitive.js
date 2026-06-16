@@ -21,6 +21,7 @@ import MedicalDiscoveryCortex from '../../arbiters/MedicalDiscoveryCortex.js';
 import ReflectionsArbiter from '../../arbiters/ReflectionsArbiter.js';
 import FinanceAgentArbiter from '../../arbiters/FinanceAgentArbiter.js';
 import messageBroker from '../../core/MessageBroker.js';
+import { startMemorySpineAutoSync } from '../utils/MemorySpine.js';
 
 // CJS Imports
 const GoalPlannerModule = require('../../arbiters/GoalPlannerArbiter.cjs');
@@ -64,6 +65,8 @@ export async function loadCognitiveSystems(toolRegistry = null) {
         mnemonicArbiter = new MnemonicArbiter({
             name: 'MnemonicArbiter',
             messageBroker,
+            dbPath: path.join(process.cwd(), 'SOMA', 'soma-memory.db'),
+            vectorDbPath: path.join(process.cwd(), 'soma-vectors.json'),
             skipEmbedder: true, // Fast startup - semantic search loads lazily
             redisUrl: null      // Don't require Redis - SQLite cold tier is sufficient
         });
@@ -198,7 +201,7 @@ export async function loadCognitiveSystems(toolRegistry = null) {
         graphify: graphify,
         rootPath: process.cwd()
     });
-    system.goalPlanner = new GoalPlannerArbiter({ name: 'GoalPlanner', messageBroker, quadBrain });
+    system.goalPlanner = new GoalPlannerArbiter({ name: 'GoalPlanner', messageBroker, quadBrain, maxActiveGoals: 100 });
     system.beliefSystem = new BeliefSystemArbiter({ name: 'BeliefSystem', messageBroker, quadBrain });
     system.museEngine = new MuseEngine({ name: 'MuseEngine', messageBroker, quadBrain, reflections: system.reflections });
     system.analytics = new PerformanceAnalytics({ rootPath: process.cwd() });
@@ -232,6 +235,7 @@ export async function loadCognitiveSystems(toolRegistry = null) {
 
     // 6. LEGACY ALIASES
     system.mnemonicArbiter = mnemonicArbiter;
+    system.messageBroker = messageBroker;
     system.adaptiveRouter = adaptiveRouter;
     system.quadBrain = quadBrain;
     system.causality = causality;
@@ -272,6 +276,21 @@ export async function loadCognitiveSystems(toolRegistry = null) {
         console.log('[Cognitive] ✅ Early OutcomeTracker ready (chat can record outcomes from boot)');
     } catch (e) {
         console.warn('[Cognitive] ⚠️ Early OutcomeTracker failed:', e.message);
+    }
+
+    try {
+        system.memorySpineAutoSync = startMemorySpineAutoSync(system, {
+            debounceMs: 120000,
+            minIntervalMs: 300000,
+            rebuildLimit: 'all'
+        });
+        if (system.memorySpineAutoSync?.success) {
+            console.log('[Cognitive] ✅ MemorySpine auto-sync ready (memory → spine → fractal graph)');
+        } else {
+            console.warn('[Cognitive] ⚠️ MemorySpine auto-sync unavailable:', system.memorySpineAutoSync?.error || 'unknown');
+        }
+    } catch (e) {
+        console.warn('[Cognitive] ⚠️ MemorySpine auto-sync failed:', e.message);
     }
 
     return system;

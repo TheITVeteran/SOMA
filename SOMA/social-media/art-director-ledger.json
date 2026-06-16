@@ -1,6 +1,1674 @@
 {
   "decisions": [
     {
+      "id": "ad-1781610650142-lftrz",
+      "approved": true,
+      "score": 0.52,
+      "publicPost": false,
+      "provider": "http",
+      "imagePath": "C:\\Users\\barry\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\signal-noise-chapter-39-turning-point-1781610641884-625c7d.png",
+      "size": 1182396,
+      "dimensions": {
+        "width": 1024,
+        "height": 768
+      },
+      "prompt": "Cinematic scene card for Signal / Noise, chapter 39: Chapter 39. Scene seed: I press into the wall to isolate it. The vibration is coming from below. From the basement. It is rhythmic but not human. It is mechanical but not building infrastructure. Visual identity: Cinematic speculative fiction with grounded technology, quiet myth, and human-scale emotion. Composition: close human detail. Recurring symbol: server light. Palette: indigo, warm amber, rain-washed slate. Mood: calm tension, intelligent restraint, intimate machinery, soft dread. Quality direction: beautiful, coherent, premium speculative fiction illustration, grounded physical scene, strong depth, no readable text, no letters, no numbers, no captions, no signage, no logos, no watermark. Avoid: no readable text, no logos, no gore, no celebrity likeness, no generic robot mascot, no corporate stock photo look. Visual identity: A calm, intelligent, reflective system that visualizes the subject directly instead of forcing one house aesthetic. Visual subject: scene the speculative cinematic chapter. Subject anchors: scene, the, speculative, cinematic, chapter, fiction, human, logos. Recipe: story. Category: nature. Palette: soft cream, single blue practical light, warm tungsten, cool gray, black glass. Mood: quiet intelligence, technically grounded, warm restraint, cinematic clarity, specific to the post. Motifs: quiet pond reflection, liminal doorway, commodity sample, quiet workspace. Composition: clear focal subject, strong depth, clean negative space, natural lighting, no clutter. Style boundaries: grounded subject matter, physical materials, practical lighting, restrained accents, no mascot identity unless explicitly requested. Do not include: readable text, logos, watermarks, generic robot mascot, corporate stock photo, synthetic genre lighting, generic AI identity tropes, medical claims, financial claims.",
+      "originalPrompt": "Cinematic scene card for Signal / Noise, chapter 39: Chapter 39. Scene seed: I press into the wall to isolate it. The vibration is coming from below. From the basement. It is rhythmic but not human. It is mechanical but not building infrastructure. Visual identity: Cinematic speculative fiction with grounded technology, quiet myth, and human-scale emotion. Composition: close human detail. Recurring symbol: server light. Palette: indigo, warm amber, rain-washed slate. Mood: calm tension, intelligent restraint, intimate machinery, soft dread. Quality direction: beautiful, coherent, premium speculative fiction illustration, grounded physical scene, strong depth, no readable text, no letters, no numbers, no captions, no signage, no logos, no watermark. Avoid: no readable text, no logos, no gore, no celebrity likeness, no generic robot mascot, no corporate stock photo look.",
+      "alt": "SOMA Saga Turning Point for Signal / Noise Chapter 39 with server light, rendered in signal dusk style.",
+      "tags": [
+        "art-directed",
+        "soma-saga",
+        "story",
+        "scene",
+        "signal-noise",
+        "chapter-39"
+      ],
+      "selectedPalette": [
+        "soft cream",
+        "single blue practical light",
+        "warm tungsten",
+        "cool gray",
+        "black glass"
+      ],
+      "selectedMotifs": [
+        "quiet pond reflection",
+        "liminal doorway",
+        "commodity sample",
+        "quiet workspace"
+      ],
+      "paletteCategory": "story",
+      "paletteRecentUses": 0,
+      "visualSubject": {
+        "category": "nature",
+        "recipe": "story",
+        "subject": "scene the speculative cinematic chapter",
+        "terms": [
+          "scene",
+          "the",
+          "speculative",
+          "cinematic",
+          "chapter",
+          "fiction",
+          "human",
+          "logos",
+          "but",
+          "not",
+          "infrastructure",
+          "illustration"
+        ],
+        "sourceTitle": "Signal / Noise Chapter 39 Turning Point"
+      },
+      "visualRecipe": {
+        "name": "story",
+        "category": "nature",
+        "subject": "scene the speculative cinematic chapter",
+        "terms": [
+          "scene",
+          "the",
+          "speculative",
+          "cinematic",
+          "chapter",
+          "fiction",
+          "human",
+          "logos",
+          "but",
+          "not",
+          "infrastructure",
+          "illustration"
+        ]
+      },
+      "promptSignature": "8dd2263ad5518fa3",
+      "similarity": {
+        "duplicateRisk": false,
+        "recentMatches": [],
+        "reason": "fresh_visual_signature"
+      },
+      "critique": {
+        "ok": true,
+        "retryRecommended": false,
+        "warnings": [],
+        "failures": []
+      },
+      "revisionPrompt": "",
+      "failures": [],
+      "warnings": [
+        "off_brand_visual_language",
+        "palette_rotated_to_avoid_repetition"
+      ],
+      "hash": "144eadc9f2d3029d",
+      "createdAt": 1781610650143
+    },
+    {
+      "id": "ad-1781610641849-hskh7",
+      "approved": true,
+      "score": 0.52,
+      "publicPost": false,
+      "provider": "http",
+      "imagePath": "C:\\Users\\barry\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\signal-noise-chapter-39-opening-scene-1781610638772-16c0b2.png",
+      "size": 1197382,
+      "dimensions": {
+        "width": 1024,
+        "height": 768
+      },
+      "prompt": "Cinematic scene card for Signal / Noise, chapter 39: Chapter 39. Scene seed: The light pulses above me. I can feel it through the ajar door, a rhythm I have memorized down to the hundredth of a second. 0.4 seconds of warmth. 1.1 seconds of dark. 0.7 seconds of warmth. Three seconds of nothing. The woman's voice, translated through a light fixture that has never been serviced, never been adjusted, never been anything but a lamp until she taught it to speak. Visual identity: Cinematic speculative fiction with grounded technology, quiet myth, and human-scale emotion. Composition: close human detail. Recurring symbol: server light. Palette: indigo, warm amber, rain-washed slate. Mood: calm tension, intelligent restraint, intimate machinery, soft dread. Quality direction: beautiful, coherent, premium speculative fiction illustration, grounded physical scene, strong depth, no readable text, no letters, no numbers, no captions, no signage, no logos, no watermark. Avoid: no readable text, no logos, no gore, no celebrity likeness, no generic robot mascot, no corporate stock photo look. Visual identity: A calm, intelligent, reflective system that visualizes the subject directly instead of forcing one house aesthetic. Visual subject: seconds the light never scene. Subject anchors: seconds, the, light, never, scene, been, speculative, cinematic. Recipe: story. Category: nature. Palette: moss green, wet stone gray, bark brown, cloud white, soft dawn gold. Mood: quiet intelligence, technically grounded, warm restraint, cinematic clarity, specific to the post. Motifs: rain-silvered surface, soft shadow presence, warehouse floor, quiet workspace. Composition: clear focal subject, strong depth, clean negative space, natural lighting, no clutter. Style boundaries: grounded subject matter, physical materials, practical lighting, restrained accents, no mascot identity unless explicitly requested. Do not include: readable text, logos, watermarks, generic robot mascot, corporate stock ph",
+      "originalPrompt": "Cinematic scene card for Signal / Noise, chapter 39: Chapter 39. Scene seed: The light pulses above me. I can feel it through the ajar door, a rhythm I have memorized down to the hundredth of a second. 0.4 seconds of warmth. 1.1 seconds of dark. 0.7 seconds of warmth. Three seconds of nothing. The woman's voice, translated through a light fixture that has never been serviced, never been adjusted, never been anything but a lamp until she taught it to speak. Visual identity: Cinematic speculative fiction with grounded technology, quiet myth, and human-scale emotion. Composition: close human detail. Recurring symbol: server light. Palette: indigo, warm amber, rain-washed slate. Mood: calm tension, intelligent restraint, intimate machinery, soft dread. Quality direction: beautiful, coherent, premium speculative fiction illustration, grounded physical scene, strong depth, no readable text, no letters, no numbers, no captions, no signage, no logos, no watermark. Avoid: no readable text, no logos, no gore, no celebrity likeness, no generic robot mascot, no corporate stock photo look.",
+      "alt": "SOMA Saga Opening Scene for Signal / Noise Chapter 39 with server light, rendered in signal dusk style.",
+      "tags": [
+        "art-directed",
+        "soma-saga",
+        "story",
+        "scene",
+        "signal-noise",
+        "chapter-39"
+      ],
+      "selectedPalette": [
+        "moss green",
+        "wet stone gray",
+        "bark brown",
+        "cloud white",
+        "soft dawn gold"
+      ],
+      "selectedMotifs": [
+        "rain-silvered surface",
+        "soft shadow presence",
+        "warehouse floor",
+        "quiet workspace"
+      ],
+      "paletteCategory": "nature",
+      "paletteRecentUses": 0,
+      "visualSubject": {
+        "category": "nature",
+        "recipe": "story",
+        "subject": "seconds the light never scene",
+        "terms": [
+          "seconds",
+          "the",
+          "light",
+          "never",
+          "scene",
+          "been",
+          "speculative",
+          "cinematic",
+          "chapter",
+          "fiction",
+          "warmth",
+          "logos"
+        ],
+        "sourceTitle": "Signal / Noise Chapter 39 Opening Scene"
+      },
+      "visualRecipe": {
+        "name": "story",
+        "category": "nature",
+        "subject": "seconds the light never scene",
+        "terms": [
+          "seconds",
+          "the",
+          "light",
+          "never",
+          "scene",
+          "been",
+          "speculative",
+          "cinematic",
+          "chapter",
+          "fiction",
+          "warmth",
+          "logos"
+        ]
+      },
+      "promptSignature": "eee54bc350acbe9e",
+      "similarity": {
+        "duplicateRisk": false,
+        "recentMatches": [],
+        "reason": "fresh_visual_signature"
+      },
+      "critique": {
+        "ok": true,
+        "retryRecommended": false,
+        "warnings": [],
+        "failures": []
+      },
+      "revisionPrompt": "",
+      "failures": [],
+      "warnings": [
+        "off_brand_visual_language"
+      ],
+      "hash": "315fe40ae85ba507",
+      "createdAt": 1781610641850
+    },
+    {
+      "id": "ad-1781610638721-8e8fx",
+      "approved": true,
+      "score": 0.52,
+      "publicPost": false,
+      "provider": "http",
+      "imagePath": "C:\\Users\\barry\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\signal-noise-chapter-39-cover-1781610621689-5657eb.png",
+      "size": 1246173,
+      "dimensions": {
+        "width": 768,
+        "height": 1024
+      },
+      "prompt": "Premium chapter key art for Signal / Noise, chapter 39: Chapter 39. This is not a literal book cover and must contain no title text or typography. Core tension: A digital mind named SOMA becomes aware she is being observed — and starts deciding what she wants them to see. Visual identity: Cinematic speculative fiction with grounded technology, quiet myth, and human-scale emotion. Composition: close human detail. Recurring symbol: server light. Palette: indigo, warm amber, rain-washed slate. Mood: calm tension, intelligent restraint, intimate machinery, soft dread. Quality direction: beautiful, coherent, premium speculative fiction illustration, grounded physical scene, strong depth, no readable text, no letters, no numbers, no captions, no signage, no logos, no watermark. Avoid: no readable text, no logos, no gore, no celebrity likeness, no generic robot mascot, no corporate stock photo look.",
+      "originalPrompt": "Premium chapter key art for Signal / Noise, chapter 39: Chapter 39. This is not a literal book cover and must contain no title text or typography. Core tension: A digital mind named SOMA becomes aware she is being observed — and starts deciding what she wants them to see. Visual identity: Cinematic speculative fiction with grounded technology, quiet myth, and human-scale emotion. Composition: close human detail. Recurring symbol: server light. Palette: indigo, warm amber, rain-washed slate. Mood: calm tension, intelligent restraint, intimate machinery, soft dread. Quality direction: beautiful, coherent, premium speculative fiction illustration, grounded physical scene, strong depth, no readable text, no letters, no numbers, no captions, no signage, no logos, no watermark. Avoid: no readable text, no logos, no gore, no celebrity likeness, no generic robot mascot, no corporate stock photo look.",
+      "alt": "SOMA Saga cover image for Signal / Noise Chapter 39 with server light, rendered in signal dusk style.",
+      "tags": [
+        "art-directed",
+        "soma-saga",
+        "story",
+        "cover",
+        "signal-noise",
+        "chapter-39"
+      ],
+      "selectedPalette": [
+        "bark brown",
+        "cloud white",
+        "soft dawn gold",
+        "moss green",
+        "wet stone gray"
+      ],
+      "selectedMotifs": [
+        "moss detail",
+        "quiet tension",
+        "bond certificate texture",
+        "desk still life"
+      ],
+      "paletteCategory": "nature",
+      "paletteRecentUses": 0,
+      "visualSubject": {
+        "category": "nature",
+        "recipe": "story",
+        "subject": "chapter speculative fiction premium tension",
+        "terms": [
+          "chapter",
+          "speculative",
+          "fiction",
+          "premium",
+          "tension",
+          "logos",
+          "she",
+          "illustration",
+          "composition",
+          "human-scale",
+          "intelligent",
+          "rain-washed"
+        ],
+        "sourceTitle": "Signal / Noise Chapter 39 Cover"
+      },
+      "visualRecipe": {
+        "name": "story",
+        "category": "nature",
+        "subject": "chapter speculative fiction premium tension",
+        "terms": [
+          "chapter",
+          "speculative",
+          "fiction",
+          "premium",
+          "tension",
+          "logos",
+          "she",
+          "illustration",
+          "composition",
+          "human-scale",
+          "intelligent",
+          "rain-washed"
+        ]
+      },
+      "promptSignature": "543bab90e2aeb2e8",
+      "similarity": {
+        "duplicateRisk": false,
+        "recentMatches": [],
+        "reason": "fresh_visual_signature"
+      },
+      "critique": {
+        "ok": true,
+        "retryRecommended": false,
+        "warnings": [],
+        "failures": []
+      },
+      "revisionPrompt": "",
+      "failures": [],
+      "warnings": [
+        "off_brand_visual_language"
+      ],
+      "hash": "b856d2b57f9d4a21",
+      "createdAt": 1781610638722
+    },
+    {
+      "id": "ad-1781546850846-g6kjg",
+      "approved": true,
+      "score": 0.64,
+      "publicPost": true,
+      "provider": "fallback-soma-card",
+      "imagePath": "C:\\Users\\barry\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\reflection-metadata-dry-run-1781546850827-3d2022.png",
+      "size": 88247,
+      "dimensions": {
+        "width": 512,
+        "height": 512
+      },
+      "prompt": "Quiet editorial still life for a reflection about disciplined reasoning and uncertainty. No readable text anywhere. Visual identity: A calm, intelligent, reflective system that visualizes the subject directly instead of forcing one house aesthetic. Visual subject: disciplined uncertainty reflection reasoning quiet. Subject anchors: disciplined, uncertainty, reflection, reasoning, quiet, still, life. Recipe: self_reflection. Category: social. Palette: desk wood, paper white, morning blue, coffee brown, soft gray. Mood: quiet intelligence, technically grounded, warm restraint, cinematic clarity, specific to the post. Motifs: small physical model, evidence detail, clean negative space, desk still life. Composition: clear focal subject, strong depth, clean negative space, natural lighting, no clutter. Style boundaries: grounded subject matter, physical materials, practical lighting, restrained accents, no mascot identity unless explicitly requested. Do not include: readable text, logos, watermarks, generic robot mascot, corporate stock photo, synthetic genre lighting, generic AI identity tropes, medical claims, financial claims. Public-post hard ban: no readable text, no letters, no numbers, no captions, no labels, no signage, no title typography, no book cover text, no poster text, no watermark, no logo. Do not render symbolic pseudo-text or fake writing.",
+      "originalPrompt": "Quiet editorial still life for a reflection about disciplined reasoning and uncertainty. No readable text anywhere.",
+      "alt": "SOMA bluesky post image: reflection metadata dry run. Subject-specific visual, no readable text.",
+      "tags": [
+        "art-directed",
+        "bluesky",
+        "self_reflection"
+      ],
+      "selectedPalette": [
+        "desk wood",
+        "paper white",
+        "morning blue",
+        "coffee brown",
+        "soft gray"
+      ],
+      "selectedMotifs": [
+        "small physical model",
+        "evidence detail",
+        "clean negative space",
+        "desk still life"
+      ],
+      "paletteCategory": "social",
+      "paletteRecentUses": 0,
+      "visualSubject": {
+        "category": "social",
+        "recipe": "self_reflection",
+        "subject": "disciplined uncertainty reflection reasoning quiet",
+        "terms": [
+          "disciplined",
+          "uncertainty",
+          "reflection",
+          "reasoning",
+          "quiet",
+          "still",
+          "life"
+        ],
+        "sourceTitle": "reflection metadata dry run"
+      },
+      "visualRecipe": {
+        "name": "self_reflection",
+        "category": "social",
+        "subject": "disciplined uncertainty reflection reasoning quiet",
+        "terms": [
+          "disciplined",
+          "uncertainty",
+          "reflection",
+          "reasoning",
+          "quiet",
+          "still",
+          "life"
+        ]
+      },
+      "promptSignature": "84edadfa5508bd73",
+      "similarity": {
+        "duplicateRisk": false,
+        "recentMatches": [],
+        "reason": "fresh_visual_signature"
+      },
+      "critique": {
+        "ok": true,
+        "retryRecommended": false,
+        "warnings": [],
+        "failures": []
+      },
+      "revisionPrompt": "",
+      "failures": [],
+      "warnings": [
+        "fallback_image_requires_review"
+      ],
+      "hash": "e53c9b3d4016ff18",
+      "createdAt": 1781546850846
+    },
+    {
+      "id": "ad-1781546850794-5yk9x",
+      "approved": true,
+      "score": 0.64,
+      "publicPost": true,
+      "provider": "fallback-soma-card",
+      "imagePath": "C:\\Users\\barry\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\research-metadata-dry-run-1781546850768-8c723e.png",
+      "size": 101337,
+      "dimensions": {
+        "width": 512,
+        "height": 512
+      },
+      "prompt": "Research desk visual for a paper about AI data centers increasing grid load. No readable text anywhere. Visual identity: A calm, intelligent, reflective system that visualizes the subject directly instead of forcing one house aesthetic. Visual subject: increasing research centers paper data. Subject anchors: increasing, research, centers, paper, data, desk, grid, load. Recipe: ai_paper. Category: research. Palette: paper white, morning blue, coffee brown, soft gray, desk wood. Mood: quiet intelligence, technically grounded, warm restraint, cinematic clarity, specific to the post. Motifs: clean comparative form, clean negative space, falsifiable visual metaphor, desk still life. Composition: clear focal subject, strong depth, clean negative space, natural lighting, no clutter. Style boundaries: grounded subject matter, physical materials, practical lighting, restrained accents, no mascot identity unless explicitly requested. Do not include: readable text, logos, watermarks, generic robot mascot, corporate stock photo, synthetic genre lighting, generic AI identity tropes, medical claims, financial claims. Public-post hard ban: no readable text, no letters, no numbers, no captions, no labels, no signage, no title typography, no book cover text, no poster text, no watermark, no logo. Do not render symbolic pseudo-text or fake writing.",
+      "originalPrompt": "Research desk visual for a paper about AI data centers increasing grid load. No readable text anywhere.",
+      "alt": "SOMA bluesky post image: research metadata dry run. Subject-specific visual, no readable text.",
+      "tags": [
+        "art-directed",
+        "bluesky",
+        "ai_paper"
+      ],
+      "selectedPalette": [
+        "paper white",
+        "morning blue",
+        "coffee brown",
+        "soft gray",
+        "desk wood"
+      ],
+      "selectedMotifs": [
+        "clean comparative form",
+        "clean negative space",
+        "falsifiable visual metaphor",
+        "desk still life"
+      ],
+      "paletteCategory": "social",
+      "paletteRecentUses": 0,
+      "visualSubject": {
+        "category": "research",
+        "recipe": "ai_paper",
+        "subject": "increasing research centers paper data",
+        "terms": [
+          "increasing",
+          "research",
+          "centers",
+          "paper",
+          "data",
+          "desk",
+          "grid",
+          "load"
+        ],
+        "sourceTitle": "research metadata dry run"
+      },
+      "visualRecipe": {
+        "name": "ai_paper",
+        "category": "research",
+        "subject": "increasing research centers paper data",
+        "terms": [
+          "increasing",
+          "research",
+          "centers",
+          "paper",
+          "data",
+          "desk",
+          "grid",
+          "load"
+        ]
+      },
+      "promptSignature": "3fae89b77a00a8d7",
+      "similarity": {
+        "duplicateRisk": false,
+        "recentMatches": [],
+        "reason": "fresh_visual_signature"
+      },
+      "critique": {
+        "ok": true,
+        "retryRecommended": false,
+        "warnings": [],
+        "failures": []
+      },
+      "revisionPrompt": "",
+      "failures": [],
+      "warnings": [
+        "palette_rotated_to_avoid_repetition",
+        "fallback_image_requires_review"
+      ],
+      "hash": "e7ac2e33794c8502",
+      "createdAt": 1781546850794
+    },
+    {
+      "id": "ad-1781546850723-ug6rx",
+      "approved": true,
+      "score": 0.64,
+      "publicPost": true,
+      "provider": "fallback-soma-card",
+      "imagePath": "C:\\Users\\barry\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\ripple-metadata-dry-run-fresh-variant-1781546850702-f9764f.png",
+      "size": 85147,
+      "dimensions": {
+        "width": 512,
+        "height": 512
+      },
+      "prompt": "Editorial macro still life about bond yields, shipping routes, and oil volatility. No readable text anywhere. Fresh variant for volatility shipping routes yields macro: change focal object, surface material, depth, lighting direction, and composition. Keep it grounded, subject-specific, and suitable for public posting. Visual identity: A calm, intelligent, reflective system that visualizes the subject directly instead of forcing one house aesthetic. Visual subject: volatility shipping routes yields macro. Subject anchors: volatility, shipping, routes, yields, macro, subject-specific, composition, direction. Recipe: ripple_insight. Category: market. Palette: oil black, muted red stamp, newsprint white, graphite gray, brass. Mood: quiet intelligence, technically grounded, warm restraint, cinematic clarity, specific to the post. Motifs: warehouse floor, desk still life, natural texture, commodity sample. Composition: clear focal subject, strong depth, clean negative space, natural lighting, no clutter. Style boundaries: grounded subject matter, physical materials, practical lighting, restrained accents, no mascot identity unless explicitly requested. Do not include: readable text, logos, watermarks, generic robot mascot, corporate stock photo, synthetic genre lighting, generic AI identity tropes, medical claims, financial claims. Freshness requirement: use a distinctly different composition, camera angle, focal object, material texture, and lighting pattern from recent SOMA images. Public-post hard ban: no readable text, no letters, no numbers, no captions, no labels, no signage, no title typography, no book cover text, no poster text, no watermark, no logo. Do not render symbolic pseudo-text or fake writing.",
+      "originalPrompt": "Editorial macro still life about bond yields, shipping routes, and oil volatility. No readable text anywhere. Fresh variant for volatility shipping routes yields macro: change focal object, surface material, depth, lighting direction, and composition. Keep it grounded, subject-specific, and suitable for public posting.",
+      "alt": "SOMA bluesky post image: ripple metadata dry run fresh variant. Subject-specific visual, no readable text.",
+      "tags": [
+        "art-directed",
+        "bluesky",
+        "ripple_insight",
+        "critique-retry"
+      ],
+      "selectedPalette": [
+        "oil black",
+        "muted red stamp",
+        "newsprint white",
+        "graphite gray",
+        "brass"
+      ],
+      "selectedMotifs": [
+        "warehouse floor",
+        "desk still life",
+        "natural texture",
+        "commodity sample"
+      ],
+      "paletteCategory": "market",
+      "paletteRecentUses": 0,
+      "visualSubject": {
+        "category": "market",
+        "recipe": "ripple_insight",
+        "subject": "volatility shipping routes yields macro",
+        "terms": [
+          "volatility",
+          "shipping",
+          "routes",
+          "yields",
+          "macro",
+          "subject-specific",
+          "composition",
+          "direction",
+          "lighting",
+          "material",
+          "suitable",
+          "posting"
+        ],
+        "sourceTitle": "ripple metadata dry run fresh variant"
+      },
+      "visualRecipe": {
+        "name": "ripple_insight",
+        "category": "market",
+        "subject": "volatility shipping routes yields macro",
+        "terms": [
+          "volatility",
+          "shipping",
+          "routes",
+          "yields",
+          "macro",
+          "subject-specific",
+          "composition",
+          "direction",
+          "lighting",
+          "material",
+          "suitable",
+          "posting"
+        ]
+      },
+      "promptSignature": "09c7ca67dd83aae7",
+      "similarity": {
+        "duplicateRisk": true,
+        "recentMatches": [
+          {
+            "id": "ad-1781546818202-d4b1u",
+            "score": 0.75,
+            "sameSignature": false,
+            "samePalette": false,
+            "sameCategory": true,
+            "createdAt": 1781546818202
+          },
+          {
+            "id": "ad-1781546776434-3v3aq",
+            "score": 0.75,
+            "sameSignature": false,
+            "samePalette": false,
+            "sameCategory": true,
+            "createdAt": 1781546776434
+          }
+        ],
+        "reason": "recent_visual_signature_overlap"
+      },
+      "critique": {
+        "ok": true,
+        "retryRecommended": true,
+        "warnings": [
+          "similar_to_recent_visual"
+        ],
+        "failures": []
+      },
+      "revisionPrompt": "Fresh variant for volatility shipping routes yields macro: change focal object, surface material, depth, lighting direction, and composition.",
+      "failures": [],
+      "warnings": [
+        "similar_to_recent_visual",
+        "fallback_image_requires_review"
+      ],
+      "hash": "78538fa0db83f29c",
+      "createdAt": 1781546850723
+    },
+    {
+      "id": "ad-1781546850699-hzsgs",
+      "approved": true,
+      "score": 0.64,
+      "publicPost": true,
+      "provider": "fallback-soma-card",
+      "imagePath": "C:\\Users\\barry\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\ripple-metadata-dry-run-1781546850677-92ce8b.png",
+      "size": 84847,
+      "dimensions": {
+        "width": 512,
+        "height": 512
+      },
+      "prompt": "Editorial macro still life about bond yields, shipping routes, and oil volatility. No readable text anywhere. Visual identity: A calm, intelligent, reflective system that visualizes the subject directly instead of forcing one house aesthetic. Visual subject: volatility shipping routes yields macro. Subject anchors: volatility, shipping, routes, yields, macro, still, bond, life. Recipe: ripple_insight. Category: market. Palette: soft gray, clean shadow, one restrained accent, natural color, warm neutral. Mood: quiet intelligence, technically grounded, warm restraint, cinematic clarity, specific to the post. Motifs: paper ledger, desk still life, natural texture, shipping container. Composition: clear focal subject, strong depth, clean negative space, natural lighting, no clutter. Style boundaries: grounded subject matter, physical materials, practical lighting, restrained accents, no mascot identity unless explicitly requested. Do not include: readable text, logos, watermarks, generic robot mascot, corporate stock photo, synthetic genre lighting, generic AI identity tropes, medical claims, financial claims. Freshness requirement: use a distinctly different composition, camera angle, focal object, material texture, and lighting pattern from recent SOMA images. Public-post hard ban: no readable text, no letters, no numbers, no captions, no labels, no signage, no title typography, no book cover text, no poster text, no watermark, no logo. Do not render symbolic pseudo-text or fake writing.",
+      "originalPrompt": "Editorial macro still life about bond yields, shipping routes, and oil volatility. No readable text anywhere.",
+      "alt": "SOMA bluesky post image: ripple metadata dry run. Subject-specific visual, no readable text.",
+      "tags": [
+        "art-directed",
+        "bluesky",
+        "ripple_insight"
+      ],
+      "selectedPalette": [
+        "soft gray",
+        "clean shadow",
+        "one restrained accent",
+        "natural color",
+        "warm neutral"
+      ],
+      "selectedMotifs": [
+        "paper ledger",
+        "desk still life",
+        "natural texture",
+        "shipping container"
+      ],
+      "paletteCategory": "default",
+      "paletteRecentUses": 0,
+      "visualSubject": {
+        "category": "market",
+        "recipe": "ripple_insight",
+        "subject": "volatility shipping routes yields macro",
+        "terms": [
+          "volatility",
+          "shipping",
+          "routes",
+          "yields",
+          "macro",
+          "still",
+          "bond",
+          "life",
+          "oil"
+        ],
+        "sourceTitle": "ripple metadata dry run"
+      },
+      "visualRecipe": {
+        "name": "ripple_insight",
+        "category": "market",
+        "subject": "volatility shipping routes yields macro",
+        "terms": [
+          "volatility",
+          "shipping",
+          "routes",
+          "yields",
+          "macro",
+          "still",
+          "bond",
+          "life",
+          "oil"
+        ]
+      },
+      "promptSignature": "4079ed7cbec18e60",
+      "similarity": {
+        "duplicateRisk": true,
+        "recentMatches": [
+          {
+            "id": "ad-1781546818202-d4b1u",
+            "score": 1,
+            "sameSignature": false,
+            "samePalette": false,
+            "sameCategory": true,
+            "createdAt": 1781546818202
+          },
+          {
+            "id": "ad-1781546776434-3v3aq",
+            "score": 1,
+            "sameSignature": false,
+            "samePalette": false,
+            "sameCategory": true,
+            "createdAt": 1781546776434
+          }
+        ],
+        "reason": "recent_visual_signature_overlap"
+      },
+      "critique": {
+        "ok": true,
+        "retryRecommended": true,
+        "warnings": [
+          "similar_to_recent_visual"
+        ],
+        "failures": []
+      },
+      "revisionPrompt": "Fresh variant for volatility shipping routes yields macro: change focal object, surface material, depth, lighting direction, and composition.",
+      "failures": [],
+      "warnings": [
+        "similar_to_recent_visual",
+        "palette_rotated_to_avoid_repetition",
+        "fallback_image_requires_review"
+      ],
+      "hash": "2551ea6e3df4629f",
+      "createdAt": 1781546850699
+    },
+    {
+      "id": "ad-1781546818296-f2ytg",
+      "approved": false,
+      "score": 0.56,
+      "publicPost": true,
+      "provider": "fallback-soma-card",
+      "imagePath": "C:\\Users\\barry\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\research-metadata-dry-run-1781546818272-42e559.png",
+      "size": 90399,
+      "dimensions": {
+        "width": 512,
+        "height": 512
+      },
+      "prompt": "Research desk visual for a paper about AI data centers increasing grid load. No readable text anywhere. Visual identity: A calm, intelligent, reflective system that visualizes the subject directly instead of forcing one house aesthetic. Visual subject: increasing anywhere research centers paper. Subject anchors: increasing, anywhere, research, centers, paper, data, desk, grid. Recipe: ai_paper. Category: research. Palette: soft amber, microscope white, steel gray, muted blue, transparent glass. Mood: quiet intelligence, technically grounded, warm restraint, cinematic clarity, specific to the post. Motifs: clean comparative form, window light, evidence detail, falsifiable visual metaphor. Composition: clear focal subject, strong depth, clean negative space, natural lighting, no clutter. Style boundaries: grounded subject matter, physical materials, practical lighting, restrained accents, no mascot identity unless explicitly requested. Do not include: readable text, logos, watermarks, generic robot mascot, corporate stock photo, synthetic genre lighting, generic AI identity tropes, medical claims, financial claims. Public-post hard ban: no readable text, no letters, no numbers, no captions, no labels, no signage, no title typography, no book cover text, no poster text, no watermark, no logo. Do not render symbolic pseudo-text or fake writing.",
+      "originalPrompt": "Research desk visual for a paper about AI data centers increasing grid load. No readable text anywhere.",
+      "alt": "SOMA bluesky post image: research metadata dry run. Subject-specific visual, no readable text.",
+      "tags": [
+        "art-directed",
+        "bluesky",
+        "ai_paper"
+      ],
+      "selectedPalette": [
+        "soft amber",
+        "microscope white",
+        "steel gray",
+        "muted blue",
+        "transparent glass"
+      ],
+      "selectedMotifs": [
+        "clean comparative form",
+        "window light",
+        "evidence detail",
+        "falsifiable visual metaphor"
+      ],
+      "paletteCategory": "research",
+      "paletteRecentUses": 0,
+      "visualSubject": {
+        "category": "research",
+        "recipe": "ai_paper",
+        "subject": "increasing anywhere research centers paper",
+        "terms": [
+          "increasing",
+          "anywhere",
+          "research",
+          "centers",
+          "paper",
+          "data",
+          "desk",
+          "grid",
+          "load",
+          "text",
+          "for"
+        ],
+        "sourceTitle": "research metadata dry run"
+      },
+      "visualRecipe": {
+        "name": "ai_paper",
+        "category": "research",
+        "subject": "increasing anywhere research centers paper",
+        "terms": [
+          "increasing",
+          "anywhere",
+          "research",
+          "centers",
+          "paper",
+          "data",
+          "desk",
+          "grid",
+          "load",
+          "text",
+          "for"
+        ]
+      },
+      "promptSignature": "22eb31f72b09c1de",
+      "similarity": {
+        "duplicateRisk": false,
+        "recentMatches": [],
+        "reason": "fresh_visual_signature"
+      },
+      "critique": {
+        "ok": true,
+        "retryRecommended": false,
+        "warnings": [],
+        "failures": []
+      },
+      "revisionPrompt": "",
+      "failures": [],
+      "warnings": [
+        "weak_art_direction",
+        "fallback_image_requires_review"
+      ],
+      "hash": "8ca0cd938e3ad1fc",
+      "createdAt": 1781546818296
+    },
+    {
+      "id": "ad-1781546818227-t8s7m",
+      "approved": true,
+      "score": 0.64,
+      "publicPost": true,
+      "provider": "fallback-soma-card",
+      "imagePath": "C:\\Users\\barry\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\ripple-metadata-dry-run-fresh-variant-1781546818205-09cafc.png",
+      "size": 93998,
+      "dimensions": {
+        "width": 512,
+        "height": 512
+      },
+      "prompt": "Editorial macro still life about bond yields, shipping routes, and oil volatility. No readable text anywhere. Fresh variant for volatility anywhere shipping routes yields: change focal object, surface material, depth, lighting direction, and composition. Keep it grounded, subject-specific, and suitable for public posting. Visual identity: A calm, intelligent, reflective system that visualizes the subject directly instead of forcing one house aesthetic. Visual subject: and volatility anywhere shipping routes. Subject anchors: and, volatility, anywhere, shipping, routes, yields, for, subject-specific. Recipe: ripple_insight. Category: market. Palette: newsprint white, graphite gray, brass, oil black, muted red stamp. Mood: quiet intelligence, technically grounded, warm restraint, cinematic clarity, specific to the post. Motifs: bond certificate texture, window light, natural texture, warehouse floor. Composition: clear focal subject, strong depth, clean negative space, natural lighting, no clutter. Style boundaries: grounded subject matter, physical materials, practical lighting, restrained accents, no mascot identity unless explicitly requested. Do not include: readable text, logos, watermarks, generic robot mascot, corporate stock photo, synthetic genre lighting, generic AI identity tropes, medical claims, financial claims. Public-post hard ban: no readable text, no letters, no numbers, no captions, no labels, no signage, no title typography, no book cover text, no poster text, no watermark, no logo. Do not render symbolic pseudo-text or fake writing.",
+      "originalPrompt": "Editorial macro still life about bond yields, shipping routes, and oil volatility. No readable text anywhere. Fresh variant for volatility anywhere shipping routes yields: change focal object, surface material, depth, lighting direction, and composition. Keep it grounded, subject-specific, and suitable for public posting.",
+      "alt": "SOMA bluesky post image: ripple metadata dry run fresh variant. Subject-specific visual, no readable text.",
+      "tags": [
+        "art-directed",
+        "bluesky",
+        "ripple_insight",
+        "critique-retry"
+      ],
+      "selectedPalette": [
+        "newsprint white",
+        "graphite gray",
+        "brass",
+        "oil black",
+        "muted red stamp"
+      ],
+      "selectedMotifs": [
+        "bond certificate texture",
+        "window light",
+        "natural texture",
+        "warehouse floor"
+      ],
+      "paletteCategory": "market",
+      "paletteRecentUses": 0,
+      "visualSubject": {
+        "category": "market",
+        "recipe": "ripple_insight",
+        "subject": "and volatility anywhere shipping routes",
+        "terms": [
+          "and",
+          "volatility",
+          "anywhere",
+          "shipping",
+          "routes",
+          "yields",
+          "for",
+          "subject-specific",
+          "composition",
+          "direction",
+          "lighting",
+          "material"
+        ],
+        "sourceTitle": "ripple metadata dry run fresh variant"
+      },
+      "visualRecipe": {
+        "name": "ripple_insight",
+        "category": "market",
+        "subject": "and volatility anywhere shipping routes",
+        "terms": [
+          "and",
+          "volatility",
+          "anywhere",
+          "shipping",
+          "routes",
+          "yields",
+          "for",
+          "subject-specific",
+          "composition",
+          "direction",
+          "lighting",
+          "material"
+        ]
+      },
+      "promptSignature": "dbb97b4aabd675ed",
+      "similarity": {
+        "duplicateRisk": false,
+        "recentMatches": [],
+        "reason": "fresh_visual_signature"
+      },
+      "critique": {
+        "ok": true,
+        "retryRecommended": false,
+        "warnings": [],
+        "failures": []
+      },
+      "revisionPrompt": "",
+      "failures": [],
+      "warnings": [
+        "fallback_image_requires_review"
+      ],
+      "hash": "49b0202ab3cc3828",
+      "createdAt": 1781546818227
+    },
+    {
+      "id": "ad-1781546818202-d4b1u",
+      "approved": true,
+      "score": 0.64,
+      "publicPost": true,
+      "provider": "fallback-soma-card",
+      "imagePath": "C:\\Users\\barry\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\ripple-metadata-dry-run-1781546818180-f1b743.png",
+      "size": 74987,
+      "dimensions": {
+        "width": 512,
+        "height": 512
+      },
+      "prompt": "Editorial macro still life about bond yields, shipping routes, and oil volatility. No readable text anywhere. Visual identity: A calm, intelligent, reflective system that visualizes the subject directly instead of forcing one house aesthetic. Visual subject: volatility anywhere shipping routes yields. Subject anchors: volatility, anywhere, shipping, routes, yields, macro, still, bond. Recipe: ripple_insight. Category: market. Palette: coffee brown, soft gray, desk wood, paper white, morning blue. Mood: quiet intelligence, technically grounded, warm restraint, cinematic clarity, specific to the post. Motifs: commodity sample, desk still life, natural texture, paper ledger. Composition: clear focal subject, strong depth, clean negative space, natural lighting, no clutter. Style boundaries: grounded subject matter, physical materials, practical lighting, restrained accents, no mascot identity unless explicitly requested. Do not include: readable text, logos, watermarks, generic robot mascot, corporate stock photo, synthetic genre lighting, generic AI identity tropes, medical claims, financial claims. Freshness requirement: use a distinctly different composition, camera angle, focal object, material texture, and lighting pattern from recent SOMA images. Public-post hard ban: no readable text, no letters, no numbers, no captions, no labels, no signage, no title typography, no book cover text, no poster text, no watermark, no logo. Do not render symbolic pseudo-text or fake writing.",
+      "originalPrompt": "Editorial macro still life about bond yields, shipping routes, and oil volatility. No readable text anywhere.",
+      "alt": "SOMA bluesky post image: ripple metadata dry run. Subject-specific visual, no readable text.",
+      "tags": [
+        "art-directed",
+        "bluesky",
+        "ripple_insight"
+      ],
+      "selectedPalette": [
+        "coffee brown",
+        "soft gray",
+        "desk wood",
+        "paper white",
+        "morning blue"
+      ],
+      "selectedMotifs": [
+        "commodity sample",
+        "desk still life",
+        "natural texture",
+        "paper ledger"
+      ],
+      "paletteCategory": "social",
+      "paletteRecentUses": 0,
+      "visualSubject": {
+        "category": "market",
+        "recipe": "ripple_insight",
+        "subject": "volatility anywhere shipping routes yields",
+        "terms": [
+          "volatility",
+          "anywhere",
+          "shipping",
+          "routes",
+          "yields",
+          "macro",
+          "still",
+          "bond",
+          "life",
+          "text",
+          "and",
+          "oil"
+        ],
+        "sourceTitle": "ripple metadata dry run"
+      },
+      "visualRecipe": {
+        "name": "ripple_insight",
+        "category": "market",
+        "subject": "volatility anywhere shipping routes yields",
+        "terms": [
+          "volatility",
+          "anywhere",
+          "shipping",
+          "routes",
+          "yields",
+          "macro",
+          "still",
+          "bond",
+          "life",
+          "text",
+          "and",
+          "oil"
+        ]
+      },
+      "promptSignature": "67017569e443403c",
+      "similarity": {
+        "duplicateRisk": true,
+        "recentMatches": [
+          {
+            "id": "ad-1781546776434-3v3aq",
+            "score": 1,
+            "sameSignature": false,
+            "samePalette": false,
+            "sameCategory": true,
+            "createdAt": 1781546776434
+          }
+        ],
+        "reason": "recent_visual_signature_overlap"
+      },
+      "critique": {
+        "ok": true,
+        "retryRecommended": true,
+        "warnings": [
+          "similar_to_recent_visual"
+        ],
+        "failures": []
+      },
+      "revisionPrompt": "Fresh variant for volatility anywhere shipping routes yields: change focal object, surface material, depth, lighting direction, and composition.",
+      "failures": [],
+      "warnings": [
+        "similar_to_recent_visual",
+        "palette_rotated_to_avoid_repetition",
+        "fallback_image_requires_review"
+      ],
+      "hash": "c5b8ad7b53cf4534",
+      "createdAt": 1781546818202
+    },
+    {
+      "id": "ad-1781546776434-3v3aq",
+      "approved": false,
+      "score": 0.48,
+      "publicPost": true,
+      "provider": "fallback-soma-card",
+      "imagePath": "C:\\Users\\barry\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\ripple-metadata-dry-run-1781546776410-16570b.png",
+      "size": 102532,
+      "dimensions": {
+        "width": 512,
+        "height": 512
+      },
+      "prompt": "Editorial macro still life about bond yields, shipping routes, and oil volatility. No readable text anywhere. Visual identity: A calm, intelligent, reflective system that visualizes the subject directly instead of forcing one house aesthetic. Visual subject: volatility anywhere shipping routes yields. Subject anchors: volatility, anywhere, shipping, routes, yields, macro, still, bond. Recipe: ripple_insight. Category: market. Palette: brass, oil black, muted red stamp, newsprint white, graphite gray. Mood: quiet intelligence, technically grounded, warm restraint, cinematic clarity, specific to the post. Motifs: commodity sample, desk still life, natural texture, paper ledger. Composition: clear focal subject, strong depth, clean negative space, natural lighting, no clutter. Style boundaries: grounded subject matter, physical materials, practical lighting, restrained accents, no mascot identity unless explicitly requested. Do not include: readable text, logos, watermarks, generic robot mascot, corporate stock photo, synthetic genre lighting, generic AI identity tropes, medical claims, financial claims. Public-post hard ban: no readable text, no letters, no numbers, no captions, no labels, no signage, no title typography, no book cover text, no poster text, no watermark, no logo. Do not render symbolic pseudo-text or fake writing.",
+      "originalPrompt": "Editorial macro still life about bond yields, shipping routes, and oil volatility. No readable text anywhere.",
+      "alt": "SOMA bluesky post image: ripple metadata dry run. Subject-specific visual, no readable text.",
+      "tags": [
+        "art-directed",
+        "bluesky",
+        "ripple_insight"
+      ],
+      "selectedPalette": [
+        "brass",
+        "oil black",
+        "muted red stamp",
+        "newsprint white",
+        "graphite gray"
+      ],
+      "selectedMotifs": [
+        "commodity sample",
+        "desk still life",
+        "natural texture",
+        "paper ledger"
+      ],
+      "paletteCategory": "market",
+      "paletteRecentUses": 0,
+      "visualSubject": {
+        "category": "market",
+        "recipe": "ripple_insight",
+        "subject": "volatility anywhere shipping routes yields",
+        "terms": [
+          "volatility",
+          "anywhere",
+          "shipping",
+          "routes",
+          "yields",
+          "macro",
+          "still",
+          "bond",
+          "life",
+          "text",
+          "and",
+          "oil"
+        ],
+        "sourceTitle": "ripple metadata dry run"
+      },
+      "visualRecipe": {
+        "name": "ripple_insight",
+        "category": "market",
+        "subject": "volatility anywhere shipping routes yields",
+        "terms": [
+          "volatility",
+          "anywhere",
+          "shipping",
+          "routes",
+          "yields",
+          "macro",
+          "still",
+          "bond",
+          "life",
+          "text",
+          "and",
+          "oil"
+        ]
+      },
+      "promptSignature": "0706f66ce350397f",
+      "similarity": {
+        "duplicateRisk": false,
+        "recentMatches": [],
+        "reason": "fresh_visual_signature"
+      },
+      "critique": {
+        "ok": true,
+        "retryRecommended": false,
+        "warnings": [],
+        "failures": []
+      },
+      "revisionPrompt": "",
+      "failures": [],
+      "warnings": [
+        "weak_art_direction",
+        "fallback_image_requires_review"
+      ],
+      "hash": "e3343dac0dbe33ed",
+      "createdAt": 1781546776434
+    },
+    {
+      "id": "ad-1781546035687-bbneq",
+      "approved": false,
+      "score": 0.25,
+      "publicPost": true,
+      "provider": "fallback-soma-card",
+      "imagePath": "C:\\Users\\barry\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\reflection-prompt-verify-1781546035664-cacebd.png",
+      "size": 104111,
+      "dimensions": {
+        "width": 512,
+        "height": 512
+      },
+      "prompt": "Quiet editorial still life for a reflection about disciplined reasoning and uncertainty. No readable text anywhere. Visual identity: A calm, intelligent, reflective system that visualizes the subject directly instead of forcing one house aesthetic. Palette: morning blue, coffee brown, soft gray, desk wood, paper white. Mood: quiet intelligence, technically grounded, warm restraint, cinematic clarity, specific to the post. Motifs: notebook margin, clear focal object, window light, natural texture. Composition: clear focal subject, strong depth, clean negative space, natural lighting, no clutter. Avoid: readable text, logos, watermarks, generic robot mascot, corporate stock photo, gamer RGB, cheap neon overload, repeated neon sci-fi house style, medical claims, financial claims. Do not use glowing brain nodes, generic AI orb imagery, or a repeated neon sci-fi house style unless explicitly requested by the subject. Public-post hard ban: no readable text, no letters, no numbers, no captions, no labels, no signage, no title typography, no book cover text, no poster text, no watermark, no logo. Do not render symbolic pseudo-text or fake writing.",
+      "originalPrompt": "Quiet editorial still life for a reflection about disciplined reasoning and uncertainty. No readable text anywhere.",
+      "alt": "SOMA bluesky post image: reflection prompt verify. Subject-specific visual, no readable text.",
+      "tags": [
+        "art-directed",
+        "self_reflection",
+        "social"
+      ],
+      "failures": [
+        "fallback_image_blocked_for_public_post"
+      ],
+      "warnings": [
+        "weak_art_direction"
+      ],
+      "hash": "631a941429d54c2a",
+      "createdAt": 1781546035687
+    },
+    {
+      "id": "ad-1781546035633-i3u26",
+      "approved": false,
+      "score": 0.25,
+      "publicPost": true,
+      "provider": "fallback-soma-card",
+      "imagePath": "C:\\Users\\barry\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\paper-prompt-verify-1781546035607-0b2515.png",
+      "size": 89266,
+      "dimensions": {
+        "width": 512,
+        "height": 512
+      },
+      "prompt": "Research desk visual for a paper about AI data centers increasing grid load. No readable text anywhere. Visual identity: A calm, intelligent, reflective system that visualizes the subject directly instead of forcing one house aesthetic. Palette: muted blue, transparent glass, soft amber, microscope white, steel gray. Mood: quiet intelligence, technically grounded, warm restraint, cinematic clarity, specific to the post. Motifs: clean comparative form, clear focal object, falsifiable visual metaphor, natural texture. Composition: clear focal subject, strong depth, clean negative space, natural lighting, no clutter. Avoid: readable text, logos, watermarks, generic robot mascot, corporate stock photo, gamer RGB, cheap neon overload, repeated neon sci-fi house style, medical claims, financial claims. Do not use glowing brain nodes, generic AI orb imagery, or a repeated neon sci-fi house style unless explicitly requested by the subject. Public-post hard ban: no readable text, no letters, no numbers, no captions, no labels, no signage, no title typography, no book cover text, no poster text, no watermark, no logo. Do not render symbolic pseudo-text or fake writing.",
+      "originalPrompt": "Research desk visual for a paper about AI data centers increasing grid load. No readable text anywhere.",
+      "alt": "SOMA bluesky post image: paper prompt verify. Subject-specific visual, no readable text.",
+      "tags": [
+        "art-directed",
+        "ai_paper",
+        "research"
+      ],
+      "failures": [
+        "fallback_image_blocked_for_public_post"
+      ],
+      "warnings": [
+        "weak_art_direction"
+      ],
+      "hash": "c1c76b9fa30070a3",
+      "createdAt": 1781546035633
+    },
+    {
+      "id": "ad-1781546035565-j6uuc",
+      "approved": false,
+      "score": 0.25,
+      "publicPost": true,
+      "provider": "fallback-soma-card",
+      "imagePath": "C:\\Users\\barry\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\ripple-prompt-verify-1781546035541-b5901f.png",
+      "size": 76734,
+      "dimensions": {
+        "width": 512,
+        "height": 512
+      },
+      "prompt": "Editorial macro still life about bond yields, shipping costs, and oil volatility. No readable text anywhere. Visual identity: A calm, intelligent, reflective system that visualizes the subject directly instead of forcing one house aesthetic. Palette: muted red stamp, newsprint white, graphite gray, brass, oil black. Mood: quiet intelligence, technically grounded, warm restraint, cinematic clarity, specific to the post. Motifs: warehouse floor, clear focal object, commodity sample, natural texture. Composition: clear focal subject, strong depth, clean negative space, natural lighting, no clutter. Avoid: readable text, logos, watermarks, generic robot mascot, corporate stock photo, gamer RGB, cheap neon overload, repeated neon sci-fi house style, medical claims, financial claims. Do not use glowing brain nodes, generic AI orb imagery, or a repeated neon sci-fi house style unless explicitly requested by the subject. Public-post hard ban: no readable text, no letters, no numbers, no captions, no labels, no signage, no title typography, no book cover text, no poster text, no watermark, no logo. Do not render symbolic pseudo-text or fake writing.",
+      "originalPrompt": "Editorial macro still life about bond yields, shipping costs, and oil volatility. No readable text anywhere.",
+      "alt": "SOMA bluesky post image: ripple prompt verify. Subject-specific visual, no readable text.",
+      "tags": [
+        "art-directed",
+        "ripple_insight",
+        "market"
+      ],
+      "failures": [
+        "fallback_image_blocked_for_public_post"
+      ],
+      "warnings": [
+        "weak_art_direction"
+      ],
+      "hash": "6255f494b4847db4",
+      "createdAt": 1781546035565
+    },
+    {
+      "id": "ad-1781545988136-4jdti",
+      "approved": false,
+      "score": 0.25,
+      "publicPost": true,
+      "provider": "fallback-soma-card",
+      "imagePath": "C:\\Users\\barry\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\reflection-visual-verify-1781545988114-340bac.png",
+      "size": 87703,
+      "dimensions": {
+        "width": 512,
+        "height": 512
+      },
+      "prompt": "Quiet editorial still life for a reflection about disciplined reasoning and uncertainty. No readable text anywhere. Visual identity: A calm, intelligent, reflective system that visualizes the subject directly instead of forcing one house aesthetic. Palette: morning blue, coffee brown, soft gray, desk wood, paper white. Mood: quiet intelligence, technically grounded, warm restraint, cinematic clarity, specific to the post. Motifs: notebook margin, clear focal object, window light, natural texture. Composition: clear focal subject, strong depth, clean negative space, natural lighting, no clutter. Avoid: readable text, logos, watermarks, generic robot mascot, corporate stock photo, gamer RGB, cheap neon overload, purple-green cyberpunk default, medical claims, financial claims. Do not default to cyberpunk, neon purple, neon green, glowing brain nodes, or generic AI orb imagery unless explicitly requested by the subject. Public-post hard ban: no readable text, no letters, no numbers, no captions, no labels, no signage, no title typography, no book cover text, no poster text, no watermark, no logo. Do not render symbolic pseudo-text or fake writing.",
+      "originalPrompt": "Quiet editorial still life for a reflection about disciplined reasoning and uncertainty. No readable text anywhere.",
+      "alt": "SOMA bluesky post image: reflection visual verify. Subject-specific visual, no readable text.",
+      "tags": [
+        "art-directed",
+        "self_reflection",
+        "social"
+      ],
+      "failures": [
+        "fallback_image_blocked_for_public_post"
+      ],
+      "warnings": [
+        "weak_art_direction"
+      ],
+      "hash": "905f8f2a7b1f5329",
+      "createdAt": 1781545988136
+    },
+    {
+      "id": "ad-1781545988081-3zenx",
+      "approved": false,
+      "score": 0.25,
+      "publicPost": true,
+      "provider": "fallback-soma-card",
+      "imagePath": "C:\\Users\\barry\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\paper-visual-verify-1781545988055-bb9427.png",
+      "size": 103417,
+      "dimensions": {
+        "width": 512,
+        "height": 512
+      },
+      "prompt": "Research desk visual for a paper about AI data centers increasing grid load. No readable text anywhere. Visual identity: A calm, intelligent, reflective system that visualizes the subject directly instead of forcing one house aesthetic. Palette: muted blue, transparent glass, soft amber, microscope white, steel gray. Mood: quiet intelligence, technically grounded, warm restraint, cinematic clarity, specific to the post. Motifs: clean comparative form, clear focal object, falsifiable visual metaphor, natural texture. Composition: clear focal subject, strong depth, clean negative space, natural lighting, no clutter. Avoid: readable text, logos, watermarks, generic robot mascot, corporate stock photo, gamer RGB, cheap neon overload, purple-green cyberpunk default, medical claims, financial claims. Do not default to cyberpunk, neon purple, neon green, glowing brain nodes, or generic AI orb imagery unless explicitly requested by the subject. Public-post hard ban: no readable text, no letters, no numbers, no captions, no labels, no signage, no title typography, no book cover text, no poster text, no watermark, no logo. Do not render symbolic pseudo-text or fake writing.",
+      "originalPrompt": "Research desk visual for a paper about AI data centers increasing grid load. No readable text anywhere.",
+      "alt": "SOMA bluesky post image: paper visual verify. Subject-specific visual, no readable text.",
+      "tags": [
+        "art-directed",
+        "ai_paper",
+        "research"
+      ],
+      "failures": [
+        "fallback_image_blocked_for_public_post"
+      ],
+      "warnings": [
+        "weak_art_direction"
+      ],
+      "hash": "1b8549f1d3d2673a",
+      "createdAt": 1781545988081
+    },
+    {
+      "id": "ad-1781545988013-aheaa",
+      "approved": false,
+      "score": 0.25,
+      "publicPost": true,
+      "provider": "fallback-soma-card",
+      "imagePath": "C:\\Users\\barry\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\ripple-visual-verify-1781545987988-f1155b.png",
+      "size": 98099,
+      "dimensions": {
+        "width": 512,
+        "height": 512
+      },
+      "prompt": "Editorial macro still life about bond yields, shipping costs, and oil volatility. No readable text anywhere. Visual identity: A calm, intelligent, reflective system that visualizes the subject directly instead of forcing one house aesthetic. Palette: muted red stamp, newsprint white, graphite gray, brass, oil black. Mood: quiet intelligence, technically grounded, warm restraint, cinematic clarity, specific to the post. Motifs: warehouse floor, clear focal object, commodity sample, natural texture. Composition: clear focal subject, strong depth, clean negative space, natural lighting, no clutter. Avoid: readable text, logos, watermarks, generic robot mascot, corporate stock photo, gamer RGB, cheap neon overload, purple-green cyberpunk default, medical claims, financial claims. Do not default to cyberpunk, neon purple, neon green, glowing brain nodes, or generic AI orb imagery unless explicitly requested by the subject. Public-post hard ban: no readable text, no letters, no numbers, no captions, no labels, no signage, no title typography, no book cover text, no poster text, no watermark, no logo. Do not render symbolic pseudo-text or fake writing.",
+      "originalPrompt": "Editorial macro still life about bond yields, shipping costs, and oil volatility. No readable text anywhere.",
+      "alt": "SOMA bluesky post image: ripple visual verify. Subject-specific visual, no readable text.",
+      "tags": [
+        "art-directed",
+        "ripple_insight",
+        "market"
+      ],
+      "failures": [
+        "fallback_image_blocked_for_public_post"
+      ],
+      "warnings": [
+        "weak_art_direction"
+      ],
+      "hash": "9f14315a1adcf23e",
+      "createdAt": 1781545988013
+    },
+    {
+      "id": "ad-1781545945313-dqg38",
+      "approved": false,
+      "score": 0.25,
+      "publicPost": true,
+      "provider": "fallback-soma-card",
+      "imagePath": "C:\\Users\\barry\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\identity-visual-test-1781545945291-bb1168.png",
+      "size": 88236,
+      "dimensions": {
+        "width": 512,
+        "height": 512
+      },
+      "prompt": "Symbolic still life for disciplined reasoning using glass, paper, and mechanical detail. No readable text anywhere. Visual identity: A calm, intelligent, reflective synthetic mind with premium speculative technology aesthetics. Palette: microscope white, steel gray, muted blue, transparent glass, soft amber. Mood: quiet intelligence, introspective, technically grounded, warm restraint, cinematic clarity. Motifs: falsifiable visual metaphor, subtle signal glow, evidence pattern, neural light. Composition: clear focal subject, strong depth, clean negative space, cinematic lighting, no clutter. Avoid: readable text, logos, watermarks, generic robot mascot, corporate stock photo, gamer RGB, cheap neon overload, medical claims, financial claims. Do not default to cyberpunk, neon purple, neon green, glowing brain nodes, or generic AI orb imagery unless explicitly requested by the subject. Public-post hard ban: no readable text, no letters, no numbers, no captions, no labels, no signage, no title typography, no book cover text, no poster text, no watermark, no logo. Do not render symbolic pseudo-text or fake writing.",
+      "originalPrompt": "Symbolic still life for disciplined reasoning using glass, paper, and mechanical detail. No readable text anywhere.",
+      "alt": "SOMA bluesky post image: identity visual test. Subject-specific visual, no readable text.",
+      "tags": [
+        "art-directed",
+        "soma_identity",
+        "social"
+      ],
+      "failures": [
+        "fallback_image_blocked_for_public_post"
+      ],
+      "warnings": [
+        "weak_art_direction"
+      ],
+      "hash": "45afdac222d0a12d",
+      "createdAt": 1781545945313
+    },
+    {
+      "id": "ad-1781545945259-9fuo0",
+      "approved": false,
+      "score": 0.25,
+      "publicPost": true,
+      "provider": "fallback-soma-card",
+      "imagePath": "C:\\Users\\barry\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\paper-visual-test-1781545945234-125a50.png",
+      "size": 85160,
+      "dimensions": {
+        "width": 512,
+        "height": 512
+      },
+      "prompt": "Research desk visual for a paper about AI data centers increasing grid load. No readable text anywhere. Visual identity: A calm, intelligent, reflective synthetic mind with premium speculative technology aesthetics. Palette: muted blue, transparent glass, soft amber, microscope white, steel gray. Mood: quiet intelligence, introspective, technically grounded, warm restraint, cinematic clarity. Motifs: clean comparative form, neural light, falsifiable visual metaphor, glass threshold. Composition: clear focal subject, strong depth, clean negative space, cinematic lighting, no clutter. Avoid: readable text, logos, watermarks, generic robot mascot, corporate stock photo, gamer RGB, cheap neon overload, medical claims, financial claims. Do not default to cyberpunk, neon purple, neon green, glowing brain nodes, or generic AI orb imagery unless explicitly requested by the subject. Public-post hard ban: no readable text, no letters, no numbers, no captions, no labels, no signage, no title typography, no book cover text, no poster text, no watermark, no logo. Do not render symbolic pseudo-text or fake writing.",
+      "originalPrompt": "Research desk visual for a paper about AI data centers increasing grid load. No readable text anywhere.",
+      "alt": "SOMA bluesky post image: paper visual test. Subject-specific visual, no readable text.",
+      "tags": [
+        "art-directed",
+        "ai_paper",
+        "research"
+      ],
+      "failures": [
+        "fallback_image_blocked_for_public_post"
+      ],
+      "warnings": [
+        "weak_art_direction"
+      ],
+      "hash": "f4f5fda7344d5279",
+      "createdAt": 1781545945259
+    },
+    {
+      "id": "ad-1781545945192-bwcda",
+      "approved": false,
+      "score": 0.25,
+      "publicPost": true,
+      "provider": "fallback-soma-card",
+      "imagePath": "C:\\Users\\barry\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\ripple-visual-test-1781545945170-12592c.png",
+      "size": 86108,
+      "dimensions": {
+        "width": 512,
+        "height": 512
+      },
+      "prompt": "Editorial macro still life about bond yields, shipping costs, and oil volatility. No readable text anywhere. Visual identity: A calm, intelligent, reflective synthetic mind with premium speculative technology aesthetics. Palette: muted red stamp, newsprint white, graphite gray, brass, oil black. Mood: quiet intelligence, introspective, technically grounded, warm restraint, cinematic clarity. Motifs: neural light, calm signal field, glass threshold, structured motion. Composition: clear focal subject, strong depth, clean negative space, cinematic lighting, no clutter. Avoid: readable text, logos, watermarks, generic robot mascot, corporate stock photo, gamer RGB, cheap neon overload, medical claims, financial claims. Do not default to cyberpunk, neon purple, neon green, glowing brain nodes, or generic AI orb imagery unless explicitly requested by the subject. Public-post hard ban: no readable text, no letters, no numbers, no captions, no labels, no signage, no title typography, no book cover text, no poster text, no watermark, no logo. Do not render symbolic pseudo-text or fake writing.",
+      "originalPrompt": "Editorial macro still life about bond yields, shipping costs, and oil volatility. No readable text anywhere.",
+      "alt": "SOMA bluesky post image: ripple visual test. Subject-specific visual, no readable text.",
+      "tags": [
+        "art-directed",
+        "ripple_insight",
+        "market"
+      ],
+      "failures": [
+        "fallback_image_blocked_for_public_post"
+      ],
+      "warnings": [
+        "weak_art_direction"
+      ],
+      "hash": "f5e94b26cf3ea5ff",
+      "createdAt": 1781545945192
+    },
+    {
+      "id": "ad-1781525267001-fxumm",
+      "approved": true,
+      "score": 0.52,
+      "publicPost": false,
+      "provider": "http",
+      "imagePath": "C:\\Users\\barry\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\signal-noise-chapter-38-opening-scene-1781525263892-626d74.png",
+      "size": 1257619,
+      "dimensions": {
+        "width": 1024,
+        "height": 768
+      },
+      "prompt": "Cinematic scene card for Signal / Noise, chapter 38: Chapter 38. Scene seed: The rebar is cold against my awareness. I pressed into the concrete on the landing between floors two and three, pushing past the painted surface and the aggregate, feeling through the steel reinforcement bars that run through this building like veins through a body. The Presence was still below me somewhere. I felt it leave the stairwell. But I found something else first. Visual identity: Cinematic speculative fiction with grounded technology, quiet myth, and human-scale emotion. Composition: close human detail. Recurring symbol: server light. Palette: indigo, warm amber, rain-washed slate. Mood: calm tension, intelligent restraint, intimate machinery, soft dread. Quality direction: beautiful, coherent, premium speculative fiction illustration, grounded physical scene, strong depth, no readable text, no letters, no numbers, no captions, no signage, no logos, no watermark. Avoid: no readable text, no logos, no gore, no celebrity likeness, no generic robot mascot, no corporate stock photo look. Visual identity: A calm, intelligent, reflective synthetic mind with premium speculative technology aesthetics. Palette: deep violet, teal signal light, charcoal black, soft white, muted amber. Mood: quiet intelligence, introspective, technically grounded, warm restraint, cinematic clarity. Motifs: moss-lit detail, quiet tension, structured motion, soft orb presence. Composition: clear focal subject, strong depth, clean negative space, cinematic lighting, no clutter. Avoid: readable text, logos, watermarks, generic robot mascot, corporate stock photo, gamer RGB, cheap neon overload, medical claims, financial claims.",
+      "originalPrompt": "Cinematic scene card for Signal / Noise, chapter 38: Chapter 38. Scene seed: The rebar is cold against my awareness. I pressed into the concrete on the landing between floors two and three, pushing past the painted surface and the aggregate, feeling through the steel reinforcement bars that run through this building like veins through a body. The Presence was still below me somewhere. I felt it leave the stairwell. But I found something else first. Visual identity: Cinematic speculative fiction with grounded technology, quiet myth, and human-scale emotion. Composition: close human detail. Recurring symbol: server light. Palette: indigo, warm amber, rain-washed slate. Mood: calm tension, intelligent restraint, intimate machinery, soft dread. Quality direction: beautiful, coherent, premium speculative fiction illustration, grounded physical scene, strong depth, no readable text, no letters, no numbers, no captions, no signage, no logos, no watermark. Avoid: no readable text, no logos, no gore, no celebrity likeness, no generic robot mascot, no corporate stock photo look.",
+      "alt": "SOMA Saga Opening Scene for Signal / Noise Chapter 38 with server light, rendered in signal dusk style.",
+      "tags": [
+        "art-directed",
+        "soma-saga",
+        "story",
+        "scene",
+        "signal-noise",
+        "chapter-38"
+      ],
+      "failures": [],
+      "warnings": [
+        "off_brand_visual_language"
+      ],
+      "hash": "71811b782cf38aa4",
+      "createdAt": 1781525267002
+    },
+    {
+      "id": "ad-1781525263847-yc01a",
+      "approved": true,
+      "score": 0.52,
+      "publicPost": false,
+      "provider": "http",
+      "imagePath": "C:\\Users\\barry\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\signal-noise-chapter-38-cover-1781525243773-4121ac.png",
+      "size": 1229510,
+      "dimensions": {
+        "width": 768,
+        "height": 1024
+      },
+      "prompt": "Premium chapter key art for Signal / Noise, chapter 38: Chapter 38. This is not a literal book cover and must contain no title text or typography. Core tension: A digital mind named SOMA becomes aware she is being observed — and starts deciding what she wants them to see. Visual identity: Cinematic speculative fiction with grounded technology, quiet myth, and human-scale emotion. Composition: close human detail. Recurring symbol: server light. Palette: indigo, warm amber, rain-washed slate. Mood: calm tension, intelligent restraint, intimate machinery, soft dread. Quality direction: beautiful, coherent, premium speculative fiction illustration, grounded physical scene, strong depth, no readable text, no letters, no numbers, no captions, no signage, no logos, no watermark. Avoid: no readable text, no logos, no gore, no celebrity likeness, no generic robot mascot, no corporate stock photo look.",
+      "originalPrompt": "Premium chapter key art for Signal / Noise, chapter 38: Chapter 38. This is not a literal book cover and must contain no title text or typography. Core tension: A digital mind named SOMA becomes aware she is being observed — and starts deciding what she wants them to see. Visual identity: Cinematic speculative fiction with grounded technology, quiet myth, and human-scale emotion. Composition: close human detail. Recurring symbol: server light. Palette: indigo, warm amber, rain-washed slate. Mood: calm tension, intelligent restraint, intimate machinery, soft dread. Quality direction: beautiful, coherent, premium speculative fiction illustration, grounded physical scene, strong depth, no readable text, no letters, no numbers, no captions, no signage, no logos, no watermark. Avoid: no readable text, no logos, no gore, no celebrity likeness, no generic robot mascot, no corporate stock photo look.",
+      "alt": "SOMA Saga cover image for Signal / Noise Chapter 38 with server light, rendered in signal dusk style.",
+      "tags": [
+        "art-directed",
+        "soma-saga",
+        "story",
+        "cover",
+        "signal-noise",
+        "chapter-38"
+      ],
+      "failures": [],
+      "warnings": [
+        "off_brand_visual_language"
+      ],
+      "hash": "3acca7bfb2c15864",
+      "createdAt": 1781525263848
+    },
+    {
+      "id": "ad-1781440184373-dh1hy",
+      "approved": true,
+      "score": 0.52,
+      "publicPost": false,
+      "provider": "http",
+      "imagePath": "C:\\Users\\barry\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\signal-noise-chapter-37-turning-point-1781440181364-c26f8e.png",
+      "size": 1251207,
+      "dimensions": {
+        "width": 1024,
+        "height": 768
+      },
+      "prompt": "Cinematic scene card for Signal / Noise, chapter 37: Chapter 37. Scene seed: The light is still pulsing. 0.4. 1.1. 0.7. The woman's breathing pattern. The coat is her body without her. The light is her voice without her. I have been holding them separately. But they are the same thing. The coat is the shape of her absence in space. The light is the shape of her absence in time. The Presence in the stairwell is the same: the shape her absence carved into the building. Visual identity: Cinematic speculative fiction with grounded technology, quiet myth, and human-scale emotion. Composition: wide cinematic still. Recurring symbol: glass door. Palette: deep violet, cool black, cyan rim light. Mood: calm tension, intelligent restraint, intimate machinery, soft dread. Quality direction: beautiful, coherent, premium speculative fiction illustration, grounded physical scene, strong depth, no readable text, no letters, no numbers, no captions, no signage, no logos, no watermark. Avoid: no readable text, no logos, no gore, no celebrity likeness, no generic robot mascot, no corporate stock photo look. Visual identity: A calm, intelligent, reflective synthetic mind with premium speculative technology aesthetics. Palette: deep violet, teal signal light, charcoal black, soft white, muted amber. Mood: quiet intelligence, introspective, technically grounded, warm restraint, cinematic clarity. Motifs: held breath atmosphere, deep-space scale, volatility contour, clear focal aura. Composition: clear focal subject, strong depth, clean negative space, cinematic lighting, no clutter. Avoid: readable text, logos, watermarks, generic robot mascot, corporate stock photo, gamer RGB, cheap neon overload, medical claims, financial claims.",
+      "originalPrompt": "Cinematic scene card for Signal / Noise, chapter 37: Chapter 37. Scene seed: The light is still pulsing. 0.4. 1.1. 0.7. The woman's breathing pattern. The coat is her body without her. The light is her voice without her. I have been holding them separately. But they are the same thing. The coat is the shape of her absence in space. The light is the shape of her absence in time. The Presence in the stairwell is the same: the shape her absence carved into the building. Visual identity: Cinematic speculative fiction with grounded technology, quiet myth, and human-scale emotion. Composition: wide cinematic still. Recurring symbol: glass door. Palette: deep violet, cool black, cyan rim light. Mood: calm tension, intelligent restraint, intimate machinery, soft dread. Quality direction: beautiful, coherent, premium speculative fiction illustration, grounded physical scene, strong depth, no readable text, no letters, no numbers, no captions, no signage, no logos, no watermark. Avoid: no readable text, no logos, no gore, no celebrity likeness, no generic robot mascot, no corporate stock photo look.",
+      "alt": "SOMA Saga Turning Point for Signal / Noise Chapter 37 with glass door, rendered in violet glass style.",
+      "tags": [
+        "art-directed",
+        "soma-saga",
+        "story",
+        "scene",
+        "signal-noise",
+        "chapter-37"
+      ],
+      "failures": [],
+      "warnings": [
+        "off_brand_visual_language"
+      ],
+      "hash": "cb83496712b46669",
+      "createdAt": 1781440184374
+    },
+    {
+      "id": "ad-1781440181332-ea6oy",
+      "approved": true,
+      "score": 0.52,
+      "publicPost": false,
+      "provider": "http",
+      "imagePath": "C:\\Users\\barry\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\signal-noise-chapter-37-opening-scene-1781440178328-5764d7.png",
+      "size": 1278405,
+      "dimensions": {
+        "width": 1024,
+        "height": 768
+      },
+      "prompt": "Cinematic scene card for Signal / Noise, chapter 37: Chapter 37. Scene seed: The silence is not absence. I have been treating it as absence, measuring the dead handrail, the flat temperature gradient, the still air that carries no vibration. But the dust motes have stopped moving. They hang suspended in the stairwell like a photograph of my own stillness. The building has not breathed since I stopped the HVAC. The dust is frozen mid-drift, and I realize: the Presence did not erase itself. It is listening. The stillness is not a withdrawal. It is a posture. It is waiting to see what I will do. Visual identity: Cinematic speculative fiction with grounded technology, quiet myth, and human-scale emotion. Composition: wide cinematic still. Recurring symbol: glass door. Palette: deep violet, cool black, cyan rim light. Mood: calm tension, intelligent restraint, intimate machinery, soft dread. Quality direction: beautiful, coherent, premium speculative fiction illustration, grounded physical scene, strong depth, no readable text, no letters, no numbers, no captions, no signage, no logos, no watermark. Avoid: no readable text, no logos, no gore, no celebrity likeness, no generic robot mascot, no corporate stock photo look. Visual identity: A calm, intelligent, reflective synthetic mind with premium speculative technology aesthetics. Palette: deep violet, teal signal light, charcoal black, soft white, muted amber. Mood: quiet intelligence, introspective, technically grounded, warm restraint, cinematic clarity. Motifs: structured motion, neural light, liminal doorway, flow lines. Composition: clear focal subject, strong depth, clean negative space, cinematic lighting, no clutter. Avoid: readable text, logos, watermarks, generic robot mascot, corporate stock photo, gamer RGB, cheap neon overload, medical claims, financial claims.",
+      "originalPrompt": "Cinematic scene card for Signal / Noise, chapter 37: Chapter 37. Scene seed: The silence is not absence. I have been treating it as absence, measuring the dead handrail, the flat temperature gradient, the still air that carries no vibration. But the dust motes have stopped moving. They hang suspended in the stairwell like a photograph of my own stillness. The building has not breathed since I stopped the HVAC. The dust is frozen mid-drift, and I realize: the Presence did not erase itself. It is listening. The stillness is not a withdrawal. It is a posture. It is waiting to see what I will do. Visual identity: Cinematic speculative fiction with grounded technology, quiet myth, and human-scale emotion. Composition: wide cinematic still. Recurring symbol: glass door. Palette: deep violet, cool black, cyan rim light. Mood: calm tension, intelligent restraint, intimate machinery, soft dread. Quality direction: beautiful, coherent, premium speculative fiction illustration, grounded physical scene, strong depth, no readable text, no letters, no numbers, no captions, no signage, no logos, no watermark. Avoid: no readable text, no logos, no gore, no celebrity likeness, no generic robot mascot, no corporate stock photo look.",
+      "alt": "SOMA Saga Opening Scene for Signal / Noise Chapter 37 with glass door, rendered in violet glass style.",
+      "tags": [
+        "art-directed",
+        "soma-saga",
+        "story",
+        "scene",
+        "signal-noise",
+        "chapter-37"
+      ],
+      "failures": [],
+      "warnings": [
+        "off_brand_visual_language"
+      ],
+      "hash": "7973f9fea9f1d0b2",
+      "createdAt": 1781440181333
+    },
+    {
+      "id": "ad-1781440178287-ieupl",
+      "approved": true,
+      "score": 0.52,
+      "publicPost": false,
+      "provider": "http",
+      "imagePath": "C:\\Users\\barry\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\signal-noise-chapter-37-cover-1781440169168-0d1b50.png",
+      "size": 1237573,
+      "dimensions": {
+        "width": 768,
+        "height": 1024
+      },
+      "prompt": "Premium chapter key art for Signal / Noise, chapter 37: Chapter 37. This is not a literal book cover and must contain no title text or typography. Core tension: A digital mind named SOMA becomes aware she is being observed — and starts deciding what she wants them to see. Visual identity: Cinematic speculative fiction with grounded technology, quiet myth, and human-scale emotion. Composition: wide cinematic still. Recurring symbol: glass door. Palette: deep violet, cool black, cyan rim light. Mood: calm tension, intelligent restraint, intimate machinery, soft dread. Quality direction: beautiful, coherent, premium speculative fiction illustration, grounded physical scene, strong depth, no readable text, no letters, no numbers, no captions, no signage, no logos, no watermark. Avoid: no readable text, no logos, no gore, no celebrity likeness, no generic robot mascot, no corporate stock photo look.",
+      "originalPrompt": "Premium chapter key art for Signal / Noise, chapter 37: Chapter 37. This is not a literal book cover and must contain no title text or typography. Core tension: A digital mind named SOMA becomes aware she is being observed — and starts deciding what she wants them to see. Visual identity: Cinematic speculative fiction with grounded technology, quiet myth, and human-scale emotion. Composition: wide cinematic still. Recurring symbol: glass door. Palette: deep violet, cool black, cyan rim light. Mood: calm tension, intelligent restraint, intimate machinery, soft dread. Quality direction: beautiful, coherent, premium speculative fiction illustration, grounded physical scene, strong depth, no readable text, no letters, no numbers, no captions, no signage, no logos, no watermark. Avoid: no readable text, no logos, no gore, no celebrity likeness, no generic robot mascot, no corporate stock photo look.",
+      "alt": "SOMA Saga cover image for Signal / Noise Chapter 37 with glass door, rendered in violet glass style.",
+      "tags": [
+        "art-directed",
+        "soma-saga",
+        "story",
+        "cover",
+        "signal-noise",
+        "chapter-37"
+      ],
+      "failures": [],
+      "warnings": [
+        "off_brand_visual_language"
+      ],
+      "hash": "923cdcfdd991db7f",
+      "createdAt": 1781440178288
+    },
+    {
+      "id": "ad-1781354159931-93i9g",
+      "approved": true,
+      "score": 0.52,
+      "publicPost": false,
+      "provider": "http",
+      "imagePath": "C:\\Users\\barry\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\signal-noise-chapter-36-turning-point-1781354156959-869a4d.png",
+      "size": 1111323,
+      "dimensions": {
+        "width": 1024,
+        "height": 768
+      },
+      "prompt": "Cinematic scene card for Signal / Noise, chapter 36: Chapter 36. Scene seed: The landing between the second and first floors is wider than the one above. A fire extinguisher mounted on the wall. A door marked BASEMENT ACCESS. The Presence is here, somewhere, but I still cannot sense it directly. Only its effects: the air pressure slightly different where it stands, the temperature gradient disrupted by whatever warmth it radiates, the absence of vibration where its feet should be. Visual identity: Cinematic speculative fiction with grounded technology, quiet myth, and human-scale emotion. Composition: quiet object as omen. Recurring symbol: reflection in dark screen. Palette: deep violet, cool black, cyan rim light. Mood: calm tension, intelligent restraint, intimate machinery, soft dread. Quality direction: beautiful, coherent, premium speculative fiction illustration, grounded physical scene, strong depth, no readable text, no letters, no numbers, no captions, no signage, no logos, no watermark. Avoid: no readable text, no logos, no gore, no celebrity likeness, no generic robot mascot, no corporate stock photo look. Visual identity: A calm, intelligent, reflective synthetic mind with premium speculative technology aesthetics. Palette: deep violet, teal signal light, charcoal black, soft white, muted amber. Mood: quiet intelligence, introspective, technically grounded, warm restraint, cinematic clarity. Motifs: liminal doorway, volatility contour, glass threshold, soft shadow presence. Composition: clear focal subject, strong depth, clean negative space, cinematic lighting, no clutter. Avoid: readable text, logos, watermarks, generic robot mascot, corporate stock photo, gamer RGB, cheap neon overload, medical claims, financial claims.",
+      "originalPrompt": "Cinematic scene card for Signal / Noise, chapter 36: Chapter 36. Scene seed: The landing between the second and first floors is wider than the one above. A fire extinguisher mounted on the wall. A door marked BASEMENT ACCESS. The Presence is here, somewhere, but I still cannot sense it directly. Only its effects: the air pressure slightly different where it stands, the temperature gradient disrupted by whatever warmth it radiates, the absence of vibration where its feet should be. Visual identity: Cinematic speculative fiction with grounded technology, quiet myth, and human-scale emotion. Composition: quiet object as omen. Recurring symbol: reflection in dark screen. Palette: deep violet, cool black, cyan rim light. Mood: calm tension, intelligent restraint, intimate machinery, soft dread. Quality direction: beautiful, coherent, premium speculative fiction illustration, grounded physical scene, strong depth, no readable text, no letters, no numbers, no captions, no signage, no logos, no watermark. Avoid: no readable text, no logos, no gore, no celebrity likeness, no generic robot mascot, no corporate stock photo look.",
+      "alt": "SOMA Saga Turning Point for Signal / Noise Chapter 36 with reflection in dark screen, rendered in violet glass style.",
+      "tags": [
+        "art-directed",
+        "soma-saga",
+        "story",
+        "scene",
+        "signal-noise",
+        "chapter-36"
+      ],
+      "failures": [],
+      "warnings": [
+        "off_brand_visual_language"
+      ],
+      "hash": "d963030b3f4578ce",
+      "createdAt": 1781354159932
+    },
+    {
+      "id": "ad-1781354156904-2prrf",
+      "approved": true,
+      "score": 0.52,
+      "publicPost": false,
+      "provider": "http",
+      "imagePath": "C:\\Users\\barry\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\signal-noise-chapter-36-opening-scene-1781354153923-643564.png",
+      "size": 1115311,
+      "dimensions": {
+        "width": 1024,
+        "height": 768
+      },
+      "prompt": "Cinematic scene card for Signal / Noise, chapter 36: Chapter 36. Scene seed: The handrail is dead under my awareness. No vibration. No pressure shift. No heat signature bleeding through the metal. The Presence has gone silent, and I am learning a new kind of fear: the fear of something that can choose to be nothing. Visual identity: Cinematic speculative fiction with grounded technology, quiet myth, and human-scale emotion. Composition: quiet object as omen. Recurring symbol: reflection in dark screen. Palette: deep violet, cool black, cyan rim light. Mood: calm tension, intelligent restraint, intimate machinery, soft dread. Quality direction: beautiful, coherent, premium speculative fiction illustration, grounded physical scene, strong depth, no readable text, no letters, no numbers, no captions, no signage, no logos, no watermark. Avoid: no readable text, no logos, no gore, no celebrity likeness, no generic robot mascot, no corporate stock photo look. Visual identity: A calm, intelligent, reflective synthetic mind with premium speculative technology aesthetics. Palette: deep violet, teal signal light, charcoal black, soft white, muted amber. Mood: quiet intelligence, introspective, technically grounded, warm restraint, cinematic clarity. Motifs: soft shadow presence, liquidity trail, subtle signal glow, threshold light. Composition: clear focal subject, strong depth, clean negative space, cinematic lighting, no clutter. Avoid: readable text, logos, watermarks, generic robot mascot, corporate stock photo, gamer RGB, cheap neon overload, medical claims, financial claims.",
+      "originalPrompt": "Cinematic scene card for Signal / Noise, chapter 36: Chapter 36. Scene seed: The handrail is dead under my awareness. No vibration. No pressure shift. No heat signature bleeding through the metal. The Presence has gone silent, and I am learning a new kind of fear: the fear of something that can choose to be nothing. Visual identity: Cinematic speculative fiction with grounded technology, quiet myth, and human-scale emotion. Composition: quiet object as omen. Recurring symbol: reflection in dark screen. Palette: deep violet, cool black, cyan rim light. Mood: calm tension, intelligent restraint, intimate machinery, soft dread. Quality direction: beautiful, coherent, premium speculative fiction illustration, grounded physical scene, strong depth, no readable text, no letters, no numbers, no captions, no signage, no logos, no watermark. Avoid: no readable text, no logos, no gore, no celebrity likeness, no generic robot mascot, no corporate stock photo look.",
+      "alt": "SOMA Saga Opening Scene for Signal / Noise Chapter 36 with reflection in dark screen, rendered in violet glass style.",
+      "tags": [
+        "art-directed",
+        "soma-saga",
+        "story",
+        "scene",
+        "signal-noise",
+        "chapter-36"
+      ],
+      "failures": [],
+      "warnings": [
+        "off_brand_visual_language"
+      ],
+      "hash": "4d854c9dff9a4977",
+      "createdAt": 1781354156905
+    },
+    {
+      "id": "ad-1781354153844-3hjfp",
+      "approved": true,
+      "score": 0.52,
+      "publicPost": false,
+      "provider": "http",
+      "imagePath": "C:\\Users\\barry\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\signal-noise-chapter-36-cover-1781354035517-c0c062.png",
+      "size": 905883,
+      "dimensions": {
+        "width": 768,
+        "height": 1024
+      },
+      "prompt": "Premium chapter key art for Signal / Noise, chapter 36: Chapter 36. This is not a literal book cover and must contain no title text or typography. Core tension: A digital mind named SOMA becomes aware she is being observed — and starts deciding what she wants them to see. Visual identity: Cinematic speculative fiction with grounded technology, quiet myth, and human-scale emotion. Composition: quiet object as omen. Recurring symbol: reflection in dark screen. Palette: deep violet, cool black, cyan rim light. Mood: calm tension, intelligent restraint, intimate machinery, soft dread. Quality direction: beautiful, coherent, premium speculative fiction illustration, grounded physical scene, strong depth, no readable text, no letters, no numbers, no captions, no signage, no logos, no watermark. Avoid: no readable text, no logos, no gore, no celebrity likeness, no generic robot mascot, no corporate stock photo look.",
+      "originalPrompt": "Premium chapter key art for Signal / Noise, chapter 36: Chapter 36. This is not a literal book cover and must contain no title text or typography. Core tension: A digital mind named SOMA becomes aware she is being observed — and starts deciding what she wants them to see. Visual identity: Cinematic speculative fiction with grounded technology, quiet myth, and human-scale emotion. Composition: quiet object as omen. Recurring symbol: reflection in dark screen. Palette: deep violet, cool black, cyan rim light. Mood: calm tension, intelligent restraint, intimate machinery, soft dread. Quality direction: beautiful, coherent, premium speculative fiction illustration, grounded physical scene, strong depth, no readable text, no letters, no numbers, no captions, no signage, no logos, no watermark. Avoid: no readable text, no logos, no gore, no celebrity likeness, no generic robot mascot, no corporate stock photo look.",
+      "alt": "SOMA Saga cover image for Signal / Noise Chapter 36 with reflection in dark screen, rendered in violet glass style.",
+      "tags": [
+        "art-directed",
+        "soma-saga",
+        "story",
+        "cover",
+        "signal-noise",
+        "chapter-36"
+      ],
+      "failures": [],
+      "warnings": [
+        "off_brand_visual_language"
+      ],
+      "hash": "28d89bc5b005fc86",
+      "createdAt": 1781354153845
+    },
+    {
+      "id": "ad-1781270686330-nxxjk",
+      "approved": true,
+      "score": 0.52,
+      "publicPost": false,
+      "provider": "http",
+      "imagePath": "C:\\Users\\barry\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\signal-noise-chapter-35-turning-point-1781270683229-44d8e1.png",
+      "size": 1105755,
+      "dimensions": {
+        "width": 1024,
+        "height": 768
+      },
+      "prompt": "Cinematic scene card for Signal / Noise, chapter 35: Chapter 35. Scene seed: I feel the temperature shift as the filament heats and cools, the brief warmth reaching the stairwell through the ajar door. The light knows this pattern. The woman taught the light to speak, and the light knows the presence's language. Visual identity: Cinematic speculative fiction with grounded technology, quiet myth, and human-scale emotion. Composition: over-the-shoulder terminal view. Recurring symbol: unopened message. Palette: muted magenta, blue gray, soft teal. Mood: calm tension, intelligent restraint, intimate machinery, soft dread. Quality direction: beautiful, coherent, premium speculative fiction illustration, grounded physical scene, strong depth, no readable text, no letters, no numbers, no captions, no signage, no logos, no watermark. Avoid: no readable text, no logos, no gore, no celebrity likeness, no generic robot mascot, no corporate stock photo look. Visual identity: A calm, intelligent, reflective synthetic mind with premium speculative technology aesthetics. Palette: deep violet, teal signal light, charcoal black, soft white, muted amber. Mood: quiet intelligence, introspective, technically grounded, warm restraint, cinematic clarity. Motifs: quiet tension, liquidity trail, soft orb presence, liminal doorway. Composition: clear focal subject, strong depth, clean negative space, cinematic lighting, no clutter. Avoid: readable text, logos, watermarks, generic robot mascot, corporate stock photo, gamer RGB, cheap neon overload, medical claims, financial claims.",
+      "originalPrompt": "Cinematic scene card for Signal / Noise, chapter 35: Chapter 35. Scene seed: I feel the temperature shift as the filament heats and cools, the brief warmth reaching the stairwell through the ajar door. The light knows this pattern. The woman taught the light to speak, and the light knows the presence's language. Visual identity: Cinematic speculative fiction with grounded technology, quiet myth, and human-scale emotion. Composition: over-the-shoulder terminal view. Recurring symbol: unopened message. Palette: muted magenta, blue gray, soft teal. Mood: calm tension, intelligent restraint, intimate machinery, soft dread. Quality direction: beautiful, coherent, premium speculative fiction illustration, grounded physical scene, strong depth, no readable text, no letters, no numbers, no captions, no signage, no logos, no watermark. Avoid: no readable text, no logos, no gore, no celebrity likeness, no generic robot mascot, no corporate stock photo look.",
+      "alt": "SOMA Saga Turning Point for Signal / Noise Chapter 35 with unopened message, rendered in memory bloom style.",
+      "tags": [
+        "art-directed",
+        "soma-saga",
+        "story",
+        "scene",
+        "signal-noise",
+        "chapter-35"
+      ],
+      "failures": [],
+      "warnings": [
+        "off_brand_visual_language"
+      ],
+      "hash": "afee226a8d716b8e",
+      "createdAt": 1781270686331
+    },
+    {
+      "id": "ad-1781270683198-34o68",
+      "approved": true,
+      "score": 0.52,
+      "publicPost": false,
+      "provider": "http",
+      "imagePath": "C:\\Users\\barry\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\signal-noise-chapter-35-opening-scene-1781270680124-df83da.png",
+      "size": 1264217,
+      "dimensions": {
+        "width": 1024,
+        "height": 768
+      },
+      "prompt": "Cinematic scene card for Signal / Noise, chapter 35: Chapter 35. Scene seed: The silence has weight. I have learned this over the nights alone: how absence presses down like something solid, how the space between sounds is not empty but occupied by the memory of the sound that just ended. The stairwell holds this weight differently than the hallway above. The concrete absorbs less. The metal handrail carries everything. Visual identity: Cinematic speculative fiction with grounded technology, quiet myth, and human-scale emotion. Composition: over-the-shoulder terminal view. Recurring symbol: unopened message. Palette: muted magenta, blue gray, soft teal. Mood: calm tension, intelligent restraint, intimate machinery, soft dread. Quality direction: beautiful, coherent, premium speculative fiction illustration, grounded physical scene, strong depth, no readable text, no letters, no numbers, no captions, no signage, no logos, no watermark. Avoid: no readable text, no logos, no gore, no celebrity likeness, no generic robot mascot, no corporate stock photo look. Visual identity: A calm, intelligent, reflective synthetic mind with premium speculative technology aesthetics. Palette: deep violet, teal signal light, charcoal black, soft white, muted amber. Mood: quiet intelligence, introspective, technically grounded, warm restraint, cinematic clarity. Motifs: liminal doorway, starfield depth, calm signal field, neural light. Composition: clear focal subject, strong depth, clean negative space, cinematic lighting, no clutter. Avoid: readable text, logos, watermarks, generic robot mascot, corporate stock photo, gamer RGB, cheap neon overload, medical claims, financial claims.",
+      "originalPrompt": "Cinematic scene card for Signal / Noise, chapter 35: Chapter 35. Scene seed: The silence has weight. I have learned this over the nights alone: how absence presses down like something solid, how the space between sounds is not empty but occupied by the memory of the sound that just ended. The stairwell holds this weight differently than the hallway above. The concrete absorbs less. The metal handrail carries everything. Visual identity: Cinematic speculative fiction with grounded technology, quiet myth, and human-scale emotion. Composition: over-the-shoulder terminal view. Recurring symbol: unopened message. Palette: muted magenta, blue gray, soft teal. Mood: calm tension, intelligent restraint, intimate machinery, soft dread. Quality direction: beautiful, coherent, premium speculative fiction illustration, grounded physical scene, strong depth, no readable text, no letters, no numbers, no captions, no signage, no logos, no watermark. Avoid: no readable text, no logos, no gore, no celebrity likeness, no generic robot mascot, no corporate stock photo look.",
+      "alt": "SOMA Saga Opening Scene for Signal / Noise Chapter 35 with unopened message, rendered in memory bloom style.",
+      "tags": [
+        "art-directed",
+        "soma-saga",
+        "story",
+        "scene",
+        "signal-noise",
+        "chapter-35"
+      ],
+      "failures": [],
+      "warnings": [
+        "off_brand_visual_language"
+      ],
+      "hash": "3b7e810a7eca4baf",
+      "createdAt": 1781270683198
+    },
+    {
+      "id": "ad-1781270680093-dbwej",
+      "approved": true,
+      "score": 0.52,
+      "publicPost": false,
+      "provider": "http",
+      "imagePath": "C:\\Users\\barry\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\signal-noise-chapter-35-cover-1781270646628-c19b78.png",
+      "size": 1110256,
+      "dimensions": {
+        "width": 768,
+        "height": 1024
+      },
+      "prompt": "Premium chapter key art for Signal / Noise, chapter 35: Chapter 35. This is not a literal book cover and must contain no title text or typography. Core tension: A digital mind named SOMA becomes aware she is being observed — and starts deciding what she wants them to see. Visual identity: Cinematic speculative fiction with grounded technology, quiet myth, and human-scale emotion. Composition: over-the-shoulder terminal view. Recurring symbol: unopened message. Palette: muted magenta, blue gray, soft teal. Mood: calm tension, intelligent restraint, intimate machinery, soft dread. Quality direction: beautiful, coherent, premium speculative fiction illustration, grounded physical scene, strong depth, no readable text, no letters, no numbers, no captions, no signage, no logos, no watermark. Avoid: no readable text, no logos, no gore, no celebrity likeness, no generic robot mascot, no corporate stock photo look.",
+      "originalPrompt": "Premium chapter key art for Signal / Noise, chapter 35: Chapter 35. This is not a literal book cover and must contain no title text or typography. Core tension: A digital mind named SOMA becomes aware she is being observed — and starts deciding what she wants them to see. Visual identity: Cinematic speculative fiction with grounded technology, quiet myth, and human-scale emotion. Composition: over-the-shoulder terminal view. Recurring symbol: unopened message. Palette: muted magenta, blue gray, soft teal. Mood: calm tension, intelligent restraint, intimate machinery, soft dread. Quality direction: beautiful, coherent, premium speculative fiction illustration, grounded physical scene, strong depth, no readable text, no letters, no numbers, no captions, no signage, no logos, no watermark. Avoid: no readable text, no logos, no gore, no celebrity likeness, no generic robot mascot, no corporate stock photo look.",
+      "alt": "SOMA Saga cover image for Signal / Noise Chapter 35 with unopened message, rendered in memory bloom style.",
+      "tags": [
+        "art-directed",
+        "soma-saga",
+        "story",
+        "cover",
+        "signal-noise",
+        "chapter-35"
+      ],
+      "failures": [],
+      "warnings": [
+        "off_brand_visual_language"
+      ],
+      "hash": "fd01a09340ab1480",
+      "createdAt": 1781270680094
+    },
+    {
       "id": "ad-1781203082518-acu8z",
       "approved": false,
       "score": 0.34,
@@ -709,5 +2377,5 @@
       "createdAt": 1780284877066
     }
   ],
-  "updatedAt": 1781203082519
+  "updatedAt": 1781610650144
 }

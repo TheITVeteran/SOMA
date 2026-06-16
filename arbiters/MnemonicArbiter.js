@@ -19,6 +19,7 @@ import BaseArbiter, {
   ArbiterResult 
 } from '../core/BaseArbiter.js';
 import { createClient } from 'redis';
+import { RedisMockArbiter } from './RedisMockArbiter.js';
 import Database from 'better-sqlite3';
 import fs from 'fs/promises';
 import path from 'path';
@@ -132,7 +133,7 @@ export class MnemonicArbiter extends BaseArbiter {
     // Configuration
     this.config = {
       ...this.config,
-      redisUrl: opts.redisUrl || 'redis://localhost:6379',
+      redisUrl: Object.prototype.hasOwnProperty.call(opts, 'redisUrl') ? opts.redisUrl : 'redis://localhost:6379',
       dbPath: opts.dbPath || path.join(process.cwd(), 'soma-memory.db'),
       vectorDbPath: opts.vectorDbPath || path.join(process.cwd(), 'soma-vectors.json'),
       embeddingModel: opts.embeddingModel || 'Xenova/all-MiniLM-L6-v2',
@@ -145,6 +146,7 @@ export class MnemonicArbiter extends BaseArbiter {
     };
 
     this.redis = null;
+    this.hotTierBackend = 'none';
     this.db = null;
     this.vectorStore = new Map();
     this.embedder = null;
@@ -183,7 +185,10 @@ export class MnemonicArbiter extends BaseArbiter {
   }
 
   async _initRedis() {
-    if (!this.config.redisUrl) return;
+    if (!this.config.redisUrl) {
+      await this._installMockHotTier('redis_url_not_configured');
+      return;
+    }
     try {
       this.redis = createClient({ 
         url: this.config.redisUrl,
@@ -202,16 +207,64 @@ export class MnemonicArbiter extends BaseArbiter {
       this.redis.on('error', (err) => {
           // Only log the first few errors to avoid spam
           if (!this._redisSuppressed) {
-              this.log('warn', 'Redis unavailable (Hot Tier inactive)');
+              this.log('warn', 'Redis unavailable; preserving hot tier with in-memory fallback', { error: err.message });
               this._redisSuppressed = true;
           }
+          this._installMockHotTier('redis_runtime_error').catch(() => {});
       });
 
       await this.redis.connect();
+      this.hotTierBackend = 'redis';
       this.log('info', '🔥 Hot tier (Redis) ready');
     } catch (e) {
-      this.log('warn', 'Redis connection failed - hot tier disabled');
+      await this._installMockHotTier(`redis_connect_failed:${e.message}`);
+    }
+  }
+
+  async _installMockHotTier(reason = 'redis_unavailable') {
+    if (this.hotTierBackend === 'mock' && this.redis?.isOpen) return this.redis;
+    try {
+      const mockRedis = new RedisMockArbiter({ name: 'MnemonicHotTierMock' });
+      await mockRedis.initialize();
+      this.redis = mockRedis;
+      this.hotTierBackend = 'mock';
+      this.log('info', '🔥 Hot tier preserved with in-memory RedisMock fallback', { reason });
+      return this.redis;
+    } catch (mockError) {
+      this.log('warn', 'Mock Redis failed - hot tier disabled', { reason, error: mockError.message });
       this.redis = null;
+      this.hotTierBackend = 'none';
+      return null;
+    }
+  }
+
+  async _hotSetEx(key, ttl, value) {
+    if (!this.redis?.isOpen || typeof this.redis.setEx !== 'function') {
+      await this._installMockHotTier('hot_set_requires_backend');
+    }
+    if (!this.redis?.isOpen || typeof this.redis.setEx !== 'function') return false;
+    try {
+      await this.redis.setEx(key, ttl, value);
+      return true;
+    } catch (error) {
+      this.log('warn', 'Hot tier write failed; swapping to RedisMock fallback', { backend: this.hotTierBackend, error: error.message });
+      await this._installMockHotTier('hot_set_failed');
+      if (this.redis?.isOpen && typeof this.redis.setEx === 'function') {
+        await this.redis.setEx(key, ttl, value);
+        return true;
+      }
+      return false;
+    }
+  }
+
+  async _hotGet(key) {
+    if (!this.redis?.isOpen || typeof this.redis.get !== 'function') return null;
+    try {
+      return await this.redis.get(key);
+    } catch (error) {
+      this.log('warn', 'Hot tier read failed; swapping to RedisMock fallback', { backend: this.hotTierBackend, error: error.message });
+      await this._installMockHotTier('hot_get_failed');
+      return null;
     }
   }
 
@@ -289,13 +342,8 @@ export class MnemonicArbiter extends BaseArbiter {
       `);
       stmt.run(id, content, JSON.stringify(metadata), embeddingId, now, now, metadata.importance || 0.5);
 
-      if (this.redis && this.redis.isOpen) {
-        try {
-          await this.redis.setEx(`mem:${id}`, this.config.hotTierTTL, JSON.stringify({ content, metadata, embeddingId }));
-        } catch (redisErr) {
-          this.log('warn', 'Failed to write to hot tier (Redis)', { error: redisErr.message });
-        }
-      }
+      await this._hotSetEx(`mem:${id}`, this.config.hotTierTTL, JSON.stringify({ content, metadata, embeddingId }));
+      this.tierMetrics.hot.stores++;
 
       return { id, success: true };
     } catch (e) {
@@ -319,15 +367,12 @@ export class MnemonicArbiter extends BaseArbiter {
 
     // 1. Hot Tier
     if (this.redis && this.redis.isOpen) {
-      try {
-        const cached = await this.redis.get(`query:${searchTerms}`);
-        if (cached) {
-          this.tierMetrics.hot.hits++;
-          return { results: JSON.parse(cached), tier: 'hot', latency: Date.now() - startTime };
-        }
-      } catch (redisErr) {
-        this.log('warn', 'Failed to read from hot tier (Redis)', { error: redisErr.message });
+      const cached = await this._hotGet(`query:${searchTerms}`);
+      if (cached) {
+        this.tierMetrics.hot.hits++;
+        return { results: JSON.parse(cached), tier: 'hot', backend: this.hotTierBackend, latency: Date.now() - startTime };
       }
+      this.tierMetrics.hot.misses++;
     }
 
     // 2. Warm Tier (Vector + Rerank)
@@ -347,13 +392,7 @@ export class MnemonicArbiter extends BaseArbiter {
 
       if (results.length > 0) {
         this.tierMetrics.warm.hits++;
-        if (this.redis && this.redis.isOpen) {
-          try {
-            await this.redis.setEx(`query:${searchTerms}`, this.config.hotTierTTL, JSON.stringify(results));
-          } catch (redisErr) {
-            this.log('warn', 'Failed to write query cache to hot tier (Redis)', { error: redisErr.message });
-          }
-        }
+        await this._hotSetEx(`query:${searchTerms}`, this.config.hotTierTTL, JSON.stringify(results));
         return { results, tier: 'warm', latency: Date.now() - startTime };
       }
     }
@@ -433,9 +472,10 @@ export class MnemonicArbiter extends BaseArbiter {
         memories: memoryCount,
         vectors: this.vectorStore.size,
         compressed: 0, // Placeholder for future compression metrics
-        hot: this.redis ? 'active' : 'inactive'
+        hot: this.redis?.isOpen ? 'active' : 'inactive',
+        hotBackend: this.hotTierBackend
       },
-      hot: { size: 0, hits: this.tierMetrics.hot.hits, status: this.redis ? 'connected' : 'offline' },
+      hot: { size: this.redis?.store?.size || 0, hits: this.tierMetrics.hot.hits, stores: this.tierMetrics.hot.stores, backend: this.hotTierBackend, status: this.redis?.isOpen ? 'connected' : 'offline' },
       warm: { size: this.vectorStore.size, hits: this.tierMetrics.warm.hits },
       cold: { size: memoryCount, hits: this.tierMetrics.cold.hits },
       total: this.tierMetrics.total,

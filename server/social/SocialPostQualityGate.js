@@ -143,7 +143,7 @@ export function validatePublicQuality(text, { type = 'post', platform = 'bluesky
             return { ok: false, reason: `identity overclaim blocked: ${pattern}` };
         }
     }
-    if (type === 'finance_brief') {
+    if (type === 'finance_brief' || type === 'ripple_insight') {
         for (const pattern of MARKET_ACTION_PATTERNS) {
             if (pattern.test(value)) {
                 return { ok: false, reason: `actionable market phrasing blocked: ${pattern}` };

@@ -48,13 +48,22 @@ function pngChunk(type, data = Buffer.alloc(0)) {
 function writeFallbackPng({ prompt, outputPath, width = 768, height = 768 }) {
     const hash = crypto.createHash('sha256').update(prompt).digest();
     const raw = Buffer.alloc((width * 4 + 1) * height);
-    const c1 = [20 + hash[0] % 50, 16 + hash[1] % 42, 44 + hash[2] % 70];
-    const c2 = [30 + hash[3] % 80, 92 + hash[4] % 110, 118 + hash[5] % 100];
-    const accent = [110 + hash[6] % 130, 80 + hash[7] % 150, 170 + hash[8] % 80];
-    const nodes = Array.from({ length: 13 }, (_, i) => ({
+    const palettes = [
+        { bg1: [235, 229, 216], bg2: [94, 83, 72], accent: [176, 118, 66] },
+        { bg1: [219, 229, 226], bg2: [52, 76, 84], accent: [168, 98, 82] },
+        { bg1: [229, 224, 208], bg2: [76, 68, 56], accent: [88, 117, 91] },
+        { bg1: [224, 228, 232], bg2: [64, 72, 83], accent: [180, 141, 72] },
+        { bg1: [232, 222, 218], bg2: [84, 61, 58], accent: [74, 106, 128] },
+        { bg1: [218, 225, 211], bg2: [58, 76, 55], accent: [156, 118, 65] },
+    ];
+    const palette = palettes[hash[0] % palettes.length];
+    const c1 = palette.bg1;
+    const c2 = palette.bg2;
+    const accent = palette.accent;
+    const nodes = Array.from({ length: 9 }, (_, i) => ({
         x: Math.floor((hash[(i * 2) % hash.length] / 255) * (width - 140)) + 70,
         y: Math.floor((hash[(i * 2 + 1) % hash.length] / 255) * (height - 140)) + 70,
-        r: 5 + (hash[(i + 9) % hash.length] % 12),
+        r: 18 + (hash[(i + 9) % hash.length] % 46),
     }));
 
     const put = (x, y, rgba) => {
@@ -102,10 +111,14 @@ function writeFallbackPng({ prompt, outputPath, width = 768, height = 768 }) {
     }
 
     for (let i = 0; i < nodes.length - 1; i++) {
-        line(nodes[i], nodes[(i + 1 + (hash[i] % 4)) % nodes.length], accent, 0.22);
-        if (i % 3 === 0) line(nodes[i], nodes[(i + 5) % nodes.length], [120, 255, 226], 0.16);
+        if (i % 2 === 0) line(nodes[i], nodes[(i + 1 + (hash[i] % 3)) % nodes.length], accent, 0.08);
     }
-    nodes.forEach((n, i) => circle(n.x, n.y, n.r, i % 3 === 0 ? [132, 255, 230] : accent));
+    nodes.forEach((n, i) => {
+        const color = i % 3 === 0
+            ? [Math.min(255, accent[0] + 28), Math.min(255, accent[1] + 22), Math.min(255, accent[2] + 18)]
+            : accent;
+        circle(n.x, n.y, n.r, color);
+    });
 
     const ihdr = Buffer.alloc(13);
     ihdr.writeUInt32BE(width, 0);
@@ -271,6 +284,29 @@ export class SomaImageGenerationEngine {
             prompt,
             alt,
         });
+        if (
+            artDirector.critique?.retryRecommended &&
+            !options._artDirectorRetry &&
+            !artDirector.failures?.length
+        ) {
+            const retryPrompt = [
+                prepared.originalPrompt || options.prompt || prompt,
+                prepared.revisionPrompt || 'Fresh visual variant: change composition, focal object, material texture, camera distance, and lighting direction from recent generated images.',
+                'Keep it grounded, subject-specific, and suitable for public posting.',
+            ].filter(Boolean).join(' ');
+            try {
+                fs.unlinkSync(outputPath);
+            } catch {}
+            return await this.generate({
+                ...options,
+                prompt: retryPrompt,
+                title: `${options.title || 'soma-image'} fresh variant`,
+                tags: [...new Set([...(Array.isArray(options.tags) ? options.tags : []), 'critique-retry'])],
+                _artDirectorRetry: true,
+                previousPromptSignature: prepared.promptSignature,
+                critiqueRetryReason: artDirector.critique?.warnings || artDirector.warnings || [],
+            });
+        }
         if (!artDirector.approved && (options.publicPost || options.strictArtDirector)) {
             throw new Error(`Art Director rejected generated image: ${artDirector.failures.join(', ') || 'score below threshold'}`);
         }
@@ -286,6 +322,17 @@ export class SomaImageGenerationEngine {
                 originalPrompt: prepared.originalPrompt,
                 finalPrompt: prompt,
                 purpose: options.purpose || 'social',
+                visualSubject: prepared.visualSubject || null,
+                visualRecipe: prepared.visualRecipe || null,
+                selectedPalette: prepared.selectedPalette || [],
+                selectedMotifs: prepared.selectedMotifs || [],
+                promptSignature: prepared.promptSignature || null,
+                similarity: prepared.similarity || null,
+                critique: prepared.critique || null,
+                critiqueRetry: Boolean(options._artDirectorRetry),
+                critiqueRetryReason: options.critiqueRetryReason || [],
+                sourcePostType: options.sourcePostType || options.postType || null,
+                sourcePostId: options.sourcePostId || null,
             },
         });
         return {

@@ -19,6 +19,8 @@ const STRATEGY_PROFILES = {
     micro_compounder: { minConfidence: 0.64, maxPositionPct: 0.04, takeProfitPct: 0.018, stopLossPct: 0.009, cooldownMs: 45000, analysisIntervalMs: 30000 },
     micro_scalper: { minConfidence: 0.57, maxPositionPct: 0.03, takeProfitPct: 0.012, stopLossPct: 0.006, cooldownMs: 20000, analysisIntervalMs: 15000 },
     full_aggression: { minConfidence: 0.50, maxPositionPct: 0.18, takeProfitPct: 0.10, stopLossPct: 0.035, cooldownMs: 45000, analysisIntervalMs: 30000 },
+    vortex: { minConfidence: 0.55, maxPositionPct: 0.12, takeProfitPct: 0.08, stopLossPct: 0.04, cooldownMs: 60000, analysisIntervalMs: 30000 },
+    boring_algo: { minConfidence: 0.65, maxPositionPct: 0.08, takeProfitPct: 0.04, stopLossPct: 0.02, cooldownMs: 120000, analysisIntervalMs: 60000 },
     yield_harvester: { minConfidence: 0.68, maxPositionPct: 0.06, takeProfitPct: 0.025, stopLossPct: 0.012, cooldownMs: 180000, analysisIntervalMs: 90000 }
 };
 

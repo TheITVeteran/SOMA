@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import rippleLoopLedger from '../../core/RippleLoopLedger.js';
 
 const PATTERN_FILE = path.join(process.cwd(), 'SOMA', 'social-patterns.json');
 const MAX_EXAMPLES = 80;
@@ -153,6 +154,7 @@ export function recordSocialOutcome(entry, metrics = {}, score = 0) {
 
     buildStrategy(state);
     saveState(state);
+    rippleLoopLedger.recordSocialRippleOutcome(entry, metrics, score);
     return state;
 }
 

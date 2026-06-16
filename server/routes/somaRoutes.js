@@ -4807,6 +4807,8 @@ ${personaContext}${characterContext}`.trim()
         { id: 'micro_compounder', name: 'Micro Compounder', premise: 'Small high-quality entries that protect gains and compound low-volatility edges.' },
         { id: 'micro_scalper', name: 'Micro Scalper', premise: 'Fast mean-reversion and micro-breakout trades with high turnover.' },
         { id: 'full_aggression', name: 'Full Aggression', premise: 'Maximum paper-risk momentum and breakout posture for upside discovery.' },
+        { id: 'vortex', name: 'VORTEX', premise: 'Volatility-Responsive Trend Exit: Asymmetric risk capture on high-volatility pairs with dynamic stops.' },
+        { id: 'boring_algo', name: 'Boring Algo', premise: 'Classic MACD and RSI confluence for conservative, steady returns.' },
         { id: 'yield_harvester', name: 'Yield Harvester', premise: 'Slow carry-style rotation favoring stable trend, hedges, and low drawdown.' },
     ];
 
@@ -4825,6 +4827,36 @@ ${personaContext}${characterContext}`.trim()
         return slice.reduce((sum, value) => sum + value, 0) / Math.max(1, slice.length);
     };
     const pctReturn = (a, b) => b ? (a - b) / b : 0;
+    const calculateRSI = (series, index, window = 14) => {
+        if (index < window) return 50;
+        let gains = 0, losses = 0;
+        for (let i = index - window + 1; i <= index; i++) {
+            const diff = series[i] - series[i - 1];
+            if (diff >= 0) gains += diff;
+            else losses -= diff;
+        }
+        if (losses === 0) return 100;
+        if (gains === 0) return 0;
+        const rs = gains / losses;
+        return 100 - (100 / (1 + rs));
+    };
+
+    const calculateMACD = (series, index) => {
+        if (index < 26) return { macd: 0, signal: 0, hist: 0 };
+        const ema12 = movingAverage(series, index, 12);
+        const ema26 = movingAverage(series, index, 26);
+        const macdLine = ema12 - ema26;
+        
+        let macdSum = 0;
+        const signalWindow = 9;
+        const start = Math.max(0, index - signalWindow + 1);
+        for (let i = start; i <= index; i++) {
+            macdSum += movingAverage(series, i, 12) - movingAverage(series, i, 26);
+        }
+        const signalLine = macdSum / Math.min(signalWindow, index + 1);
+        return { macd: macdLine, signal: signalLine, hist: macdLine - signalLine };
+    };
+
     const activeMarketStrategyIds = () => new Set(MARKET_STRATEGIES.map(strategy => strategy.id));
 
     const readMarketLabLedger = () => {
@@ -4957,6 +4989,23 @@ ${personaContext}${characterContext}`.trim()
             const breakout = rawMarketSignal('breakout', series, i, asset);
             const trend = rawMarketSignal('trend', series, i, asset);
             return breakout || trend;
+        }
+        if (strategyId === 'vortex') {
+            const mean = rawMarketSignal('mean', series, i, asset);
+            const trend = rawMarketSignal('trend', series, i, asset);
+            const breakout = rawMarketSignal('breakout', series, i, asset);
+            if (mean === 1 && trend === -1) return 1;
+            if (mean === -1 && trend === 1 && asset.allowShort) return -1;
+            return breakout;
+        }
+        if (strategyId === 'boring_algo') {
+            const rsi = calculateRSI(series, i, 14);
+            const { macd, signal } = calculateMACD(series, i);
+            const trend = rawMarketSignal('trend', series, i, asset);
+            
+            if (rsi < 60 && macd > signal && trend === 1) return 1;
+            if (rsi > 40 && macd < signal && trend === -1 && asset.allowShort) return -1;
+            return 0;
         }
         if (strategyId === 'yield_harvester') return rawMarketSignal('yield', series, i, asset);
         return 0;

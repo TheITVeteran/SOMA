@@ -368,9 +368,24 @@ function titleFromFilename(filename = 'Featured Work') {
 }
 
 function portfolioItemFromSocialImage(image, overrides = {}) {
+    const metadata = image.metadata && typeof image.metadata === 'object' ? image.metadata : {};
+    const artDirector = image.artDirector || metadata.artDirector || {};
+    const visualSubject = metadata.visualSubject || artDirector.visualSubject || {};
+    const visualRecipe = metadata.visualRecipe || artDirector.visualRecipe || {};
+    const selectedPalette = metadata.selectedPalette || artDirector.selectedPalette || [];
+    const critique = metadata.critique || artDirector.critique || {};
+    const similarity = metadata.similarity || artDirector.similarity || {};
     const title = String(overrides.title || image.title || titleFromFilename(image.filename)).trim();
-    const category = String(overrides.category || 'SOMA Social Images').trim();
-    const description = String(overrides.description || image.alt || 'Managed image available for SOMA social posts.').trim();
+    const category = String(overrides.category || (visualRecipe.name ? `SOMA ${String(visualRecipe.name).replace(/[-_]+/g, ' ')} Images` : 'SOMA Social Images')).trim();
+    const evidence = [
+        visualRecipe.name ? `Recipe: ${String(visualRecipe.name).replace(/[-_]+/g, ' ')}` : '',
+        visualSubject.subject ? `Subject: ${visualSubject.subject}` : '',
+        selectedPalette.length ? `Palette: ${selectedPalette.slice(0, 5).join(', ')}` : '',
+        artDirector.score !== undefined ? `Art director score: ${artDirector.score}` : '',
+        similarity.reason ? `Similarity: ${similarity.reason}` : '',
+        critique.retryRecommended ? 'Critique requested a fresh variant.' : '',
+    ].filter(Boolean).join(' | ');
+    const description = String(overrides.description || [image.alt || 'Managed image available for SOMA social posts.', evidence].filter(Boolean).join('\n')).trim();
     const tags = Array.isArray(overrides.tags)
         ? overrides.tags
         : Array.isArray(image.tags) && image.tags.length
@@ -391,6 +406,18 @@ function portfolioItemFromSocialImage(image, overrides = {}) {
         socialFilename: image.filename,
         useForSocial: true,
         source: 'soma-social-image-library',
+        generationEvidence: {
+            visualSubject,
+            visualRecipe,
+            selectedPalette,
+            selectedMotifs: metadata.selectedMotifs || artDirector.selectedMotifs || [],
+            promptSignature: metadata.promptSignature || artDirector.promptSignature || null,
+            similarity,
+            critique,
+            artDirectorScore: artDirector.score,
+            approved: artDirector.approved,
+            provider: image.source || metadata.provider || null,
+        },
     };
 }
 

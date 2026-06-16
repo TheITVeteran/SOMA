@@ -15,6 +15,8 @@ import BaseDaemon      from './BaseDaemon.js';
 import socialQueue     from '../server/social/SocialQueue.js';
 import { SocialPersonaEngine } from '../server/social/SocialPersonaEngine.js';
 import socialRelationships from '../server/social/SocialRelationshipLedger.js';
+import rippleSocialBridge from '../server/social/RippleSocialBridge.js';
+import rippleLoopLedger from '../core/RippleLoopLedger.js';
 import messageBroker   from '../core/MessageBroker.cjs';
 import fs   from 'fs';
 import path from 'path';
@@ -53,6 +55,7 @@ const TOPIC_ROTATION = [
     { type: 'hot_take',         fetch: 'spontaneous'  },
     { type: 'github_find',      fetch: 'github'       },
     { type: 'finance_brief',    fetch: 'yahoo_finance'},
+    { type: 'ripple_insight',   fetch: 'ripple'       },
     { type: 'soma_identity',    fetch: 'spontaneous'  },
     { type: 'medical_research', fetch: 'pubmed'       },
     { type: 'self_reflection',  fetch: 'spontaneous'  },
@@ -295,6 +298,26 @@ export class SocialIntelDaemon extends BaseDaemon {
                 item = firstFresh(results, 48 * 3600_000);
                 break;
             }
+            case 'ripple': {
+                try {
+                    const candidate = rippleSocialBridge.latestCandidate();
+                    if (candidate) {
+                        const draft = await rippleSocialBridge.buildDraft(candidate, { brain: this.brain });
+                        item = {
+                            type: 'ripple_insight',
+                            title: draft.data.title,
+                            text: draft.text,
+                            url: draft.data.url,
+                            source: draft.data.provider,
+                            sourceKey: draft.data.sourceKey,
+                            prebuiltPost: draft,
+                        };
+                    }
+                } catch (error) {
+                    console.warn(`[SocialIntel] Ripple bridge empty: ${error.message}`);
+                }
+                break;
+            }
             case 'spontaneous': {
                 if (slot.type === 'self_reflection') {
                     const thought = (this.brain?.internalNarrative || topic).substring(0, 300);
@@ -326,12 +349,15 @@ export class SocialIntelDaemon extends BaseDaemon {
             console.warn(`[SocialIntel] ⚠️  ${slot.fetch} empty — falling back to hot take`);
             item = { type: 'hot_take', title: topic, text: topic, source: 'spontaneous' };
         }
+        if (['ai_paper', 'medical_research'].includes(item.type)) {
+            rippleLoopLedger.recordPaperRipple(item);
+        }
 
         console.log(`[SocialIntel] Generating "${(item.title || item.thought || '').slice(0, 60)}"`);
 
         // ── Generate and queue ────────────────────────────────────────────────
         try {
-            const post    = await this.persona.generatePost(item.type, item, 'bluesky');
+            const post    = item.prebuiltPost || await this.persona.generatePost(item.type, item, 'bluesky');
             const fireAt  = postSoon();
             const pushed  = socialQueue.push({
                 platform: 'bluesky',

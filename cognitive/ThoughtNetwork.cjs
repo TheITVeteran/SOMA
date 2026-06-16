@@ -408,15 +408,19 @@ class ThoughtNetwork {
 
                     // Persist synthesis to long-term memory so SOMA remembers it across restarts
                     if (this.mnemonicArbiter) {
-                        this.mnemonicArbiter.store(decision.synthesis, {
+                        const persist = this.mnemonicArbiter.remember || this.mnemonicArbiter.store;
+                        persist?.call(this.mnemonicArbiter, decision.synthesis, {
                             type: 'synthesis',
                             source: 'thought_network',
                             rationale: decision.rationale || '',
                             parentA: nodeA.content,
                             parentB: nodeB.content,
+                            importance: 0.85,
                             tags: ['synthesis', 'thought_network', nodeA.content, nodeB.content]
                         }).catch(e => console.warn(`[${this.name}] Failed to persist synthesis:`, e.message));
                     }
+
+                    await this.save();
 
                     return newNode;
                 } else {
@@ -441,6 +445,57 @@ class ThoughtNetwork {
         
         // Return unique concepts
         return [...new Set(words)];
+    }
+
+    /**
+     * Build a compact prompt block from related graph nodes and their evidence.
+     * This is the runtime bridge from stored fractals to actual reasoning context.
+     */
+    formatContextForQuery(query, options = {}) {
+        const limit = Math.max(1, Math.min(12, Number(options.limit || 6)));
+        const threshold = Number(options.threshold ?? 0.05);
+        const minConfidence = Number(options.minConfidence ?? 0.62);
+        const related = this.findSimilar(query, threshold, limit * 2)
+            .filter(node => Number(node.confidence || 0) >= minConfidence || node.source === 'bootstrap')
+            .slice(0, limit);
+        if (!related.length) return '';
+
+        const lines = ['[ACTIVE THOUGHT GRAPH]'];
+        for (const node of related) {
+            const type = node.type || 'concept';
+            const sector = node.sector || 'GEN';
+            const confidence = Number(node.confidence || 0).toFixed(2);
+            const strength = Number(node.strength || 0).toFixed(2);
+            lines.push(`- ${node.content} (${type}/${sector}, confidence ${confidence}, strength ${strength})`);
+
+            const evidence = this._formatNodeEvidence(node);
+            if (evidence) lines.push(`  evidence: ${evidence}`);
+
+            const links = node.getConnections?.()
+                ?.slice(0, 3)
+                ?.map(conn => {
+                    const target = conn.node?.content || this.nodes.get(conn.id)?.content || conn.id;
+                    return `${conn.type}->${target}`;
+                }) || [];
+            if (links.length) lines.push(`  links: ${links.join('; ')}`);
+        }
+        lines.push('Use this as retrieved graph evidence. Do not invent graph facts not shown here.');
+        lines.push('[/ACTIVE THOUGHT GRAPH]');
+        return `\n${lines.join('\n')}\n`;
+    }
+
+    _formatNodeEvidence(node) {
+        const evidence = node.evidence;
+        if (!evidence) return '';
+        if (evidence.excerpt) {
+            return String(evidence.excerpt).replace(/\s+/g, ' ').slice(0, 220);
+        }
+        const parts = [];
+        if (evidence.category) parts.push(`category=${evidence.category}`);
+        if (evidence.sector) parts.push(`sector=${evidence.sector}`);
+        if (evidence.count != null) parts.push(`count=${evidence.count}`);
+        if (evidence.avgImportance != null) parts.push(`avgImportance=${evidence.avgImportance}`);
+        return parts.join(', ');
     }
     
     /**

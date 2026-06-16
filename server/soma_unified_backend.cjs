@@ -129,7 +129,7 @@ class SomaUnifiedBackend {
       
       this.systems.orchestrator = new ASIOrchestrator({ name: 'ASIOrchestrator' });
       await this.systems.orchestrator.initialize();
-      console.log('  ✅ Meta-systems online\n');
+      console.log('  o. Meta-systems online\n');
 
       // Integrate Systems
       console.log('[6/10] 🔗 Integrating ASI Systems...');

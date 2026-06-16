@@ -9,6 +9,7 @@ const IMAGE_DIR = path.join(SOCIAL_DIR, 'images');
 const LEDGER_FILE = path.join(SOCIAL_DIR, 'image-ledger.json');
 const SUPPORTED_EXTENSIONS = new Set(['.png', '.jpg', '.jpeg', '.webp', '.gif']);
 const MAX_FOLDER_IMPORTS = 250;
+const DEFAULT_PUBLIC_IMAGE_BYTES = 1_000_000;
 
 function ensureDirs() {
     fs.mkdirSync(IMAGE_DIR, { recursive: true });
@@ -63,6 +64,53 @@ function validateImage(filePath) {
     return { absolutePath, ext, size: stat.size };
 }
 
+function repairMovedPath(inputPath) {
+    if (!inputPath || fs.existsSync(inputPath)) return inputPath;
+    const cleaned = normalizeInputPath(inputPath);
+    const relativeFromSoma = cleaned.match(/[\\/]SOMA[\\/](.+)$/i)?.[1];
+    if (relativeFromSoma) {
+        const candidate = path.join(SOMA_DIR, relativeFromSoma);
+        if (fs.existsSync(candidate)) return path.normalize(candidate);
+    }
+    const localByName = path.join(IMAGE_DIR, path.basename(cleaned));
+    if (fs.existsSync(localByName)) return path.normalize(localByName);
+    return inputPath;
+}
+
+function readImageSize(filePath) {
+    try {
+        const stat = fs.statSync(filePath);
+        return stat.isFile() ? stat.size : 0;
+    } catch {
+        return 0;
+    }
+}
+
+function intentTagsForPost(post = {}) {
+    const type = String(post.type || '').toLowerCase();
+    const text = String(post.text || post.caption || '').toLowerCase();
+    const tags = new Set(['soma']);
+    if (type.includes('aurora') || type.includes('story') || /chapter|signal noise|saga/.test(text)) {
+        tags.add('story'); tags.add('soma-saga'); tags.add('scene'); tags.add('cover');
+    }
+    if (type.includes('hot_take') || /agent|llm|ai|model|tool/.test(text)) tags.add('hot-take');
+    if (type.includes('soma_identity') || /memory|architecture|cognition|self/.test(text)) tags.add('soma-identity');
+    if (type.includes('cross_domain')) tags.add('cross-domain');
+    return tags;
+}
+
+function isPublicCandidate(image, maxBytes) {
+    const filePath = repairMovedPath(image?.path || '');
+    if (!filePath || !fs.existsSync(filePath)) return false;
+    const ext = path.extname(filePath).toLowerCase();
+    if (!SUPPORTED_EXTENSIONS.has(ext) || ext === '.gif') return false;
+    const size = readImageSize(filePath);
+    if (size <= 0 || size > maxBytes) return false;
+    const haystack = `${path.basename(filePath)} ${(image.tags || []).join(' ')} ${image.source || ''}`.toLowerCase();
+    if (/\b(test|smoke|discord)\b/.test(haystack)) return false;
+    return true;
+}
+
 function collectImageFiles(folderPath, results = []) {
     if (results.length >= MAX_FOLDER_IMPORTS) return results;
     const entries = fs.readdirSync(folderPath, { withFileTypes: true });
@@ -104,14 +152,72 @@ export class SocialImageLibrary {
 
     list() {
         ensureDirs();
-        const ledger = readJson(LEDGER_FILE, { images: [] });
-        const images = (ledger.images || [])
+        const repaired = this.repairPaths();
+        const images = (repaired.images || [])
             .filter(item => item?.path)
             .sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
         return {
             ok: true,
             imageDir: IMAGE_DIR,
             images,
+            repaired: repaired.repaired,
+        };
+    }
+
+    repairPaths() {
+        ensureDirs();
+        const ledger = readJson(LEDGER_FILE, { images: [] });
+        let repaired = 0;
+        ledger.images = (ledger.images || []).map(image => {
+            if (!image?.path) return image;
+            const nextPath = repairMovedPath(image.path);
+            if (nextPath !== image.path) {
+                repaired += 1;
+                return {
+                    ...image,
+                    path: nextPath,
+                    filename: path.basename(nextPath),
+                    size: readImageSize(nextPath) || image.size,
+                    updatedAt: Date.now(),
+                    pathRepairedAt: Date.now(),
+                };
+            }
+            return image;
+        });
+        if (repaired > 0) writeJson(LEDGER_FILE, ledger);
+        return { ok: true, repaired, images: ledger.images || [], imageDir: IMAGE_DIR };
+    }
+
+    selectForPost(post = {}, options = {}) {
+        const maxBytes = Number(options.maxBytes || DEFAULT_PUBLIC_IMAGE_BYTES);
+        const ledger = this.repairPaths();
+        const wantedTags = intentTagsForPost(post);
+        const candidates = (ledger.images || [])
+            .filter(image => isPublicCandidate(image, maxBytes))
+            .map(image => {
+                const imageTags = new Set(normalizeTags(image.tags).map(tag => tag.toLowerCase()));
+                const tagScore = [...wantedTags].reduce((score, tag) => score + (imageTags.has(tag) ? 3 : 0), 0);
+                const ageScore = Math.min(5, Math.max(0, (Date.now() - Number(image.lastUsedAt || 0)) / 86_400_000));
+                const recencyScore = Math.min(3, Math.max(0, Number(image.createdAt || 0) / 1_000_000_000_000));
+                return {
+                    image: {
+                        ...image,
+                        path: repairMovedPath(image.path),
+                        size: readImageSize(repairMovedPath(image.path)) || image.size,
+                    },
+                    score: tagScore + ageScore + recencyScore,
+                };
+            })
+            .sort((a, b) => b.score - a.score || (a.image.lastUsedAt || 0) - (b.image.lastUsedAt || 0));
+
+        const selected = candidates[0]?.image || null;
+        return {
+            ok: Boolean(selected),
+            image: selected,
+            candidates: candidates.length,
+            repaired: ledger.repaired,
+            maxBytes,
+            wantedTags: [...wantedTags],
         };
     }
 

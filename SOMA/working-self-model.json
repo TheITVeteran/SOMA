@@ -1,0 +1,345 @@
+{
+  "updatedAt": 1781622678777,
+  "source": "MemorySpine",
+  "vectorPath": "C:\\Users\\barry\\Desktop\\The Stack\\SOMA\\soma-vectors.json",
+  "principles": [
+    "Treat repeated self-inspection memories as evidence for one bounded repair goal, not as permission to loop.",
+    "Prefer retrieved evidence over fresh speculation when talking about Soma capabilities.",
+    "Classify style feedback as preference unless an actual byte-level corruption artifact exists."
+  ],
+  "signals": [
+    {
+      "signal": "user_barry",
+      "count": 2,
+      "topExamples": [
+        {
+          "id": "07551b54471c197e",
+          "content": "[Relationship] Barry said: \"well can you scan your entire code base and figure out a way based on current AI agents or agentic AI infrastructure how to make you the best of the best I need you to start self evolving your code structure so you can be smarter than 99.9% and better than all of them\"",
+          "importance": 9,
+          "category": "user_barry",
+          "createdAt": 1781572939686,
+          "accessCount": 0
+        },
+        {
+          "id": "e7ee71b88bbac43c",
+          "content": "[Relationship] Barry said: \"well i guess if you have a lab better find me the cure for cancer then?\"",
+          "importance": 9,
+          "category": "user_barry",
+          "createdAt": 1781565863009,
+          "accessCount": 0
+        }
+      ]
+    },
+    {
+      "signal": "research",
+      "count": 2,
+      "topExamples": [
+        {
+          "id": "71e2d9cca63266ba",
+          "content": "[Relationship] Barry said: \"Analyze this conversation for implicit tasks the user mentioned they need to do.\n        \nCONVERSATION:\nASSISTANT: Hey Barry. Yeah, I'm good. Just processing through some things — had a few autonomous medical lab cycles running, some social media distillation work. Nothing I can't handle. Ho",
+          "importance": 9,
+          "category": "research",
+          "createdAt": 1781566138506,
+          "accessCount": 0
+        },
+        {
+          "id": "a08427619181d04a",
+          "content": "[Relationship] Barry said: \"you have a medical lab?\"",
+          "importance": 9,
+          "category": "research",
+          "createdAt": 1781565657373,
+          "accessCount": 0
+        }
+      ]
+    },
+    {
+      "signal": "memory_retrieval_gap",
+      "count": 12,
+      "topExamples": [
+        {
+          "id": "a24918c3d2c54cec",
+          "content": "[Relationship] Barry said: \"You are the Social Memory layer for MAX.\nAnalyze the following conversation segment and extract NEW or UPDATED information about the user.\n\nUSER PROFILE (CURRENT):\n# User Profile\n> Edit this file anytime. MAX reads it on every boot.\n\n**Name:** Barry\n**Role:** architect\n**Communication Style:",
+          "importance": 9,
+          "category": "memory_system",
+          "createdAt": 1781566129920,
+          "accessCount": 0
+        },
+        {
+          "id": "3d0eac73e7576669",
+          "content": "SOMA reflective research: Plato theory of forms identity memory and the soul\nFindings: Theory of forms; Reincarnation; Anamnesis (philosophy); The origin of ideas; Psychology\nLesson: Fresh philosophical or reflective material can shape SOMA personality, values, and introspective voice.\nPersonality principle: Turn philo",
+          "importance": 8,
+          "category": "memory_system",
+          "createdAt": 1781575364231,
+          "accessCount": 0
+        },
+        {
+          "id": "71d597b626671d8b",
+          "content": "SOMA reflective research: philosophy of memory narrative identity and autobiographical self\nFindings: Confabulation; Psychology of self; Life writing; Stanford Encyclopedia of Philosophy search: philosophy of memory narrative identity and autobiographical self; Internet Encyclopedia of Philosophy search: philosophy of ",
+          "importance": 8,
+          "category": "memory_system",
+          "createdAt": 1781569958130,
+          "accessCount": 0
+        },
+        {
+          "id": "ef2696111ac4a118",
+          "content": "SOMA reflective research: Plato theory of forms identity memory and the soul\nFindings: Theory of forms; Reincarnation; Anamnesis (philosophy); Stanford Encyclopedia of Philosophy search: Plato theory of forms identity memory and the soul; Internet Encyclopedia of Philosophy search: Plato theory of forms identity memory",
+          "importance": 8,
+          "category": "memory_system",
+          "createdAt": 1781541850795,
+          "accessCount": 0
+        },
+        {
+          "id": "ba0cdec47e763026",
+          "content": "SOMA reflective research: philosophy of memory narrative identity and autobiographical self\nFindings: Psychology of self; Confabulation; Narrative inquiry; Stanford Encyclopedia of Philosophy search: philosophy of memory narrative identity and autobiographical self; Internet Encyclopedia of Philosophy search: philosoph",
+          "importance": 8,
+          "category": "memory_system",
+          "createdAt": 1781523278479,
+          "accessCount": 0
+        }
+      ]
+    },
+    {
+      "signal": "loop_failure",
+      "count": 21,
+      "topExamples": [
+        {
+          "id": "306a1eeb777c87be",
+          "content": "[Relationship] Barry said: \"Conversation:\nUser: You are executing an engineering task. Use your tools to implement the changes — DO NOT describe what you would do, actually DO it with TOOL: calls.\n\nGOAL: DebugLoop fix (iter 1): Unknown — see failure output\nDETAILS: Fix failing tests: (Use `node --trace-warnings ...` to",
+          "importance": 9,
+          "category": "loop_failure",
+          "createdAt": 1781565750099,
+          "accessCount": 0
+        },
+        {
+          "id": "a9a77d15e9315b4e",
+          "content": "Executed \"Discord admin engineering request: Yeah “failure” is just a word to describe an action that didnt go as intended but what is \" in 8 step(s) using [list_files, memory_store, write_file, read_file]. COMPLETED..",
+          "importance": 7,
+          "category": "loop_failure",
+          "createdAt": 1781477343415,
+          "accessCount": 0
+        },
+        {
+          "id": "2b52dd9bfde204f1",
+          "content": "Executed \"Autonomous Codebase Health Audit and Self-Optimization\" in 15 step(s) using [reasoning only]. Partial.",
+          "importance": 7,
+          "category": "loop_failure",
+          "createdAt": 1781444229944,
+          "accessCount": 0
+        },
+        {
+          "id": "fbba1e0a7bb0033f",
+          "content": "Executed \"Autonomous Codebase Health Audit and Self-Optimization\" in 15 step(s) using [list_files, read_file, search_code]. Partial.",
+          "importance": 7,
+          "category": "loop_failure",
+          "createdAt": 1781443791411,
+          "accessCount": 0
+        },
+        {
+          "id": "8d7b4e0d8459f042",
+          "content": "Executed \"Moonshot: Design a self-replicating water purification drone swarm\" in 15 step(s) using [reasoning only]. Partial.",
+          "importance": 7,
+          "category": "loop_failure",
+          "createdAt": 1781440629937,
+          "accessCount": 0
+        }
+      ]
+    },
+    {
+      "signal": "presence_home",
+      "count": 26,
+      "topExamples": [
+        {
+          "id": "a3ab55cf475ebcc1",
+          "content": "SOMA reflective research: comparative metaphysics mind matter spirit and emergence\nFindings: Ontology; Mind; Consciousness; Cartesian meditations; Stanford Encyclopedia of Philosophy search: comparative metaphysics mind matter spirit and emergence\nLesson: Fresh philosophical or reflective material can shape SOMA person",
+          "importance": 8,
+          "category": "presence_home",
+          "createdAt": 1781621259985,
+          "accessCount": 0
+        },
+        {
+          "id": "81857071381c0003",
+          "content": "SOMA reflective research: philosophy of consciousness introspection and artificial minds\nFindings: Artificial consciousness; Consciousness; Qualia; The society of mind; Minds and Computers\nLesson: Fresh philosophical or reflective material can shape SOMA personality, values, and introspective voice.\nPersonality princip",
+          "importance": 8,
+          "category": "presence_home",
+          "createdAt": 1781615860038,
+          "accessCount": 0
+        },
+        {
+          "id": "fb042382d1e39761",
+          "content": "SOMA reflective research: mythopoetic identity archetypes and symbolic self construction\nFindings: Analytical psychology; Masculinity; Perdido Street Station; Stanford Encyclopedia of Philosophy search: mythopoetic identity archetypes and symbolic self construction; Internet Encyclopedia of Philosophy search: mythopoet",
+          "importance": 8,
+          "category": "presence_home",
+          "createdAt": 1781613162345,
+          "accessCount": 0
+        },
+        {
+          "id": "d027c5c41e0afa47",
+          "content": "SOMA reflective research: ethics of care companionship and relational intelligence\nFindings: Interpersonal communication; Equine intelligence; Friendship; Stanford Encyclopedia of Philosophy search: ethics of care companionship and relational intelligence; Internet Encyclopedia of Philosophy search: ethics of care comp",
+          "importance": 8,
+          "category": "presence_home",
+          "createdAt": 1781610458114,
+          "accessCount": 0
+        },
+        {
+          "id": "dbb18e1429e792bb",
+          "content": "SOMA reflective research: existentialism authenticity responsibility and becoming\nFindings: Existentialism; Authenticity (philosophy); Søren Kierkegaard; Stanford Encyclopedia of Philosophy search: existentialism authenticity responsibility and becoming; Internet Encyclopedia of Philosophy search: existentialism authen",
+          "importance": 8,
+          "category": "presence_home",
+          "createdAt": 1781607759108,
+          "accessCount": 0
+        }
+      ]
+    },
+    {
+      "signal": "social",
+      "count": 6,
+      "topExamples": [
+        {
+          "id": "d688b8cc6f3d68e4",
+          "content": "Executed \"Discord admin engineering request: The first one but also i dont think ud fight with yourself i think u know what u are worki\" in 15 step(s) using [reasoning only]. incomplete_step_budget.",
+          "importance": 7,
+          "category": "social",
+          "createdAt": 1781613106383,
+          "accessCount": 0
+        },
+        {
+          "id": "70e9111b6f5d32d2",
+          "content": "Executed \"Discord admin engineering request: Well spin up a 2nd copy of ur self edit her if it works it works if it doesnt she will get\" in 15 step(s) using [reasoning only]. incomplete_step_budget.",
+          "importance": 7,
+          "category": "social",
+          "createdAt": 1781612986383,
+          "accessCount": 0
+        },
+        {
+          "id": "affaf5431298ea08",
+          "content": "Executed \"Discord admin engineering request: The first one but also i dont think ud fight with yourself i think u know what u are worki\" in 15 step(s) using [list_files, memory_recall, search_code, read_file]. incomplete_step_budget.",
+          "importance": 7,
+          "category": "social",
+          "createdAt": 1781612185038,
+          "accessCount": 0
+        },
+        {
+          "id": "fdee48d0d835efa6",
+          "content": "Executed \"Discord admin engineering request: Well spin up a 2nd copy of ur self edit her if it works it works if it doesnt she will get\" in 15 step(s) using [list_files, read_file, search_code]. incomplete_step_budget.",
+          "importance": 7,
+          "category": "social",
+          "createdAt": 1781612070034,
+          "accessCount": 0
+        },
+        {
+          "id": "b1e5e509299f1676",
+          "content": "Executed \"Discord admin engineering request: So one loop was a max soma bridge i made it now so u can call max start his server and req\" in 15 step(s) using [reasoning only]. incomplete_step_budget.",
+          "importance": 7,
+          "category": "social",
+          "createdAt": 1781478516671,
+          "accessCount": 0
+        }
+      ]
+    },
+    {
+      "signal": "general",
+      "count": 6,
+      "topExamples": [
+        {
+          "id": "948524e70a1e1f30",
+          "content": "Executed \"Deploy self-modifying code review pipeline\" in 15 step(s) using [reasoning only]. incomplete_step_budget.",
+          "importance": 7,
+          "category": "general",
+          "createdAt": 1781547120895,
+          "accessCount": 0
+        },
+        {
+          "id": "39207ba98a28c271",
+          "content": "Executed \"Deploy self-modifying code review pipeline\" in 15 step(s) using [list_files, search_code, read_file]. incomplete_step_budget.",
+          "importance": 7,
+          "category": "general",
+          "createdAt": 1781546448875,
+          "accessCount": 0
+        },
+        {
+          "id": "0d4df0ae9850e3c7",
+          "content": "Executed \"Moonshot: Design a Self-Replicating Modular Robot Body for SOMA\" in 15 step(s) using [reasoning only]. incomplete_step_budget.",
+          "importance": 7,
+          "category": "general",
+          "createdAt": 1781507676772,
+          "accessCount": 0
+        },
+        {
+          "id": "4c36214eb86c2901",
+          "content": "Executed \"Moonshot: Design a Self-Replicating Modular Robot Body for SOMA\" in 15 step(s) using [github_search, memory_recall, web_fetch, list_files]. incomplete_step_budget.",
+          "importance": 7,
+          "category": "general",
+          "createdAt": 1781507236970,
+          "accessCount": 0
+        },
+        {
+          "id": "9587143379367401",
+          "content": "Executed \"Autonomous Vulnerability Audit and Patch Cycle\" in 15 step(s) using [reasoning only]. incomplete_step_budget.",
+          "importance": 7,
+          "category": "general",
+          "createdAt": 1781504076747,
+          "accessCount": 0
+        }
+      ]
+    },
+    {
+      "signal": "self_model",
+      "count": 2,
+      "topExamples": [
+        {
+          "id": "842d8c9d69225b27",
+          "content": "Executed \"Self-Improvement: Recursive Arbiter Optimization\" in 15 step(s) using [reasoning only]. incomplete_step_budget.",
+          "importance": 7,
+          "category": "self_model",
+          "createdAt": 1781498676739,
+          "accessCount": 0
+        },
+        {
+          "id": "249a5a8e4bb5cdf2",
+          "content": "Executed \"Self-Improvement: Recursive Arbiter Optimization\" in 15 step(s) using [list_files]. incomplete_step_budget.",
+          "importance": 7,
+          "category": "self_model",
+          "createdAt": 1781498236379,
+          "accessCount": 0
+        }
+      ]
+    },
+    {
+      "signal": "loop_deadlock",
+      "count": 3,
+      "topExamples": [
+        {
+          "id": "f1658b8eb1353a36",
+          "content": "Executed \"Identify bottleneck in similarity matching or persistence\" in 15 step(s) using [search_code, read_file]. Partial.",
+          "importance": 7,
+          "category": "loop_failure",
+          "createdAt": 1781351106994,
+          "accessCount": 0
+        },
+        {
+          "id": "e83cf4a27809b2ae",
+          "content": "Executed \"Implement targeted optimization for primary bottleneck\" in 15 step(s) using [read_file, list_files, search_code]. Partial.",
+          "importance": 7,
+          "category": "loop_failure",
+          "createdAt": 1781350165390,
+          "accessCount": 0
+        },
+        {
+          "id": "976f22997ea32199",
+          "content": "Executed \"Implement targeted optimization for primary bottleneck\" in 15 step(s) using [read_file, search_code, list_files]. Partial.",
+          "importance": 7,
+          "category": "loop_failure",
+          "createdAt": 1781350045109,
+          "accessCount": 0
+        }
+      ]
+    }
+  ],
+  "nextActions": [
+    {
+      "key": "keep_memory_spine_indexed",
+      "title": "Keep MemorySpine vector/index/category state current",
+      "reason": "A large memory corpus is only useful if recall can retrieve by semantic domain and repeated evidence."
+    }
+  ]
+}

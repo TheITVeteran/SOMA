@@ -1323,7 +1323,119 @@ const ScannerView = ({ games, onSelectGame, onOracleScan }) => (
     </div>
 );
 
-const OracleView = ({ games, dossier, isLoading }) => {
+const SimulationFeedView = ({ feed, meta, isLoading, onRefresh }) => (
+    <div className="space-y-6 animate-in fade-in zoom-in duration-300">
+        <div className="flex items-end justify-between">
+            <div>
+                <h2 className="text-xl font-bold text-white tracking-tight">Simulation Evidence Feed</h2>
+                <p className="text-slate-400 text-xs mt-1">Read-only simulation context from SOMA ledgers. Evidence only, not live picks.</p>
+            </div>
+            <button
+                onClick={onRefresh}
+                disabled={isLoading}
+                className="px-3 py-1.5 bg-cyan-600/10 hover:bg-cyan-600/20 rounded text-[10px] font-bold uppercase tracking-wider text-cyan-300 border border-cyan-500/30 flex items-center gap-2 disabled:opacity-50"
+            >
+                <RefreshCw size={14} className={isLoading ? 'animate-spin' : ''} /> Refresh
+            </button>
+        </div>
+
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {[
+                ['Total', meta?.counts?.total ?? 0],
+                ['Market Lab', meta?.counts?.market ?? 0],
+                ['Simulation Suite', meta?.counts?.simulations ?? 0],
+                ['Code Trials', meta?.counts?.code ?? 0],
+            ].map(([label, value]) => (
+                <div key={label} className="glass-panel p-3 rounded-xl border border-white/5">
+                    <div className="text-[9px] text-slate-600 uppercase font-bold tracking-widest">{label}</div>
+                    <div className="text-lg font-mono text-white">{value}</div>
+                </div>
+            ))}
+        </div>
+
+        <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-xs text-amber-200">
+            <div className="font-bold uppercase tracking-widest text-[10px] mb-1">Boundary</div>
+            {meta?.policy?.notice || 'Simulation feed is evidence only. It does not execute trades or create forecasts by itself.'}
+        </div>
+
+        {isLoading && (
+            <div className="flex flex-col items-center justify-center py-16 gap-3 text-slate-600">
+                <RefreshCw className="animate-spin" size={28} />
+                <div className="text-xs uppercase tracking-widest">Loading simulation ledgers...</div>
+            </div>
+        )}
+
+        {!isLoading && feed.length === 0 && (
+            <div className="flex flex-col items-center justify-center py-16 gap-3 text-slate-600">
+                <Database size={32} className="opacity-40" />
+                <div className="text-xs uppercase tracking-widest">No simulation evidence found</div>
+            </div>
+        )}
+
+        <div className="space-y-3">
+            {feed.map(item => {
+                const confidence = Number(item.confidence);
+                const confidenceText = Number.isFinite(confidence)
+                    ? `${(confidence <= 1 ? confidence * 100 : confidence).toFixed(0)}%`
+                    : 'n/a';
+                const itemTime = item.timestamp || item.updatedAt || item.createdAt;
+                const statusTone = item.status === 'promoted' || item.status === 'candidate' || item.status === 'developed_patch'
+                    ? 'text-emerald-300 border-emerald-500/20 bg-emerald-500/8'
+                    : item.status === 'rejected' || item.status === 'patch_rejected'
+                    ? 'text-rose-300 border-rose-500/20 bg-rose-500/8'
+                    : 'text-slate-300 border-white/8 bg-slate-900/60';
+                return (
+                    <div key={`${item.source}-${item.id}`} className={`rounded-xl border p-4 ${statusTone}`}>
+                        <div className="flex items-start justify-between gap-4">
+                            <div className="min-w-0">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                    <span className="text-[10px] uppercase tracking-widest font-bold text-cyan-300">{item.source}</span>
+                                    <span className="text-[10px] uppercase tracking-widest text-slate-500">{item.kind}</span>
+                                    <span className="text-[9px] px-2 py-0.5 rounded bg-black/20 border border-white/10 uppercase font-bold">{item.status}</span>
+                                </div>
+                                <h3 className="text-sm font-bold text-white mt-1 truncate">{item.title}</h3>
+                                {item.target && <div className="text-[10px] font-mono text-slate-500 mt-0.5 truncate">target: {item.target}</div>}
+                            </div>
+                            <div className="text-right shrink-0">
+                                <div className="text-[9px] uppercase tracking-widest text-slate-600">Confidence</div>
+                                <div className="text-lg font-mono text-white">{confidenceText}</div>
+                            </div>
+                        </div>
+
+                        {item.metrics && (
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 mt-3">
+                                {Object.entries(item.metrics).filter(([, value]) => value !== undefined && value !== null).slice(0, 4).map(([key, value]) => (
+                                    <div key={key} className="rounded bg-black/20 border border-white/5 px-2 py-1.5">
+                                        <div className="text-[8px] text-slate-600 uppercase tracking-wider">{key}</div>
+                                        <div className="text-[10px] font-mono text-slate-300">{String(value)}</div>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+
+                        {item.evidence?.length > 0 && (
+                            <div className="mt-3 space-y-1">
+                                {item.evidence.slice(0, 5).map((line, i) => (
+                                    <div key={i} className="flex items-start gap-2 text-[10px] text-slate-400">
+                                        <FileText size={11} className="text-slate-600 shrink-0 mt-0.5" />
+                                        <span>{String(line)}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+
+                        <div className="mt-3 flex items-center justify-between text-[9px] text-slate-600 font-mono">
+                            <span className="truncate">{item.sourceLedger}</span>
+                            <span>{itemTime ? new Date(itemTime).toLocaleString() : 'undated'}</span>
+                        </div>
+                    </div>
+                );
+            })}
+        </div>
+    </div>
+);
+
+const OracleView = ({ games, dossier, isLoading, activeGuesses }) => {
     const [config, setConfig] = useState({
         fatigueLevel: 1.0,
         blowoutRisk: 0.1,
@@ -1370,6 +1482,51 @@ const OracleView = ({ games, dossier, isLoading }) => {
                         </div>
                     </div>
                 </div>
+
+                {/* SOMA's Autonomous Active Picks */}
+                {activeGuesses.length > 0 && (
+                    <div className="glass-panel p-6 rounded-2xl border-indigo-500/20 bg-indigo-900/5 shadow-[0_0_50px_rgba(99,102,241,0.05)] mt-8 relative overflow-hidden">
+                        <div className="absolute top-0 right-0 p-4 opacity-10 pointer-events-none">
+                            <BrainCircuit size={100} />
+                        </div>
+                        <h2 className="text-xl font-bold text-white flex items-center gap-2 mb-6">
+                            <Zap size={20} className="text-emerald-400" /> SOMA's Active Picks
+                        </h2>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 relative z-10">
+                            {activeGuesses.map((guess, idx) => (
+                                <div key={idx} className="bg-[#09090b]/80 border border-white/5 rounded-xl p-5 hover:border-indigo-500/30 transition-colors">
+                                    <div className="flex justify-between items-start mb-4">
+                                        <div className="text-xs font-bold text-indigo-400 uppercase tracking-widest">{guess.sport || 'SPORTS'}</div>
+                                        <div className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
+                                            guess.confidence === 'HIGH' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 
+                                            guess.confidence === 'MEDIUM' ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20' : 
+                                            'bg-slate-500/10 text-slate-400 border border-slate-500/20'
+                                        }`}>
+                                            {guess.confidence} CONFIDENCE
+                                        </div>
+                                    </div>
+                                    <div className="text-lg font-bold text-white mb-2">{guess.matchup}</div>
+                                    <div className="flex items-center gap-2 text-sm text-slate-300 mb-4">
+                                        <Target size={14} className="text-slate-500" />
+                                        Prediction: <span className="text-white font-medium">{guess.prediction}</span>
+                                    </div>
+                                    <div className="flex justify-between items-end border-t border-white/5 pt-4 mt-auto">
+                                        <div>
+                                            <div className="text-[10px] text-slate-500 uppercase tracking-widest mb-1">Win Prob</div>
+                                            <div className="text-lg font-mono text-emerald-400">{(guess.win_probability * 100).toFixed(1)}%</div>
+                                        </div>
+                                        <div className="text-right">
+                                            <div className="text-[10px] text-slate-500 uppercase tracking-widest mb-1">Calculated Edge</div>
+                                            <div className={`text-lg font-mono ${guess.calculatedEdge > 0 ? 'text-emerald-400' : 'text-amber-400'}`}>
+                                                {guess.calculatedEdge > 0 ? '+' : ''}{guess.calculatedEdge?.toFixed(1) || '0.0'}%
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
 
                 <div className="grid grid-cols-12 gap-8">
                     {/* LEFT: The Numbers */}
@@ -1673,10 +1830,16 @@ export default function ForecasterApp() {
     const [slipText, setSlipText] = useState('');
     const [slipParseResult, setSlipParseResult] = useState(null);
     const [performance, setPerformance] = useState(null);
+    const [simulationFeed, setSimulationFeed] = useState([]);
+    const [simulationFeedMeta, setSimulationFeedMeta] = useState(null);
+    const [isSimulationFeedLoading, setIsSimulationFeedLoading] = useState(false);
     
     // Oracle State
     const [oracleDossier, setOracleDossier] = useState(null);
     const [isOracleLoading, setIsOracleLoading] = useState(false);
+
+    // Active Autonomous Guesses
+    const [activeGuesses, setActiveGuesses] = useState([]);
 
     // Parlay Simulator State
     const [parlayLegs, setParlayLegs] = useState([]);
@@ -1728,18 +1891,32 @@ export default function ForecasterApp() {
 
     useEffect(() => {
         fetch('/api/forecaster/performance')
-            .then(res => res.ok ? res.json() : null)
-            .then(data => {
-                if (data?.success) setPerformance(data);
-            })
+            .then(res => res.json())
+            .then(data => data.success && setPerformance(data.performance))
             .catch(() => {});
     }, []);
 
-    const handleGameSelect = (game) => {
-        setSelectedGame(game);
-        setPrediction(null);
-        setActiveTab('analysis');
+    const loadSimulationFeed = async () => {
+        setIsSimulationFeedLoading(true);
+        try {
+            const res = await fetch('/api/forecaster/simulation-feed?limit=40');
+            const data = await res.json();
+            if (res.ok && data.success) {
+                setSimulationFeed(data.feed || []);
+                setSimulationFeedMeta({ counts: data.counts, policy: data.policy, generatedAt: data.generatedAt });
+            }
+        } catch (error) {
+            console.warn('[Forecaster] Simulation feed unavailable:', error.message);
+        } finally {
+            setIsSimulationFeedLoading(false);
+        }
     };
+
+    useEffect(() => {
+        loadSimulationFeed();
+        const t = setInterval(loadSimulationFeed, 30000);
+        return () => clearInterval(t);
+    }, []);
 
     const runAnalysis = async () => {
         if (!selectedGame) return;
@@ -1929,9 +2106,20 @@ export default function ForecasterApp() {
             return <TheGoalView games={games} />;
         }
 
+        if (activeTab === 'simulations') {
+            return (
+                <SimulationFeedView
+                    feed={simulationFeed}
+                    meta={simulationFeedMeta}
+                    isLoading={isSimulationFeedLoading}
+                    onRefresh={loadSimulationFeed}
+                />
+            );
+        }
+
         // 1. Oracle View
         if (activeTab === 'oracle') {
-            return <OracleView games={games} dossier={oracleDossier} isLoading={isOracleLoading} />;
+            return <OracleView games={games} dossier={oracleDossier} isLoading={isOracleLoading} activeGuesses={activeGuesses} />;
         }
 
         // 2. Analysis View (Game Detail)
@@ -2340,6 +2528,7 @@ export default function ForecasterApp() {
                     {[
                         { id: 'dashboard', label: 'Scanner', icon: Radar },
                         { id: 'oracle', label: 'The Oracle', icon: Eye },
+                        { id: 'simulations', label: 'Sim Feed', icon: Database },
                         { id: 'goal', label: 'The Goal', icon: Target },
                     ].map(tab => (
                         <button
