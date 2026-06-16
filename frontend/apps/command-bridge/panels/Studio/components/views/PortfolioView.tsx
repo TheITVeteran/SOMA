@@ -378,26 +378,47 @@ const PortfolioView: React.FC<Props> = ({ currentUser, onBack, onPortfolioChange
             ))}
           </div>
         ) : (
-          <div className="gap-3 pb-20 [column-fill:_balance] columns-2 sm:columns-3 lg:columns-4 2xl:columns-5">
-              {filteredItems.map((item) => (
-                <button
-                  key={item.id}
-                  onClick={() => setSelectedItem(item)}
-                  className="group mb-3 block w-full break-inside-avoid text-left"
-                >
-                  <div className="relative overflow-hidden rounded-2xl border border-white/5 bg-[#14141d]">
-                    <img src={item.image} className="w-full h-auto object-cover transition-transform duration-500 group-hover:scale-[1.04]" alt={item.title} />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
-                    <span className="absolute bottom-2.5 right-2.5 translate-y-1 rounded-full bg-gradient-to-r from-cyan-400 to-fuchsia-500 px-3 py-1.5 text-xs font-bold text-black opacity-0 transition-all duration-300 group-hover:translate-y-0 group-hover:opacity-100">
-                      Save
-                    </span>
+          <div className="gap-4 pb-20 columns-2 sm:columns-3 lg:columns-4 xl:columns-5 2xl:columns-6">
+              {filteredItems.map((item, index) => {
+                // Varied pin heights are what make masonry read as Pinterest.
+                // Even uniform source images get cropped to staggered ratios.
+                const ratios = ['3 / 4', '1 / 1', '4 / 5', '2 / 3', '3 / 5', '5 / 4', '9 / 16'];
+                const ratio = ratios[(item.id ? item.id.length + index : index) % ratios.length];
+                return (
+                  <div key={item.id} className="group mb-4 break-inside-avoid">
+                    <button
+                      onClick={() => setSelectedItem(item)}
+                      className="relative block w-full overflow-hidden rounded-2xl bg-[#15151c]"
+                    >
+                      <img src={item.image} style={{ aspectRatio: ratio }} className="w-full object-cover" alt={item.title} />
+
+                      {/* hover dim */}
+                      <div className="absolute inset-0 bg-black/35 opacity-0 transition-opacity duration-200 group-hover:opacity-100" />
+
+                      {/* signature red Save (top-right) */}
+                      <span className="absolute right-3 top-3 rounded-full bg-[#e60023] px-4 py-2 text-sm font-bold text-white opacity-0 shadow-lg transition-all duration-200 group-hover:opacity-100">
+                        Save
+                      </span>
+
+                      {/* quick actions (bottom-right) */}
+                      <div className="absolute bottom-3 right-3 flex gap-2 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+                        <span onClick={(e) => { e.stopPropagation(); queueSocialPost(item); }} className="grid h-9 w-9 place-items-center rounded-full bg-black/60 text-white backdrop-blur-md transition-colors hover:bg-black/80" title="Queue for SOMA social">
+                          <Share2 size={15} />
+                        </span>
+                        <span onClick={(e) => { e.stopPropagation(); copyCaption(item); }} className="grid h-9 w-9 place-items-center rounded-full bg-black/60 text-white backdrop-blur-md transition-colors hover:bg-black/80" title="Copy caption">
+                          {copiedId === item.id ? <Check size={15} /> : <Copy size={15} />}
+                        </span>
+                      </div>
+                    </button>
+
+                    {/* pin meta (below the image, Pinterest-style) */}
+                    <div className="px-1 pt-2">
+                      <h3 className="line-clamp-2 text-[13px] font-semibold leading-snug text-white/90">{item.title}</h3>
+                      <p className="mt-0.5 truncate text-[11px] text-white/40">{item.category}</p>
+                    </div>
                   </div>
-                  <div className="px-1 pt-2">
-                    <h3 className="line-clamp-2 text-[13px] font-semibold leading-snug text-white/85">{item.title}</h3>
-                    <p className="mt-1 truncate font-mono text-[10px] uppercase tracking-widest text-white/35">{item.category} · {item.year}</p>
-                  </div>
-                </button>
-              ))}
+                );
+              })}
           </div>
         )}
       </main>
