@@ -38,15 +38,6 @@ const BRAINROT_CLIPS = [
     { id: 4, views: '500K', title: 'Static', author: '@noise', color: 'from-blue-500' },
 ];
 
-function ago(ts?: number) {
-    if (!ts) return '';
-    const s = Math.max(0, (Date.now() - ts) / 1000);
-    if (s < 60) return Math.round(s) + 's';
-    if (s < 3600) return Math.round(s / 60) + 'm';
-    if (s < 86400) return Math.round(s / 3600) + 'h';
-    return Math.round(s / 86400) + 'd';
-}
-
 const EcosystemView: React.FC<Props> = ({ currentUser, onBack }) => {
     const [activeTab, setActiveTab] = useState('Overview');
     const [activeSignalIndex, setActiveSignalIndex] = useState(2);
@@ -76,7 +67,6 @@ const EcosystemView: React.FC<Props> = ({ currentUser, onBack }) => {
 
     const chats: any[] = Array.isArray(axis?.chats) ? axis.chats : [];
     const friends: any[] = Array.isArray(axis?.friends) ? axis.friends : [];
-    const directs = chats.slice().sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
     const joinedCommunities = communities.filter(c => c.isJoined);
 
     const APPS = [
@@ -182,11 +172,8 @@ const EcosystemView: React.FC<Props> = ({ currentUser, onBack }) => {
                         ))}
                     </div>
 
-                    {/* Spotlight + live Directs rail */}
-                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:h-[600px]">
-
-                        {/* Spotlight = currently selected Top Signal */}
-                        <div className="lg:col-span-8 h-[400px] lg:h-full bg-[#0A0A0A] rounded-3xl border border-white/5 overflow-hidden relative group">
+                    {/* Spotlight = currently selected Top Signal */}
+                    <div className="h-[400px] lg:h-[440px] bg-[#0A0A0A] rounded-3xl border border-white/5 overflow-hidden relative group">
                             <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent z-10" />
                             <img src={spotlight.image.replace('w=400', 'w=1600')} className="w-full h-full object-cover opacity-60 group-hover:opacity-80 transition-opacity duration-500" />
                             <div className="absolute top-6 left-6 z-20 flex gap-3">
@@ -210,41 +197,6 @@ const EcosystemView: React.FC<Props> = ({ currentUser, onBack }) => {
                                     </button>
                                 </div>
                             </div>
-                        </div>
-
-                        {/* Directs — live from the phone Studio app */}
-                        <div className="lg:col-span-4 h-full bg-[#0A0A0A] rounded-3xl border border-white/5 flex flex-col overflow-hidden">
-                            <div className="p-6 border-b border-white/5 flex justify-between items-center">
-                                <div className="flex items-center gap-2">
-                                    <MessageSquare size={18} className="text-cyan-400" />
-                                    <span className="font-bold">Directs</span>
-                                    {synced && <span className="text-[9px] font-mono uppercase tracking-widest text-emerald-400 bg-emerald-400/10 border border-emerald-400/20 px-2 py-0.5 rounded-full">live</span>}
-                                </div>
-                                <button className="text-white/30 hover:text-white"><Settings size={16} /></button>
-                            </div>
-                            <div className="flex-1 overflow-y-auto p-2 scrollbar-thin scrollbar-thumb-white/10">
-                                {directs.length === 0 && (
-                                    <div className="p-6 text-center text-sm text-white/30 font-mono">
-                                        {synced ? 'No directs yet.' : 'Connect SOMA to see your Studio directs.'}
-                                    </div>
-                                )}
-                                {directs.map((c) => (
-                                    <div key={c.id} className="p-3 hover:bg-white/5 rounded-2xl transition-colors cursor-pointer group flex items-center gap-3">
-                                        <div className="relative shrink-0">
-                                            <img src={c.image} className="w-10 h-10 rounded-full object-cover border border-white/10" />
-                                            {c.online && <span className="absolute -right-0.5 -bottom-0.5 w-3 h-3 rounded-full bg-emerald-500 border-2 border-[#0A0A0A]" />}
-                                        </div>
-                                        <div className="min-w-0 flex-1">
-                                            <div className="flex items-center justify-between gap-2">
-                                                <h4 className="font-bold text-white text-sm truncate">{c.title}</h4>
-                                                <span className="text-[10px] text-white/30 font-mono shrink-0">{ago(c.updatedAt)}</span>
-                                            </div>
-                                            <p className="text-xs text-white/45 truncate">{c.lastMessage || '—'}</p>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
                     </div>
 
                     {/* Top Performing Signals — the cascade carousel (kept) */}
