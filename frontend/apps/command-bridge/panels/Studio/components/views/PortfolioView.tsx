@@ -253,12 +253,12 @@ const PortfolioView: React.FC<Props> = ({ currentUser, onBack, onPortfolioChange
   );
 
   return (
-    <div className="flex min-h-screen flex-col bg-[#070604] font-sans text-[#f7f2e8] md:flex-row">
+    <div className="flex min-h-screen flex-col bg-[#0a0a0f] font-sans text-[#f4f7fb] md:flex-row">
       <AnimatePresence>
         {selectedItem && <DetailOverlay item={selectedItem} onClose={() => setSelectedItem(null)} />}
       </AnimatePresence>
 
-      <aside className="hidden h-screen w-64 shrink-0 flex-col border-r border-white/10 bg-[#090806]/95 p-6 backdrop-blur-xl md:sticky md:top-0 md:flex">
+      <aside className="hidden h-screen w-64 shrink-0 flex-col border-r border-white/10 bg-[#0e0e15]/95 p-6 backdrop-blur-xl md:sticky md:top-0 md:flex">
         <div className="mb-6">
           <button onClick={onBack} className="mb-6 flex items-center gap-2 text-white/50 transition-colors hover:text-white">
             <ArrowLeft size={16} /> Back
@@ -293,7 +293,7 @@ const PortfolioView: React.FC<Props> = ({ currentUser, onBack, onPortfolioChange
                 key={cat}
                 onClick={() => setActiveCategory(cat)}
                 className={`flex items-center justify-between rounded-lg px-3 py-1.5 text-left text-sm transition-all ${
-                  activeCategory === cat ? 'bg-[#f7f2e8] font-bold text-black' : 'text-white/50 hover:bg-white/5 hover:text-white'
+                  activeCategory === cat ? 'bg-gradient-to-r from-cyan-400 to-fuchsia-500 font-bold text-black' : 'text-white/50 hover:bg-white/5 hover:text-white'
                 }`}
               >
                 <span>{cat}</span>
@@ -307,19 +307,19 @@ const PortfolioView: React.FC<Props> = ({ currentUser, onBack, onPortfolioChange
 
         <div className="mt-5 space-y-2">
           <div className="grid grid-cols-2 gap-2">
-            <button onClick={() => setViewMode('gallery')} className={`rounded-lg border px-3 py-2 text-xs font-bold transition-all ${viewMode === 'gallery' ? 'border-white bg-white text-black' : 'border-white/10 bg-white/[0.03] text-white/45 hover:text-white'}`}>
+            <button onClick={() => setViewMode('gallery')} className={`rounded-lg border px-3 py-2 text-xs font-bold transition-all ${viewMode === 'gallery' ? 'border-transparent bg-gradient-to-r from-cyan-400 to-fuchsia-500 text-black' : 'border-white/10 bg-white/[0.03] text-white/45 hover:text-white'}`}>
               <Grid size={14} className="mr-1 inline" /> Gallery
             </button>
-            <button onClick={() => setViewMode('index')} className={`rounded-lg border px-3 py-2 text-xs font-bold transition-all ${viewMode === 'index' ? 'border-white bg-white text-black' : 'border-white/10 bg-white/[0.03] text-white/45 hover:text-white'}`}>
+            <button onClick={() => setViewMode('index')} className={`rounded-lg border px-3 py-2 text-xs font-bold transition-all ${viewMode === 'index' ? 'border-transparent bg-gradient-to-r from-cyan-400 to-fuchsia-500 text-black' : 'border-white/10 bg-white/[0.03] text-white/45 hover:text-white'}`}>
               <List size={14} className="mr-1 inline" /> Index
             </button>
           </div>
-          <select value={sortMode} onChange={e => setSortMode(e.target.value as any)} className="w-full rounded-lg border border-white/10 bg-[#11100d] px-3 py-2 text-xs font-bold text-white/65 outline-none">
+          <select value={sortMode} onChange={e => setSortMode(e.target.value as any)} className="w-full rounded-lg border border-white/10 bg-[#14141d] px-3 py-2 text-xs font-bold text-white/65 outline-none">
             <option value="recent">Sort by year</option>
             <option value="title">Sort by title</option>
             <option value="category">Sort by series</option>
           </select>
-          <button onClick={() => fileInputRef.current?.click()} disabled={isUploading} className="flex w-full items-center justify-center gap-2 rounded-lg border border-white/10 bg-[#f7f2e8] py-2.5 text-sm font-black text-black transition-all hover:bg-white disabled:cursor-not-allowed disabled:opacity-50">
+          <button onClick={() => fileInputRef.current?.click()} disabled={isUploading} className="flex w-full items-center justify-center gap-2 rounded-lg border border-transparent bg-gradient-to-r from-cyan-400 to-fuchsia-500 py-2.5 text-sm font-black text-black transition-all hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50">
             <Upload size={16} /> {isUploading ? 'Importing...' : 'Add Featured Image'}
           </button>
           <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleUpload} />
@@ -328,7 +328,7 @@ const PortfolioView: React.FC<Props> = ({ currentUser, onBack, onPortfolioChange
         </div>
       </aside>
 
-      <div className="sticky top-0 z-30 flex items-center justify-between border-b border-white/10 bg-[#090806]/90 px-4 py-4 backdrop-blur-md md:hidden">
+      <div className="sticky top-0 z-30 flex items-center justify-between border-b border-white/10 bg-[#0e0e15]/90 px-4 py-4 backdrop-blur-md md:hidden">
         <button onClick={onBack} className="-ml-2 p-2 text-white/70">
           <ArrowLeft size={24} />
         </button>
@@ -344,7 +344,7 @@ const PortfolioView: React.FC<Props> = ({ currentUser, onBack, onPortfolioChange
             key={cat}
             onClick={() => setActiveCategory(cat)}
             className={`whitespace-nowrap rounded-full border px-4 py-2 text-xs font-bold transition-colors ${
-              activeCategory === cat ? 'border-white bg-[#f7f2e8] text-black' : 'border-white/10 bg-transparent text-white/60'
+              activeCategory === cat ? 'border-transparent bg-gradient-to-r from-cyan-400 to-fuchsia-500 text-black' : 'border-white/10 bg-transparent text-white/60'
             }`}
           >
             {cat}
@@ -378,20 +378,23 @@ const PortfolioView: React.FC<Props> = ({ currentUser, onBack, onPortfolioChange
             ))}
           </div>
         ) : (
-          <div className="grid grid-cols-2 gap-3 pb-20 sm:grid-cols-3 md:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-5">
-              {filteredItems.map((item, index) => (
+          <div className="gap-3 pb-20 [column-fill:_balance] columns-2 sm:columns-3 lg:columns-4 2xl:columns-5">
+              {filteredItems.map((item) => (
                 <button
                   key={item.id}
                   onClick={() => setSelectedItem(item)}
-                  className="group relative overflow-hidden rounded-xl border border-white/10 bg-neutral-900 text-left transition hover:border-white/25"
+                  className="group mb-3 block w-full break-inside-avoid text-left"
                 >
-                  <div className="aspect-[4/3] overflow-hidden bg-black">
-                    <img src={item.image} className="h-full w-full object-cover opacity-90 transition-transform duration-300 group-hover:scale-[1.03]" alt={item.title} />
+                  <div className="relative overflow-hidden rounded-2xl border border-white/5 bg-[#14141d]">
+                    <img src={item.image} className="w-full h-auto object-cover transition-transform duration-500 group-hover:scale-[1.04]" alt={item.title} />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
+                    <span className="absolute bottom-2.5 right-2.5 translate-y-1 rounded-full bg-gradient-to-r from-cyan-400 to-fuchsia-500 px-3 py-1.5 text-xs font-bold text-black opacity-0 transition-all duration-300 group-hover:translate-y-0 group-hover:opacity-100">
+                      Save
+                    </span>
                   </div>
-                  <div className="min-h-[74px] p-3">
-                    <span className="mb-1 block truncate font-mono text-[9px] uppercase tracking-widest text-white/35">{item.category}</span>
-                    <h3 className="truncate text-sm font-bold leading-tight text-white/90">{item.title}</h3>
-                    <p className="mt-1 truncate text-[11px] text-white/35">{item.year}</p>
+                  <div className="px-1 pt-2">
+                    <h3 className="line-clamp-2 text-[13px] font-semibold leading-snug text-white/85">{item.title}</h3>
+                    <p className="mt-1 truncate font-mono text-[10px] uppercase tracking-widest text-white/35">{item.category} · {item.year}</p>
                   </div>
                 </button>
               ))}
