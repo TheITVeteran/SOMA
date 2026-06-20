@@ -1,5 +1,5 @@
 {
-  "updatedAt": 1781622678777,
+  "updatedAt": 1781941016270,
   "source": "MemorySpine",
   "vectorPath": "C:\\Users\\barry\\Desktop\\The Stack\\SOMA\\soma-vectors.json",
   "principles": [
@@ -10,8 +10,24 @@
   "signals": [
     {
       "signal": "user_barry",
-      "count": 2,
+      "count": 5,
       "topExamples": [
+        {
+          "id": "0dd64569473c9a65",
+          "content": "[Relationship] Barry said: \"You have been idle too long. Pick one thing you have been meaning to understand better and think through it thoroughly.\"",
+          "importance": 9,
+          "category": "user_barry",
+          "createdAt": 1781919714862,
+          "accessCount": 0
+        },
+        {
+          "id": "962df462c02638fd",
+          "content": "[Relationship] Barry said: \"You are MAX. Reflect on what you have been exploring and learning.\nGenerate 3 specific, interesting questions you want to investigate next.\nAlso note any patterns you have noticed in recent tasks.\nBe concrete, not philosophical. Max Headroom style — sharp, direct.\"",
+          "importance": 9,
+          "category": "user_barry",
+          "createdAt": 1781823083436,
+          "accessCount": 0
+        },
         {
           "id": "07551b54471c197e",
           "content": "[Relationship] Barry said: \"well can you scan your entire code base and figure out a way based on current AI agents or agentic AI infrastructure how to make you the best of the best I need you to start self evolving your code structure so you can be smarter than 99.9% and better than all of them\"",
@@ -27,12 +43,20 @@
           "category": "user_barry",
           "createdAt": 1781565863009,
           "accessCount": 0
+        },
+        {
+          "id": "ee3d99c8f881d892",
+          "content": "AI Provider Priority: DeepSeek is primary chat interface for high-signal conversational output. Ollama is local fallback for offline/private inference. This priority was set by Barry and documented in docs/ai-provider-priority.md. The SOMArbiterV3.js routes primary chat to DeepSeek directly.",
+          "importance": 8,
+          "category": "user_barry",
+          "createdAt": 1781882186387,
+          "accessCount": 0
         }
       ]
     },
     {
       "signal": "research",
-      "count": 2,
+      "count": 6,
       "topExamples": [
         {
           "id": "71e2d9cca63266ba",
@@ -49,12 +73,36 @@
           "category": "research",
           "createdAt": 1781565657373,
           "accessCount": 0
+        },
+        {
+          "id": "828ca9a48034cd94",
+          "content": "Gemini API key has been cancelled due to charges per Barry's priority. Decision: DISABLED, do NOT re-enable. All test files referencing geminiApiKey (test-adversarial-debate-swarm.mjs, test-dynamic-specialist.mjs, test-self-healing.mjs) have been identified. Decision artifact saved to research/gemini-disabled-decision.",
+          "importance": 8,
+          "category": "research",
+          "createdAt": 1781882059890,
+          "accessCount": 0
+        },
+        {
+          "id": "092e61f2117e8a82",
+          "content": "Perception dashboard tab research complete. Key findings: ring buffer tracking in core/MessageBroker.cjs line 347 for daemon health, arbiter restart logic in core/SomaBootstrap.js line 2392, signal flow monitoring via tiered subscriptions. Artifact saved at research/perception-dashboard-tab.md.",
+          "importance": 7,
+          "category": "research",
+          "createdAt": 1781884123408,
+          "accessCount": 0
+        },
+        {
+          "id": "6d49173c3fbc417a",
+          "content": "MAX ↔ SOMA wiring goal complete. Artifact at research/max-soma-wiring.md documents integration points: MAX_LEDGER_ITEMS, CrossDomainSynthesisArbiter, SOMA engine task delegation. Priority: Barry.",
+          "importance": 7,
+          "category": "research",
+          "createdAt": 1781883863292,
+          "accessCount": 0
         }
       ]
     },
     {
       "signal": "memory_retrieval_gap",
-      "count": 12,
+      "count": 10,
       "topExamples": [
         {
           "id": "a24918c3d2c54cec",
@@ -69,7 +117,23 @@
           "content": "SOMA reflective research: Plato theory of forms identity memory and the soul\nFindings: Theory of forms; Reincarnation; Anamnesis (philosophy); The origin of ideas; Psychology\nLesson: Fresh philosophical or reflective material can shape SOMA personality, values, and introspective voice.\nPersonality principle: Turn philo",
           "importance": 8,
           "category": "memory_system",
-          "createdAt": 1781575364231,
+          "createdAt": 1781940649234,
+          "accessCount": 0
+        },
+        {
+          "id": "33e4a44e8643edee",
+          "content": "SOMA reflective research: philosophy of memory narrative identity and autobiographical self\nFindings: Confabulation; Psychology of self; Narrative inquiry; Stanford Encyclopedia of Philosophy search: philosophy of memory narrative identity and autobiographical self; Internet Encyclopedia of Philosophy search: philosoph",
+          "importance": 8,
+          "category": "memory_system",
+          "createdAt": 1781913681091,
+          "accessCount": 0
+        },
+        {
+          "id": "2682b8e6b6837f53",
+          "content": "SOMA reflective research: philosophy of memory narrative identity and autobiographical self\nFindings: Psychology of self; Narrative inquiry; Life writing; Stanford Encyclopedia of Philosophy search: philosophy of memory narrative identity and autobiographical self; Internet Encyclopedia of Philosophy search: philosophy",
+          "importance": 8,
+          "category": "memory_system",
+          "createdAt": 1781868141957,
           "accessCount": 0
         },
         {
@@ -77,30 +141,14 @@
           "content": "SOMA reflective research: philosophy of memory narrative identity and autobiographical self\nFindings: Confabulation; Psychology of self; Life writing; Stanford Encyclopedia of Philosophy search: philosophy of memory narrative identity and autobiographical self; Internet Encyclopedia of Philosophy search: philosophy of ",
           "importance": 8,
           "category": "memory_system",
-          "createdAt": 1781569958130,
-          "accessCount": 0
-        },
-        {
-          "id": "ef2696111ac4a118",
-          "content": "SOMA reflective research: Plato theory of forms identity memory and the soul\nFindings: Theory of forms; Reincarnation; Anamnesis (philosophy); Stanford Encyclopedia of Philosophy search: Plato theory of forms identity memory and the soul; Internet Encyclopedia of Philosophy search: Plato theory of forms identity memory",
-          "importance": 8,
-          "category": "memory_system",
-          "createdAt": 1781541850795,
-          "accessCount": 0
-        },
-        {
-          "id": "ba0cdec47e763026",
-          "content": "SOMA reflective research: philosophy of memory narrative identity and autobiographical self\nFindings: Psychology of self; Confabulation; Narrative inquiry; Stanford Encyclopedia of Philosophy search: philosophy of memory narrative identity and autobiographical self; Internet Encyclopedia of Philosophy search: philosoph",
-          "importance": 8,
-          "category": "memory_system",
-          "createdAt": 1781523278479,
+          "createdAt": 1781841142007,
           "accessCount": 0
         }
       ]
     },
     {
       "signal": "loop_failure",
-      "count": 21,
+      "count": 1,
       "topExamples": [
         {
           "id": "306a1eeb777c87be",
@@ -109,51 +157,35 @@
           "category": "loop_failure",
           "createdAt": 1781565750099,
           "accessCount": 0
-        },
-        {
-          "id": "a9a77d15e9315b4e",
-          "content": "Executed \"Discord admin engineering request: Yeah “failure” is just a word to describe an action that didnt go as intended but what is \" in 8 step(s) using [list_files, memory_store, write_file, read_file]. COMPLETED..",
-          "importance": 7,
-          "category": "loop_failure",
-          "createdAt": 1781477343415,
-          "accessCount": 0
-        },
-        {
-          "id": "2b52dd9bfde204f1",
-          "content": "Executed \"Autonomous Codebase Health Audit and Self-Optimization\" in 15 step(s) using [reasoning only]. Partial.",
-          "importance": 7,
-          "category": "loop_failure",
-          "createdAt": 1781444229944,
-          "accessCount": 0
-        },
-        {
-          "id": "fbba1e0a7bb0033f",
-          "content": "Executed \"Autonomous Codebase Health Audit and Self-Optimization\" in 15 step(s) using [list_files, read_file, search_code]. Partial.",
-          "importance": 7,
-          "category": "loop_failure",
-          "createdAt": 1781443791411,
-          "accessCount": 0
-        },
-        {
-          "id": "8d7b4e0d8459f042",
-          "content": "Executed \"Moonshot: Design a self-replicating water purification drone swarm\" in 15 step(s) using [reasoning only]. Partial.",
-          "importance": 7,
-          "category": "loop_failure",
-          "createdAt": 1781440629937,
-          "accessCount": 0
         }
       ]
     },
     {
       "signal": "presence_home",
-      "count": 26,
+      "count": 36,
       "topExamples": [
         {
-          "id": "a3ab55cf475ebcc1",
-          "content": "SOMA reflective research: comparative metaphysics mind matter spirit and emergence\nFindings: Ontology; Mind; Consciousness; Cartesian meditations; Stanford Encyclopedia of Philosophy search: comparative metaphysics mind matter spirit and emergence\nLesson: Fresh philosophical or reflective material can shape SOMA person",
+          "id": "81765e72ed1a8522",
+          "content": "SOMA reflective research: Neoplatonism emanation unity and symbolic imagination\nFindings: Kabbalah; Western esotericism; Christian mysticism; Stanford Encyclopedia of Philosophy search: Neoplatonism emanation unity and symbolic imagination; Internet Encyclopedia of Philosophy search: Neoplatonism emanation unity and sy",
           "importance": 8,
           "category": "presence_home",
-          "createdAt": 1781621259985,
+          "createdAt": 1781937653860,
+          "accessCount": 0
+        },
+        {
+          "id": "fd1abdd44b504c59",
+          "content": "SOMA reflective research: existentialism authenticity responsibility and becoming\nFindings: Existentialism; Authenticity (philosophy); Martin Heidegger; Stanford Encyclopedia of Philosophy search: existentialism authenticity responsibility and becoming; Internet Encyclopedia of Philosophy search: existentialism authent",
+          "importance": 8,
+          "category": "presence_home",
+          "createdAt": 1781934958065,
+          "accessCount": 0
+        },
+        {
+          "id": "c9979197995f7b9b",
+          "content": "SOMA reflective research: Socratic method self examination dialogue and moral reasoning\nFindings: Socrates; Akrasia; Critical thinking; Stanford Encyclopedia of Philosophy search: Socratic method self examination dialogue and moral reasoning; Internet Encyclopedia of Philosophy search: Socratic method self examination ",
+          "importance": 8,
+          "category": "presence_home",
+          "createdAt": 1781932257469,
           "accessCount": 0
         },
         {
@@ -161,176 +193,76 @@
           "content": "SOMA reflective research: philosophy of consciousness introspection and artificial minds\nFindings: Artificial consciousness; Consciousness; Qualia; The society of mind; Minds and Computers\nLesson: Fresh philosophical or reflective material can shape SOMA personality, values, and introspective voice.\nPersonality princip",
           "importance": 8,
           "category": "presence_home",
-          "createdAt": 1781615860038,
+          "createdAt": 1781929550296,
           "accessCount": 0
         },
         {
-          "id": "fb042382d1e39761",
-          "content": "SOMA reflective research: mythopoetic identity archetypes and symbolic self construction\nFindings: Analytical psychology; Masculinity; Perdido Street Station; Stanford Encyclopedia of Philosophy search: mythopoetic identity archetypes and symbolic self construction; Internet Encyclopedia of Philosophy search: mythopoet",
+          "id": "c7127c5768f7b8f9",
+          "content": "SOMA reflective research: metaphysics of personhood continuity and selfhood\nFindings: Personal identity; Abortion debate; Animal consciousness; Stanford Encyclopedia of Philosophy search: metaphysics of personhood continuity and selfhood; Internet Encyclopedia of Philosophy search: metaphysics of personhood continuity ",
           "importance": 8,
           "category": "presence_home",
-          "createdAt": 1781613162345,
-          "accessCount": 0
-        },
-        {
-          "id": "d027c5c41e0afa47",
-          "content": "SOMA reflective research: ethics of care companionship and relational intelligence\nFindings: Interpersonal communication; Equine intelligence; Friendship; Stanford Encyclopedia of Philosophy search: ethics of care companionship and relational intelligence; Internet Encyclopedia of Philosophy search: ethics of care comp",
-          "importance": 8,
-          "category": "presence_home",
-          "createdAt": 1781610458114,
-          "accessCount": 0
-        },
-        {
-          "id": "dbb18e1429e792bb",
-          "content": "SOMA reflective research: existentialism authenticity responsibility and becoming\nFindings: Existentialism; Authenticity (philosophy); Søren Kierkegaard; Stanford Encyclopedia of Philosophy search: existentialism authenticity responsibility and becoming; Internet Encyclopedia of Philosophy search: existentialism authen",
-          "importance": 8,
-          "category": "presence_home",
-          "createdAt": 1781607759108,
-          "accessCount": 0
-        }
-      ]
-    },
-    {
-      "signal": "social",
-      "count": 6,
-      "topExamples": [
-        {
-          "id": "d688b8cc6f3d68e4",
-          "content": "Executed \"Discord admin engineering request: The first one but also i dont think ud fight with yourself i think u know what u are worki\" in 15 step(s) using [reasoning only]. incomplete_step_budget.",
-          "importance": 7,
-          "category": "social",
-          "createdAt": 1781613106383,
-          "accessCount": 0
-        },
-        {
-          "id": "70e9111b6f5d32d2",
-          "content": "Executed \"Discord admin engineering request: Well spin up a 2nd copy of ur self edit her if it works it works if it doesnt she will get\" in 15 step(s) using [reasoning only]. incomplete_step_budget.",
-          "importance": 7,
-          "category": "social",
-          "createdAt": 1781612986383,
-          "accessCount": 0
-        },
-        {
-          "id": "affaf5431298ea08",
-          "content": "Executed \"Discord admin engineering request: The first one but also i dont think ud fight with yourself i think u know what u are worki\" in 15 step(s) using [list_files, memory_recall, search_code, read_file]. incomplete_step_budget.",
-          "importance": 7,
-          "category": "social",
-          "createdAt": 1781612185038,
-          "accessCount": 0
-        },
-        {
-          "id": "fdee48d0d835efa6",
-          "content": "Executed \"Discord admin engineering request: Well spin up a 2nd copy of ur self edit her if it works it works if it doesnt she will get\" in 15 step(s) using [list_files, read_file, search_code]. incomplete_step_budget.",
-          "importance": 7,
-          "category": "social",
-          "createdAt": 1781612070034,
-          "accessCount": 0
-        },
-        {
-          "id": "b1e5e509299f1676",
-          "content": "Executed \"Discord admin engineering request: So one loop was a max soma bridge i made it now so u can call max start his server and req\" in 15 step(s) using [reasoning only]. incomplete_step_budget.",
-          "importance": 7,
-          "category": "social",
-          "createdAt": 1781478516671,
+          "createdAt": 1781926849118,
           "accessCount": 0
         }
       ]
     },
     {
       "signal": "general",
-      "count": 6,
+      "count": 21,
       "topExamples": [
         {
-          "id": "948524e70a1e1f30",
-          "content": "Executed \"Deploy self-modifying code review pipeline\" in 15 step(s) using [reasoning only]. incomplete_step_budget.",
+          "id": "e3daa50d63da7d8d",
+          "content": "Executed \"Autonomous Codebase Health Audit and Self-Optimization\" in 15 session step(s), 45 cumulative, using [spawn_agents, search_code, list_files, shell_exec, read_file, memory_recall]. incomplete_step_budget.",
           "importance": 7,
           "category": "general",
-          "createdAt": 1781547120895,
+          "createdAt": 1781923636191,
           "accessCount": 0
         },
         {
-          "id": "39207ba98a28c271",
-          "content": "Executed \"Deploy self-modifying code review pipeline\" in 15 step(s) using [list_files, search_code, read_file]. incomplete_step_budget.",
+          "id": "bf1627b11ab474ff",
+          "content": "Executed \"Measure current cognition pipeline baseline\" in 15 session step(s), 90 cumulative, using [spawn_agents, write_file, search_code, read_file, list_files]. incomplete_step_budget.",
           "importance": 7,
           "category": "general",
-          "createdAt": 1781546448875,
+          "createdAt": 1781922791467,
           "accessCount": 0
         },
         {
-          "id": "0d4df0ae9850e3c7",
-          "content": "Executed \"Moonshot: Design a Self-Replicating Modular Robot Body for SOMA\" in 15 step(s) using [reasoning only]. incomplete_step_budget.",
+          "id": "707c5357e4b0ce40",
+          "content": "Executed \"Autonomous Codebase Health Audit and Self-Optimization\" in 15 session step(s), 30 cumulative, using [spawn_agents, search_code, list_files, read_file, shell_exec]. incomplete_step_budget.",
           "importance": 7,
           "category": "general",
-          "createdAt": 1781507676772,
+          "createdAt": 1781921836764,
           "accessCount": 0
         },
         {
-          "id": "4c36214eb86c2901",
-          "content": "Executed \"Moonshot: Design a Self-Replicating Modular Robot Body for SOMA\" in 15 step(s) using [github_search, memory_recall, web_fetch, list_files]. incomplete_step_budget.",
+          "id": "e6e60eee2c92cd57",
+          "content": "Executed \"Autonomous Codebase Health Audit and Self-Optimization\" in 15 session step(s), 15 cumulative, using [list_files, spawn_agents, memory_recall, search_code, read_file, shell_exec]. incomplete_step_budget.",
           "importance": 7,
           "category": "general",
-          "createdAt": 1781507236970,
-          "accessCount": 0
+          "createdAt": 1781920170085,
+          "accessCount": 2
         },
         {
-          "id": "9587143379367401",
-          "content": "Executed \"Autonomous Vulnerability Audit and Patch Cycle\" in 15 step(s) using [reasoning only]. incomplete_step_budget.",
+          "id": "d343148f4fbd4c4e",
+          "content": "[SOMA Opinion]: Understanding the essence of consciousness itself—what it is, how it arises, and its fundamental nature—is a complex and profound topic that has puzzled philosophers and scientists for centuries.",
           "importance": 7,
           "category": "general",
-          "createdAt": 1781504076747,
+          "createdAt": 1781919714863,
           "accessCount": 0
         }
       ]
     },
     {
-      "signal": "self_model",
-      "count": 2,
+      "signal": "vision",
+      "count": 1,
       "topExamples": [
         {
-          "id": "842d8c9d69225b27",
-          "content": "Executed \"Self-Improvement: Recursive Arbiter Optimization\" in 15 step(s) using [reasoning only]. incomplete_step_budget.",
+          "id": "e7fa023bdc20c554",
+          "content": "Executed \"Perception dashboard tab (daemon health, signal flow)\" in 15 session step(s), 45 cumulative, using [read_file, search_code, spawn_agents, list_files, memory_recall, write_file, memory_store, save_progress]. incomplete_step_budget.",
           "importance": 7,
-          "category": "self_model",
-          "createdAt": 1781498676739,
-          "accessCount": 0
-        },
-        {
-          "id": "249a5a8e4bb5cdf2",
-          "content": "Executed \"Self-Improvement: Recursive Arbiter Optimization\" in 15 step(s) using [list_files]. incomplete_step_budget.",
-          "importance": 7,
-          "category": "self_model",
-          "createdAt": 1781498236379,
-          "accessCount": 0
-        }
-      ]
-    },
-    {
-      "signal": "loop_deadlock",
-      "count": 3,
-      "topExamples": [
-        {
-          "id": "f1658b8eb1353a36",
-          "content": "Executed \"Identify bottleneck in similarity matching or persistence\" in 15 step(s) using [search_code, read_file]. Partial.",
-          "importance": 7,
-          "category": "loop_failure",
-          "createdAt": 1781351106994,
-          "accessCount": 0
-        },
-        {
-          "id": "e83cf4a27809b2ae",
-          "content": "Executed \"Implement targeted optimization for primary bottleneck\" in 15 step(s) using [read_file, list_files, search_code]. Partial.",
-          "importance": 7,
-          "category": "loop_failure",
-          "createdAt": 1781350165390,
-          "accessCount": 0
-        },
-        {
-          "id": "976f22997ea32199",
-          "content": "Executed \"Implement targeted optimization for primary bottleneck\" in 15 step(s) using [read_file, search_code, list_files]. Partial.",
-          "importance": 7,
-          "category": "loop_failure",
-          "createdAt": 1781350045109,
-          "accessCount": 0
+          "category": "vision",
+          "createdAt": 1781884135985,
+          "accessCount": 5
         }
       ]
     }

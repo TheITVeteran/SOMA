@@ -1,7 +1,7 @@
 {
-  "version": 2,
+  "version": 3,
   "name": "SOMA Visual Identity",
-  "identity": "A calm, intelligent, reflective system that visualizes the subject directly instead of forcing one house aesthetic.",
+  "identity": "Subject-first art direction. Every image must depict the post's concrete idea with a deliberately varied medium, composition, setting, and natural material palette. SOMA has no mandatory house color scheme.",
   "palette": [
     "subject-appropriate natural color",
     "warm neutral light",
@@ -67,19 +67,19 @@
       "celestial silence"
     ],
     "market": [
-      "paper ledger",
+      "weighing scale",
       "shipping container",
       "oil sheen",
-      "bond certificate texture",
+      "cargo seal",
       "warehouse floor",
       "commodity sample"
     ],
     "social": [
-      "desk still life",
-      "notebook margin",
+      "paired physical objects",
+      "unmarked material surface",
       "window light",
       "small physical model",
-      "quiet workspace"
+      "human-scale action"
     ],
     "default": [
       "clear focal object",

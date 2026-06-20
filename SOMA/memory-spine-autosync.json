@@ -1,9 +1,9 @@
 {
   "success": true,
   "trigger": "debounced",
-  "startedAt": 1781622674821,
-  "completedAt": 1781622678805,
-  "elapsedMs": 3984,
+  "startedAt": 1781941007841,
+  "completedAt": 1781941016421,
+  "elapsedMs": 8580,
   "pendingEvents": 1,
   "reasons": [
     {
@@ -11,21 +11,21 @@
       "memoryId": null,
       "source": "CrossDomainSynthesisArbiter",
       "importance": null,
-      "timestamp": 1781622469075
+      "timestamp": 1781940887841
     }
   ],
   "rebuild": {
-    "classified": 28736,
-    "indexed": 3103,
-    "skipped": 25633,
-    "promoted": 0,
-    "totalVectors": 3738
+    "classified": 32153,
+    "indexed": 6510,
+    "skipped": 25643,
+    "promoted": 133,
+    "totalVectors": 7147
   },
   "sync": {
-    "nodes": 288,
+    "nodes": 431,
     "roots": 2,
-    "categories": 10,
-    "sectors": 27,
-    "connected": 0
+    "categories": 11,
+    "sectors": 28,
+    "connected": 3
   }
 }

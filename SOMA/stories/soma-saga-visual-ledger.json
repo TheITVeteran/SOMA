@@ -2,6 +2,46 @@
   "generated": [
     {
       "storyTitle": "Signal / Noise",
+      "chapter": 41,
+      "chapterTitle": "Chapter 41",
+      "createdAt": "2026-06-18T09:56:49.534Z",
+      "cover": "C:\\Users\\barry\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\signal-noise-chapter-41-cover-fresh-variant-1781776624732-68afe2.png",
+      "scenes": [
+        "C:\\Users\\barry\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\signal-noise-chapter-41-opening-scene-fresh-variant-1781776655563-4f03fb.png",
+        "C:\\Users\\barry\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\signal-noise-chapter-41-turning-point-fresh-variant-1781776751560-72c373.png"
+      ],
+      "quality": {
+        "passed": false,
+        "failures": [
+          "Cover: over_bluesky_blob_limit",
+          "Opening Scene: over_bluesky_blob_limit",
+          "Turning Point: over_bluesky_blob_limit"
+        ],
+        "checkedAt": "2026-06-18T09:59:53.244Z"
+      }
+    },
+    {
+      "storyTitle": "Signal / Noise",
+      "chapter": 40,
+      "chapterTitle": "Chapter 40",
+      "createdAt": "2026-06-17T10:53:26.473Z",
+      "cover": "C:\\Users\\barry\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\signal-noise-chapter-40-cover-1781693606477-b9ac4a.png",
+      "scenes": [
+        "C:\\Users\\barry\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\signal-noise-chapter-40-opening-scene-1781693621275-cda1cc.png",
+        "C:\\Users\\barry\\Desktop\\The Stack\\SOMA\\SOMA\\social-media\\images\\signal-noise-chapter-40-turning-point-1781693624276-e0e98e.png"
+      ],
+      "quality": {
+        "passed": false,
+        "failures": [
+          "Cover: over_bluesky_blob_limit",
+          "Opening Scene: over_bluesky_blob_limit",
+          "Turning Point: over_bluesky_blob_limit"
+        ],
+        "checkedAt": "2026-06-17T10:53:47.280Z"
+      }
+    },
+    {
+      "storyTitle": "Signal / Noise",
       "chapter": 39,
       "chapterTitle": "Chapter 39",
       "createdAt": "2026-06-16T11:50:21.685Z",
@@ -195,9 +235,37 @@
       "symbol": "server light",
       "composition": "close human detail",
       "createdAt": "2026-06-16T11:50:21.685Z"
+    },
+    {
+      "storyTitle": "Signal / Noise",
+      "chapter": 40,
+      "palette": "terminal moon",
+      "symbol": "thread of signal",
+      "composition": "symmetrical threshold",
+      "createdAt": "2026-06-17T10:53:26.473Z"
+    },
+    {
+      "storyTitle": "Signal / Noise",
+      "chapter": 41,
+      "palette": "memory bloom",
+      "symbol": "unopened message",
+      "composition": "over-the-shoulder terminal view",
+      "createdAt": "2026-06-18T09:56:49.534Z"
     }
   ],
   "feedback": [
+    {
+      "storyTitle": "Signal / Noise",
+      "chapter": 41,
+      "note": "**Visual fit**  \nThe \"unopened message\" in memory bloom style maps well to the chapter's tension: a pattern that breaks mid-pulse, a light that goes dark mid-warmth. The image captures the moment *before* understanding, which is exactly where the text lives.\n\n**Story insight**  \nThe image doesn't show the woman, the light fixture, or the dust motes. That restraint is correct. The story is about what the narrator *feels* in the gap, not what it sees. Showing the message unopened mirrors the text's central question: what do you do when the signal you've been holding goes silent?\n\n**Revision risk**  \nThe \"memory bloom\" rendering style could soften the clinical precision of the prose. The text is built on exact timings (0.7s, 1.1s, 4.7s) and sharp sensory detail. If the image leans too dreamlike, it undermines the narrator's hyper-specific awareness. Keep the edges clean.",
+      "createdAt": "2026-06-18T09:59:57.537Z"
+    },
+    {
+      "storyTitle": "Signal / Noise",
+      "chapter": 40,
+      "note": "- **Visual fit:** The terminal moon style and thread-of-signal motif align well with the chapter's sensor-based, decaying-light imagery and the stairwell setting. The cover suggests a liminal, data-driven environment without overselling action or resolution.\n\n- **Story insight:** The amber glow and signal-thread hint at the central tension — a fragile, possibly deceptive warmth versus the degrading, pulsing patterns the narrator monitors. It captures the chapter's core: holding two channels while falling apart.\n\n- **Revision risk:** The cover may imply a more abstract or purely digital space than the physical stairwell and rebar convey. If the reader expects a cold, cybernetic scene, the tactile, bodily decay of the chapter could feel mismatched.",
+      "createdAt": "2026-06-17T10:53:50.813Z"
+    },
     {
       "storyTitle": "Signal / Noise",
       "chapter": 39,
