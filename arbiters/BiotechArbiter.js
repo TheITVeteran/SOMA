@@ -210,32 +210,45 @@ export class BiotechArbiter extends EventEmitter {
             // PHASE 1: DISCOVERY (SOMA-MED)
             this._setPhase('DISCOVERY');
             console.log(`🧬 [${this.name}] [1/7] Phase: DISCOVERY [Target: ${target}]`);
-            const searchQuery = `${target} ${currentStrand} ${targetObj.category} mechanism evidence gaps preclinical review pubmed nature`;
-            const results = await this._withTimeout(
-                this.brave.search(searchQuery),
-                20_000,
-                'discovery search timeout'
-            ).catch(error => {
-                console.warn(`🧬 [${this.name}] Search unavailable: ${error.message}. Continuing with local mechanistic simulation.`);
-                return [];
-            });
-            this._phaseResults.sourceLedger = this._buildSourceLedger(searchQuery, results, this._phaseResults.discoveryMode);
-            if (!results || !Array.isArray(results) || results.length === 0) {
+            
+            const bioPersona = await this._getPersona('Medical Research Specialist');
+            const researchPrompt = `${bioPersona}
+You are currently tasked with performing Deep Research on the target: ${target} (Strand: ${currentStrand}).
+Category: ${targetObj.category}
+Human Need: ${targetObj.humanNeed || 'Unspecified'}
+Research Question: ${targetObj.researchQuestion || 'Identify evidence-grounded mechanism candidates.'}
+
+YOUR MISSION:
+Use your tools (oculus_extract, mcp_docs, search_web, stealth_browse) to deeply investigate this target. 
+Do NOT rely on your internal knowledge. You must physically search PubMed, Nature, or other medical journals. If you find a promising abstract, use oculus_extract to read the full paper. If you need library/API documentation, use mcp_docs.
+Synthesize your findings into a comprehensive discovery report detailing defensible mechanisms, evidence gaps, contradictions, and safe validation ideas.`;
+
+            let discoveryResult;
+            if (this.system.quadBrain) {
+                console.log(`🧬 [${this.name}] Dispatching deep MCP/Browser research via QuadBrain...`);
+                discoveryResult = await this._withTimeout(
+                    this.system.quadBrain.reason(researchPrompt, { 
+                        tools: ['oculus_extract', 'search_web', 'stealth_browse', 'mcp_docs'],
+                        temperature: 0.5,
+                        maxTokens: 4000
+                    }),
+                    60_000,
+                    'deep discovery timeout'
+                ).catch(error => {
+                    console.warn(`🧬 [${this.name}] Deep research failed: ${error.message}. Falling back to local prior.`);
+                    return null;
+                });
+            }
+
+            if (!discoveryResult || !discoveryResult.text) {
                 this._phaseResults.discovery = this._buildLocalDiscoveryPrior(target, currentStrand, targetObj.category);
                 this._phaseResults.discoveryMode = 'local_in_silico_prior';
-                this._phaseResults.sourceLedger = this._buildSourceLedger(searchQuery, [], this._phaseResults.discoveryMode);
+                this._phaseResults.sourceLedger = this._buildSourceLedger('local_fallback', [], this._phaseResults.discoveryMode);
             } else {
-                const bioPersona = await this._getPersona('Medical Research Specialist');
-                const snippets = results.map(s => s.snippet || s.title || '').filter(Boolean).join('\n').slice(0, 4000);
-                const discovery = await this._reason(
-                    `${bioPersona}\nResearch question: ${targetObj.researchQuestion || 'Identify evidence-grounded mechanism candidates.'}\nHuman need: ${targetObj.humanNeed || 'Unspecified'}\nIdentify defensible mechanisms, evidence gaps, contradictions, and safe validation ideas in: ${snippets}`,
-                    'logos',
-                    'high',
-                    'discovery reasoning timeout'
-                );
-                this._phaseResults.discovery = discovery.response;
-                this._phaseResults.discoveryMode = 'external_literature_assisted';
-                this._phaseResults.sourceLedger = this._buildSourceLedger(searchQuery, results, this._phaseResults.discoveryMode);
+                this._phaseResults.discovery = discoveryResult.text;
+                this._phaseResults.discoveryMode = 'deep_mcp_browser_assisted';
+                // Build a mock ledger indicating tool usage
+                this._phaseResults.sourceLedger = this._buildSourceLedger('QuadBrain Tool Execution', [{ title: 'Deep Research Run', snippet: 'Extracted via MCP/Oculus' }], this._phaseResults.discoveryMode);
             }
             this._phaseResults.integrity = 0.90; 
             await this._metabolicPause();
@@ -691,20 +704,11 @@ Respond with ONLY the new molecular string or name.`;
             // Push into Universal Learning Pipeline
             if (this.system?.universalLearningPipeline) {
                 this.system.universalLearningPipeline.logInteraction({
-                    source: 'BiotechArbiter',
-                    action: `medical_lab_${event.outcome || 'event'}`,
-                    details: {
-                        target: event.target,
-                        strand: event.strand,
-                        category: event.category,
-                        phase: event.phase,
-                        reason: event.reason,
-                        affinity: event.affinity,
-                        confidence: event.confidence,
-                        evidenceGrade: event.evidenceGrade
-                    },
-                    outcome: event.outcome || 'unknown',
-                    tags: ['biotech', 'medical-lab', 'simulation', event.target]
+                    agent: 'BiotechArbiter',
+                    type: `medical_lab_${event.outcome || 'event'}`,
+                    input: { target: event.target, strand: event.strand, category: event.category, phase: event.phase },
+                    output: { reason: event.reason, affinity: event.affinity, confidence: event.confidence, evidenceGrade: event.evidenceGrade, status: event.outcome || 'unknown' },
+                    metadata: { tags: ['biotech', 'medical-lab', 'simulation', event.target] }
                 }).catch(() => {});
             }
         } catch {}

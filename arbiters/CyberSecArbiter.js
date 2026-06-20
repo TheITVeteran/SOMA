@@ -3,6 +3,7 @@ import { createRequire } from 'module';
 import UniversalLearningPipeline from './UniversalLearningPipeline.js';
 import simulationLedger from '../core/SimulationAutonomyLedger.cjs';
 import rippleLoopLedger from '../core/RippleLoopLedger.js';
+import messageBroker from '../core/MessageBroker.cjs';
 
 const require = createRequire(import.meta.url);
 const { BraveSearchAdapter } = require('../cognitive/BraveSearchAdapter.cjs');
@@ -78,6 +79,11 @@ export class CyberSecArbiter extends EventEmitter {
                         cveUrl: selectedCve.url
                     }
                 });
+            }
+
+            // Emit to MessageBroker so RedTeam / AdversarialSelfCorrectionArbiter can intercept it
+            if (messageBroker) {
+                messageBroker.publish('cybersec_challenge_generation', this.currentChallenge);
             }
 
             return this.currentChallenge;

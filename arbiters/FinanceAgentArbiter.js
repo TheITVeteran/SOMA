@@ -17,6 +17,7 @@ import { EconomicCalendar } from './EconomicCalendar.js';
 import { MetaLearner } from './MetaLearner.js';
 import { ToolCreatorArbiter } from './ToolCreatorArbiter.js';
 import marketDataService from '../server/finance/marketDataService.js';
+import ictKillzoneStrategy from '../server/finance/strategies/IctKillzoneEngine.js';
 
 /**
  * FinanceAgentArbiter V2.1 - "The Phased Market Wolf"
@@ -66,6 +67,13 @@ export class FinanceAgentArbiter extends BaseArbiterV4 {
     if (this.economicCalendar) await this.economicCalendar.initialize();
     if (this.riskSystem) await this.riskSystem.initialize();
     if (this.metaLearner) await this.metaLearner.initialize();
+    
+    // Start Autonomous ICT Killzone Scanner (Runs every 1 minute)
+    this._ictInterval = setInterval(() => {
+        this.analyzeIctKillzone('BTC-USD').catch(e => this.auditLogger.error(`[ICT Error] ${e.message}`));
+    }, 60000);
+    this.auditLogger.info(`[ICT] Autonomous Killzone Scanner initialized for BTC-USD (1m interval).`);
+
     this.auditLogger.info('✅ Finance Pack Phase Alignment Complete.');
   }
 
@@ -212,6 +220,44 @@ export class FinanceAgentArbiter extends BaseArbiterV4 {
   async _executePaperTrade(symbol, strategy, amount) {
     this.auditLogger.info(`[MarketWolf] 💹 Executing Paper Trade: ${symbol}`);
     return { executed: true, status: "Success", amount };
+  }
+
+  /**
+   * Run the fast Algorithmic ICT Killzone strategy.
+   * This skips the heavy LLM phases and runs strict algorithmic logic.
+   */
+  async analyzeIctKillzone(symbol) {
+    this.auditLogger.info(`[ICT] Scanning 1-minute algorithmic Killzone for ${symbol}`);
+    
+    try {
+        const bars = await marketDataService.getBars(symbol, '1Min', 240); // Last 4 hours of 1m data
+        if (!bars || bars.length < 240) {
+            this.auditLogger.warn(`[ICT] Insufficient 1-minute data for ${symbol}`);
+            return { signal: null, reason: 'Insufficient data' };
+        }
+
+        const currentBar = bars[bars.length - 1];
+        
+        // Execute the algorithmic logic
+        const signal = await ictKillzoneStrategy({
+            symbol,
+            bars,
+            currentBar,
+            position: null, // Stateless check for setups
+            capital: this.portfolio.cash
+        });
+
+        if (signal && signal.action === 'BUY') {
+            this.auditLogger.info(`[ICT] 🚨 KILLZONE SETUP DETECTED! Executing Strike on ${symbol}`);
+            const tradeExecution = await this._executePaperTrade(symbol, signal, signal.positionSize);
+            return { symbol, signal, trade: tradeExecution, timestamp: new Date().toISOString() };
+        } else {
+            return { symbol, signal: 'HOLD', reason: 'No ICT setup detected', timestamp: new Date().toISOString() };
+        }
+    } catch (e) {
+        this.auditLogger.error(`[ICT] Error running Killzone strategy: ${e.message}`);
+        return { error: e.message };
+    }
   }
 
   getPortfolioSummary() {

@@ -6,6 +6,12 @@
 
 import { EventEmitter } from 'events';
 import { Worker } from 'worker_threads';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const ROOT = process.cwd();
+const WORKER_RUNNER = path.join(__dirname, '..', 'core', 'microAgentWorkerRunner.js');
 
 /**
  * MicroAgentPool
@@ -250,7 +256,16 @@ export class MicroAgentPool extends EventEmitter {
   }
 
   /**
-   * Execute work on a specific worker
+   * Execute real work on a specific worker slot.
+   *
+   * Supported item shapes:
+   * - { agent: 'BlackAgent', task: { type, payload } }       -> named spawned agent
+   * - { agentType: 'black', task: { type, payload } }        -> spawn registered agent type
+   * - { type: 'black', task: { type, payload } }             -> spawn registered agent type
+   * - anything else with config.processItem(item, ctx)       -> caller-supplied processor
+   *
+   * If no real processor is supplied, this returns an explicit error instead
+   * of pretending work happened.
    */
   async executeWork(worker, microBatch, config) {
     worker.status = 'busy';
@@ -258,20 +273,18 @@ export class MicroAgentPool extends EventEmitter {
     worker.lastUsed = Date.now();
 
     try {
-      // Simulate processing time (in real impl, would dispatch to Worker thread)
-      const processingTime = 20 + Math.random() * 10; // 20-30ms per micro-batch
-      await new Promise(resolve => setTimeout(resolve, processingTime));
+      const started = Date.now();
+      const output = [];
+      for (const item of microBatch) {
+        output.push(await this.processItem(item, { worker, config }));
+      }
+      const processingTime = Date.now() - started;
 
-      // Simulate result
       const result = {
         workerId: worker.id,
         batchSize: microBatch.length,
         processingTime,
-        output: microBatch.map(item => ({
-          ...item,
-          processed: true,
-          worker: worker.id
-        }))
+        output
       };
 
       worker.tasksCompleted++;
@@ -285,6 +298,96 @@ export class MicroAgentPool extends EventEmitter {
 
       throw error;
     }
+  }
+
+  async processItem(item, context = {}) {
+    const { config = {}, worker = null } = context;
+
+    if (typeof config.processItem === 'function') {
+      return await config.processItem(item, { worker, pool: this });
+    }
+
+    if (typeof config.handler === 'function') {
+      return await config.handler(item, { worker, pool: this });
+    }
+
+    const workerScript = item?.workerScript || config.workerScript;
+    if (workerScript) {
+      const resolvedScript = path.resolve(ROOT, workerScript);
+      if (!resolvedScript.startsWith(ROOT)) throw new Error(`Worker script outside workspace: ${workerScript}`);
+      const result = await this.executeIsolatedWorker(resolvedScript, item, { workerId: worker?.id });
+      return { ...item, processed: true, isolated: true, worker: worker?.id, result };
+    }
+
+    const namedAgent = item?.agent || item?.agentName || item?.name;
+    if (namedAgent && this.spawnedAgents.has(namedAgent)) {
+      const agent = this.spawnedAgents.get(namedAgent);
+      const task = item.task || item.payload || item;
+      const result = await this._executeAgentTask(agent, task);
+      return { ...item, processed: true, worker: worker?.id, agent: namedAgent, result };
+    }
+
+    const agentType = item?.agentType || item?.type;
+    if (agentType && this.agentTypes.has(agentType)) {
+      const result = await this.spawnAndExecute(agentType, item.task || item.payload || item, {
+        name: item.name || `${agentType}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+        autoTerminate: item.autoTerminate !== false
+      });
+      return { ...item, processed: true, worker: worker?.id, agentType, result };
+    }
+
+    throw new Error('No real worker processor available for item. Provide config.processItem or item.agent/item.agentType.');
+  }
+
+  async executeIsolatedWorker(scriptPath, item, context = {}) {
+    return await new Promise((resolve, reject) => {
+      const worker = new Worker(WORKER_RUNNER, {
+        workerData: { scriptPath, item, context },
+        type: 'module',
+        execArgv: []
+      });
+      worker.once('message', message => {
+        if (message?.success) resolve(message.result);
+        else reject(new Error(message?.error || 'Worker failed'));
+      });
+      worker.once('error', reject);
+      worker.once('exit', code => {
+        if (code !== 0) reject(new Error(`Worker exited with code ${code}`));
+      });
+    });
+  }
+
+  async spawnAndExecute(type, task, config = {}) {
+    const agent = await this.spawnAgent(type, {
+      ...config,
+      name: config.name || `${type}_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`
+    });
+
+    try {
+      return await this._executeAgentTask(agent, task);
+    } finally {
+      if (config.autoTerminate !== false && typeof agent.terminate === 'function') {
+        await agent.terminate('task_completed');
+      }
+    }
+  }
+
+  async executeTask(type, task, config = {}) {
+    const reusable = Array.from(this.spawnedAgents.values()).find(agent =>
+      agent?.type === type && agent?.state === 'idle'
+    );
+    if (reusable) return this._executeAgentTask(reusable, task);
+
+    return this.spawnAndExecute(type, task, config);
+  }
+
+  async _executeAgentTask(agent, task) {
+    if (typeof agent.execute === 'function') return await agent.execute(task);
+    if (typeof agent.executeTask === 'function') return await agent.executeTask(task);
+    if (typeof agent.handleMessage === 'function') {
+      return await agent.handleMessage({ type: 'task_assign', payload: task });
+    }
+    throw new Error(`Agent ${agent?.name || agent?.id || 'unknown'} has no executable task interface`);
   }
 
   /**

@@ -973,7 +973,7 @@ export async function loadRoutes(app, system) {
                 return res.json({ success: false, error: 'Process metrics not supported on this platform' });
             }
             const cmd = 'powershell -NoProfile -Command "Get-Process | Sort-Object CPU -Descending | Select-Object -First 8 Name, Id, CPU, WS | ConvertTo-Json"';
-            exec(cmd, { timeout: 8000, maxBuffer: 1024 * 1024 }, (err, stdout) => {
+            exec(cmd, { timeout: 8000, windowsHide: true, maxBuffer: 1024 * 1024 }, (err, stdout) => {
                 if (err) return res.status(500).json({ success: false, error: err.message });
                 const data = JSON.parse(stdout || '[]');
                 const list = Array.isArray(data) ? data : [data];
@@ -996,7 +996,7 @@ export async function loadRoutes(app, system) {
                 return res.json({ success: false, error: 'Network metrics not supported on this platform' });
             }
             const cmd = 'powershell -NoProfile -Command "Get-NetAdapterStatistics | Select-Object Name, ReceivedBytes, SentBytes | ConvertTo-Json"';
-            exec(cmd, { timeout: 8000, maxBuffer: 1024 * 1024 }, (err, stdout) => {
+            exec(cmd, { timeout: 8000, windowsHide: true, maxBuffer: 1024 * 1024 }, (err, stdout) => {
                 if (err) return res.json({ success: false, error: 'Network probe timed out' });
                 try {
                     const data = JSON.parse(stdout || '[]');
@@ -1020,7 +1020,7 @@ export async function loadRoutes(app, system) {
     app.get('/api/system/gpu', async (req, res) => {
         try {
             const cmd = 'nvidia-smi --query-gpu=name,utilization.gpu,memory.used,memory.total --format=csv,noheader,nounits';
-            exec(cmd, { timeout: 8000, maxBuffer: 1024 * 1024 }, (err, stdout) => {
+            exec(cmd, { timeout: 8000, windowsHide: true, maxBuffer: 1024 * 1024 }, (err, stdout) => {
                 if (err || !stdout) {
                     return res.json({ success: false, error: 'GPU telemetry unavailable (nvidia-smi not found)' });
                 }

@@ -21,6 +21,8 @@
 
 import { BaseArbiterV4, ArbiterRole, ArbiterCapability } from './BaseArbiter.js';
 import os from 'os';
+import fs from 'fs/promises';
+import path from 'path';
 import messageBroker from '../core/MessageBroker.cjs';
 
 const AUDIT_INTERVAL_MS   = 60_000;  // audit every 60s
@@ -44,6 +46,7 @@ export class SubstrateOptimizerArbiter extends BaseArbiterV4 {
         this.status           = 'optimal';
         this.lastAudit        = null;
         this._lastSqueeze     = 0;
+        this._lastPurge       = 0;
         this._squeezeCount    = 0;
         this._prevCpuUsage    = null;
         this._prevCpuTime     = null;
@@ -100,6 +103,13 @@ export class SubstrateOptimizerArbiter extends BaseArbiterV4 {
             // Recovery — pressure cleared
             this.status = 'optimal';
             console.log(`✅ [${this.name}] Pressure cleared — status: optimal.`);
+        }
+
+        // Daily Auto-Purge check (runs once every 24 hours)
+        const now = Date.now();
+        if (now - this._lastPurge > 86400000) { // 24 hours
+            this._lastPurge = now;
+            this._purgeStaleGraveyard().catch(e => console.error(`[${this.name}] Graveyard purge failed:`, e.message));
         }
 
         return this.lastAudit;
@@ -196,6 +206,59 @@ export class SubstrateOptimizerArbiter extends BaseArbiterV4 {
 
     _startMetabolicPulse() {
         setInterval(() => this.auditMetabolism().catch(() => {}), AUDIT_INTERVAL_MS).unref();
+    }
+
+    // ── Database Graveyard Purging ────────────────────────────────────────────
+
+    async _purgeStaleGraveyard() {
+        const somaDir = path.join(process.cwd(), '.soma');
+        const syntheticDir = path.join(somaDir, 'synthetic-data');
+        const now = Date.now();
+        const MAX_AGE_MS = 90 * 24 * 60 * 60 * 1000; // 90 days
+
+        let filesDeleted = 0;
+        let bytesFreed = 0;
+
+        try {
+            // 1. Purge synthetic data
+            const files = await fs.readdir(syntheticDir).catch(() => []);
+            for (const file of files) {
+                if (file.endsWith('.json')) {
+                    const filePath = path.join(syntheticDir, file);
+                    const stats = await fs.stat(filePath);
+                    if (now - stats.mtimeMs > MAX_AGE_MS) {
+                        await fs.unlink(filePath);
+                        filesDeleted++;
+                        bytesFreed += stats.size;
+                    }
+                }
+            }
+
+            // 2. Check training_buffer.jsonl
+            const bufferPath = path.join(somaDir, 'training_buffer.jsonl');
+            try {
+                const stats = await fs.stat(bufferPath);
+                if (now - stats.mtimeMs > (30 * 24 * 60 * 60 * 1000)) { // 30 days for the buffer
+                    await fs.unlink(bufferPath);
+                    filesDeleted++;
+                    bytesFreed += stats.size;
+                }
+            } catch (e) { /* ignore if not found */ }
+
+            if (filesDeleted > 0) {
+                const mbFreed = (bytesFreed / (1024 * 1024)).toFixed(2);
+                console.log(`🧹 [${this.name}] Graveyard Purge Complete: Deleted ${filesDeleted} stale files (${mbFreed}MB freed).`);
+                try {
+                    messageBroker.publish('metabolic_purge_complete', {
+                        filesDeleted,
+                        mbFreed,
+                        timestamp: new Date().toISOString()
+                    });
+                } catch (e) { /* ignore broker errors */ }
+            }
+        } catch (e) {
+            console.warn(`[${this.name}] Warning during graveyard purge:`, e.message);
+        }
     }
 }
 

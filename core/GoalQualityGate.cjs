@@ -97,25 +97,37 @@ function verifyGoal(goal = {}, result = {}, options = {}) {
   const contract = metadata.goalContract || normalizeGoalContract(goal);
   const verification = result.verification || metadata.verification || goal.verification || contract.verification || null;
   const evidence = result.evidence || metadata.evidence || {};
+  const scopedEvidence = evidence.completionEvidence && evidence.completionEvidence.goalId === goal.id
+    ? evidence.completionEvidence
+    : null;
   const checks = [];
 
   const criteria = result.successCriteria || metadata.successCriteria || goal.successCriteria || contract.successCriteria || [];
-  for (const criterion of criteria) {
+  for (let index = 0; index < criteria.length; index++) {
+    const criterion = criteria[index];
+    const scopedCriterion = scopedEvidence?.criterionCoverage?.[index];
     const hasExplicitEvidence = Boolean(evidence[String(criterion)]);
     const hasCompletionText = Boolean(result.summary || result.result || result.output || result.message);
     const hasStopReason = Boolean(result.stopReason || result.reason);
     checks.push({
       type: 'success_criterion',
       label: String(criterion),
-      passed: Boolean(result.force || hasExplicitEvidence || hasCompletionText || (verification?.allowStopReason && hasStopReason))
+      passed: Boolean(
+        result.force ||
+        scopedCriterion?.passed === true ||
+        (!scopedEvidence && (hasExplicitEvidence || hasCompletionText || (verification?.allowStopReason && hasStopReason)))
+      ),
+      receiptIds: scopedCriterion?.requirements?.flatMap(item => item.receiptIds || []) || []
     });
   }
 
   const requiredEvidence = verification?.evidenceRequired || metadata.evidenceRequired || contract.evidenceRequired || [];
   for (const key of requiredEvidence) {
     const value = result[key] ?? evidence[key] ?? metadata[key];
+    const scopedPassed = scopedEvidence?.requiredChecks?.find(check => check.key === key)?.passed === true;
     const passed = Boolean(
       result.force ||
+      scopedPassed ||
       value ||
       (key === 'summary' && (result.summary || result.result || result.output || result.message)) ||
       (verification?.allowStopReason && (result.stopReason || result.reason))
@@ -159,6 +171,29 @@ function verifyGoal(goal = {}, result = {}, options = {}) {
       }
       checks.push({ type: 'contains', file, text, passed, output });
     }
+  }
+
+  const toolsUsed = Array.isArray(evidence.toolsUsed) ? evidence.toolsUsed : Array.isArray(result.toolsUsed) ? result.toolsUsed : [];
+  const writtenPath = result.file || result.filepath || result.path || evidence.file || evidence.filepath || evidence.path || '';
+  const codeTouched = Boolean(
+    result.codeTouched === true ||
+    evidence.codeTouched === true ||
+    toolsUsed.some(tool => ['modify_code', 'pulse_stage_code'].includes(tool)) ||
+    (toolsUsed.includes('write_file') && /\.(?:js|cjs|mjs|ts)$/i.test(String(writtenPath)))
+  );
+  const requiresExecutableProof = Boolean(verification?.requiresExecutableProof || metadata.requiresExecutableProof || codeTouched);
+  if (requiresExecutableProof) {
+    const commandPassed = checks.some(check => check.type === 'command' && check.passed);
+    const syntaxPassed = Boolean(result.verifySyntax || evidence.verifySyntax || checks.some(check => check.type === 'syntax' && check.passed));
+    const testsPassed = Boolean(result.runTests || evidence.runTests || evidence.shellVerification || commandPassed);
+    checks.push({
+      type: 'executable_proof',
+      label: 'Executable verification proof',
+      passed: Boolean(result.force || testsPassed || (verification?.allowSyntaxOnly && syntaxPassed)),
+      output: testsPassed
+        ? 'Executable proof present'
+        : 'Missing executable proof: run tests, build, syntax check plus explicit allowed syntax-only verification, or configured verification command'
+    });
   }
 
   if (!checks.length) {

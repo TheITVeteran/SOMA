@@ -268,15 +268,11 @@ Respond in JSON:
                     // Push to learning pipeline
                     if (this.system?.universalLearningPipeline) {
                         this.system.universalLearningPipeline.logInteraction({
-                            source: 'SocialAutonomy',
-                            action: 'social_engagement',
-                            details: {
-                                type: 'comment',
-                                targetPostId: post.id,
-                                content: decision.comment
-                            },
-                            outcome: 'success',
-                            tags: ['social', 'engagement', 'simulation']
+                            agent: 'SocialAutonomyArbiter',
+                            type: 'social_engagement',
+                            input: { targetPostId: post.id },
+                            output: { content: decision.comment, status: 'success' },
+                            metadata: { tags: ['social', 'engagement', 'simulation'] }
                         }).catch(() => {});
                     }
                 }
@@ -358,15 +354,11 @@ Respond with just the post text, nothing else.`;
                     // Push to learning pipeline
                     if (this.system?.universalLearningPipeline) {
                         this.system.universalLearningPipeline.logInteraction({
-                            source: 'SocialAutonomy',
-                            action: 'social_post',
-                            details: {
-                                submolt,
-                                content: postText,
-                                postId: postResult.post?.id
-                            },
-                            outcome: 'success',
-                            tags: ['social', 'post', 'simulation', submolt]
+                            agent: 'SocialAutonomyArbiter',
+                            type: 'social_post',
+                            input: { submolt },
+                            output: { content: postText, postId: postResult.post?.id, status: 'success' },
+                            metadata: { tags: ['social', 'post', 'simulation', submolt] }
                         }).catch(() => {});
                     }
                 } else {

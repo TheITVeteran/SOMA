@@ -20,6 +20,7 @@ import { loadCOSSystems } from '../server/loaders/cos.js';
 import { BrainBridge } from '../server/BrainBridge.js';
 import { registry } from '../server/SystemRegistry.js';
 import { SomaAgenticExecutor } from './SomaAgenticExecutor.js';
+import { wireSelfModificationRuntime } from './SelfModificationRuntime.js';
 import { ExpertiseRegistry } from './ExpertiseRegistry.js';
 import { ComputerControlArbiter } from '../arbiters/ComputerControlArbiter.js';
 import { ASTIndexerService } from '../server/services/ASTIndexerService.js';
@@ -134,6 +135,7 @@ export class SomaBootstrapV2 {
             const wsSystem = setupWebSocket(server, wss, this.system);
             this.system.ws = wsSystem;
 
+            await this._wireSelfModificationRuntime(this.system);
             await this._wireAutonomyRuntime(this.system);
             await this._wireExpertiseRuntime(this.system);
             await this._wireASTIndexer(this.system);
@@ -248,7 +250,8 @@ export class SomaBootstrapV2 {
                 brain: system.quadBrain,
                 memory: system.mnemonicArbiter || system.mnemonic,
                 goalPlanner: system.goalPlanner,
-                system
+                system,
+                pool: system.microAgentPool || system.agentPool || null
             });
             system.agenticExecutor = executor;
             console.log('[SOMA V2] ✅ SomaAgenticExecutor wired — goals can use real tools');
@@ -271,6 +274,10 @@ export class SomaBootstrapV2 {
             system.drive = heartbeat.drive;
             console.log(`[SOMA V2] ✅ AutonomousHeartbeat wired — autopilot ${heartbeat.isRunning ? 'running' : 'ready'}`);
         }
+    }
+
+    async _wireSelfModificationRuntime(system) {
+        wireSelfModificationRuntime(system);
     }
 
     async _wireExpertiseRuntime(system) {

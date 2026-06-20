@@ -15,7 +15,7 @@ let networkCache = { load: 0, lastTotalBytes: 0, lastTimestamp: 0 };
 const pollHardware = () => {
   // 1. GPU Telemetry (NVIDIA)
   const gpuCmd = 'nvidia-smi --query-gpu=utilization.gpu,memory.used,memory.total --format=csv,noheader,nounits';
-  exec(gpuCmd, (err, stdout) => {
+  exec(gpuCmd, { windowsHide: true }, (err, stdout) => {
     if (!err && stdout) {
       const rows = stdout.trim().split(/\r?\n/).filter(Boolean);
       const gpus = rows.map(row => {
@@ -35,7 +35,7 @@ const pollHardware = () => {
   // 2. Network Telemetry (Windows)
   if (process.platform === 'win32') {
     const netCmd = 'powershell -NoProfile -Command "Get-NetAdapterStatistics | Select-Object ReceivedBytes, SentBytes | ConvertTo-Json"';
-    exec(netCmd, (err, stdout) => {
+    exec(netCmd, { windowsHide: true }, (err, stdout) => {
       if (!err && stdout) {
         try {
           const data = JSON.parse(stdout || '[]');

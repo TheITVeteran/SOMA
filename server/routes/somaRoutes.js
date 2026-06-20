@@ -24,6 +24,10 @@ import somaImageGeneration from '../social/SomaImageGenerationEngine.js';
 import { buildSomaContext } from '../context/SomaContextKernel.js';
 import { guardPublicText } from '../context/ClaimVerifier.js';
 import { analyzeImageFile, formatImageAnalysisForIngestion } from '../utils/LocalVisionFileAnalyzer.js';
+import { describeContracts } from '../../core/AgentCapabilityContracts.js';
+import { readTruthLedger } from '../../core/TruthLedger.js';
+import resourceJobScheduler from '../../core/ResourceJobScheduler.js';
+import { getLastCapabilityAudit, runCapabilityAudit } from '../../core/CapabilityAuditRunner.js';
 const require = createRequire(import.meta.url);
 const { defaultLearningSpine } = require('../../core/LearningSpine.cjs');
 const presenceAwareness = require('../../core/PresenceAwarenessState.cjs');
@@ -53,6 +57,131 @@ function _setCachedAnalysis(fp, analysis, report) {
             _excelCache.delete(oldest);
         }
     } catch { /* non-fatal */ }
+}
+
+async function fetchJsonStatus(url, timeoutMs = 2500) {
+    const started = Date.now();
+    try {
+        const response = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) });
+        let body = null;
+        try { body = await response.json(); } catch {}
+        return { ok: response.ok, status: response.status, latencyMs: Date.now() - started, body };
+    } catch (error) {
+        return { ok: false, latencyMs: Date.now() - started, error: error.message };
+    }
+}
+
+function folderExists(folderPath) {
+    try { return fs.existsSync(folderPath) && fs.statSync(folderPath).isDirectory(); }
+    catch { return false; }
+}
+
+function fileExists(filePath) {
+    try { return fs.existsSync(filePath) && fs.statSync(filePath).isFile(); }
+    catch { return false; }
+}
+
+function detectDuplicateInstalls() {
+    const desktop = path.join(process.env.USERPROFILE || 'C:\\Users\\barry', 'Desktop');
+    const candidates = {
+        soma: [
+            path.join(desktop, 'The Stack', 'SOMA'),
+            path.join(desktop, 'SOMA'),
+            path.join(desktop, 'SOMA1')
+        ],
+        max: [
+            path.join(desktop, 'The Stack', 'MAX'),
+            path.join(desktop, 'MAX'),
+            path.join(desktop, 'MAX1')
+        ]
+    };
+    return Object.entries(candidates).flatMap(([service, paths]) => {
+        const existing = paths.filter(folderExists);
+        return existing.map(candidate => ({
+            service,
+            path: candidate,
+            canonical: service === 'soma'
+                ? path.resolve(candidate) === path.resolve(process.cwd())
+                : path.resolve(candidate) === path.resolve(path.join(desktop, 'The Stack', 'MAX')),
+            startLocal: fileExists(path.join(candidate, 'start-local.bat')),
+            packageJson: fileExists(path.join(candidate, 'package.json'))
+        }));
+    });
+}
+
+async function buildAgenticProofStatus(system) {
+    const desktop = path.join(process.env.USERPROFILE || 'C:\\Users\\barry', 'Desktop');
+    const canonical = {
+        somaRoot: process.cwd(),
+        maxRoot: path.join(desktop, 'The Stack', 'MAX'),
+        marionetteRoot: path.join(process.cwd(), 'marionette')
+    };
+    const [marionette, max, truthEntries, lastAudit] = await Promise.all([
+        fetchJsonStatus('http://127.0.0.1:9000/status'),
+        fetchJsonStatus('http://127.0.0.1:3100/health'),
+        readTruthLedger(12),
+        getLastCapabilityAudit()
+    ]);
+    const auditAgeMs = lastAudit?.completedAt ? Date.now() - lastAudit.completedAt : Infinity;
+    if (auditAgeMs > 24 * 60 * 60 * 1000) {
+        runCapabilityAudit(system, { force: true }).catch(() => {});
+    }
+    const resourceSnapshot = resourceJobScheduler.getLoadSnapshot();
+    const duplicateInstalls = detectDuplicateInstalls();
+    const warnings = [];
+    const nonCanonical = duplicateInstalls.filter(item => !item.canonical);
+    if (nonCanonical.length) warnings.push(`${nonCanonical.length} non-canonical install folder(s) detected`);
+    if (!marionette.ok) warnings.push('Marionette supervisor is not reachable');
+    if (!max.ok) warnings.push('MAX health endpoint is not reachable');
+
+    const agents = describeContracts().map(contract => ({
+        ...contract,
+        online: contract.name === 'max'
+            ? max.ok
+            : contract.name === 'steve'
+                ? !!system.steveArbiter
+                : contract.name === 'black'
+                    ? !!system.microAgentPool?.spawnedAgents?.get?.('BlackAgent')
+                    : contract.name === 'kuze'
+                        ? !!system.microAgentPool?.spawnedAgents?.get?.('KuzeAgent')
+                        : true,
+        lastArtifact: truthEntries.find(entry => String(entry.claim || '').toLowerCase().includes(contract.name)) || null
+    }));
+
+    return {
+        success: true,
+        generatedAt: Date.now(),
+        state: warnings.length ? 'degraded' : 'ready',
+        canonical,
+        watchdog: {
+            marionette,
+            max,
+            somaHealthy: marionette.body?.services?.soma?.state === 'healthy',
+            maxHealthy: marionette.body?.services?.max?.state === 'healthy',
+            bridgeOk: marionette.body?.bridge_ok === true
+        },
+        duplicateInstalls,
+        warnings,
+        contracts: agents,
+        truthLedger: {
+            recent: truthEntries,
+            count: truthEntries.length
+        },
+        scheduler: resourceSnapshot,
+        capabilityAudit: lastAudit || null,
+        workers: {
+            isolatedWorkerSupport: true,
+            jobScripts: [
+                'core/worker-jobs/codeScanWorker.mjs',
+                'core/worker-jobs/sourceDedupeWorker.mjs',
+                'core/worker-jobs/memoryClusterWorker.mjs'
+            ]
+        },
+        promotion: {
+            truthLedgerRequired: true,
+            sandboxRoot: 'data/code-lab/sandbox/pulse-self-mod'
+        }
+    };
 }
 
 function detectImageGenerationRequest(message = '') {
@@ -498,6 +627,7 @@ Write a closing thought â€" 1-2 sentences. Something genuine that shows you a
             const runtime = missionControlRuntime.getStatus?.() || null;
             const vision = global.SOMA_COS?.visionDaemon || system.visionDaemon || null;
             const memory = system.mnemonicArbiter || system.mnemonic;
+            const agenticProof = await buildAgenticProofStatus(system);
 
             const components = [
                 { id: 'brain', label: 'Reasoning', ready: !!system.quadBrain, detail: system.quadBrain ? 'QuadBrain initialized' : 'QuadBrain unavailable' },
@@ -551,8 +681,25 @@ Write a closing thought â€" 1-2 sentences. Something genuine that shows you a
                         lastEval: nemesis?.lastEvalAt ?? null
                     }
                 },
-                missionCapital: runtime
+                missionCapital: runtime,
+                agenticProof
             });
+        } catch (error) {
+            res.status(500).json({ success: false, error: error.message });
+        }
+    });
+
+    router.get('/agentic-proof/status', async (req, res) => {
+        try {
+            res.json(await buildAgenticProofStatus(system));
+        } catch (error) {
+            res.status(500).json({ success: false, error: error.message });
+        }
+    });
+
+    router.post('/agentic-proof/audit', async (req, res) => {
+        try {
+            res.json({ success: true, audit: await runCapabilityAudit(system, { force: req.body?.force === true }) });
         } catch (error) {
             res.status(500).json({ success: false, error: error.message });
         }
@@ -3121,7 +3268,9 @@ ${personaContext}${characterContext}`.trim()
         const hb = system.autonomousHeartbeat;
         if (!hb) return res.status(503).json({ success: false, error: 'Heartbeat not running' });
         try {
-            await hb._tick();
+            const tick = typeof hb.tick === 'function' ? hb.tick.bind(hb) : typeof hb._tick === 'function' ? hb._tick.bind(hb) : null;
+            if (!tick) return res.status(503).json({ success: false, error: 'Heartbeat tick method unavailable' });
+            await tick();
             res.json({ success: true, message: 'Tick executed', cycles: hb.stats?.cycles });
         } catch (e) {
             res.status(500).json({ success: false, error: e.message });
@@ -3175,6 +3324,20 @@ ${personaContext}${characterContext}`.trim()
             });
             res.status(result?.success ? 200 : 422).json({ id: req.params.id, ...(result || { success: false }) });
         } catch (e) { res.status(500).json({ error: e.message }); }
+    });
+
+    router.post('/goals/:id/retry', async (req, res) => {
+        const gp = system.goalPlanner || system.goalPlannerArbiter;
+        if (!gp?.retryGoal) return res.status(503).json({ error: 'Goal retry unavailable' });
+        try {
+            const result = await gp.retryGoal(req.params.id, {
+                actor: 'api_admin',
+                reason: req.body?.reason || 'Manual retry requested through SOMA API'
+            });
+            res.status(result.success ? 200 : 409).json(result);
+        } catch (error) {
+            res.status(500).json({ success: false, error: error.message });
+        }
     });
 
     router.delete('/goals/:id', async (req, res) => {

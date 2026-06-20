@@ -111,7 +111,7 @@ function normalizeGoalContract(goalData = {}) {
     verification,
     evidenceRequired: verification.evidenceRequired || ['summary'],
     stopCriteria,
-    maxAttempts: goalData.maxAttempts || metadata.maxAttempts || 3,
+    maxAttempts: Math.max(1, Math.min(20, Number(goalData.maxAttempts || metadata.maxAttempts || 3))),
     qualityFloor: goalData.qualityFloor || metadata.qualityFloor || 0.7,
     createdAt: Date.now()
   };

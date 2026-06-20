@@ -46,11 +46,11 @@ export class MlInternArbiter extends EventEmitter {
             if (this.system?.universalLearningPipeline) {
                 for (const item of (research.data || [])) {
                     this.system.universalLearningPipeline.logInteraction({
-                        source: 'ML Intern',
-                        action: 'autonomous_research',
-                        details: item,
-                        outcome: 'success',
-                        tags: ['autonomous-learning', 'ml-intern', 'philosophy', 'reflection']
+                        agent: 'MlInternArbiter',
+                        type: 'autonomous_research',
+                        input: { query: topic },
+                        output: { details: item, status: 'success' },
+                        metadata: { tags: ['autonomous-learning', 'ml-intern', 'philosophy', 'reflection'] }
                     }).catch(() => {});
                 }
             }

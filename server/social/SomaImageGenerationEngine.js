@@ -2,7 +2,8 @@ import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
 import zlib from 'zlib';
-import { exec } from 'child_process';
+import sharp from 'sharp';
+import { exec, spawn } from 'child_process';
 import { promisify } from 'util';
 import socialImageLibrary from './SocialImageLibrary.js';
 import somaArtDirector from './SomaArtDirector.js';
@@ -14,6 +15,7 @@ const SOCIAL_DIR = path.join(SOMA_DIR, 'social-media');
 const IMAGE_DIR = path.join(SOCIAL_DIR, 'images');
 const PHOTOS_DIR = path.join(SOMA_DIR, 'photos', 'generated');
 const poseidon = new Poseidon({ threshold: 0.75 });
+let bonsaiStartupPromise = null;
 
 function ensureDirs() {
     fs.mkdirSync(IMAGE_DIR, { recursive: true });
@@ -157,6 +159,97 @@ async function copyOrDecodeGenerated(result, outputPath) {
     throw new Error('Provider did not return imagePath/path/file/output or base64');
 }
 
+async function optimizePngForUpload(filePath, maxBytes) {
+    const before = fs.statSync(filePath).size;
+    if (before <= maxBytes || path.extname(filePath).toLowerCase() !== '.png') {
+        return { optimized: false, before, after: before };
+    }
+
+    let best = fs.readFileSync(filePath);
+    for (const colours of [256, 192, 128]) {
+        const candidate = await sharp(filePath)
+            .rotate()
+            .png({ compressionLevel: 9, effort: 10, palette: true, colours, dither: 0.9 })
+            .toBuffer();
+        if (candidate.length < best.length) best = candidate;
+        if (best.length <= maxBytes) break;
+    }
+    if (best.length < before) fs.writeFileSync(filePath, best);
+    return { optimized: best.length < before, before, after: fs.statSync(filePath).size };
+}
+
+function isLocalBonsaiEndpoint(endpoint) {
+    try {
+        const url = new URL(endpoint);
+        return ['127.0.0.1', 'localhost', '::1'].includes(url.hostname);
+    } catch {
+        return false;
+    }
+}
+
+async function waitForBonsaiHealth(endpoint, timeoutMs = 240000) {
+    const url = new URL(endpoint);
+    const healthUrl = `${url.protocol}//${url.host}/backends`;
+    const deadline = Date.now() + timeoutMs;
+    while (Date.now() < deadline) {
+        try {
+            const response = await fetch(healthUrl, { signal: AbortSignal.timeout(3000) });
+            if (response.ok && (await response.json())?.healthy === true) return true;
+        } catch {}
+        await new Promise(resolve => setTimeout(resolve, 2000));
+    }
+    throw new Error(`Bonsai did not become healthy within ${Math.round(timeoutMs / 1000)} seconds`);
+}
+
+async function ensureLocalBonsai(endpoint) {
+    if (!isLocalBonsaiEndpoint(endpoint) || process.env.SOMA_BONSAI_AUTOSTART === 'false') return false;
+    if (!bonsaiStartupPromise) {
+        bonsaiStartupPromise = (async () => {
+            const demoDir = path.join(process.cwd(), 'research', 'Bonsai-Image-Demo');
+            const serveScript = path.join(demoDir, 'scripts', 'serve.ps1');
+            if (!fs.existsSync(serveScript)) throw new Error(`Bonsai serve script is missing: ${serveScript}`);
+            const port = new URL(endpoint).port || '8000';
+            const child = spawn('powershell.exe', [
+                '-NoProfile',
+                '-ExecutionPolicy', 'Bypass',
+                '-File', serveScript,
+                '-BackendOnly',
+            ], {
+                cwd: demoDir,
+                detached: true,
+                windowsHide: true,
+                stdio: 'ignore',
+                env: {
+                    ...process.env,
+                    BACKEND_PORT: port,
+                    BONSAI_VARIANT: process.env.BONSAI_VARIANT || 'ternary',
+                },
+            });
+            child.unref();
+            await waitForBonsaiHealth(endpoint, Number(process.env.BONSAI_STARTUP_TIMEOUT_MS || 240000));
+            return true;
+        })().finally(() => {
+            bonsaiStartupPromise = null;
+        });
+    }
+    return bonsaiStartupPromise;
+}
+
+async function postToImageEndpoint(endpoint, payload) {
+    const request = () => fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+    });
+    try {
+        return await request();
+    } catch (error) {
+        if (!isLocalBonsaiEndpoint(endpoint)) throw error;
+        await ensureLocalBonsai(endpoint);
+        return request();
+    }
+}
+
 export class SomaImageGenerationEngine {
     getStatus() {
         return {
@@ -210,19 +303,15 @@ export class SomaImageGenerationEngine {
         let providerDetail = null;
 
         if ((provider === 'auto' || provider === 'bonsai' || provider === 'http') && endpoint) {
-            const response = await fetch(endpoint, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    prompt,
-                    width,
-                    height,
-                    steps: Number(options.steps || process.env.BONSAI_IMAGE_STEPS || 4),
-                    seed: options.seed,
-                    backend: options.backend || process.env.BONSAI_IMAGE_BACKEND || undefined,
-                    outputPath,
-                    purpose: options.purpose || 'social',
-                }),
+            const response = await postToImageEndpoint(endpoint, {
+                prompt,
+                width,
+                height,
+                steps: Number(options.steps || process.env.BONSAI_IMAGE_STEPS || 4),
+                seed: options.seed,
+                backend: options.backend || process.env.BONSAI_IMAGE_BACKEND || undefined,
+                outputPath,
+                purpose: options.purpose || 'social',
             });
             if (!response.ok) throw new Error(`Image endpoint failed: ${response.status} ${await response.text()}`);
             const contentType = response.headers.get('content-type') || '';
@@ -232,7 +321,7 @@ export class SomaImageGenerationEngine {
                 const data = await response.json();
                 await copyOrDecodeGenerated(data, outputPath);
             }
-            usedProvider = endpoint.includes('bonsai') ? 'bonsai-http' : 'http';
+            usedProvider = provider === 'bonsai' || process.env.SOMA_IMAGE_PROVIDER === 'bonsai' || endpoint.includes('bonsai') ? 'bonsai-http' : 'http';
             providerDetail = endpoint;
         } else if ((provider === 'auto' || provider === 'bonsai' || provider === 'command') && command) {
             const rendered = command
@@ -257,25 +346,30 @@ export class SomaImageGenerationEngine {
             writeFallbackPng({ prompt, outputPath, width, height });
         }
 
-        const stat = fs.statSync(outputPath);
-        const photoPath = path.join(PHOTOS_DIR, path.basename(outputPath));
-        try {
-            if (path.normalize(photoPath) !== path.normalize(outputPath)) fs.copyFileSync(outputPath, photoPath);
-        } catch {}
         const purpose = String(options.purpose || 'social').toLowerCase();
         const maxBytes = Number(options.maxBytes || (
             purpose === 'discord'
                 ? 8_000_000
                 : (options.publicPost ? 1_000_000 : 5_000_000)
         ));
+        const optimization = await optimizePngForUpload(outputPath, maxBytes);
+        const stat = fs.statSync(outputPath);
+        const photoPath = path.join(PHOTOS_DIR, path.basename(outputPath));
+        try {
+            if (path.normalize(photoPath) !== path.normalize(outputPath)) fs.copyFileSync(outputPath, photoPath);
+        } catch {}
         const verification = await poseidon.verify(`Generated image file exists and is upload sized for ${purpose}`, {
             falsificationTest: `File exists, is non-empty, and is under the ${Math.round(maxBytes / 1_000_000)}MB ${purpose} upload limit`,
             testResult: stat.isFile() && stat.size > 0 && stat.size <= maxBytes,
         });
-        if (verification.state !== 'TRUE') throw new Error(`Generated image failed Poseidon gate: ${verification.reason}`);
+        if (verification.state !== 'TRUE') {
+            try { fs.unlinkSync(outputPath); } catch {}
+            try { fs.unlinkSync(photoPath); } catch {}
+            throw new Error(`Generated image failed Poseidon gate: ${verification.reason}`);
+        }
 
         const alt = String(prepared.alt || options.alt || options.imageAlt || `SOMA generated visual: ${prompt}`).slice(0, 1000);
-        const artDirector = somaArtDirector.reviewGenerated({
+        const artDirector = await somaArtDirector.reviewGenerated({
             options,
             prepared,
             provider: usedProvider,
@@ -284,30 +378,36 @@ export class SomaImageGenerationEngine {
             prompt,
             alt,
         });
-        if (
-            artDirector.critique?.retryRecommended &&
-            !options._artDirectorRetry &&
-            !artDirector.failures?.length
-        ) {
-            const retryPrompt = [
-                prepared.originalPrompt || options.prompt || prompt,
-                prepared.revisionPrompt || 'Fresh visual variant: change composition, focal object, material texture, camera distance, and lighting direction from recent generated images.',
-                'Keep it grounded, subject-specific, and suitable for public posting.',
-            ].filter(Boolean).join(' ');
+        const retryableFailures = new Set(['perceptual_duplicate_of_recent_image']);
+        const hasOnlyRetryableFailures = (artDirector.failures || []).every(failure => retryableFailures.has(failure));
+        const retryRequested = artDirector.critique?.retryRecommended || artDirector.perceptualSimilarity?.duplicate || artDirector.perceptualSimilarity?.nearDuplicate;
+        const maxRetries = Math.max(0, Number(options.maxArtDirectorRetries ?? process.env.SOMA_IMAGE_MAX_ART_RETRIES ?? (options.publicPost ? 2 : 1)));
+        const attempt = Math.max(0, Number(options._artDirectorAttempt) || 0);
+        if (retryRequested && attempt < maxRetries && hasOnlyRetryableFailures) {
             try {
                 fs.unlinkSync(outputPath);
             } catch {}
+            try {
+                fs.unlinkSync(photoPath);
+            } catch {}
             return await this.generate({
                 ...options,
-                prompt: retryPrompt,
                 title: `${options.title || 'soma-image'} fresh variant`,
                 tags: [...new Set([...(Array.isArray(options.tags) ? options.tags : []), 'critique-retry'])],
                 _artDirectorRetry: true,
+                _artDirectorAttempt: attempt + 1,
                 previousPromptSignature: prepared.promptSignature,
-                critiqueRetryReason: artDirector.critique?.warnings || artDirector.warnings || [],
+                critiqueRetryReason: [...(artDirector.critique?.warnings || []), ...(artDirector.failures || [])],
             });
         }
+        if (retryRequested && attempt >= maxRetries && options.publicPost) {
+            try { fs.unlinkSync(outputPath); } catch {}
+            try { fs.unlinkSync(photoPath); } catch {}
+            throw new Error(`Art Director exhausted ${maxRetries} visual retries without producing a sufficiently distinct public image`);
+        }
         if (!artDirector.approved && (options.publicPost || options.strictArtDirector)) {
+            try { fs.unlinkSync(outputPath); } catch {}
+            try { fs.unlinkSync(photoPath); } catch {}
             throw new Error(`Art Director rejected generated image: ${artDirector.failures.join(', ') || 'score below threshold'}`);
         }
 
@@ -333,6 +433,7 @@ export class SomaImageGenerationEngine {
                 critiqueRetryReason: options.critiqueRetryReason || [],
                 sourcePostType: options.sourcePostType || options.postType || null,
                 sourcePostId: options.sourcePostId || null,
+                uploadOptimization: optimization,
             },
         });
         return {

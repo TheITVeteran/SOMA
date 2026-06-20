@@ -11,7 +11,7 @@
  */
 
 export class AdaptivePositionSizer {
-    constructor({ basePositionSize = 1000, maxPositionSize = 5000, minPositionSize = 100 }) {
+    constructor({ basePositionSize = 1000, maxPositionSize = 5000, minPositionSize = 50 }) {
         this.basePositionSize = basePositionSize;  // Default position size ($)
         this.maxPositionSize = maxPositionSize;    // Max position size ($)
         this.minPositionSize = minPositionSize;    // Min position size ($)
@@ -107,6 +107,17 @@ export class AdaptivePositionSizer {
         }
 
         // Apply min/max bounds
+        // If the calculated size before max-bounding is under the minimum, SOMA requested we reject the trade 
+        // entirely rather than bump it up to 50, to avoid executing low-signal micro-trades.
+        if (positionSize < this.minPositionSize) {
+            console.log(`[PositionSizer] ❌ Trade REJECTED: Position size $${positionSize.toFixed(2)} is below the $${this.minPositionSize} capital floor.`);
+            return {
+                positionSize: 0,
+                rejected: true,
+                reason: `Below capital floor: calculated $${positionSize.toFixed(2)} < $${this.minPositionSize}`
+            };
+        }
+
         positionSize = Math.max(this.minPositionSize, Math.min(this.maxPositionSize, positionSize));
 
         console.log(`[PositionSizer] ✅ Final position size: $${positionSize.toFixed(2)}`);

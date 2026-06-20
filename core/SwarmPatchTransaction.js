@@ -15,6 +15,7 @@
 
 import fs from 'fs/promises';
 import path from 'path';
+import { resolveWithinRoot } from './PathSafety.js';
 
 // ── AEGIS: files with more lines than this get signature-checked before any full_rewrite ──
 const AEGIS_LINE_THRESHOLD = 100;
@@ -102,14 +103,7 @@ export class SwarmPatchTransaction {
         try {
             // ── 1. Prepare, Backup, and AEGIS Check ──────────────────────────
             for (const file of patch.files) {
-                const fullPath = path.isAbsolute(file.path)
-                    ? file.path
-                    : path.resolve(this.rootPath, file.path);
-
-                // Security: path must stay within rootPath
-                if (!fullPath.startsWith(path.resolve(this.rootPath))) {
-                    throw new Error(`Security violation: Patch path outside root: ${file.path}`);
-                }
+                const fullPath = resolveWithinRoot(this.rootPath, file.path, 'Patch path');
 
                 let original = null;
                 try {

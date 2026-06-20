@@ -21,6 +21,8 @@ const { AgendaSystem } = require('../../core/AgendaSystem.cjs');
 const { ownerName }    = require('../../core/SomaOwner.cjs');
 const workLedger = require('../../core/AutonomousWorkLedger.cjs');
 const { writeMonologue } = require('../../core/InternalMonologue.cjs');
+const { GoalExecutionLease } = require('../../core/GoalExecutionLease.cjs');
+const { STATUS } = require('../../core/GoalLifecycle.cjs');
 
 // ── Run Log constants ──
 const RUN_LOG_DIR = path.join(__dirname, '..', '.soma', 'heartbeat');
@@ -90,6 +92,10 @@ class AutonomousHeartbeat extends EventEmitter {
     this.timer = null;
     this.isRunning = false;
     this.isProcessing = false;
+    this.goalLeases = new GoalExecutionLease({
+      root: config.goalLeaseRoot || path.join(process.cwd(), 'data', 'goal-leases'),
+      defaultTtlMs: config.goalLeaseTtlMs || 10 * 60 * 1000
+    });
     this.stats = {
       cycles: 0,
       tasksExecuted: 0,
@@ -355,7 +361,7 @@ class AutonomousHeartbeat extends EventEmitter {
         if (isGoalTask) {
           const goal = this.system.goalPlanner?.goals?.get(task.context.goalId);
           if (goal) {
-            const execResult = await this.system.agenticExecutor.execute(goal);
+            const execResult = await this._executeAgenticGoal(goal);
             const toolsList = (execResult.toolsUsed || []).join(', ') || 'reasoning';
             // Only count real work: tools must have been used for any progress credit
             const toolsUsedCount = (execResult.toolsUsed || []).length;
@@ -370,15 +376,57 @@ class AutonomousHeartbeat extends EventEmitter {
 
             // Gap 4: Verify concrete outcomes when SOMA claims completion
             let verificationNote = '';
+            let completionVerification = null;
             if (execResult.done) {
               const verification = await this._verifyGoalCompletion(goal, execResult);
+              completionVerification = verification;
               if (!verification.verified) {
                 const failed = verification.checks.filter(c => !c.passed).map(c => c.check).join(', ');
                 this.logger.warn(`[AutonomousHeartbeat] ⚠️ Verification failed: ${failed}`);
                 progressVal = 75; // Downgrade from 100 — claimed done but artifacts missing
                 verificationNote = `\nVERIFICATION: FAILED (${failed}) — progress rolled back to 75%`;
+                const autopsy = await this._writeGoalAutopsy(goal, {
+                  phase: 'verification_failed',
+                  reason: failed || 'verification_failed',
+                  verification,
+                  execResult
+                });
+                if (autopsy) {
+                  goal.metadata = {
+                    ...(goal.metadata || {}),
+                    latestAutopsy: autopsy.path,
+                    autopsyNextStrategy: autopsy.nextStrategy,
+                    autopsyCount: (goal.metadata?.autopsyCount || 0) + 1
+                  };
+                }
               } else if (verification.checks.length > 0) {
                 verificationNote = `\nVERIFICATION: passed (${verification.checks.map(c => c.check).join(', ')})`;
+              }
+            }
+
+            // Directly update the goal state in GoalPlanner
+            await this.system.goalPlanner?.updateGoalProgress(goal.id, progressVal === 100 ? 99 : progressVal, {
+              note: `Agentic Executor: ${execResult.result || 'Partial progress'}`,
+              evidence: toolsList,
+              lastVerification: completionVerification || undefined,
+              latestAutopsy: goal.metadata?.latestAutopsy || undefined,
+              autopsyNextStrategy: goal.metadata?.autopsyNextStrategy || undefined
+            }).catch(() => {});
+
+            if (progressVal === 100) {
+              const completion = await this.system.goalPlanner?.completeGoal(goal.id, {
+                result: execResult.result || 'Goal verified and completed.',
+                verification: completionVerification?.goalVerification || undefined,
+                evidence: completionVerification?.evidence || undefined,
+                summary: execResult.result || 'Goal verified and completed.'
+              }).catch(error => ({ success: false, error: error.message }));
+              if (completion?.success) {
+                if (execResult.checkpointFile) await fs.promises.unlink(execResult.checkpointFile).catch(() => {});
+                this._goalAttempts.delete(goal.id);
+                if (this.drive && typeof this.drive.onGoalComplete === 'function') this.drive.onGoalComplete(goal);
+              } else {
+                progressVal = 75;
+                verificationNote += `\nGOAL COMMIT: FAILED (${completion?.error || 'GoalPlanner rejected completion'})`;
               }
             }
 
@@ -743,6 +791,7 @@ class AutonomousHeartbeat extends EventEmitter {
         for (const goalId of activeGoals) {
           const g = this.system.goalPlanner.goals?.get(goalId);
           if (!g || !(g.status === 'active' || g.status === 'pending')) continue;
+          if (this.system.goalPlanner.areDependenciesSatisfied && !this.system.goalPlanner.areDependenciesSatisfied(g)) continue;
           if (!isHumanEngineeringGoal(g) && !this.drive.confidenceMet(g.confidence) && !this.drive.isUrgent()) continue;
           runnableGoals.push(g);
         }
@@ -765,14 +814,60 @@ class AutonomousHeartbeat extends EventEmitter {
         }
 
         if (bestGoal) {
+          if ([STATUS.PENDING, STATUS.ACTIVE].includes(bestGoal.status) && this.system.goalPlanner?._isComplexGoal?.(bestGoal)) {
+            const decomposition = await this.system.goalPlanner.decomposeGoal(bestGoal.id, 'AutonomousHeartbeat');
+            if (decomposition?.success) {
+              this.logger.log(`[AutonomousHeartbeat] Decomposed broad goal into ${decomposition.childGoalIds.length} measurable child goals`);
+              return null;
+            }
+          }
+
           // ── Stall detection: auto-complete goals stuck at ≥80% after 5 attempts ──
           const stall = this._goalAttempts.get(bestGoal.id) || { attempts: 0, lastProgress: 0 };
+          const autopsyCount = bestGoal.metadata?.autopsyCount || 0;
           if (stall.attempts >= 5 && (bestGoal.metrics?.progress || 0) >= 80) {
-            this.logger.log(`[AutonomousHeartbeat] ⏭️  Stall-completing goal "${bestGoal.title}" (${bestGoal.metrics?.progress || 0}% after ${stall.attempts} attempts)`);
-            await this.system.goalPlanner.completeGoal(bestGoal.id, {
-              result: `Goal reached maximum autonomous effort (${stall.attempts} attempts, ${bestGoal.metrics?.progress || 0}% progress). Marked complete.`
-            }).catch(() => {});
-            this._goalAttempts.delete(bestGoal.id);
+            if (autopsyCount >= 2) {
+              this.logger.error(`[AutonomousHeartbeat] 💥 Goal "${bestGoal.title}" is BROKEN. Escalating to MAX.`);
+              this.system.goalPlanner?.transitionGoal(bestGoal.id, STATUS.BROKEN, {
+                reason: 'repeated_stall_autopsies',
+                actor: 'AutonomousHeartbeat',
+                persist: true
+              });
+              bestGoal.metadata = {
+                  ...(bestGoal.metadata || {}),
+                  incompleteReason: 'escalated_to_max_after_repeated_failures'
+              };
+              this._goalAttempts.delete(bestGoal.id);
+              this._broadcast('soma_escalation', {
+                  message: `Goal escalated to MAX due to repeated failures: "${bestGoal.title}"`,
+                  goalId: bestGoal.id,
+                  autopsies: autopsyCount,
+                  source: 'AutonomousHeartbeat'
+              });
+              return null;
+            }
+
+            this.logger.warn(`[AutonomousHeartbeat] ⚠️ Stall autopsy for "${bestGoal.title}" (${bestGoal.metrics?.progress || 0}% after ${stall.attempts} attempts)`);
+            const autopsy = await this._writeGoalAutopsy(bestGoal, {
+              phase: 'stall_detected',
+              reason: `Goal stalled at ${bestGoal.metrics?.progress || 0}% after ${stall.attempts} heartbeat attempts.`,
+              verification: bestGoal.metadata?.lastVerification || null,
+              execResult: { result: 'Stall detected before verified completion.' }
+            });
+            if (autopsy) {
+                bestGoal.metadata = {
+                    ...(bestGoal.metadata || {}),
+                    latestAutopsy: autopsy.path,
+                    autopsyNextStrategy: autopsy.nextStrategy,
+                    autopsyCount: autopsyCount + 1
+                };
+            }
+            this.system.goalPlanner?.transitionGoal(bestGoal.id, STATUS.PENDING, {
+              reason: 'stall_autopsy_retry',
+              actor: 'AutonomousHeartbeat'
+            });
+            bestGoal.metrics.progress = Math.min(bestGoal.metrics?.progress || 0, 75);
+            this._goalAttempts.set(bestGoal.id, { attempts: 0, lastProgress: bestGoal.metrics.progress });
             return null;
           }
 
@@ -1281,8 +1376,83 @@ Write the update now:`,
     };
   }
 
+  async _executeAgenticGoal(goal) {
+    const leaseHandle = this.goalLeases.acquire(goal.id, 'AutonomousHeartbeat');
+    if (!leaseHandle.acquired) {
+      return {
+        done: false,
+        state: 'lease_busy',
+        stopReason: leaseHandle.reason,
+        result: `Execution deferred: goal is leased by ${leaseHandle.lease?.owner || 'another worker'}.`,
+        iterations: 0,
+        toolsUsed: [],
+        observations: [],
+        needsContinuation: true,
+        continuationFile: goal.metadata?.continuationFile || null,
+        lease: leaseHandle
+      };
+    }
+
+    try {
+      const budget = this.system.goalPlanner?.getExecutionAttemptBudget?.(goal) || {
+        attempts: Number(goal.metadata?.executionAttempts || 0),
+        maxAttempts: Math.max(1, Number(goal.metadata?.goalContract?.maxAttempts || goal.metadata?.maxAttempts || 3))
+      };
+      if (budget.attempts >= budget.maxAttempts) {
+        const autopsy = await this._writeGoalAutopsy(goal, {
+          phase: 'attempt_budget_exhausted',
+          reason: `Execution attempt budget exhausted (${budget.attempts}/${budget.maxAttempts}).`,
+          verification: goal.metadata?.lastVerification || null,
+          execResult: { result: 'No further local execution allowed until strategy changes or human review.' }
+        });
+        let escalation = null;
+        if (this.system.agenticExecutor?.escalateGoalToMax) {
+          escalation = await this.system.agenticExecutor.escalateGoalToMax(goal, autopsy).catch(error => ({ success: false, error: error.message }));
+        }
+        goal.metadata = {
+          ...(goal.metadata || {}),
+          latestAutopsy: autopsy?.path || goal.metadata?.latestAutopsy || null,
+          attemptBudget: { attempts: budget.attempts, maxAttempts: budget.maxAttempts, exhaustedAt: Date.now() },
+          maxEscalation: escalation
+        };
+        this.system.goalPlanner?.transitionGoal(goal.id, STATUS.BROKEN, {
+          reason: 'execution_attempt_budget_exhausted',
+          actor: 'AutonomousHeartbeat',
+          persist: true
+        });
+        return {
+          done: false,
+          state: 'attempt_budget_exhausted',
+          stopReason: 'max_attempts_reached',
+          result: `Execution stopped after ${budget.attempts}/${budget.maxAttempts} attempts and escalated to MAX.`,
+          iterations: 0,
+          toolsUsed: [],
+          observations: [],
+          needsContinuation: true,
+          continuationFile: goal.metadata?.continuationFile || null,
+          escalation
+        };
+      }
+
+      const attempt = this.system.goalPlanner?.beginExecutionAttempt?.(goal.id, 'AutonomousHeartbeat');
+      if (attempt && !attempt.success) throw new Error(attempt.error || 'Could not record execution attempt');
+      return await this.system.agenticExecutor.execute(goal);
+    } finally {
+      const released = this.goalLeases.release(leaseHandle);
+      if (!released.released) this.logger.warn(`[AutonomousHeartbeat] Goal lease release failed: ${released.reason}`);
+    }
+  }
+
   async _verifyGoalCompletion(goal, execResult) {
     const checks = [];
+
+    if (execResult.completionEvidence) {
+      checks.push({
+        check: 'executor_completion_evidence',
+        passed: execResult.completionEvidence.passed === true,
+        type: 'execution_evidence'
+      });
+    }
 
     for (const obs of execResult.observations || []) {
       // write_file → verify file was actually created
@@ -1307,8 +1477,24 @@ Write the update now:`,
       }
     }
 
-    const verified = checks.length === 0 || checks.every(c => c.passed);
-    return { verified, checks };
+    const positiveChecks = checks.filter(c => c.passed);
+    const verified = positiveChecks.length > 0 && checks.every(c => c.passed);
+    return {
+      verified,
+      checks,
+      evidence: {
+        toolsUsed: execResult.toolsUsed || [],
+        artifact: execResult.evidencePath || execResult.completionEvidence?.checks?.find(item => item.path)?.path || null,
+        evidencePath: execResult.evidencePath || null,
+        receiptIds: execResult.completionEvidence?.checks?.filter(item => item.passed).map(item => item.receiptId).filter(Boolean) || [],
+        codeTouched: (execResult.toolsUsed || []).some(tool => ['modify_code', 'pulse_stage_code'].includes(tool)) ||
+          (execResult.observations || []).some(obs => obs.tool === 'write_file' && /\.(?:js|cjs|mjs|ts)$/i.test(obs.args?.path || obs.result?.path || '')),
+        runTests: Boolean(execResult.completionEvidence?.checks?.some(item => item.type === 'tests' && item.passed)),
+        verifySyntax: Boolean(execResult.completionEvidence?.checks?.some(item => item.type === 'syntax' && item.passed)),
+        completionEvidence: execResult.completionEvidence || null,
+        checks
+      }
+    };
   }
 
   // ═══════════════════════════════════════════

@@ -132,6 +132,13 @@ async function runTest() {
             quadBrain: mockQuadBrain,
             rootPath: tempDir
         });
+        // This test exercises autonomous consensus, not the UI approval flow.
+        swarm.system = { commandBridgeSettings: { authority: { humanInLoopOverride: false } } };
+        await fs.writeFile(path.join(tempDir, 'smoke.mjs'), 'console.log("swarm smoke passed");\n', 'utf8');
+        await fs.writeFile(path.join(tempDir, 'package.json'), JSON.stringify({
+            type: 'module',
+            scripts: { 'soma:test': 'node smoke.mjs' }
+        }), 'utf8');
 
         // ==========================================
         // TEST CASE 1: Successful Vote (Approvals = 3/3)

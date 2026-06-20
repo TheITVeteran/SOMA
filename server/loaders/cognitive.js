@@ -18,9 +18,17 @@ import { PerformanceAnalytics } from '../../arbiters/PerformanceAnalytics.js';
 import SimulationArbiter from '../../arbiters/SimulationArbiter.js';
 import { GraphifyArbiter } from '../../arbiters/GraphifyArbiter.js';
 import MedicalDiscoveryCortex from '../../arbiters/MedicalDiscoveryCortex.js';
+import { BiotechArbiter } from '../../arbiters/BiotechArbiter.js';
+import { SomaBrowserArbiter } from '../../arbiters/SomaBrowserArbiter.js';
 import ReflectionsArbiter from '../../arbiters/ReflectionsArbiter.js';
 import FinanceAgentArbiter from '../../arbiters/FinanceAgentArbiter.js';
 import messageBroker from '../../core/MessageBroker.js';
+import GameTheoryArbiter from '../../arbiters/GameTheoryArbiter.js';
+import MacroEventArbiter from '../../arbiters/MacroEventArbiter.js';
+import CyberSecArbiter from '../../arbiters/CyberSecArbiter.js';
+import DistillationArbiter from '../../arbiters/DistillationArbiter.js';
+import SubstrateOptimizerArbiter from '../../arbiters/SubstrateOptimizerArbiter.js';
+import AdversarialSelfCorrectionArbiter from '../../arbiters/AdversarialSelfCorrectionArbiter.js';
 import { startMemorySpineAutoSync } from '../utils/MemorySpine.js';
 
 // CJS Imports
@@ -203,6 +211,9 @@ export async function loadCognitiveSystems(toolRegistry = null) {
     });
     system.goalPlanner = new GoalPlannerArbiter({ name: 'GoalPlanner', messageBroker, quadBrain, maxActiveGoals: 100 });
     system.beliefSystem = new BeliefSystemArbiter({ name: 'BeliefSystem', messageBroker, quadBrain });
+    system.distillation = new DistillationArbiter({ messageBroker, quadBrain, beliefSystem: system.beliefSystem });
+    system.substrateOptimizer = new SubstrateOptimizerArbiter({ name: 'SubstrateOptimizer' });
+    system.adversarialSelfCorrection = new AdversarialSelfCorrectionArbiter({ name: 'AdversarialSelfCorrection', quadBrain });
     system.museEngine = new MuseEngine({ name: 'MuseEngine', messageBroker, quadBrain, reflections: system.reflections });
     system.analytics = new PerformanceAnalytics({ rootPath: process.cwd() });
     system.timekeeper = new TimekeeperArbiter({ name: 'TimekeeperArbiter' });
@@ -214,14 +225,30 @@ export async function loadCognitiveSystems(toolRegistry = null) {
         console.log('      🎮 Physics Simulation: SKIPPED (set SOMA_LOAD_SIMULATION=true to enable)');
     }
 
+    system.gameTheory = GameTheoryArbiter;
+    system.macroEvent = MacroEventArbiter;
+    system.cyberSec = CyberSecArbiter;
+
+    // Oculus Browser Arbiter
+    system.browserArbiter = new SomaBrowserArbiter(system);
+
+    system.biotech = new BiotechArbiter({ system });
+
     await initIfPossible(system.timekeeper, 'TimekeeperArbiter');
 
     await Promise.all([
         initIfPossible(system.goalPlanner, 'GoalPlanner'),
         initIfPossible(system.beliefSystem, 'BeliefSystem'),
+        initIfPossible(system.distillation, 'DistillationArbiter'),
         initIfPossible(system.museEngine, 'MuseEngine'),
         initIfPossible(system.analytics, 'PerformanceAnalytics'),
         initIfPossible(system.velocityTracker, 'VelocityTracker'),
+        initIfPossible(system.gameTheory, 'GameTheoryArbiter'),
+        initIfPossible(system.macroEvent, 'MacroEventArbiter'),
+        initIfPossible(system.cyberSec, 'CyberSecArbiter'),
+        initIfPossible(system.biotech, 'BiotechArbiter'),
+        initIfPossible(system.substrateOptimizer, 'SubstrateOptimizerArbiter'),
+        initIfPossible(system.adversarialSelfCorrection, 'AdversarialSelfCorrectionArbiter'),
         ...(system.simulation ? [initIfPossible(system.simulation, 'Simulation')] : [])
     ]);
 

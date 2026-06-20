@@ -268,17 +268,11 @@ class SimulationControllerArbiter extends BaseArbiter {
     const system = global.__SOMA_SYSTEM;
     if (system?.universalLearningPipeline) {
         system.universalLearningPipeline.logInteraction({
-            source: 'SimulationController',
-            action: 'physics_epoch_complete',
-            details: {
-                episode,
-                score,
-                reward: this.totalReward,
-                qTableSize: this.qTable.size,
-                explorationRate: this.stats.explorationRate
-            },
-            outcome: 'success',
-            tags: ['simulation', 'physics', 'embodiment', 'learning']
+            agent: 'SimulationControllerArbiter',
+            type: 'physics_epoch_complete',
+            input: { episode, explorationRate: this.stats.explorationRate },
+            output: { score, reward: this.totalReward, qTableSize: this.qTable.size, status: 'success' },
+            metadata: { tags: ['simulation', 'physics', 'embodiment', 'learning'] }
         }).catch(() => {});
         
         // Also feed into the ExperienceReplayBuffer explicitly

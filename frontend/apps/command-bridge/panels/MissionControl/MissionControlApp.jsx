@@ -24,6 +24,7 @@ import { MissionBriefPanel } from './components/MissionBriefPanel.jsx';
 import { StrategyHuntPanel } from './components/StrategyHuntPanel.jsx';
 import { PnlSummaryCard, computeMissionPnl, formatMoney, pnlTextColor } from './components/PnlSummary.jsx';
 import { TradeMode, AssetType } from './types.js';
+import AgenticProofPanel from '../../components/AgenticProofPanel.jsx';
 
 import { INITIAL_TICKERS, STRATEGY_PRESETS } from './constants.js';
 import './mission-control.css';
@@ -2680,6 +2681,7 @@ const MissionControlApp = ({ somaBackend, isConnected }) => {
                                         </div>
                                         );
                                     })()}
+                                    <AgenticProofPanel compact />
                                 </div>
 
                                 {/* Center: Open Positions */}

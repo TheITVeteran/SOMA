@@ -38,6 +38,7 @@ function runWorker(task) {
         const child = spawn(process.execPath, [WORKER], {
             stdio: ['pipe', 'pipe', 'pipe'],
             env:   { ...process.env },   // inherit env (for any future keys)
+            windowsHide: true,
         });
 
         let out = '';

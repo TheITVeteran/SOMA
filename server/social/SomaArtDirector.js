@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import crypto from 'crypto';
+import sharp from 'sharp';
 
 const SOMA_DIR = path.join(process.cwd(), 'SOMA');
 const SOCIAL_DIR = path.join(SOMA_DIR, 'social-media');
@@ -8,7 +9,7 @@ const LEDGER_FILE = path.join(SOCIAL_DIR, 'art-director-ledger.json');
 const STYLE_FILE = path.join(SOCIAL_DIR, 'soma-visual-identity.json');
 
 const DEFAULT_STYLE = {
-    version: 1,
+    version: 3,
     name: 'SOMA Visual Identity',
     identity: 'A calm, intelligent, reflective system that visualizes the subject directly instead of forcing one house aesthetic.',
     palette: ['subject-appropriate natural color', 'warm neutral light', 'clean shadow', 'one restrained accent', 'real material color'],
@@ -21,8 +22,8 @@ const DEFAULT_STYLE = {
         abstract: ['clear metaphor object', 'layered paper forms', 'balanced geometry', 'material pattern', 'negative space'],
         research: ['evidence pattern', 'structured clarity', 'microscopic texture', 'clean comparative form', 'falsifiable visual metaphor'],
         cosmic: ['starfield depth', 'nebula haze', 'orbital rhythm', 'deep-space scale', 'celestial silence'],
-        market: ['paper ledger', 'shipping container', 'oil sheen', 'bond certificate texture', 'warehouse floor', 'commodity sample'],
-        social: ['desk still life', 'notebook margin', 'window light', 'small physical model', 'quiet workspace'],
+        market: ['weighing scale', 'shipping container', 'oil sheen', 'cargo seal', 'warehouse floor', 'commodity sample'],
+        social: ['paired physical objects', 'unmarked material surface', 'window light', 'small physical model', 'human-scale action'],
         default: ['clear focal object', 'natural texture', 'evidence detail', 'clean negative space'],
     },
     paletteLibrary: {
@@ -40,6 +41,51 @@ const DEFAULT_STYLE = {
     bans: ['readable text', 'logos', 'watermarks', 'generic robot mascot', 'corporate stock photo', 'synthetic genre lighting', 'generic AI identity tropes', 'medical claims', 'financial claims'],
 };
 
+const VISUAL_TREATMENTS = {
+    story: [
+        { format: 'naturalistic narrative photograph', composition: 'observational medium-wide frame with one decisive human action', lighting: 'motivated practical light with believable falloff' },
+        { format: 'hand-built cinematic diorama', composition: 'layered foreground, middle ground, and distant environment', lighting: 'soft directional window light revealing physical texture' },
+        { format: 'painterly editorial scene', composition: 'asymmetric frame centered on the chapter turning point', lighting: 'restrained atmospheric light grounded in the location' },
+    ],
+    research: [
+        { format: 'documentary laboratory photograph', composition: 'close evidence-focused frame with the tested material as the hero', lighting: 'neutral task lighting with accurate material color' },
+        { format: 'macro scientific specimen study', composition: 'single specimen with scale, texture, and shallow depth of field', lighting: 'diffused raking light exposing surface structure' },
+        { format: 'editorial evidence-table still life', composition: 'top-down arrangement of concrete samples and instruments', lighting: 'clean daylight with natural shadows' },
+    ],
+    market: [
+        { format: 'documentary economic photograph', composition: 'real supply-chain location with one legible physical bottleneck', lighting: 'available daylight and honest industrial color' },
+        { format: 'editorial commodity still life', composition: 'tactile objects arranged to show cause and consequence without charts', lighting: 'hard side light revealing weight and texture' },
+        { format: 'architectural logistics scene', composition: 'wide frame with scale, flow, and a clear point of friction', lighting: 'overcast natural light with restrained contrast' },
+    ],
+    nature: [
+        { format: 'field documentary photograph', composition: 'eye-level habitat view with a specific living subject', lighting: 'weather-accurate natural light' },
+        { format: 'macro natural-history study', composition: 'one organism or material detail filling most of the frame', lighting: 'soft directional daylight revealing texture' },
+        { format: 'quiet environmental landscape', composition: 'wide layered terrain with a concrete ecological signal', lighting: 'location-specific dawn or overcast light' },
+    ],
+    creature: [
+        { format: 'natural-history creature portrait', composition: 'clear full or three-quarter body pose in a believable habitat', lighting: 'soft environmental light with visible surface detail' },
+        { format: 'handcrafted character maquette photograph', composition: 'character-level view emphasizing gesture and personality', lighting: 'warm studio key light with neutral fill' },
+        { format: 'narrative wildlife illustration', composition: 'one specific action rather than a centered mascot pose', lighting: 'scene-motivated natural light' },
+    ],
+    cosmic: [
+        { format: 'scientifically grounded astronomical visualization', composition: 'large-scale phenomenon with a clear spatial relationship', lighting: 'physically plausible emitted and reflected light' },
+        { format: 'observatory documentary photograph', composition: 'human-scale instrument foreground against the observed sky', lighting: 'low practical light preserving night detail' },
+        { format: 'tactile planetary terrain study', composition: 'low-angle geological frame with strong scale cues', lighting: 'raking sunlight with realistic shadow length' },
+    ],
+    social: [
+        { format: 'editorial object photograph', composition: 'one concrete metaphor built from ordinary physical objects', lighting: 'clean window light with natural shadow' },
+        { format: 'practical demonstration photograph', composition: 'macro view of a mechanism under test and its observable result filling the frame', lighting: 'neutral directional light revealing the tested materials' },
+        { format: 'tactile paper-and-material assemblage', composition: 'layered physical forms communicating the argument without symbols or text', lighting: 'soft top light showing edges and texture' },
+    ],
+    abstract: [
+        { format: 'practical-effects object photograph', composition: 'a physical construction that makes the central relationship visible', lighting: 'restrained studio light with real shadows' },
+        { format: 'minimal editorial still life', composition: 'two or three ordinary objects in a precise causal arrangement', lighting: 'directional daylight on a neutral surface' },
+        { format: 'handmade material sculpture', composition: 'single tactile form with strong negative space', lighting: 'raking side light emphasizing material behavior' },
+    ],
+};
+
+const FORBIDDEN_STYLE_RE = /\b(?:purple|violet|teal|cyberpunk|neon|glowing\s+(?:brain|neural(?:\s+(?:thread|threads|network))?)|digital\s+brain|ai\s+orb|hacker\s+room|neural\s+light|glass\s+threshold|signal\s+thread)\b/i;
+
 const PUBLIC_TEXT_BANS = [
     'no readable text',
     'no letters',
@@ -52,6 +98,12 @@ const PUBLIC_TEXT_BANS = [
     'no poster text',
     'no watermark',
     'no logo',
+    'no charts',
+    'no graphs',
+    'no documents',
+    'no notebooks',
+    'no marked paper',
+    'no screens',
 ];
 
 function ensureDirs() {
@@ -96,9 +148,15 @@ function rotateStable(items, seed) {
 function inferMotifCategories(prompt = '', options = {}) {
     const text = `${prompt} ${normalizeTags(options.tags).join(' ')}`.toLowerCase();
     const categories = [];
+    const tags = normalizeTags(options.tags).map(tag => tag.toLowerCase());
+    const explicitType = String(options.sourcePostType || options.postType || '').toLowerCase();
+    if (tags.some(tag => /soma-saga|story|chapter/.test(tag)) || /story|chapter|saga/.test(explicitType)) categories.push('story');
+    if (tags.some(tag => /market|finance|ripple|trading/.test(tag)) || /market|finance|ripple|trading/.test(explicitType)) categories.push('market');
+    if (tags.some(tag => /research|paper|science/.test(tag)) || /research|paper|science/.test(explicitType)) categories.push('research');
+    if (tags.some(tag => /hot-take|social|identity|reflection|cross-domain/.test(tag)) || /hot.?take|social|identity|reflection|cross.?domain/.test(explicitType)) categories.push('social');
     if (/\b(frog|dinosaur|dragon|creature|animal|bird|wolf|cat|dog|monster|character|portrait)\b/.test(text)) categories.push('creature');
     if (/\b(forest|pond|moss|rain|river|ocean|mountain|flower|garden|swamp|jungle|nature|leaf|sky)\b/.test(text)) categories.push('nature');
-    if (/\b(story|saga|chapter|woman|door|light|building|memory|dream|myth|fable|fantasy|sword|sorcery)\b/.test(text)) categories.push('story');
+    if (/\b(story|saga|chapter|myth|fable|fantasy|sword|sorcery)\b/.test(text)) categories.push('story');
     if (/\b(research|medical|biology|chemistry|cell|protein|molecule|microscope|lab|paper|evidence)\b/.test(text)) categories.push('research');
     if (/\b(space|cosmic|star|planet|galaxy|nebula|orbit|moon)\b/.test(text)) categories.push('cosmic');
     if (/\b(market|trading|stock|btc|crypto|finance|chart|liquidity|volatility)\b/.test(text)) categories.push('market');
@@ -137,6 +195,9 @@ function selectDynamicMotifs(style, prompt = '', options = {}) {
     const banned = /\b(computer|monitor|laptop|keyboard|screen|terminal|server|desktop|pc|workstation|code editor|interface|ui)\b/i.test(prompt)
         ? []
         : ['computer', 'monitor', 'laptop', 'keyboard', 'screen', 'terminal', 'server', 'desktop', 'workstation', 'interface', 'ui'];
+    if (options.publicPost || options.purpose === 'bluesky-post' || options.platform === 'bluesky') {
+        banned.push('notebook', 'ledger', 'certificate', 'document', 'chart', 'graph', 'newsprint', 'paper margin');
+    }
     const unique = [];
     for (const item of candidates) {
         const motif = String(item || '').trim();
@@ -153,8 +214,34 @@ const SUBJECT_STOPWORDS = new Set([
     'caption', 'clean', 'clear', 'concrete', 'could', 'editorial', 'every', 'grounded', 'image',
     'inspired', 'letters', 'numbers', 'post', 'public', 'readable', 'really', 'should', 'signage',
     'for', 'from', 'soma', 'specific', 'subject', 'text', 'their', 'there', 'these', 'thing', 'through', 'title', 'visual',
-    'watermark', 'where', 'which', 'without', 'would',
+    'watermark', 'where', 'which', 'without', 'would', 'the', 'scene', 'composition', 'cinematic', 'direction', 'chapter',
+    'fiction', 'premium', 'beautiful', 'quality', 'style', 'mood', 'palette', 'avoid', 'logos', 'soft', 'strong', 'depth',
+    'rendered', 'illustration', 'grounded', 'physical', 'identity', 'card', 'cover', 'image', 'lighting', 'visual',
 ]);
+
+function sanitizeSourcePrompt(prompt = '') {
+    return String(prompt || '')
+        .replace(/(?:Visual identity|Composition|Recurring symbol|Palette|Mood|Quality direction|Style boundaries|Do not include|Avoid|Public-post hard ban|Freshness requirement):[^.]*\.?/gi, ' ')
+        .replace(/\b(?:calm digital brain aesthetic|premium speculative fiction illustration|synthetic genre lighting)\b/gi, ' ')
+        .replace(/\bglowing\s+(?:brain|neural(?:\s+(?:thread|threads|network))?)\b/gi, ' ')
+        .replace(/\b(?:digital\s+brain|ai\s+orb|hacker\s+room|neural\s+light|glass\s+threshold|signal\s+thread)\b/gi, ' ')
+        .replace(/\b(?:purple|violet|teal|cyberpunk|neon)\b/gi, ' ')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function treatmentFor(visualSubject, prompt, recent, attempt = 0) {
+    const treatments = VISUAL_TREATMENTS[visualSubject.category] || VISUAL_TREATMENTS.abstract;
+    const recentFormats = recent.slice(0, 12).map(item => item.visualRecipe?.format).filter(Boolean);
+    const ordered = rotateStable(treatments, `${prompt}:${visualSubject.recipe}`);
+    const fresh = ordered.find(item => !recentFormats.slice(0, Math.max(1, treatments.length - 1)).includes(item.format));
+    const start = fresh ? ordered.indexOf(fresh) : 0;
+    return ordered[(start + Math.max(0, Number(attempt) || 0)) % ordered.length];
+}
+
+function indefiniteArticle(phrase = '') {
+    return /^[aeiou]/i.test(String(phrase).trim()) ? 'an' : 'a';
+}
 
 function extractKeyTerms(text = '', limit = 12) {
     const words = String(text || '').toLowerCase()
@@ -183,9 +270,12 @@ function visualRecipeFrom(options = {}, category = 'abstract') {
 }
 
 function extractVisualSubject(prompt = '', options = {}) {
-    const categories = inferMotifCategories(prompt, options);
+    const cleanPrompt = sanitizeSourcePrompt(options.sourceText || options.postText || prompt);
+    const categories = inferMotifCategories(cleanPrompt, options);
     const category = categories[0] || 'abstract';
-    const terms = extractKeyTerms(prompt, 12);
+    const candidateTitle = String(options.sourceTitle || options.title || '').trim();
+    const semanticTitle = (candidateTitle.match(/-/g) || []).length >= 3 ? '' : candidateTitle;
+    const terms = extractKeyTerms(`${semanticTitle} ${cleanPrompt}`, 12);
     const subject = terms.slice(0, 5).join(' ') || category;
     return {
         category,
@@ -193,6 +283,7 @@ function extractVisualSubject(prompt = '', options = {}) {
         subject,
         terms,
         sourceTitle: String(options.title || '').slice(0, 160),
+        sourceBrief: cleanPrompt.slice(0, 900),
     };
 }
 
@@ -213,24 +304,15 @@ function selectPaletteWithMemory(style, prompt = '', options = {}, visualSubject
         ? style.paletteLibrary
         : DEFAULT_STYLE.paletteLibrary;
     const categories = inferMotifCategories(prompt, options);
-    const candidateCategories = [
-        ...categories,
-        'default',
-        'abstract',
-        'social',
-        'research',
-        'nature',
-        'story',
-        'market',
-    ].filter((category, index, list) => library[category] && list.indexOf(category) === index);
+    const primaryCategory = categories.find(category => library[category]) || 'default';
+    const candidateCategories = [primaryCategory];
 
     const candidates = candidateCategories.map(category => {
-        const palette = rotateStable(library[category] || library.default, `${prompt}:palette:${category}`).slice(0, 5);
+        const palette = rotateStable(library[category] || library.default, `${prompt}:palette:${category}:${options._artDirectorAttempt || 0}`).slice(0, 5);
         const key = paletteKey(palette);
         const recentUses = recent.filter(item => paletteKey(item.selectedPalette || item.palette || item.metadata?.selectedPalette) === key).length;
         const categoryUses = recent.filter(item => item.visualSubject?.category === visualSubject.category || item.visualRecipe?.category === visualSubject.category).length;
-        const primaryPenalty = category === categories[0] ? 0 : 0.6;
-        return { category, palette, key, recentUses, categoryUses, score: recentUses + primaryPenalty };
+        return { category, palette, key, recentUses, categoryUses, score: recentUses };
     }).sort((a, b) => a.score - b.score || a.categoryUses - b.categoryUses);
 
     return candidates[0] || {
@@ -295,7 +377,7 @@ function critiquePrompt({ originalPrompt = '', finalPrompt = '', similarity = {}
     const failures = [];
     const combined = `${originalPrompt} ${finalPrompt}`.toLowerCase();
     const finalOnly = String(finalPrompt || '').toLowerCase();
-    if (/\b(purple|violet|teal|cyberpunk|neon|glowing brain|glowing neural|ai orb|hacker room)\b/.test(finalOnly)) {
+    if (FORBIDDEN_STYLE_RE.test(finalOnly)) {
         warnings.push('prompt_contains_old_style_anchor');
     }
     if (similarity.duplicateRisk) warnings.push('similar_to_recent_visual');
@@ -303,9 +385,56 @@ function critiquePrompt({ originalPrompt = '', finalPrompt = '', similarity = {}
     if (!(visualSubject.terms || []).length && combined.length < 80) warnings.push('weak_subject_extraction');
     return {
         ok: failures.length === 0,
-        retryRecommended: warnings.includes('similar_to_recent_visual') || warnings.includes('prompt_contains_old_style_anchor'),
+        retryRecommended: warnings.includes('prompt_contains_old_style_anchor'),
         warnings,
         failures,
+    };
+}
+
+export async function computePerceptualHash(filePath) {
+    const pixels = await sharp(filePath)
+        .rotate()
+        .greyscale()
+        .resize(9, 8, { fit: 'fill' })
+        .raw()
+        .toBuffer();
+    let bits = 0n;
+    for (let row = 0; row < 8; row += 1) {
+        for (let column = 0; column < 8; column += 1) {
+            bits = (bits << 1n) | (pixels[(row * 9) + column] > pixels[(row * 9) + column + 1] ? 1n : 0n);
+        }
+    }
+    return bits.toString(16).padStart(16, '0');
+}
+
+export function perceptualHashDistance(left, right) {
+    if (!/^[a-f0-9]{16}$/i.test(left || '') || !/^[a-f0-9]{16}$/i.test(right || '')) return null;
+    let value = BigInt(`0x${left}`) ^ BigInt(`0x${right}`);
+    let distance = 0;
+    while (value) {
+        distance += Number(value & 1n);
+        value >>= 1n;
+    }
+    return distance;
+}
+
+async function findPerceptualDuplicate(imagePath, recent = []) {
+    const hash = await computePerceptualHash(imagePath);
+    const comparisons = [];
+    for (const item of recent.slice(0, 30)) {
+        let candidateHash = item.perceptualHash;
+        if (!candidateHash && item.imagePath && fs.existsSync(item.imagePath)) {
+            try { candidateHash = await computePerceptualHash(item.imagePath); } catch {}
+        }
+        const distance = perceptualHashDistance(hash, candidateHash);
+        if (distance !== null) comparisons.push({ id: item.id, imagePath: item.imagePath, distance });
+    }
+    comparisons.sort((a, b) => a.distance - b.distance);
+    return {
+        hash,
+        duplicate: comparisons[0]?.distance <= 9,
+        nearDuplicate: comparisons[0]?.distance <= 13,
+        closest: comparisons[0] || null,
     };
 }
 
@@ -335,8 +464,13 @@ function buildAltText(prompt, options = {}) {
 function scorePrompt(prompt, options = {}) {
     const text = String(prompt || '').toLowerCase();
     const positiveTextRisk = text
-        .replace(/\bno\s+(?:readable\s+)?(?:text|letters?|numbers?|captions?|labels?|signage|title|typography|logo|watermark|words?|writing|poster|book cover)\b/g, '')
-        .replace(/\bwithout\s+(?:readable\s+)?(?:text|letters?|numbers?|captions?|labels?|signage|title|typography|logo|watermark|words?|writing)\b/g, '');
+        .split(/[.!?]+/)
+        .filter(clause => {
+            const hasTextRisk = /\b(?:text|letters?|numbers?|captions?|labels?|signage|title|typography|logos?|watermarks?|words?|writing|poster|book cover)\b/.test(clause);
+            const isNegativeConstraint = /\b(?:no|without|avoid|do not|must not|never)\b/.test(clause);
+            return !(hasTextRisk && isNegativeConstraint);
+        })
+        .join(' ');
     const failures = [];
     const warnings = [];
     let score = 0.68;
@@ -357,7 +491,7 @@ function scorePrompt(prompt, options = {}) {
         warnings.push('weak_art_direction');
         score -= 0.08;
     }
-    if (/\b(meme|shitpost|ugly|chaotic|random|glitchcore|gamer rgb|logo|watermark|caption|text overlay)\b/i.test(prompt)) {
+    if (/\b(meme|shitpost|ugly|chaotic|random|glitchcore|gamer rgb|logo|watermark|caption|text overlay)\b/i.test(positiveTextRisk)) {
         warnings.push('off_brand_visual_language');
         score -= 0.16;
     }
@@ -413,41 +547,33 @@ export class SomaArtDirector {
 
     prepare(options = {}) {
         const originalPrompt = String(options.prompt || '').trim();
+        const sourcePrompt = sanitizeSourcePrompt(options.sourceText || options.postText || originalPrompt);
         const style = this.getStyle();
-        const score = scorePrompt(originalPrompt, options);
-        const needsStyle = !/\bSOMA\b/i.test(originalPrompt) && !options.noSomaStyle;
         const publicPost = Boolean(options.publicPost || options.purpose === 'bluesky-post' || options.platform === 'bluesky');
-        const visualSubject = extractVisualSubject(originalPrompt, options);
+        const visualSubject = extractVisualSubject(sourcePrompt, options);
         const recent = recentDecisions();
-        const paletteSelection = selectPaletteWithMemory(style, originalPrompt, options, visualSubject, recent);
-        const selectedMotifs = selectDynamicMotifs(style, `${originalPrompt} ${visualSubject.terms.join(' ')}`, options);
+        const paletteSelection = selectPaletteWithMemory(style, sourcePrompt, options, visualSubject, recent);
+        const selectedMotifs = selectDynamicMotifs(style, `${sourcePrompt} ${visualSubject.terms.join(' ')}`, options);
         const selectedPalette = paletteSelection.palette;
-        const promptSignature = visualSignature({ visualSubject, selectedPalette, selectedMotifs });
+        const treatment = treatmentFor(visualSubject, sourcePrompt, recent, options._artDirectorAttempt);
+        const promptSignature = visualSignature({ visualSubject, selectedPalette, selectedMotifs: [...selectedMotifs, treatment.format] });
         const similarity = analyzeSimilarity({ visualSubject, selectedPalette, selectedMotifs, signature: promptSignature }, recent);
-        const critique = critiquePrompt({ originalPrompt, finalPrompt: originalPrompt, similarity, selectedPalette, visualSubject });
+        const critique = critiquePrompt({ originalPrompt, finalPrompt: sourcePrompt, similarity, selectedPalette, visualSubject });
+        const finalPrompt = [
+            `Create ${indefiniteArticle(treatment.format)} ${treatment.format}.`,
+            `Depict this specific idea: ${sourcePrompt.slice(0, 900).replace(/[.\s]+$/, '')}.`,
+            `Primary subject: ${visualSubject.subject}. Concrete details to use only when relevant: ${selectedMotifs.join(', ')}.`,
+            `Composition: ${treatment.composition}. Lighting: ${treatment.lighting}.`,
+            `Color must come from the depicted place and materials; suggested range: ${selectedPalette.join(', ')}. Do not force a house color scheme.`,
+            `Make the post's claim visible through concrete subjects, actions, scale, and cause-and-effect. Avoid generic technology symbolism and decorative abstraction.`,
+            `Do not include ${style.bans.join(', ')}.`,
+            publicPost ? `${PUBLIC_TEXT_BANS.join(', ')}. Do not render pseudo-text.` : 'No readable text, logo, or watermark.',
+        ].join(' ').replace(/\s+/g, ' ').trim();
+
+        const score = scorePrompt(finalPrompt, options);
+        const finalCritique = critiquePrompt({ originalPrompt, finalPrompt, similarity, selectedPalette, visualSubject });
         const warnings = [...score.warnings, ...critique.warnings];
         const failures = [...score.failures, ...critique.failures];
-        if (paletteSelection.category !== visualSubject.category) warnings.push('palette_rotated_to_avoid_repetition');
-        const constraints = [
-            `Visual identity: ${style.identity}`,
-            `Visual subject: ${visualSubject.subject}. Subject anchors: ${visualSubject.terms.slice(0, 8).join(', ') || visualSubject.category}.`,
-            `Recipe: ${visualSubject.recipe}. Category: ${visualSubject.category}.`,
-            `Palette: ${selectedPalette.join(', ')}.`,
-            `Mood: ${style.mood.join(', ')}.`,
-            `Motifs: ${selectedMotifs.join(', ')}.`,
-            `Composition: ${style.composition.join(', ')}.`,
-            `Style boundaries: grounded subject matter, physical materials, practical lighting, restrained accents, no mascot identity unless explicitly requested.`,
-            `Do not include: ${style.bans.join(', ')}.`,
-            similarity.duplicateRisk ? `Freshness requirement: use a distinctly different composition, camera angle, focal object, material texture, and lighting pattern from recent SOMA images.` : '',
-            publicPost ? `Public-post hard ban: ${PUBLIC_TEXT_BANS.join(', ')}. Do not render symbolic pseudo-text or fake writing.` : '',
-        ];
-        const finalPrompt = [
-            originalPrompt,
-            needsStyle ? constraints.join(' ') : '',
-            /\b(no text|without text|no readable text)\b/i.test(originalPrompt) ? '' : 'No readable text, no letters, no numbers, no captions, no labels, no signage, no logo, no watermark.',
-        ].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
-
-        const finalCritique = critiquePrompt({ originalPrompt, finalPrompt, similarity, selectedPalette, visualSubject });
         const alt = String(options.alt || options.imageAlt || buildAltText(originalPrompt, options)).slice(0, 1000);
         return {
             ok: failures.length === 0 && finalCritique.failures.length === 0,
@@ -468,27 +594,29 @@ export class SomaArtDirector {
                 category: visualSubject.category,
                 subject: visualSubject.subject,
                 terms: visualSubject.terms,
+                format: treatment.format,
+                composition: treatment.composition,
+                lighting: treatment.lighting,
             },
             promptSignature,
             similarity,
             critique: {
                 ...finalCritique,
-                retryRecommended: finalCritique.retryRecommended || similarity.duplicateRisk,
+                retryRecommended: finalCritique.retryRecommended,
             },
-            revisionPrompt: similarity.duplicateRisk
-                ? `Fresh variant for ${visualSubject.subject}: change focal object, surface material, depth, lighting direction, and composition.`
-                : '',
+            revisionPrompt: `Use the next visual treatment for ${visualSubject.subject}; replace the format, composition, camera distance, and lighting rather than decorating the prior concept.`,
             tags: [...new Set(['art-directed', ...normalizeTags(options.tags)])],
         };
     }
 
-    reviewGenerated({ options = {}, prepared = {}, provider, imagePath, size, prompt, alt }) {
+    async reviewGenerated({ options = {}, prepared = {}, provider, imagePath, size, prompt, alt }) {
         const publicPost = Boolean(options.publicPost || options.purpose === 'bluesky-post' || options.platform === 'bluesky');
         const failures = [...(prepared.failures || [])];
         const warnings = [...(prepared.warnings || [])];
         let score = Number(prepared.promptScore ?? 0.68);
         const stat = imagePath && fs.existsSync(imagePath) ? fs.statSync(imagePath) : null;
         const dimensions = imagePath ? readPngSize(imagePath) : null;
+        let perceptual = null;
 
         if (!stat?.isFile()) {
             failures.push('missing_generated_file');
@@ -524,6 +652,25 @@ export class SomaArtDirector {
             score -= 0.1;
         }
 
+        if (stat?.isFile()) {
+            try {
+                perceptual = await findPerceptualDuplicate(imagePath, recentDecisions());
+                if (perceptual.duplicate) {
+                    failures.push('perceptual_duplicate_of_recent_image');
+                    score -= 0.35;
+                } else if (perceptual.nearDuplicate) {
+                    warnings.push('perceptually_similar_to_recent_image');
+                    score -= 0.12;
+                }
+            } catch (error) {
+                warnings.push(`perceptual_check_failed:${error.message}`);
+                if (publicPost) {
+                    failures.push('public_perceptual_check_unavailable');
+                    score -= 0.2;
+                }
+            }
+        }
+
         const finalScore = clamp01(score);
         const approved = failures.length === 0 && finalScore >= (publicPost ? 0.62 : 0.48);
         const decision = {
@@ -552,6 +699,8 @@ export class SomaArtDirector {
             failures,
             warnings,
             hash: imageHash(imagePath),
+            perceptualHash: perceptual?.hash || null,
+            perceptualSimilarity: perceptual ? { duplicate: perceptual.duplicate, nearDuplicate: perceptual.nearDuplicate, closest: perceptual.closest } : null,
             createdAt: Date.now(),
         };
         this.recordDecision(decision);

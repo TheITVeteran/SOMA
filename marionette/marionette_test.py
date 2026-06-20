@@ -25,6 +25,8 @@ check("refuses self PID", md.kill_pid(md.SELF_PID) is False)
 # 2) config sanity: dead threshold strictly greater than stuck threshold
 check("FAILS_TO_DEAD > FAILS_TO_STUCK",
       CONFIG["FAILS_TO_DEAD"] > CONFIG["FAILS_TO_STUCK"])
+check("listener threshold > ordinary dead threshold",
+      CONFIG["FAILS_TO_DEAD_WITH_LISTENER"] > CONFIG["FAILS_TO_DEAD"])
 
 # 3) circuit breaker trips after MAX_RESTARTS_IN_WINDOW restarts
 m = md.ServiceMonitor("test", {"health_url": "http://127.0.0.1:1/health", "port": 1,
@@ -66,6 +68,43 @@ check("not_installed never recovers", calls["recover"] == 0 and absent.state == 
 # 7) SOMA is detected as installed in this repo
 soma = md.ServiceMonitor("soma", CONFIG["SERVICES"]["soma"])
 check("SOMA detected installed", soma.installed is True)
+
+# 8) HTTP stalls cannot restart a process whose listener remains alive.
+original_http_ok = md.http_ok
+original_tcp_ok = md.tcp_ok
+original_pid_on_port = md.pid_on_port
+original_process_age = md.process_age_seconds
+try:
+    md.http_ok = lambda *_args, **_kwargs: False
+    md.tcp_ok = lambda *_args, **_kwargs: True
+    md.pid_on_port = lambda *_args, **_kwargs: 4242
+    md.process_age_seconds = lambda *_args, **_kwargs: 9999
+    listener_monitor = md.ServiceMonitor("listener-test", CONFIG["SERVICES"]["soma"])
+    listener_monitor.installed = True
+    recoveries = []
+    listener_monitor.recover = lambda *_args, **kwargs: recoveries.append(kwargs.get("reason", ""))
+    for _ in range(CONFIG["FAILS_TO_DEAD"] + 2):
+        listener_monitor.evaluate(_NoopSup())
+    check("live listener survives ordinary HTTP failure threshold", not recoveries)
+    while listener_monitor.consecutive_fails < CONFIG["FAILS_TO_DEAD_WITH_LISTENER"]:
+        listener_monitor.evaluate(_NoopSup())
+    check("persistent HTTP stall eventually recovers", len(recoveries) == 1)
+
+    # A missing listener remains a fast, normal recovery.
+    md.tcp_ok = lambda *_args, **_kwargs: False
+    md.pid_on_port = lambda *_args, **_kwargs: None
+    missing_monitor = md.ServiceMonitor("missing-test", CONFIG["SERVICES"]["soma"])
+    missing_monitor.installed = True
+    missing_recoveries = []
+    missing_monitor.recover = lambda *_args, **kwargs: missing_recoveries.append(kwargs.get("reason", ""))
+    for _ in range(CONFIG["FAILS_TO_DEAD"]):
+        missing_monitor.evaluate(_NoopSup())
+    check("missing listener recovers at ordinary threshold", len(missing_recoveries) == 1)
+finally:
+    md.http_ok = original_http_ok
+    md.tcp_ok = original_tcp_ok
+    md.pid_on_port = original_pid_on_port
+    md.process_age_seconds = original_process_age
 
 print("-" * 40)
 print(f"{passed} passed, {failed} failed")

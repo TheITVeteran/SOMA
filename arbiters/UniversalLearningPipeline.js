@@ -89,6 +89,7 @@ export class UniversalLearningPipeline extends EventEmitter {
     this.mnemonicArbiter = arbiters.mnemonic || null;
     this.adaptivePlanner = arbiters.planner || null;
     this.tribrain = arbiters.tribrain || null;
+    this.quadBrain = arbiters.quadBrain || (global.__SOMA_SYSTEM && global.__SOMA_SYSTEM.quadBrain) || null;
 
     // Initialize sub-systems
     await this.outcomeTracker.initialize();
@@ -176,31 +177,34 @@ export class UniversalLearningPipeline extends EventEmitter {
 
     // 🧠 KNOWLEDGE EXTRACTION: Extract concepts and notify LearningVelocityTracker
     if (this.messageBroker && standardized.input && standardized.output) {
-      try {
-        // Extract potential concepts from the interaction
-        const concepts = this._extractConceptsFromInteraction(standardized);
+      // Background extraction to prevent blocking the fast interaction loop
+      setImmediate(async () => {
+        try {
+          // Extract potential concepts from the interaction using LLM
+          const concepts = await this._extractConceptsFromInteraction(standardized);
 
-        if (concepts.length > 0) {
-          for (const concept of concepts) {
-            await this.messageBroker.sendMessage({
-              from: this.name,
-              to: 'LearningVelocityTracker',
-              type: 'knowledge_acquired',
-              payload: {
-                concept: concept.name,
-                domain: concept.domain || 'general',
-                confidence: concept.confidence || 0.7,
-                size: JSON.stringify(standardized).length,
-                source: 'interaction_log',
-                timestamp,
-                interaction_id: standardized.id
-              }
-            });
+          if (concepts && concepts.length > 0) {
+            for (const concept of concepts) {
+              await this.messageBroker.sendMessage({
+                from: this.name,
+                to: 'LearningVelocityTracker',
+                type: 'knowledge_acquired',
+                payload: {
+                  concept: concept.name,
+                  domain: concept.domain || 'general',
+                  confidence: concept.confidence || 0.7,
+                  size: JSON.stringify(standardized).length,
+                  source: 'interaction_log',
+                  timestamp,
+                  interaction_id: standardized.id
+                }
+              });
+            }
           }
+        } catch (err) {
+          console.warn(`[${this.name}] Failed to extract concepts: ${err.message}`);
         }
-      } catch (err) {
-        console.warn(`[${this.name}] Failed to extract concepts: ${err.message}`);
-      }
+      });
     }
 
     // Check if we should trigger learning
@@ -239,12 +243,42 @@ export class UniversalLearningPipeline extends EventEmitter {
         agent: interaction.agent,
         outcome: truncate(interaction.output, 300),
         reward: this.calculateReward(interaction),
+        priority: this.calculateImportance(interaction), // Inject PER priority
         nextState: null, // Will be filled by next interaction
         metadata: {
           input: truncate(interaction.input, 200),
           ...interaction.metadata
         }
       };
+
+      // 🧠 Auto-Critic Asynchronous Evaluation
+      // Grade complex interactions in the background and update the reward/priority dynamically!
+      if (this.quadBrain && (interaction.input?.length > 100 || interaction.output?.length > 100)) {
+         setImmediate(async () => {
+             try {
+                const criticPrompt = `Evaluate the following interaction. Was it a highly successful action, a neutral action, or a failure? Score it from -1.0 (total failure) to 1.0 (perfect success). Respond ONLY with a JSON object: {"score": 0.5, "reason": "why"}. Interaction: Agent: ${interaction.agent}, Action: ${interaction.type}, Input: ${truncate(interaction.input, 300)}, Output: ${truncate(interaction.output, 300)}`;
+                const response = await this.quadBrain.reason(criticPrompt, { 
+                    task: 'critic_eval', 
+                    lobe: 'LOGOS', 
+                    forceBrain: 'NEMESIS', 
+                    toolsAvailable: false 
+                });
+                
+                if (response && response.text) {
+                   const match = response.text.match(/\{[\s\S]*\}/);
+                   if (match) {
+                      const parsed = JSON.parse(match[0]);
+                      if (typeof parsed.score === 'number') {
+                          experience.reward = parsed.score; // Override static heuristic
+                          experience.priority += Math.abs(parsed.score); // Extreme variance = high replay priority
+                      }
+                   }
+                }
+             } catch (e) {
+                 // Ignore background critic errors
+             }
+         });
+      }
 
       this.experienceBuffer.addExperience(experience);
       this.stats.totalExperiences++;
@@ -400,6 +434,12 @@ export class UniversalLearningPipeline extends EventEmitter {
     if (interaction.metadata && interaction.metadata.error) importance += 0.3;
     if (interaction.metadata && interaction.metadata.success) importance += 0.1;
     if (interaction.metadata && interaction.metadata.novel) importance += 0.2;
+    if (interaction.metadata && interaction.metadata.noveltyScore) importance += interaction.metadata.noveltyScore; // From LearningVelocityTracker
+
+    // AutoCritic dynamic grading hook
+    if (interaction.metadata && interaction.metadata.criticScore) {
+       importance += Math.abs(interaction.metadata.criticScore); // High variance = High importance
+    }
 
     // Recency bonus
     const age = Date.now() - interaction.timestamp;
@@ -497,66 +537,65 @@ export class UniversalLearningPipeline extends EventEmitter {
       this.stats.lastLearningSession = Date.now();
 
       // Emit for nighttime learning to pick up
-      this.emit('learning_ready', {
+      const payload = {
         experiences: this.sampleExperiences(500),
         outcomes: this.getRecentOutcomes(500),
         stats: this.getStats()
-      });
+      };
+      
+      this.emit('learning_ready', payload);
+      
+      if (this.messageBroker) {
+        this.messageBroker.publish('learning_ready', payload);
+      }
     });
   }
 
   /**
    * Extract concepts from an interaction for knowledge graph
-   * Simple keyword-based extraction - can be enhanced with NLP
+   * Uses QuadBrain for dynamic zero-shot entity extraction
    */
-  _extractConceptsFromInteraction(interaction) {
+  async _extractConceptsFromInteraction(interaction) {
     const concepts = [];
 
     try {
-      const text = `${interaction.input} ${interaction.output}`.toLowerCase();
+      if (!this.quadBrain) return concepts;
 
-      // Domain keywords mapping
-      const domainKeywords = {
-        'programming': ['code', 'function', 'variable', 'class', 'api', 'debug', 'error', 'programming'],
-        'ai': ['ai', 'machine learning', 'neural', 'model', 'training', 'inference', 'llm'],
-        'data': ['data', 'database', 'query', 'sql', 'storage', 'cache'],
-        'system': ['system', 'process', 'memory', 'cpu', 'performance', 'optimization'],
-        'learning': ['learn', 'pattern', 'knowledge', 'understand', 'remember']
-      };
+      const text = `${interaction.input} ${interaction.output}`;
+      if (text.length < 50) return concepts; // Skip trivial interactions
 
-      // Detect domains
-      for (const [domain, keywords] of Object.entries(domainKeywords)) {
-        for (const keyword of keywords) {
-          if (text.includes(keyword)) {
-            concepts.push({
-              name: keyword,
-              domain,
-              confidence: 0.7,
-              source: 'keyword_extraction'
-            });
-            break; // One per domain to avoid duplication
+      const prompt = `Extract ONE core entity or concept from the following interaction. Respond ONLY in valid JSON format: {"name": "ConceptName", "domain": "Category"}. Interaction: ${text.substring(0, 500)}`;
+
+      const response = await this.quadBrain.reason(prompt, {
+        task: 'concept_extraction',
+        lobe: 'KNOWLEDGE',
+        forceBrain: 'NEMESIS',
+        toolsAvailable: false
+      });
+
+      if (response && response.text) {
+        try {
+          const match = response.text.match(/\{[\s\S]*\}/);
+          if (match) {
+            const parsed = JSON.parse(match[0]);
+            if (parsed.name && parsed.domain) {
+              concepts.push({
+                name: parsed.name,
+                domain: parsed.domain,
+                confidence: 0.8,
+                source: 'llm_extraction'
+              });
+            }
           }
+        } catch (parseError) {
+          // Ignore JSON parse errors for background task
         }
       }
-
-      // Extract capitalized terms (likely proper nouns/concepts)
-      const capitalizedTerms = (interaction.input || '').match(/\b[A-Z][a-z]+(?:[A-Z][a-z]+)*\b/g) || [];
-      for (const term of capitalizedTerms.slice(0, 3)) { // Limit to 3
-        if (term.length > 3) { // Skip short words
-          concepts.push({
-            name: term,
-            domain: 'general',
-            confidence: 0.6,
-            source: 'proper_noun_extraction'
-          });
-        }
-      }
-
     } catch (err) {
       console.warn(`[${this.name}] Concept extraction error: ${err.message}`);
     }
 
-    return concepts.slice(0, 5); // Limit to top 5 concepts per interaction
+    return concepts;
   }
 
   /**

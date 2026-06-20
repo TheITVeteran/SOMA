@@ -11,6 +11,7 @@ import path from 'path';
 import fs from 'fs/promises';
 import crypto from 'crypto';
 import { parse } from '@babel/parser';
+import { resolveWithinRoot } from '../core/PathSafety.js';
 
 import { VirtualShell } from './VirtualShell.js';
 
@@ -235,6 +236,11 @@ export class EngineeringSwarmArbiter extends BaseArbiterV4 {
    * Orchestrates the research, plan, debate, and synthesis cycle.
    */
   async modifyCode(filepath, request, onProgress = null) {
+    try {
+      filepath = resolveWithinRoot(this.rootPath, filepath, 'Engineering target');
+    } catch (error) {
+      return { success: false, error: error.message };
+    }
     const normPath = (filepath || '').replace(/\\/g, '/');
     const blocked = IMMUTABLE_PATHS.find(p => normPath.includes(p.replace(/\\/g, '/')));
     if (blocked) {
@@ -250,25 +256,31 @@ export class EngineeringSwarmArbiter extends BaseArbiterV4 {
     // Human-in-the-loop gate: if humanInLoopOverride is enabled in commandBridgeSettings,
     // queue a WebSocket approval request before touching production code.
     const commandBridgeSettings = this.system?.commandBridgeSettings;
-    const humanInLoop = commandBridgeSettings?.authority?.humanInLoopOverride === true;
+    // Code modification is high risk. Missing configuration must not silently
+    // disable approval during early boot.
+    const humanInLoop = commandBridgeSettings?.authority?.humanInLoopOverride !== false;
     if (humanInLoop) {
       const approvalGate = this.system?.ws?.approvalGate || this.system?.approvalGate;
-      if (approvalGate) {
-        try {
-          const approved = await approvalGate.request({
+      if (!approvalGate) {
+        return { success: false, error: 'Human approval is required but no approval gate is available' };
+      }
+      try {
+          const approval = await approvalGate.request({
             type:    'code_modification',
+            action:  `Modify SOMA code: ${path.relative(this.rootPath, filepath)}`,
             file:    filepath,
+            details: { file: filepath, request: request.slice(0, 300) },
             request: request.slice(0, 300),
-            timeout: 120000
+            timeoutMs: 120000,
+            riskScore: 0.8,
+            trustScore: 0.2,
           });
-          if (!approved) {
+          if (approval?.approved !== true) {
             this.auditLogger.warn(`[EngSwarm] 🛑 Human rejected code modification for "${filepath}"`);
-            return { success: false, error: 'Modification rejected by human-in-the-loop gate', humanRejected: true };
+            return { success: false, error: `Modification rejected by human-in-the-loop gate: ${approval?.reason || 'denied'}`, humanRejected: true };
           }
-        } catch (gateErr) {
-          // Approval gate unavailable — fail open (log and continue) so SOMA doesn't deadlock
-          this.auditLogger.warn(`[EngSwarm] ⚠️ Approval gate unavailable (${gateErr.message}) — proceeding without gate`);
-        }
+      } catch (gateErr) {
+          return { success: false, error: `Approval gate failed: ${gateErr.message}` };
       }
     }
 
@@ -382,7 +394,8 @@ export class EngineeringSwarmArbiter extends BaseArbiterV4 {
 
                 // 6. VERIFICATION (Real-world Plan Monitor)
                 emit('verify', 'Running verification commands...');
-                const verification = await this.verifyPatch(verdict.patch, plan);
+                const requiredPlan = this.buildRequiredVerificationPlan(verdict.patch, plan);
+                const verification = await this.verifyPatch(verdict.patch, requiredPlan);
 
                 if (!verification.passed) {
                     throw new Error(`Verification FAILED: ${verification.error}`);
@@ -394,7 +407,14 @@ export class EngineeringSwarmArbiter extends BaseArbiterV4 {
                 this.auditLogger.success(`[Swarm] ✅ SUCCESS: ${filepath} updated and verified on attempt ${swarmState.attempts}.`);
 
                 const duration = ((Date.now() - sessionStartTime) / 1000).toFixed(1);
-                const experienceData = { sessionId, filepath, request, success: true, duration, consensus: debate.consensus };
+                const evidence = {
+                    verification,
+                    benchmark: benchmarkMetrics,
+                    vote: votingResult,
+                    attempts: swarmState.attempts,
+                    changedFiles: verdict.patch.files.map(file => path.relative(this.rootPath, resolveWithinRoot(this.rootPath, file.path, 'Patch path')).replace(/\\/g, '/')),
+                };
+                const experienceData = { sessionId, filepath, request, success: true, duration, consensus: debate.consensus, evidence };
 
                 if (this.optimizer) this.optimizer.record(experienceData);
                 await this._logToExperienceLedger(experienceData);
@@ -409,7 +429,7 @@ export class EngineeringSwarmArbiter extends BaseArbiterV4 {
                 // Success — wipe failure context so next call starts clean
                 this._persistentFailureLog.delete(normPath);
 
-                return { success: true, sessionId, duration, verdict };
+                return { success: true, sessionId, duration, verdict, evidence };
 
             } catch (transErr) {
                 this.auditLogger.warn(`[Swarm] 🔄 CYBERNETIC PIVOT: Verification failed on attempt ${swarmState.attempts}. Rolling back and retrying with error context.`);
@@ -984,7 +1004,8 @@ You MUST output ONLY a valid JSON object matching the requested schema. Ensure a
 
   async verifyPatch(patch, tasks) {
     this.auditLogger.info(`[Ralph] 🛡️ Running autonomous verification loop via VirtualShell...`);
-    
+    const results = [];
+
     for (const task of tasks) {
         try {
             this.commandPolicy.validate(task.command);
@@ -993,20 +1014,62 @@ You MUST output ONLY a valid JSON object matching the requested schema. Ensure a
             const result = await this.shell.execute(task.command, task.timeout || 30000);
             
             this.auditLogger.debug(`[Ralph] Command: ${task.command} | Exit: ${result.exitCode}`);
+            results.push({
+                command: task.command,
+                exitCode: result.exitCode,
+                duration: result.duration || null,
+                stdout: String(result.stdout || '').slice(-2000),
+                stderr: String(result.stderr || '').slice(-2000),
+            });
 
             if (result.exitCode !== 0) {
                 this.auditLogger.error(`[Ralph] Verification failed on command: ${task.command}`);
-                return { 
+                return {
                     passed: false, 
-                    error: result.stderr || result.stdout || `Command failed with exit code ${result.exitCode}` 
+                    error: result.stderr || result.stdout || `Command failed with exit code ${result.exitCode}`,
+                    results,
                 };
             }
         } catch (e) {
-            return { passed: false, error: `Policy/Execution Error: ${e.message}` };
+            return { passed: false, error: `Policy/Execution Error: ${e.message}`, results };
         }
     }
 
-    return { passed: true };
+    return { passed: true, results };
+  }
+
+  buildRequiredVerificationPlan(patch, proposedTasks = []) {
+    const tasks = [];
+    const seen = new Set();
+    const add = (command, timeout = 30000, source = 'required') => {
+      const normalized = String(command || '').trim();
+      if (!normalized || seen.has(normalized)) return;
+      this.commandPolicy.validate(normalized);
+      seen.add(normalized);
+      tasks.push({ command: normalized, timeout, source });
+    };
+
+    for (const file of patch?.files || []) {
+      const fullPath = resolveWithinRoot(this.rootPath, file.path, 'Patch path');
+      if (/\.(js|cjs|mjs)$/i.test(fullPath)) {
+        const relative = path.relative(this.rootPath, fullPath).replace(/\\/g, '/');
+        add(`node --check "${relative}"`, 30000, 'syntax');
+      }
+    }
+
+    // The repository smoke suite is mandatory. A model-generated syntax check
+    // alone is not sufficient evidence that a SOMA change works.
+    add('npm run soma:test', 120000, 'project_smoke');
+
+    for (const task of proposedTasks || []) {
+      try {
+        add(task.command, task.timeout || 30000, 'proposed');
+      } catch (error) {
+        this.auditLogger.warn(`[Ralph] Ignoring unsafe proposed verification command: ${error.message}`);
+      }
+    }
+
+    return tasks;
   }
 
   async runSwarmBenchmark(filepath, originalCode) {

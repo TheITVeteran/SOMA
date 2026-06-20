@@ -22,12 +22,22 @@ import path from 'path';
 import { createRequire } from 'module';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
+import { createHash, randomUUID } from 'crypto';
 import { Poseidon } from './Poseidon.js';
 import { recordLoopEvent } from '../server/utils/LoopLedger.js';
+import maxAgentBridge from './MaxAgentBridge.js';
+import resourceJobScheduler from './ResourceJobScheduler.js';
+import { getAgentsForRole } from './AgentCapabilityContracts.js';
+import { validateArtifactBatch } from './AgentArtifactValidator.js';
+import { recordCapabilityTruth, recordTruth } from './TruthLedger.js';
+import { resolveWithinRoot } from './PathSafety.js';
 
+const require = createRequire(import.meta.url);
+const { atomicWriteJson } = require('./AtomicJsonStore.cjs');
 const execFileAsync = promisify(execFile);
 const ROOT = process.cwd();
 const PULSE_SELF_MOD_ROOT = path.join(ROOT, 'data', 'code-lab', 'sandbox', 'pulse-self-mod');
+const DELEGATION_DIR = path.join(ROOT, 'data', 'agent-delegations');
 
 function safeStageId(input = '') {
     return String(input || 'stage')
@@ -148,8 +158,7 @@ export class SomaAgenticExecutor {
                 args: '{"path":"relative path from SOMA root","startLine":1,"endLine":100,"maxLines":500}',
                 execute: async ({ path: filePath, startLine = 1, endLine, maxLines = 500 }) => {
                     try {
-                        const resolved = path.resolve(ROOT, filePath);
-                        if (!resolved.startsWith(ROOT)) return { error: 'Access denied: outside SOMA root' };
+                        const resolved = resolveWithinRoot(ROOT, filePath, 'Read path');
                         
                         const content = await fs.readFile(resolved, 'utf8');
                         const allLines = content.split('\n');
@@ -177,9 +186,9 @@ export class SomaAgenticExecutor {
                 args: '{"path":"relative path (must be under data/, docs/, or research/)","content":"string"}',
                 execute: async ({ path: filePath, content }) => {
                     try {
-                        const resolved = path.resolve(ROOT, filePath);
-                        const allowed = ['data', 'docs', 'research'].map(d => path.join(ROOT, d));
-                        if (!allowed.some(d => resolved.startsWith(d))) {
+                        const resolved = resolveWithinRoot(ROOT, filePath, 'Write path');
+                        const topDirectory = path.relative(ROOT, resolved).split(path.sep)[0];
+                        if (!['data', 'docs', 'research'].includes(topDirectory)) {
                             return { error: 'Write only allowed inside data/, docs/, or research/' };
                         }
                         await fs.mkdir(path.dirname(resolved), { recursive: true });
@@ -196,8 +205,7 @@ export class SomaAgenticExecutor {
                 args: '{"directory":".","filter":"optional substring to filter by"}',
                 execute: async ({ directory = '.', filter }) => {
                     try {
-                        const resolved = path.resolve(ROOT, directory);
-                        if (!resolved.startsWith(ROOT)) return { error: 'Access denied' };
+                        const resolved = resolveWithinRoot(ROOT, directory, 'List path', { allowRoot: true });
                         const entries = await fs.readdir(resolved, { withFileTypes: true });
                         const files = entries
                             .filter(e => !filter || e.name.includes(filter))
@@ -215,8 +223,7 @@ export class SomaAgenticExecutor {
                 args: '{"pattern":"regex or literal string","directory":"optional subdirectory","maxResults":20}',
                 execute: async ({ pattern, directory = '.', maxResults = 20 }) => {
                     try {
-                        const searchDir = path.resolve(ROOT, directory);
-                        if (!searchDir.startsWith(ROOT)) return { error: 'Access denied' };
+                        const searchDir = resolveWithinRoot(ROOT, directory, 'Search path', { allowRoot: true });
 
                         const results = [];
                         let regex;
@@ -298,36 +305,82 @@ export class SomaAgenticExecutor {
                 }
             },
 
-            // ── Parallel workforce (MicroAgentPool) ──────────────────────
-            // Runs multiple sub-tasks simultaneously — "in tandem"
+            // ── Parallel workforce ───────────────────────────────────────
+            // Runs artifact-producing role work concurrently. This does not
+            // depend on a theatrical pool method; it writes evidence to disk.
 
             spawn_agents: {
-                description: "Run multiple tasks IN PARALLEL using specialized micro-agents. Much faster than doing them one at a time. Agent types: fetch (HTTP), file (read/write/search), analyze (sentiment/keywords/structure), transform, validate, workflow.",
-                args: '{"tasks":[{"type":"fetch|file|analyze|transform|validate|workflow","task":{}}],"label":"optional description"}',
-                execute: async ({ tasks = [], label = 'parallel batch' }) => {
-                    if (!this.pool) return { error: 'MicroAgentPool not available — parallel execution disabled' };
-                    if (!Array.isArray(tasks) || tasks.length === 0) return { error: 'tasks must be a non-empty array' };
-                    if (tasks.length > 8) return { error: 'Max 8 parallel tasks per call' };
+                description: "Run real parallel role work and save artifacts. Roles: researcher (code evidence), coder (patch plan), tester (executable checks), reviewer (readiness verdict), ops (system health). Uses Max/Steve/Kuze/Black when available, with deterministic fallback.",
+                args: '{"objective":"string","roles":["researcher","coder","tester","reviewer","ops"],"targets":["relative/file.js"],"label":"optional description"}',
+                execute: async ({ objective, roles, targets = [], tasks = [], label = 'delegation batch', priority = 'normal' }) => {
+                    const normalized = this._normalizeDelegationTasks({ objective, roles, targets, tasks, label, priority });
+                    if (normalized.error) return { error: normalized.error };
 
-                    console.log(`[${this.name}] 🔀 Spawning ${tasks.length} agents in parallel: ${label}`);
+                    console.log(`[${this.name}] 🔀 Running ${normalized.tasks.length} real delegation tasks: ${label}`);
+                    const context = {
+                        objective: normalized.objective,
+                        targets: normalized.targets,
+                        label: normalized.label
+                    };
 
-                    const results = await Promise.allSettled(
-                        tasks.map(({ type, task: taskPayload }) =>
-                            this.pool.spawnAndExecute(type, taskPayload, { autoTerminate: true })
-                        )
-                    );
+                    const scheduled = await resourceJobScheduler.runJob({
+                        name: `spawn_agents:${normalized.label}`,
+                        type: 'agent_delegation',
+                        priority: normalized.priority || 'normal'
+                    }, async () => Promise.allSettled(
+                        normalized.tasks.map(task => this._runDelegationTask(task, context))
+                    ));
+                    if (scheduled.deferred) {
+                        return {
+                            success: false,
+                            deferred: true,
+                            reason: scheduled.reason,
+                            label: normalized.label,
+                            objective: normalized.objective
+                        };
+                    }
+                    const settled = scheduled.result;
 
-                    const output = results.map((r, i) => ({
-                        index: i,
-                        type: tasks[i]?.type,
-                        status: r.status,
-                        result: r.status === 'fulfilled' ? r.value : null,
-                        error:  r.status === 'rejected'  ? r.reason?.message : null
-                    }));
+                    const artifacts = settled.map((result, index) => {
+                        if (result.status === 'fulfilled') return result.value;
+                        return {
+                            role: normalized.tasks[index].role,
+                            type: 'delegation_error',
+                            passed: false,
+                            error: result.reason?.message || String(result.reason)
+                        };
+                    });
+                    const artifactPath = await this._writeDelegationArtifacts({
+                        objective: normalized.objective,
+                        label: normalized.label,
+                        targets: normalized.targets,
+                        artifacts
+                    });
+                    const validation = validateArtifactBatch(artifacts);
+                    const passed = artifacts.every(a => a.passed !== false) && validation.passed;
+                    const summary = artifacts.map(a => `${a.role}:${a.type}:${a.passed === false ? 'needs_work' : 'ok'}`).join(', ');
 
-                    const succeeded = output.filter(o => o.status === 'fulfilled').length;
-                    console.log(`[${this.name}] 🔀 Parallel batch done: ${succeeded}/${tasks.length} succeeded`);
-                    return { results: output, succeeded, total: tasks.length, label };
+                    await recordTruth(`Agent delegation completed: ${normalized.label}`, {
+                        status: passed ? 'verified' : 'rejected',
+                        confidence: validation.score / 100,
+                        proof: validation,
+                        source: 'soma_agentic_executor',
+                        artifactPath,
+                        metadata: { roles: normalized.tasks.map(t => t.role), summary }
+                    }).catch(() => {});
+
+                    console.log(`[${this.name}] 🔀 Delegation artifacts written: ${artifactPath}`);
+                    return {
+                        success: true,
+                        realWork: true,
+                        label: normalized.label,
+                        objective: normalized.objective,
+                        artifactPath,
+                        artifacts,
+                        validation,
+                        passed,
+                        summary
+                    };
                 }
             },
 
@@ -453,7 +506,7 @@ export class SomaAgenticExecutor {
             // Prevents a broken self-modification from crashing the system.
 
             run_tests: {
-                description: 'Run SOMA\'s test suite or a specific test file to verify a code change works before committing. Use BEFORE write_file when modifying SOMA\'s own code. Returns pass/fail + output.',
+                description: 'Run SOMA\'s test suite or a specific test/build command proof after a code change and before DONE. Use with verify_syntax when modifying SOMA code. Returns pass/fail + output.',
                 args: '{"testFile":"optional specific test file path","timeout":30000}',
                 execute: async ({ testFile, timeout = 30000 }) => {
                     const shell = this.system?.virtualShell;
@@ -480,8 +533,7 @@ export class SomaAgenticExecutor {
                     if (!shell) return { error: 'VirtualShell not available' };
                     if (!filePath) return { error: 'filePath required' };
                     try {
-                        const resolved = path.resolve(ROOT, filePath);
-                        if (!resolved.startsWith(ROOT)) return { error: 'Access denied: outside SOMA root' };
+                        const resolved = resolveWithinRoot(ROOT, filePath, 'Syntax-check path');
                         const result = await shell.execute(`node --check "${resolved}" 2>&1`, 10000);
                         return {
                             valid:    result.exitCode === 0,
@@ -500,8 +552,12 @@ export class SomaAgenticExecutor {
                 execute: async ({ filepath, content, reason = '' }) => {
                     if (!filepath) return { error: 'filepath required' };
                     if (typeof content !== 'string' || content.length < 20) return { error: 'content must be the full proposed file contents' };
-                    const sourcePath = path.resolve(ROOT, filepath);
-                    if (!sourcePath.startsWith(ROOT)) return { error: 'Access denied: outside SOMA root' };
+                    let sourcePath;
+                    try {
+                        sourcePath = resolveWithinRoot(ROOT, filepath, 'Sandbox source path');
+                    } catch (error) {
+                        return { error: error.message };
+                    }
                     if (!isCodeFile(sourcePath)) return { error: 'Only .js/.cjs/.mjs/.ts files can be staged' };
                     try {
                         const sourceStat = await fs.stat(sourcePath);
@@ -576,8 +632,12 @@ export class SomaAgenticExecutor {
                     if (!swarm) return { error: 'EngineeringSwarm not available — self-modification disabled' };
                     if (!filepath) return { error: 'filepath required' };
                     if (!request)  return { error: 'request required — describe the change precisely' };
-                    const resolved = path.resolve(ROOT, filepath);
-                    if (!resolved.startsWith(ROOT)) return { error: 'Access denied: outside SOMA root' };
+                    let resolved;
+                    try {
+                        resolved = resolveWithinRoot(ROOT, filepath, 'Self-modification path');
+                    } catch (error) {
+                        return { error: error.message };
+                    }
                     if (!/\.(js|cjs|mjs|ts)$/.test(resolved)) return { error: 'Only .js/.cjs/.mjs/.ts files allowed' };
                     try {
                         // Route through SelfModificationPipeline when available
@@ -592,8 +652,11 @@ export class SomaAgenticExecutor {
                         }
                         // Fallback: direct EngineeringSwarm (no review layer)
                         const result = await swarm.modifyCode(resolved, request);
+                        if (!result?.success) {
+                            return { success: false, filepath, error: result?.error || 'Engineering Swarm failed without an error message' };
+                        }
                         const summary = result?.summary || result?.output || result?.result || 'Modification applied via Engineering Swarm safety pipeline';
-                        return { success: true, filepath, summary };
+                        return { success: true, filepath, summary, evidence: result.evidence || null };
                     } catch (e) {
                         return { error: `modify_code failed: ${e.message}`, filepath };
                     }
@@ -613,13 +676,18 @@ export class SomaAgenticExecutor {
                         const dir = path.join(ROOT, 'data', 'goal-progress');
                         await fs.mkdir(dir, { recursive: true });
                         const file = path.join(dir, `${this._currentGoalId}.json`);
-                        await fs.writeFile(file, JSON.stringify({
+                        const compacted = (this._currentObservations || []).map(obs => this._compactObservation(obs));
+                        const evidenceTools = new Set(['write_file', 'run_tests', 'verify_syntax', 'pulse_stage_code', 'modify_code', 'spawn_agents', 'memory_store']);
+                        atomicWriteJson(file, {
+                            version: 2,
                             goalId:       this._currentGoalId,
                             savedAt:      Date.now(),
                             summary,
                             nextSteps,
-                            observations: this._currentObservations || []
-                        }, null, 2), 'utf8');
+                            totalIterations: this._currentTotalIterations || compacted.length,
+                            recentObservations: compacted.slice(-12),
+                            evidenceObservations: compacted.filter(obs => evidenceTools.has(obs.tool)).slice(-24)
+                        });
                         return { success: true, savedAt: new Date().toISOString(), summary, nextSteps,
                             message: 'Progress saved — next heartbeat will resume from here' };
                     } catch (e) {
@@ -634,43 +702,259 @@ export class SomaAgenticExecutor {
     // MAIN EXECUTION LOOP
     // ─────────────────────────────────────────────────────────────────────
 
+    async _artifactFact(goal, executionId, obs, type, candidate, extraPassed = true) {
+        if (!candidate) return null;
+        let filePath;
+        try {
+            filePath = resolveWithinRoot(ROOT, candidate, 'Artifact path');
+        } catch {
+            return null;
+        }
+        try {
+            const stat = await fs.stat(filePath);
+            if (!stat.isFile() || stat.size <= 0) return null;
+            const content = await fs.readFile(filePath);
+            const createdForGoal = stat.mtimeMs >= Number(goal.createdAt || goal.startedAt || 0) - 1000;
+            return {
+                receiptId: randomUUID(),
+                goalId: goal.id,
+                executionId,
+                type,
+                tool: obs.tool,
+                path: path.relative(ROOT, filePath).replace(/\\/g, '/'),
+                sha256: createHash('sha256').update(content).digest('hex'),
+                bytes: stat.size,
+                observedAt: Number(obs.observedAt || Date.now()),
+                passed: Boolean(extraPassed && createdForGoal)
+            };
+        } catch {
+            return null;
+        }
+    }
+
+    _criterionRequirements(criterion = '') {
+        const text = String(criterion).toLowerCase();
+        const requirements = new Set();
+        if (/inspect|read|source path|relevant file/.test(text)) requirements.add('inspection');
+        if (/test|syntax|build|executable|verification result|command pass/.test(text)) requirements.add('executable');
+        if (/artifact|output|deliverable|file exists|recorded|produce|baseline|metric/.test(text)) requirements.add('artifact');
+        if (/summary|final status|decision|verdict|cite|changed files/.test(text)) requirements.add('summary');
+        if (/next step|lesson|reason to stop/.test(text)) requirements.add('next');
+        if (!requirements.size) requirements.add('substantive');
+        return [...requirements];
+    }
+
+    _factSatisfies(requirement, fact) {
+        if (!fact?.passed) return false;
+        const artifactTypes = new Set(['artifact_exists', 'sandbox_stage', 'code_modification', 'delegation_artifact', 'memory_receipt']);
+        if (requirement === 'inspection') return fact.type === 'inspection';
+        if (requirement === 'executable') return ['tests', 'syntax', 'sandbox_stage'].includes(fact.type);
+        if (requirement === 'artifact') return artifactTypes.has(fact.type);
+        if (requirement === 'summary') return fact.type === 'grounded_summary';
+        if (requirement === 'next') return fact.type === 'grounded_next_step';
+        return artifactTypes.has(fact.type) || ['tests', 'syntax'].includes(fact.type);
+    }
+
+    async _verifyCompletionEvidence(goal, claimedResult, falsificationTest, observations = [], executionId = randomUUID()) {
+        const facts = [];
+        const goalStartedAt = Number(goal.startedAt || goal.createdAt || 0);
+
+        for (const obs of observations) {
+            const result = obs?.result || {};
+            if (!obs?.tool || result.error) continue;
+            const observedAt = Number(obs.observedAt || 0);
+            const belongsToGoal = !obs.goalId || obs.goalId === goal.id;
+            const timely = !observedAt || observedAt >= goalStartedAt - 1000;
+            if (!belongsToGoal || !timely) continue;
+
+            if (['list_files', 'search_code', 'read_file'].includes(obs.tool)) {
+                const hasResult = obs.tool === 'read_file'
+                    ? typeof result.content === 'string' && result.content.length > 0
+                    : (Array.isArray(result.files) && result.files.length >= 0) || (Array.isArray(result.matches) && result.matches.length >= 0);
+                facts.push({ receiptId: randomUUID(), goalId: goal.id, executionId, type: 'inspection', tool: obs.tool, observedAt: observedAt || Date.now(), passed: hasResult });
+            }
+
+            if (obs.tool === 'write_file' && result.success) {
+                const fact = await this._artifactFact(goal, executionId, obs, 'artifact_exists', result.path || obs.args?.path);
+                if (fact) facts.push(fact);
+            }
+            if (obs.tool === 'run_tests') {
+                facts.push({ receiptId: randomUUID(), goalId: goal.id, executionId, type: 'tests', tool: obs.tool, observedAt: observedAt || Date.now(), passed: result.passed === true, output: String(result.output || '').slice(-1200) });
+            }
+            if (obs.tool === 'verify_syntax') {
+                facts.push({ receiptId: randomUUID(), goalId: goal.id, executionId, type: 'syntax', tool: obs.tool, path: result.filePath || obs.args?.filePath || null, observedAt: observedAt || Date.now(), passed: result.valid === true });
+            }
+            if (obs.tool === 'pulse_stage_code') {
+                const fact = await this._artifactFact(goal, executionId, obs, 'sandbox_stage', result.manifestPath, result.success === true && result.syntax?.valid === true);
+                if (fact) facts.push(fact);
+            }
+            if (obs.tool === 'modify_code' && result.success) {
+                const fact = await this._artifactFact(goal, executionId, obs, 'code_modification', result.filepath || obs.args?.filepath, true);
+                if (fact) facts.push(fact);
+            }
+            if (obs.tool === 'spawn_agents') {
+                const fact = await this._artifactFact(goal, executionId, obs, 'delegation_artifact', result.artifactPath, result.success === true && result.validation?.passed !== false);
+                if (fact) facts.push(fact);
+            }
+            if (obs.tool === 'memory_store') {
+                facts.push({ receiptId: randomUUID(), goalId: goal.id, executionId, type: 'memory_receipt', tool: obs.tool, observedAt: observedAt || Date.now(), passed: result.success === true });
+            }
+        }
+
+        const groundedFacts = facts.filter(fact => fact.passed && fact.type !== 'inspection');
+        if (String(claimedResult || '').trim() && groundedFacts.length) {
+            facts.push({ receiptId: randomUUID(), goalId: goal.id, executionId, type: 'grounded_summary', tool: 'done_response', observedAt: Date.now(), passed: true, claim: String(claimedResult).slice(0, 1200) });
+            if (/next|lesson|stop|follow[- ]?up|recommend/i.test(claimedResult)) {
+                facts.push({ receiptId: randomUUID(), goalId: goal.id, executionId, type: 'grounded_next_step', tool: 'done_response', observedAt: Date.now(), passed: true });
+            }
+        }
+
+        const contract = goal.metadata?.goalContract || {};
+        const criteria = goal.successCriteria || goal.metadata?.successCriteria || contract.successCriteria || [];
+        const criterionCoverage = criteria.map((criterion, index) => {
+            const requirements = this._criterionRequirements(criterion);
+            const requirementCoverage = requirements.map(requirement => ({
+                requirement,
+                receiptIds: facts.filter(fact => this._factSatisfies(requirement, fact)).map(fact => fact.receiptId),
+                passed: facts.some(fact => this._factSatisfies(requirement, fact))
+            }));
+            return {
+                criterionId: `criterion-${index + 1}`,
+                criterion: String(criterion),
+                requirements: requirementCoverage,
+                passed: requirementCoverage.every(item => item.passed)
+            };
+        });
+
+        const expectedArtifacts = [
+            goal.metadata?.expectedArtifact,
+            ...(goal.verification?.filesExist || []),
+            ...(goal.metadata?.verification?.filesExist || [])
+        ].filter(Boolean).map(value => String(value).replace(/\\/g, '/'));
+        const expectedArtifactChecks = expectedArtifacts.map(expected => ({
+            expected,
+            passed: facts.some(fact => fact.passed && fact.path === expected),
+            receiptIds: facts.filter(fact => fact.passed && fact.path === expected).map(fact => fact.receiptId)
+        }));
+
+        const requiredEvidence = goal.verification?.evidenceRequired || goal.metadata?.evidenceRequired || contract.evidenceRequired || [];
+        const requiredChecks = requiredEvidence.map(key => {
+            const requirement = key === 'summary' ? 'summary' : key === 'artifact' ? 'artifact' : key === 'tests' ? 'executable' : 'substantive';
+            return { key, passed: facts.some(fact => this._factSatisfies(requirement, fact)) };
+        });
+
+        const passed = facts.some(fact => fact.passed && fact.type !== 'inspection') &&
+            criterionCoverage.every(item => item.passed) &&
+            expectedArtifactChecks.every(item => item.passed) &&
+            requiredChecks.every(item => item.passed) &&
+            Boolean(String(falsificationTest || '').trim());
+
+        return {
+            version: 2,
+            goalId: goal.id,
+            executionId,
+            passed,
+            falsificationTest: String(falsificationTest || '').slice(0, 1000),
+            checks: facts,
+            criterionCoverage,
+            expectedArtifactChecks,
+            requiredChecks,
+            checkedAt: Date.now()
+        };
+    }
+
+    _compactObservation(obs = {}) {
+        const result = obs.result && typeof obs.result === 'object' ? obs.result : obs.result;
+        let compactResult = result;
+        if (result && typeof result === 'object') {
+            compactResult = {};
+            const durableKeys = ['success', 'passed', 'valid', 'path', 'filepath', 'filePath', 'artifactPath', 'manifestPath', 'stagedPath', 'stored', 'exitCode', 'summary', 'validation', 'syntax'];
+            for (const key of durableKeys) if (result[key] !== undefined) compactResult[key] = result[key];
+            if (typeof result.content === 'string') compactResult.content = result.content.slice(0, 1200);
+            if (typeof result.output === 'string') compactResult.output = result.output.slice(-1200);
+            if (Array.isArray(result.files)) compactResult.files = result.files.slice(0, 20);
+            if (Array.isArray(result.matches)) compactResult.matches = result.matches.slice(0, 20);
+            if (Array.isArray(result.memories)) compactResult.memories = result.memories.slice(0, 10);
+            if (result.error) compactResult.error = String(result.error).slice(0, 1000);
+        }
+        return {
+            step: obs.step,
+            goalId: obs.goalId,
+            executionId: obs.executionId,
+            observedAt: obs.observedAt,
+            tool: obs.tool,
+            args: obs.args,
+            think: typeof obs.think === 'string' ? obs.think.slice(0, 500) : obs.think,
+            result: compactResult,
+            _brainError: obs._brainError,
+            _poseidonBlock: obs._poseidonBlock,
+            _formatError: obs._formatError,
+            thought: typeof obs.thought === 'string' ? obs.thought.slice(0, 1200) : obs.thought
+        };
+    }
+
     async execute(goal) {
         if (!this.brain) return { done: false, error: 'No brain available', iterations: 0 };
 
         const started      = Date.now();
+        const executionId  = randomUUID();
         const observations = [];
         let   iteration    = 0;
+        let   sessionIterations = 0;
+        let   timedOut = false;
         let   finalResult  = null;
+        let   completionEvidence = null;
         const toolsUsed    = new Set();
 
         console.log(`[${this.name}] 🚀 Starting agentic execution: "${goal.title}"`);
 
         // Prime context with relevant memories
         const priorMemories = await this._recallMemories(goal.title);
+        const priorAutopsy = await this._loadGoalAutopsy(goal);
 
         // Inter-session continuity: expose goal context to save_progress tool
         this._currentGoalId = goal.id;
         this._currentObservations = observations;
+        this._currentTotalIterations = 0;
 
         // Attempt to resume from a prior session if heartbeat ran out of steps
         const _progressFile = path.join(ROOT, 'data', 'goal-progress', `${goal.id}.json`);
+        const _ledgerFile = path.join(ROOT, 'data', 'goal-progress', `${goal.id}.observations.jsonl`);
+        const _evidenceFile = path.join(ROOT, 'data', 'goal-evidence', `${goal.id}.json`);
         try {
             const _raw = await fs.readFile(_progressFile, 'utf8');
             const _prior = JSON.parse(_raw);
-            if (Array.isArray(_prior.observations) && _prior.observations.length > 0) {
-                observations.push(..._prior.observations);
-                iteration = _prior.observations.length;
-                console.log(`[${this.name}] 📂 Resumed: ${_prior.observations.length} prior steps for "${goal.title}"`);
+            const priorEvidence = Array.isArray(_prior.evidenceObservations) ? _prior.evidenceObservations : [];
+            const priorRecent = Array.isArray(_prior.recentObservations)
+                ? _prior.recentObservations
+                : Array.isArray(_prior.observations)
+                    ? _prior.observations.slice(-12)
+                    : [];
+            const mergedPrior = [...priorEvidence, ...priorRecent]
+                .filter((item, index, all) => all.findIndex(other => other.step === item.step && other.tool === item.tool) === index)
+                .sort((a, b) => Number(a.step || 0) - Number(b.step || 0));
+            if (mergedPrior.length > 0) {
+                observations.push(...mergedPrior);
+                iteration = Number.isFinite(_prior.totalIterations)
+                    ? _prior.totalIterations
+                    : Math.max(...mergedPrior.map(item => Number(item.step || 0)), mergedPrior.length);
+                for (const obs of mergedPrior) if (obs.tool) toolsUsed.add(obs.tool);
+                console.log(`[${this.name}] 📂 Resumed: ${mergedPrior.length} compacted observations, ${iteration} cumulative steps for "${goal.title}"`);
             }
         } catch { /* no saved progress — fresh start */ }
+        const sessionObservationStart = observations.length;
+        this._currentTotalIterations = iteration;
 
-        while (iteration < this.maxIterations) {
+        // maxIterations is a per-heartbeat budget. Restored history must not
+        // consume the next session's budget or a 15-step goal can never resume.
+        while (sessionIterations < this.maxIterations) {
             if (Date.now() - started > this.sessionTimeout) {
                 console.log(`[${this.name}] ⏱️ Session timeout at step ${iteration}`);
+                timedOut = true;
                 break;
             }
 
-            const userPrompt = this._buildPrompt(goal, observations, priorMemories);
+            const userPrompt = this._buildPrompt(goal, observations, priorMemories, priorAutopsy);
             const systemPrompt = `You are SOMA's AUTONOMOUS AGENT ENGINE — not a conversational AI.
 Respond in ONE of these exact formats and NOTHING else:
 
@@ -700,6 +984,9 @@ ABSOLUTE RULES:
                 console.warn(`[${this.name}] Brain error at step ${iteration}:`, e.message);
                 observations.push({
                     step: iteration + 1,
+                    goalId: goal.id,
+                    executionId,
+                    observedAt: Date.now(),
                     _brainError: true,
                     thought: `[BRAIN ERROR at step ${iteration + 1}] ${e.message}`
                 });
@@ -707,6 +994,8 @@ ABSOLUTE RULES:
                 const recentErrors = observations.slice(-2).filter(o => o._brainError);
                 if (recentErrors.length >= 2) break;
                 iteration++;
+                sessionIterations++;
+                this._currentTotalIterations = iteration;
                 continue;
             }
 
@@ -719,12 +1008,13 @@ ABSOLUTE RULES:
                 const testResultRaw = text.match(/TEST_RESULT:\s*(true|false)/i)?.[1]?.toLowerCase();
                 const testResult = testResultRaw === 'true';
 
+                completionEvidence = await this._verifyCompletionEvidence(goal, claimedResult, falsificationTest, observations, executionId);
                 const verified = await this._poseidon.verify(claimedResult, {
                     falsificationTest: falsificationTest || null,
-                    testResult: falsificationTest ? testResult : false
+                    testResult: Boolean(falsificationTest && testResult && completionEvidence.passed)
                 });
 
-                if (verified.state === 'TRUE') {
+                if (verified.state === 'TRUE' && completionEvidence.passed) {
                     await recordLoopEvent({
                         loop: 'autonomous_work',
                         phase: 'poseidon_verified_done',
@@ -737,7 +1027,8 @@ ABSOLUTE RULES:
                         evidence: {
                             goalId: goal.id || null,
                             iteration: iteration + 1,
-                            poseidon: verified
+                            poseidon: verified,
+                            completionEvidence
                         },
                         nextStep: 'Report completion with evidence-backed result.'
                     }).catch(() => {});
@@ -757,7 +1048,8 @@ ABSOLUTE RULES:
                         evidence: {
                             goalId: goal.id || null,
                             iteration: iteration + 1,
-                            poseidon: verified
+                            poseidon: verified,
+                            completionEvidence
                         },
                         nextStep: 'Continue work or end as partial after repeated unverified DONE claims.'
                     }).catch(() => {});
@@ -776,11 +1068,17 @@ ABSOLUTE RULES:
                         console.warn(`[${this.name}] | Poseidon: 2 unverified DONE claims — ending as partial`);
                         break;
                     }
-                    console.warn(`[${this.name}] ${verified.prefix} Poseidon ${verified.state}: "${verified.reason}"`);
+                    const evidenceReason = completionEvidence.passed
+                        ? verified.reason
+                        : 'No successful artifact, test, syntax, staging, delegation, or memory receipt was observed.';
+                    console.warn(`[${this.name}] ${verified.prefix} Poseidon ${verified.state}: "${evidenceReason}"`);
                     observations.push({
                         step: iteration + 1,
+                        goalId: goal.id,
+                        executionId,
+                        observedAt: Date.now(),
                         _poseidonBlock: true,
-                        thought: `[POSEIDON ${verified.state}] Your DONE claim was rejected: ${verified.reason}
+                        thought: `[POSEIDON ${verified.state}] Your DONE claim was rejected: ${evidenceReason}
 You must provide:
 FALSIFICATION_TEST: [a specific, verifiable check — e.g., "file research/topic.md exists and contains findings"]
 TEST_RESULT: true
@@ -849,6 +1147,9 @@ Before declaring DONE, verify your own work using read_file or list_files.`
                 toolsUsed.add(toolCall.tool);
                 observations.push({
                     step: iteration + 1,
+                    goalId: goal.id,
+                    executionId,
+                    observedAt: Date.now(),
                     tool: toolCall.tool,
                     args: toolCall.args,
                     think,
@@ -871,33 +1172,84 @@ Before declaring DONE, verify your own work using read_file or list_files.`
                 console.warn(`[${this.name}] ⚠️ Format error at step ${iteration + 1} (${totalFormatErrors + 1}/3): "${text.substring(0, 80)}"`);
                 observations.push({
                     step: iteration + 1,
+                    goalId: goal.id,
+                    executionId,
+                    observedAt: Date.now(),
                     _formatError: true,
                     thought: `[FORMAT CORRECTION] You must use THINK:/TOOL:/ARGS: or DONE:/RESULT: format. You responded with narrative text. Example correct response:\nTHINK: I need to recall what I know about this goal\nTOOL: memory_recall\nARGS: {"query": "${(goal.title || '').substring(0, 50)}", "limit": 5}`
                 });
             }
 
             iteration++;
+            sessionIterations++;
+            this._currentTotalIterations = iteration;
         }
 
-        const needsContinuation = !finalResult && iteration >= this.maxIterations && observations.length > 0;
+        const newObservations = observations.slice(sessionObservationStart).map(obs => this._compactObservation(obs));
+        if (newObservations.length) {
+            try {
+                await fs.mkdir(path.dirname(_ledgerFile), { recursive: true });
+                await fs.appendFile(_ledgerFile, `${newObservations.map(obs => JSON.stringify(obs)).join('\n')}\n`, 'utf8');
+            } catch (error) {
+                console.warn(`[${this.name}] Could not append observation ledger: ${error.message}`);
+            }
+        }
+
+        let evidencePath = null;
+        if (finalResult && completionEvidence) {
+            try {
+                atomicWriteJson(_evidenceFile, completionEvidence);
+                evidencePath = path.relative(ROOT, _evidenceFile).replace(/\\/g, '/');
+            } catch (error) {
+                finalResult = null;
+                completionEvidence = { ...completionEvidence, passed: false, persistenceError: error.message };
+                console.warn(`[${this.name}] Completion evidence could not be persisted: ${error.message}`);
+            }
+        }
+
+        const needsContinuation = !finalResult && observations.length > 0 && (sessionIterations >= this.maxIterations || timedOut || Boolean(completionEvidence?.persistenceError));
         if (needsContinuation) {
             try {
                 await fs.mkdir(path.dirname(_progressFile), { recursive: true });
-                await fs.writeFile(_progressFile, JSON.stringify({
+                const compacted = observations.map(obs => this._compactObservation(obs));
+                const evidenceTools = new Set(['write_file', 'run_tests', 'verify_syntax', 'pulse_stage_code', 'modify_code', 'spawn_agents', 'memory_store']);
+                atomicWriteJson(_progressFile, {
+                    version: 2,
                     goalId: goal.id,
                     savedAt: Date.now(),
-                    reason: 'max_iterations_reached',
-                    summary: `Reached ${iteration}/${this.maxIterations} agentic steps without verified completion.`,
+                    reason: timedOut ? 'session_timeout' : 'max_iterations_reached',
+                    summary: `Reached ${sessionIterations}/${this.maxIterations} steps this session (${iteration} cumulative) without verified completion.`,
                     nextSteps: 'Resume from stored observations and continue with the next concrete tool-backed action.',
-                    observations
-                }, null, 2), 'utf8');
-            } catch {}
+                    totalIterations: iteration,
+                    recentObservations: compacted.slice(-12),
+                    evidenceObservations: compacted.filter(obs => evidenceTools.has(obs.tool)).slice(-24),
+                    observationLedger: path.relative(ROOT, _ledgerFile).replace(/\\/g, '/')
+                });
+            } catch (error) {
+                console.warn(`[${this.name}] Could not persist continuation checkpoint: ${error.message}`);
+            }
+        } else if (finalResult) {
+            const compacted = observations.map(obs => this._compactObservation(obs));
+            atomicWriteJson(_progressFile, {
+                version: 2,
+                goalId: goal.id,
+                savedAt: Date.now(),
+                reason: 'awaiting_goalplanner_verification',
+                summary: finalResult,
+                nextSteps: 'GoalPlanner must commit the verified completion before this checkpoint is removed.',
+                totalIterations: iteration,
+                recentObservations: compacted.slice(-12),
+                evidenceObservations: compacted.filter(obs => ['write_file', 'run_tests', 'verify_syntax', 'pulse_stage_code', 'modify_code', 'spawn_agents', 'memory_store'].includes(obs.tool)).slice(-24),
+                evidencePath,
+                observationLedger: path.relative(ROOT, _ledgerFile).replace(/\\/g, '/')
+            });
         } else {
-            // Clear saved progress only when complete or no useful state exists.
             fs.unlink(_progressFile).catch(() => {});
         }
+
         this._currentGoalId = null;
         this._currentObservations = null;
+        this._currentTotalIterations = null;
 
         // Summarise and persist
         const toolsList = [...toolsUsed].join(', ') || 'reasoning only';
@@ -909,12 +1261,12 @@ Before declaring DONE, verify your own work using read_file or list_files.`
         const stopReason = finalResult
             ? 'poseidon_verified'
             : needsContinuation
-                ? 'max_iterations_reached'
+                ? (timedOut ? 'session_timeout' : 'max_iterations_reached')
                 : 'unverified_or_interrupted';
         const fallbackResult = needsContinuation
-            ? `Incomplete: reached ${iteration}/${this.maxIterations} steps before verified completion. Continue from ${_progressFile}.`
-            : `Incomplete: ${iteration} steps, tools: ${toolsList}`;
-        const summary = `Executed "${goal.title}" in ${iteration} step(s) using [${toolsList}]. ${finalResult ? 'COMPLETED.' : executionState}.`;
+            ? `Incomplete: used ${sessionIterations}/${this.maxIterations} steps this session (${iteration} cumulative) before verified completion. Continue from ${_progressFile}.`
+            : `Incomplete: ${sessionIterations} session steps (${iteration} cumulative), tools: ${toolsList}`;
+        const summary = `Executed "${goal.title}" in ${sessionIterations} session step(s), ${iteration} cumulative, using [${toolsList}]. ${finalResult ? 'COMPLETED.' : executionState}.`;
         if (this.memory?.remember) {
             await this.memory.remember(summary, {
                 type: 'goal_execution', importance: 7, goalId: goal.id, state: executionState, stopReason
@@ -926,10 +1278,15 @@ Before declaring DONE, verify your own work using read_file or list_files.`
             state:        executionState,
             stopReason,
             result:       finalResult || fallbackResult,
-            iterations:   iteration,
+            iterations:   sessionIterations,
+            totalIterations: iteration,
             maxIterations: this.maxIterations,
             toolsUsed:    [...toolsUsed],
             observations,
+            completionEvidence,
+            evidencePath,
+            checkpointFile: _progressFile,
+            observationLedger: path.relative(ROOT, _ledgerFile).replace(/\\/g, '/'),
             needsContinuation,
             continuationFile: needsContinuation ? _progressFile : null
         };
@@ -939,7 +1296,7 @@ Before declaring DONE, verify your own work using read_file or list_files.`
     // PROMPT BUILDER
     // ─────────────────────────────────────────────────────────────────────
 
-    _buildPrompt(goal, observations, priorMemories) {
+    _buildPrompt(goal, observations, priorMemories, priorAutopsy = null) {
         const toolDocs = Object.entries(this._tools).map(([name, t]) =>
             `  ${name}\n    What: ${t.description}\n    Args: ${t.args}`
         ).join('\n\n');
@@ -948,12 +1305,25 @@ Before declaring DONE, verify your own work using read_file or list_files.`
             ? `\nWHAT I ALREADY KNOW:\n${priorMemories.map(m => `• ${m}`).join('\n')}\n`
             : '';
 
-        const obsBlock = observations.length > 0
-            ? `\nSTEPS COMPLETED SO FAR:\n${observations.map(o =>
+        const promptObservations = observations.slice(-12);
+        const obsBlock = promptObservations.length > 0
+            ? `\nRECENT STEPS (full history is in the observation ledger):\n${promptObservations.map(o =>
                 o.tool
                     ? `[Step ${o.step}] ${o.tool} → ${JSON.stringify(o.result).substring(0, 250)}`
                     : `[Step ${o.step}] Thought: ${(o.thought || '').substring(0, 250)}`
               ).join('\n')}\n`
+            : '';
+        const contract = goal.metadata?.goalContract || {};
+        const successCriteria = goal.successCriteria || goal.metadata?.successCriteria || contract.successCriteria || [];
+        const contractBlock = successCriteria.length
+            ? `\nVERIFIABLE SUCCESS CRITERIA:\n${successCriteria.map((criterion, index) => `${index + 1}. ${criterion}`).join('\n')}\nEXPECTED ARTIFACT: ${goal.metadata?.expectedArtifact || 'use a goal-specific artifact path and report it'}\n`
+            : '';
+        const autopsyBlock = priorAutopsy
+            ? `\nLAST FAILED ATTEMPT AUTOPSY:\n- Failed verification: ${priorAutopsy.failedVerification || priorAutopsy.reason || 'unknown'}\n- Attempted strategy: ${priorAutopsy.attemptedStrategy || 'unknown'}\n- Next strategy: ${priorAutopsy.nextStrategy || 'inspect verifier failure and produce missing proof'}\n- Do not repeat: ${(priorAutopsy.bannedRepeatActions || []).join(' | ')}\n`
+            : '';
+
+        const complexityBlock = this._shouldDelegate(goal, observations)
+            ? `\nDELEGATION REQUIREMENT:\nThis goal is complex enough for parallel work. Your first concrete action should be spawn_agents with roles ["researcher","coder","tester","reviewer"] and relevant target files. The tool must return saved artifacts: research_report, code_patch_plan, test_report, and review_verdict. Use those artifacts before editing or claiming DONE.\n`
             : '';
 
         return `You are SOMA's autonomous execution engine. Complete the goal below by using tools one step at a time.
@@ -961,7 +1331,7 @@ Before declaring DONE, verify your own work using read_file or list_files.`
 GOAL: ${goal.title}
 DESCRIPTION: ${goal.description || 'No additional description'}
 PROGRESS SO FAR: ${goal.metrics?.progress || 0}%
-${memBlock}${obsBlock}
+${memBlock}${autopsyBlock}${complexityBlock}${contractBlock}${obsBlock}
 AVAILABLE TOOLS:
 ${toolDocs}
 
@@ -986,6 +1356,7 @@ RULES:
 - Never make up URLs — only fetch real URLs you construct from known patterns.
 - If a tool returns an error, try a different approach.
 - CRITICAL: When modifying SOMA's own code files — always run verify_syntax THEN run_tests before declaring the goal complete. Never commit broken code to yourself.
+- CRITICAL: If a previous autopsy exists, your next action must address its failed verification. You MUST try a completely different approach or use a different tool. Do not repeat the same failed strategy. Do not repeat the same DONE claim or same failing command without new evidence.
 
 What is your next step?`;
     }
@@ -1040,10 +1411,548 @@ What is your next step?`;
         }
     }
 
+    async _loadGoalAutopsy(goal = {}) {
+        const candidates = [
+            goal.metadata?.latestAutopsy,
+            goal.id ? path.join(ROOT, 'data', 'goal-autopsies', `${goal.id}.json`) : null
+        ].filter(Boolean);
+        for (const file of candidates) {
+            try {
+                const resolved = resolveWithinRoot(ROOT, file, 'Autopsy path');
+                const parsed = JSON.parse(await fs.readFile(resolved, 'utf8'));
+                return parsed.latest || (Array.isArray(parsed.history) ? parsed.history[0] : null) || parsed;
+            } catch {}
+        }
+        return goal.metadata?.autopsyNextStrategy
+            ? {
+                failedVerification: goal.metadata?.incompleteReason || 'previous verification failed',
+                nextStrategy: goal.metadata.autopsyNextStrategy,
+                attemptedStrategy: 'prior heartbeat attempt'
+            }
+            : null;
+    }
+
+    _shouldDelegate(goal = {}, observations = []) {
+        if (observations.some(obs => obs.tool === 'spawn_agents')) return false;
+        const text = `${goal.title || ''} ${goal.description || ''} ${goal.category || ''}`.toLowerCase();
+        const multiFile = /\b(files?|modules?|routes?|arbiters?|daemons?|frontend|backend|database|memory|loader|executor|verification|tests?)\b/.test(text);
+        const complexVerb = /\b(refactor|overhaul|implement|enhance|repair|audit|analyze|investigate|integrate|self-improvement|self improvement)\b/.test(text);
+        const failedBefore = Number(goal.metadata?.autopsyCount || 0) > 0 || goal.metadata?.latestAutopsy;
+        const highPriority = Number(goal.priority || 0) >= 75;
+        return (multiFile && complexVerb) || failedBefore || highPriority;
+    }
+
+    _normalizeDelegationTasks({ objective, roles, targets = [], tasks = [], label = 'delegation batch', priority = 'normal' } = {}) {
+        const cleanObjective = String(objective || label || 'delegated agentic work').trim();
+        const cleanTargets = [...new Set((Array.isArray(targets) ? targets : [targets])
+            .filter(Boolean)
+            .map(t => String(t).replace(/\\/g, '/')))]
+            .slice(0, 12);
+
+        let requested = [];
+        if (Array.isArray(roles) && roles.length) {
+            requested = roles.map(role => ({ role: String(role).toLowerCase(), task: cleanObjective }));
+        } else if (Array.isArray(tasks) && tasks.length) {
+            requested = tasks.map(item => ({
+                role: String(item.role || item.type || 'researcher').toLowerCase(),
+                task: item.task || item.objective || cleanObjective,
+                targets: item.targets
+            }));
+        } else {
+            requested = ['researcher', 'coder', 'tester', 'reviewer'].map(role => ({ role, task: cleanObjective }));
+        }
+
+        const allowed = new Set(['researcher', 'coder', 'tester', 'reviewer', 'ops']);
+        const normalizedTasks = requested
+            .map(task => ({
+                role: allowed.has(task.role) ? task.role : 'researcher',
+                task: typeof task.task === 'string' ? task.task : JSON.stringify(task.task || cleanObjective),
+                targets: Array.isArray(task.targets) ? task.targets.map(t => String(t).replace(/\\/g, '/')) : cleanTargets
+            }))
+            .slice(0, 8);
+
+        if (!normalizedTasks.length) return { error: 'roles or tasks must produce at least one delegation task' };
+        return {
+            objective: cleanObjective,
+            label: String(label || 'delegation batch'),
+            priority,
+            targets: cleanTargets,
+            tasks: normalizedTasks
+        };
+    }
+
+    async _runDelegationTask(task = {}, context = {}) {
+        const namedArtifact = await this._tryNamedAgentForTask(task, context);
+        if (namedArtifact) return namedArtifact;
+
+        switch (task.role) {
+            case 'researcher':
+                return this._runResearcherTask(task, context);
+            case 'coder':
+                return this._runCoderTask(task, context);
+            case 'tester':
+                return this._runTesterTask(task, context);
+            case 'reviewer':
+                return this._runReviewerTask(task, context);
+            case 'ops':
+                return this._runOpsTask(task, context);
+            default:
+                return this._runResearcherTask({ ...task, role: 'researcher' }, context);
+        }
+    }
+
+    async _tryNamedAgentForTask(task = {}, context = {}) {
+        const routes = {
+            coder: ['max', ...getAgentsForRole('coder').filter(name => name !== 'max')],
+            researcher: ['max', 'kuze', ...getAgentsForRole('researcher').filter(name => !['max', 'kuze'].includes(name))],
+            reviewer: ['steve', 'kuze', ...getAgentsForRole('reviewer').filter(name => !['steve', 'kuze'].includes(name))],
+            ops: ['black', ...getAgentsForRole('ops').filter(name => name !== 'black')],
+            tester: getAgentsForRole('tester').filter(name => name !== 'soma')
+        };
+        for (const agentName of routes[task.role] || []) {
+            try {
+                let artifact = null;
+                if (agentName === 'max') artifact = await this._askMaxForArtifact(task, context);
+                if (agentName === 'steve') artifact = await this._askSteveForArtifact(task, context);
+                if (agentName === 'kuze') artifact = await this._askKuzeForArtifact(task, context);
+                if (agentName === 'black') artifact = await this._askBlackForArtifact(task, context);
+                if (this._isValidDelegationArtifact(artifact, task.role)) return artifact;
+            } catch (error) {
+                // Named agents are accelerators, not a hard dependency.
+            }
+        }
+        return null;
+    }
+
+    _isValidDelegationArtifact(artifact, role) {
+        return !!(
+            artifact &&
+            artifact.role === role &&
+            typeof artifact.type === 'string' &&
+            Object.prototype.hasOwnProperty.call(artifact, 'passed') &&
+            (artifact.findings || artifact.plan || artifact.checks || artifact.verdict || artifact.metrics || artifact.output)
+        );
+    }
+
+    async _askMaxForArtifact(task, context) {
+        const bridge = this.system?.maxBridge || maxAgentBridge;
+        if (bridge?.ensureAvailable) {
+            const availability = await bridge.ensureAvailable({ startIfOffline: true, timeoutMs: 45_000 });
+            if (!availability?.available) return null;
+            await recordCapabilityTruth('SOMA can reach/start MAX API', {
+                verified: true,
+                source: 'soma_agentic_executor',
+                proof: availability,
+                metadata: { role: task.role }
+            }).catch(() => {});
+        } else if (!bridge?.isAvailable || !(await bridge.isAvailable())) {
+            return null;
+        }
+
+        const localTargetSummaries = await this._readTargetFileSummaries(task.targets || context.targets || []);
+        const targetSummary = localTargetSummaries.length
+            ? localTargetSummaries.map(t => `${t.path} (${t.exists ? `${t.lines || 0} lines, exists` : `missing: ${t.error || 'not found'}`})`).join('; ')
+            : ((task.targets || context.targets || []).slice(0, 8).join(', ') || 'no explicit targets');
+        const prompt = [
+            'You are MAX assisting SOMA. Return concise JSON only.',
+            `Role: ${task.role}`,
+            `Artifact type: ${task.role === 'coder' ? 'code_patch_plan' : 'research_report'}`,
+            `Objective: ${context.objective}`,
+            `SOMA root: ${ROOT}`,
+            `Targets: ${targetSummary}`,
+            `SOMA local target evidence: ${JSON.stringify(localTargetSummaries.map(({ excerpt, ...rest }) => rest)).slice(0, 3000)}`,
+            'Resolve relative targets from the SOMA root above.',
+            'For research, include findings and risks. For coding, include files, plan, and verificationRequired.',
+            'Do not edit files from this request. This is planning/evidence only.'
+        ].join('\n');
+        const response = await bridge.chat(prompt, { persona: 'engineering', temperature: 0.2, maxTokens: 1400 });
+        const text = this._normalizeBridgeText(response?.response || response?.message || response?.raw || response);
+        const parsed = this._parsePossibleJson(text);
+        if (parsed && typeof parsed === 'object') {
+            return {
+                role: task.role,
+                agent: 'max',
+                type: parsed.type || (task.role === 'coder' ? 'code_patch_plan' : 'research_report'),
+                passed: parsed.passed !== false,
+                objective: context.objective,
+                findings: parsed.findings,
+                files: parsed.files,
+                plan: parsed.plan,
+                verificationRequired: parsed.verificationRequired || ['syntax_check', 'test_or_build_command'],
+                risks: [
+                    ...(parsed.risks || []),
+                    ...localTargetSummaries.filter(t => !t.exists).map(t => `SOMA local target missing: ${t.path}`)
+                ],
+                targetSummaries: localTargetSummaries.map(({ excerpt, ...rest }) => rest),
+                output: parsed.output || text.slice(0, 4000)
+            };
+        }
+        return {
+            role: task.role,
+            agent: 'max',
+            type: task.role === 'coder' ? 'code_patch_plan' : 'research_report',
+            passed: true,
+            objective: context.objective,
+            output: text.slice(0, 4000),
+            plan: task.role === 'coder' ? [text.slice(0, 1200)] : undefined,
+            findings: task.role !== 'coder' ? [text.slice(0, 1200)] : undefined,
+            targetSummaries: localTargetSummaries.map(({ excerpt, ...rest }) => rest),
+            verificationRequired: task.role === 'coder' ? ['syntax_check', 'test_or_build_command'] : undefined
+        };
+    }
+
+    async _askSteveForArtifact(task, context) {
+        const steve = this.system?.steveArbiter;
+        if (!steve?.processChat) return null;
+        const message = [
+            'Review this delegated SOMA work. Return concise concerns and a readiness verdict.',
+            `Objective: ${context.objective}`,
+            `Targets: ${(task.targets || context.targets || []).join(', ') || 'none'}`,
+            'Focus on correctness, missing tests, and whether this is safe to mark done.'
+        ].join('\n');
+        const response = await steve.processChat(message, [], { autonomous: true, source: 'agentic_executor.spawn_agents' });
+        const text = response?.response || response?.message || JSON.stringify(response || {});
+        const concerns = this._extractConcerns(text);
+        return {
+            role: 'reviewer',
+            agent: 'steve',
+            type: 'review_verdict',
+            passed: concerns.length === 0,
+            objective: context.objective,
+            verdict: concerns.length ? 'needs_work' : 'ready_with_tests',
+            concerns,
+            output: text.slice(0, 4000),
+            requiredBeforeDone: ['Syntax check passed', 'Test/build proof attached', 'Reviewer concerns resolved']
+        };
+    }
+
+    async _askKuzeForArtifact(task, context) {
+        const kuze = this._getNamedMicroAgent('KuzeAgent') || this._getNamedMicroAgent('Kuze');
+        if (!kuze?.execute) return null;
+        const targetSummaries = await this._readTargetFileSummaries(task.targets || context.targets || []);
+        const events = targetSummaries.map((summary, index) => ({
+            timestamp: Date.now() + index,
+            type: summary.exists ? 'target_file' : 'missing_target',
+            path: summary.path,
+            lines: summary.lines || 0,
+            declarations: summary.declarations?.length || 0,
+            imports: summary.imports?.length || 0
+        }));
+        const result = task.role === 'reviewer'
+            ? await kuze.execute({ type: 'risk-model', payload: { evidence: events, context: context.objective } })
+            : await kuze.execute({ type: 'pattern-detect', payload: { events, context: context.objective } });
+        if (result?.success === false) return null;
+        const analysis = result?.analysis || result;
+        return {
+            role: task.role,
+            agent: 'kuze',
+            type: task.role === 'reviewer' ? 'review_verdict' : 'research_report',
+            passed: true,
+            objective: context.objective,
+            findings: analysis?.patterns ? analysis.patterns.slice(0, 12) : [JSON.stringify(analysis).slice(0, 1200)],
+            risks: analysis?.risks || [],
+            verdict: task.role === 'reviewer' ? 'analytical_review_complete' : undefined,
+            output: JSON.stringify(analysis).slice(0, 4000)
+        };
+    }
+
+    async _askBlackForArtifact(task, context) {
+        const black = this._getNamedMicroAgent('BlackAgent') || this._getNamedMicroAgent('Black');
+        if (!black?.execute) return null;
+        const result = await black.execute({ type: 'health-check', payload: { objective: context.objective } });
+        if (result?.success === false) return null;
+        return {
+            role: 'ops',
+            agent: 'black',
+            type: 'ops_report',
+            passed: result?.healthy !== false,
+            objective: context.objective,
+            metrics: result?.metrics || result,
+            findings: result?.recommendations || result?.alerts || [],
+            output: JSON.stringify(result).slice(0, 4000)
+        };
+    }
+
+    _getNamedMicroAgent(name) {
+        const pool = this.system?.microAgentPool || this.pool;
+        if (pool?.spawnedAgents?.get) return pool.spawnedAgents.get(name);
+        if (pool?.spawnedAgents && typeof pool.spawnedAgents === 'object') return pool.spawnedAgents[name];
+        return this.system?.[name] || this.system?.[`${name.charAt(0).toLowerCase()}${name.slice(1)}`] || null;
+    }
+
+    _parsePossibleJson(text = '') {
+        const raw = String(text || '').trim();
+        if (!raw) return null;
+        try { return JSON.parse(raw); } catch {}
+        const match = raw.match(/\{[\s\S]*\}/);
+        if (!match) return null;
+        try { return JSON.parse(match[0]); } catch { return null; }
+    }
+
+    _normalizeBridgeText(value) {
+        if (value == null) return '';
+        const raw = typeof value === 'string' ? value : JSON.stringify(value);
+        if (!raw.includes('data:')) return raw;
+
+        const tokens = [];
+        for (const line of raw.split(/\r?\n/)) {
+            const trimmed = line.trim();
+            if (!trimmed.startsWith('data:')) continue;
+            const payload = trimmed.slice(5).trim();
+            if (!payload || payload === '[DONE]') continue;
+            try {
+                const parsed = JSON.parse(payload);
+                if (parsed.type === 'token' && typeof parsed.text === 'string') tokens.push(parsed.text);
+                else if (typeof parsed.text === 'string') tokens.push(parsed.text);
+            } catch {}
+        }
+        return tokens.length ? tokens.join('') : raw;
+    }
+
+    _extractConcerns(text = '') {
+        const lower = String(text || '').toLowerCase();
+        if (/\b(no concerns|ready|safe to proceed|looks good|pass)\b/.test(lower) && !/\b(fail|missing|concern|risk|unsafe|broken)\b/.test(lower)) {
+            return [];
+        }
+        const lines = String(text || '').split(/\r?\n/)
+            .map(line => line.replace(/^[-*0-9.)\s]+/, '').trim())
+            .filter(Boolean)
+            .filter(line => /\b(concern|risk|missing|fail|unsafe|broken|needs?|should|must|required)\b/i.test(line))
+            .slice(0, 8);
+        return lines.length ? lines : ['Steve review returned non-empty feedback; inspect output before DONE.'];
+    }
+
+    async _readTargetFileSummaries(targets = []) {
+        const summaries = [];
+        for (const target of targets.slice(0, 12)) {
+            let resolved;
+            try {
+                resolved = resolveWithinRoot(ROOT, target, 'Delegation target');
+            } catch {
+                summaries.push({ path: target, exists: false, error: 'outside SOMA root' });
+                continue;
+            }
+            try {
+                const stat = await fs.stat(resolved);
+                if (!stat.isFile()) {
+                    summaries.push({ path: target, exists: true, type: 'directory_or_non_file' });
+                    continue;
+                }
+                const content = await fs.readFile(resolved, 'utf8');
+                const lines = content.split('\n');
+                const exports = [...content.matchAll(/\bexport\s+(?:class|function|const|let|var|async function)?\s*([A-Za-z0-9_$]*)/g)]
+                    .map(m => m[1]).filter(Boolean).slice(0, 12);
+                const declarations = [...content.matchAll(/\b(?:class|function|async function)\s+([A-Za-z0-9_$]+)/g)]
+                    .map(m => m[1]).slice(0, 18);
+                const imports = [...content.matchAll(/^\s*import\s+.+?from\s+['"](.+?)['"]/gm)]
+                    .map(m => m[1]).slice(0, 18);
+                summaries.push({
+                    path: target,
+                    exists: true,
+                    bytes: stat.size,
+                    lines: lines.length,
+                    imports,
+                    exports,
+                    declarations,
+                    excerpt: content.slice(0, 1200)
+                });
+            } catch (e) {
+                summaries.push({ path: target, exists: false, error: e.message });
+            }
+        }
+        return summaries;
+    }
+
+    async _runResearcherTask(task, context) {
+        const targetSummaries = await this._readTargetFileSummaries(task.targets || context.targets || []);
+        const missing = targetSummaries.filter(t => !t.exists).map(t => t.path);
+        const findings = [];
+        for (const summary of targetSummaries.filter(t => t.exists)) {
+            findings.push(`${summary.path}: ${summary.lines || 0} lines, ${summary.declarations?.length || 0} declarations, ${summary.imports?.length || 0} imports`);
+            if (summary.exports?.length) findings.push(`${summary.path}: exports ${summary.exports.join(', ')}`);
+        }
+        if (!findings.length) findings.push('No target files were provided or readable; start with search_code/list_files before editing.');
+        return {
+            role: 'researcher',
+            type: 'research_report',
+            passed: missing.length === 0,
+            objective: context.objective,
+            findings,
+            targetSummaries: targetSummaries.map(({ excerpt, ...rest }) => rest),
+            risks: missing.length ? [`Missing or unreadable targets: ${missing.join(', ')}`] : []
+        };
+    }
+
+    async _runCoderTask(task, context) {
+        const targetSummaries = await this._readTargetFileSummaries(task.targets || context.targets || []);
+        const files = targetSummaries.map(t => t.path);
+        const plan = [];
+        if (files.length) {
+            plan.push(`Patch only the scoped target files unless research proves another file is required: ${files.join(', ')}`);
+        } else {
+            plan.push('Identify concrete files with search_code before modifying code.');
+        }
+        plan.push('Keep the change narrow, preserve existing public contracts, and add explicit evidence for each behavior changed.');
+        plan.push('After edits, run verify_syntax for changed JS/CJS/MJS files and run_tests or an equivalent executable command.');
+        return {
+            role: 'coder',
+            type: 'code_patch_plan',
+            passed: files.length > 0,
+            objective: context.objective,
+            files,
+            plan,
+            verificationRequired: ['syntax_check', 'test_or_build_command', 'post_change_readback'],
+            riskLevel: files.length > 4 ? 'medium' : 'low'
+        };
+    }
+
+    async _runTesterTask(task, context) {
+        const targets = (task.targets || context.targets || []).filter(file => /\.(js|cjs|mjs)$/i.test(file)).slice(0, 8);
+        const checks = [];
+        for (const target of targets) {
+            let resolved;
+            try {
+                resolved = resolveWithinRoot(ROOT, target, 'Tester target');
+            } catch {
+                checks.push({ command: `node --check ${target}`, passed: false, error: 'outside SOMA root' });
+                continue;
+            }
+            try {
+                const { stdout, stderr } = await execFileAsync(process.execPath, ['--check', resolved], {
+                    cwd: ROOT,
+                    timeout: 30_000,
+                    maxBuffer: 256 * 1024
+                });
+                checks.push({
+                    command: `node --check ${target}`,
+                    passed: true,
+                    stdout: stdout?.slice(0, 1000) || '',
+                    stderr: stderr?.slice(0, 1000) || ''
+                });
+            } catch (e) {
+                checks.push({
+                    command: `node --check ${target}`,
+                    passed: false,
+                    stdout: e.stdout?.slice(0, 1000) || '',
+                    stderr: e.stderr?.slice(0, 1000) || '',
+                    error: e.message
+                });
+            }
+        }
+        if (!checks.length) {
+            checks.push({
+                command: 'node --check <targets>',
+                passed: false,
+                error: 'No JS/CJS/MJS/TS targets supplied for executable syntax verification'
+            });
+        }
+        return {
+            role: 'tester',
+            type: 'test_report',
+            passed: checks.every(c => c.passed),
+            objective: context.objective,
+            checks,
+            recommendedNextChecks: ['Run the repo-specific test/build command after code edits if one exists.']
+        };
+    }
+
+    async _runReviewerTask(task, context) {
+        const targetSummaries = await this._readTargetFileSummaries(task.targets || context.targets || []);
+        const concerns = [];
+        if (!targetSummaries.length) concerns.push('No target files supplied; delegation cannot anchor review to concrete code.');
+        if (targetSummaries.some(t => !t.exists)) concerns.push('One or more target files are missing or unreadable.');
+        if (!/\b(test|verify|syntax|build|proof|evidence)\b/i.test(context.objective || '')) {
+            concerns.push('Objective does not explicitly mention verification; require executable proof before DONE.');
+        }
+        return {
+            role: 'reviewer',
+            type: 'review_verdict',
+            passed: concerns.length === 0,
+            objective: context.objective,
+            verdict: concerns.length ? 'needs_work' : 'ready_with_tests',
+            concerns,
+            requiredBeforeDone: ['Concrete changed files listed', 'Syntax check passed', 'Test/build command passed or documented with reason if unavailable']
+        };
+    }
+
+    async _runOpsTask(task, context) {
+        const checks = [];
+        try {
+            const { stdout } = await execFileAsync(process.execPath, ['-e', 'console.log(JSON.stringify({memory:process.memoryUsage(),uptime:process.uptime(),platform:process.platform}))'], {
+                cwd: ROOT,
+                timeout: 10_000,
+                maxBuffer: 128 * 1024
+            });
+            checks.push({
+                command: 'node process health snapshot',
+                passed: true,
+                metrics: this._parsePossibleJson(stdout) || { raw: stdout.slice(0, 1000) }
+            });
+        } catch (error) {
+            checks.push({
+                command: 'node process health snapshot',
+                passed: false,
+                error: error.message
+            });
+        }
+        return {
+            role: 'ops',
+            agent: 'soma-fallback',
+            type: 'ops_report',
+            passed: checks.every(check => check.passed),
+            objective: context.objective,
+            checks,
+            findings: checks.every(check => check.passed)
+                ? ['Local process health snapshot completed.']
+                : ['Local process health snapshot failed; inspect error before continuing.']
+        };
+    }
+
+    async _writeDelegationArtifacts({ objective, label, targets, artifacts }) {
+        await fs.mkdir(DELEGATION_DIR, { recursive: true });
+        const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const fileName = `${stamp}-${safeStageId(label || objective)}.json`;
+        const relativePath = path.join('data', 'agent-delegations', fileName);
+        const absolutePath = path.join(ROOT, relativePath);
+        const payload = {
+            createdAt: new Date().toISOString(),
+            objective,
+            label,
+            targets,
+            artifacts,
+            passed: artifacts.every(a => a.passed !== false)
+        };
+        await fs.writeFile(absolutePath, JSON.stringify(payload, null, 2), 'utf8');
+        return relativePath.replace(/\\/g, '/');
+    }
+
+    async escalateGoalToMax(goal = {}, autopsy = null) {
+        const bridge = this.system?.maxBridge || maxAgentBridge;
+        const availability = await bridge.ensureAvailable({ startIfOffline: true });
+        if (!availability?.available) {
+            return { success: false, error: availability?.error || 'MAX unavailable', availability };
+        }
+        const title = `Repair SOMA goal after exhausted attempts: ${String(goal.title || goal.id).slice(0, 120)}`;
+        const description = [
+            `SOMA goal ID: ${goal.id}`,
+            `Goal: ${goal.title}`,
+            `Description: ${goal.description || 'none'}`,
+            `Attempts: ${goal.metadata?.executionAttempts || 0}/${goal.metadata?.goalContract?.maxAttempts || goal.metadata?.maxAttempts || 3}`,
+            `Latest autopsy: ${autopsy?.path || goal.metadata?.latestAutopsy || 'none'}`,
+            'Inspect the persisted continuation and evidence ledger. Return a bounded repair with executable verification; do not mark SOMA complete yourself.'
+        ].join('\n');
+        const result = await bridge.injectGoal(title, { description, priority: 0.95 });
+        return { success: Boolean(result?.id), maxGoalId: result?.id || null, result };
+    }
+
     async _queuePoseidonRepairGoal(goal = {}, details = {}) {
         if (!this.goalPlanner?.createGoal) return null;
 
         const repairTitle = `Repair repeated unverified completion claims: ${goal.title || 'agentic goal'}`.slice(0, 180);
+        if (this.goalPlanner?.updateGoalProgress) {
+            await this.goalPlanner.updateGoalProgress(goal.id, goal.metrics?.progress || 0, { status: 'repairing' }).catch(() => {});
+            goal.status = 'repairing';
+        }
         const repair = await this.goalPlanner.createGoal({
             title: repairTitle,
             description: [

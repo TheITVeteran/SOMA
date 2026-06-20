@@ -8,6 +8,7 @@ import fs from 'fs/promises';
 import path from 'path';
 import { execFile } from 'child_process';
 import toolRegistry from '../../core/ToolRegistry.js';
+import { recordCapabilityTruth, recordTruth } from '../../core/TruthLedger.js';
 import { analyzeImageFile, imageMimeType, isImageFile } from '../utils/LocalVisionFileAnalyzer.js';
 import {
     auditMemorySpine,
@@ -132,12 +133,52 @@ export async function loadTools(systemContext = {}) {
                 });
                 const data = await res.json();
                 if (data.error) return `Marionette declined the restart: ${data.error}`;
+                await recordCapabilityTruth('SOMA can request Marionette self-restart', {
+                    verified: true,
+                    source: 'request_self_restart_tool',
+                    proof: data,
+                    metadata: { rollbackRef, reason: reason || 'SOMA self-restart request' }
+                }).catch(() => {});
                 return `Restart requested through Marionette (the independent supervisor that survives my restart). `
                     + `It will stop me, start the new server, verify /health, and `
                     + (rollbackRef ? `auto-roll-back to ${rollbackRef.slice(0, 8)} if I come up broken. ` : `report if I fail to come back. `)
                     + `I'll be down briefly and return. Watch http://127.0.0.1:9000/status for the result.`;
             } catch (e) {
+                await recordCapabilityTruth('SOMA can request Marionette self-restart', {
+                    verified: false,
+                    status: 'failed',
+                    confidence: 1,
+                    source: 'request_self_restart_tool',
+                    proof: e.message
+                }).catch(() => {});
                 return `Could not reach the Marionette supervisor on :9000 (${e.message}). It may not be running — without it I cannot safely restart myself.`;
+            }
+        }
+    });
+
+    toolRegistry.registerTool({
+        name: 'marionette_status',
+        description: 'Check the independent Marionette supervisor status and record whether the SOMA/MAX watchdog is actually online.',
+        parameters: {},
+        execute: async () => {
+            try {
+                const res = await fetch('http://127.0.0.1:9000/status');
+                const data = await res.json();
+                await recordTruth('Marionette supervisor status checked', {
+                    status: res.ok ? 'verified' : 'failed',
+                    confidence: res.ok ? 1 : 0.4,
+                    proof: data,
+                    source: 'marionette_status_tool'
+                }).catch(() => {});
+                return data;
+            } catch (e) {
+                await recordTruth('Marionette supervisor status checked', {
+                    status: 'failed',
+                    confidence: 1,
+                    proof: e.message,
+                    source: 'marionette_status_tool'
+                }).catch(() => {});
+                return { success: false, error: `Marionette unavailable on :9000: ${e.message}` };
             }
         }
     });
@@ -855,6 +896,25 @@ export async function loadTools(systemContext = {}) {
                 const docs = docsData.result?.content?.[0]?.text || 'No documentation found.';
                 return docs.substring(0, 5000);
             } catch (e) { return `MCP docs error: ${e.message}`; }
+        }
+    });
+
+    toolRegistry.registerTool({
+        name: 'oculus_extract',
+        description: 'Use the Oculus Browser Arbiter (Playwright) to deeply navigate to a URL and extract full-text content. Use this to read full papers, articles, or research PDFs.',
+        parameters: { url: 'string' },
+        execute: async ({ url }) => {
+            if (process.env.SOMA_LOCAL_ONLY === 'true') return 'Local-only mode: web access blocked';
+            const liveSystem = getSystem();
+            if (liveSystem.browserArbiter) {
+                try {
+                    const res = await liveSystem.browserArbiter.extract(url);
+                    return res.text || res.content || JSON.stringify(res);
+                } catch (e) {
+                    return `Oculus extract error: ${e.message}`;
+                }
+            }
+            return 'OculusBrowser not available.';
         }
     });
 

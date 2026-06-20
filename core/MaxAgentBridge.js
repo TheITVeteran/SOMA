@@ -12,6 +12,7 @@
 import path from 'path';
 import { existsSync, readFileSync } from 'fs';
 import { mkdir, appendFile } from 'fs/promises';
+import { spawn } from 'child_process';
 import { redactObject } from './RedactionUtils.js';
 
 const DEFAULT_MAX_URL  = 'http://127.0.0.1:3100';
@@ -47,6 +48,7 @@ export class MaxAgentBridge {
         this.ledgerPath = config.ledgerPath || path.join(process.cwd(), 'data', 'maintenance', 'soma-max-bridge.jsonl');
         this._available = null;   // null = unchecked, true/false = known
         this._lastHealth = null;
+        this._startedProcess = null;
         this.logger = config.logger || console;
     }
 
@@ -69,6 +71,84 @@ export class MaxAgentBridge {
 
     getLastHealth() {
         return this._lastHealth;
+    }
+
+    async ensureAvailable(opts = {}) {
+        const startIfOffline = opts.startIfOffline !== false;
+        const timeoutMs = opts.timeoutMs || 45_000;
+
+        if (await this.isAvailable()) {
+            return { available: true, alreadyRunning: true, health: this._lastHealth };
+        }
+
+        if (!startIfOffline) {
+            return { available: false, started: false, health: this._lastHealth };
+        }
+
+        const started = await this.startLocalServer({
+            timeoutMs,
+            port: opts.port,
+            mode: opts.mode || 'api'
+        });
+        return {
+            available: started.available,
+            alreadyRunning: false,
+            started: true,
+            pid: started.pid,
+            command: started.command,
+            health: this._lastHealth
+        };
+    }
+
+    async startLocalServer(opts = {}) {
+        if (await this.isAvailable()) {
+            return { available: true, alreadyRunning: true, health: this._lastHealth };
+        }
+
+        if (!existsSync(this.maxPath)) {
+            throw new Error(`MAX path does not exist: ${this.maxPath}`);
+        }
+
+        const port = opts.port || new URL(this.maxUrl).port || '3100';
+        const args = ['launcher.mjs', '--mode', opts.mode || 'api', '--port', String(port)];
+        const command = `${process.execPath} ${args.join(' ')}`;
+        const child = spawn(process.execPath, args, {
+            cwd: this.maxPath,
+            detached: true,
+            stdio: 'ignore',
+            windowsHide: true,
+            env: {
+                ...process.env,
+                MAX_PORT: String(port)
+            }
+        });
+
+        child.unref();
+        this._startedProcess = { pid: child.pid, command, startedAt: Date.now() };
+        await this._recordBridgeEvent({
+            method: 'SPAWN',
+            path: 'local-max-api',
+            ok: true,
+            pid: child.pid,
+            command,
+            maxPath: this.maxPath
+        });
+
+        const available = await this._pollAvailable(opts.timeoutMs || 45_000);
+        if (!available) {
+            throw new Error(`MAX did not become healthy within ${opts.timeoutMs || 45_000}ms`);
+        }
+
+        return { available: true, pid: child.pid, command, health: this._lastHealth };
+    }
+
+    async _pollAvailable(timeoutMs = 45_000, intervalMs = 1000) {
+        const deadline = Date.now() + timeoutMs;
+        while (Date.now() < deadline) {
+            if (await this.isAvailable()) return true;
+            await new Promise(resolve => setTimeout(resolve, intervalMs));
+        }
+        return false;
     }
 
     // ─── File tools ────────────────────────────────────────────────────────

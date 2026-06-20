@@ -22,6 +22,8 @@ import path from 'path';
 import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { Poseidon } from './Poseidon.js';
+import { recordTruth } from './TruthLedger.js';
+import { resolveWithinRoot } from './PathSafety.js';
 
 const ROOT = process.cwd();
 const LEDGER_PATH    = path.join(ROOT, 'data', 'self_mod_ledger.jsonl');
@@ -88,7 +90,12 @@ export class SelfModificationPipeline {
 
         console.log(`[${this.name}] 🔧 Proposal: ${filepath}`);
         console.log(`[${this.name}]    Motivation: ${motivation.substring(0, 80)}`);
-        const absPath = path.resolve(ROOT, filepath);
+        let absPath;
+        try {
+            absPath = resolveWithinRoot(ROOT, filepath, 'Self-modification path');
+        } catch (error) {
+            return { state: 'blocked', implemented: false, shelved: false, filepath, reason: error.message };
+        }
         let originalContent = null;
         try {
             originalContent = await fs.readFile(absPath, 'utf8');
@@ -141,15 +148,17 @@ export class SelfModificationPipeline {
         let lastNemesis = null;
         for (let round = 0; round < this.maxRounds; round++) {
             const roundEntry = { round: round + 1, nemesisScore: null, nemesisPassed: false, error: null };
+            let implResult = null;
 
             // Implement via EngineeringSwarm
             try {
-                const implResult = await this._implement(filepath, entry.finalChange);
+                implResult = await this._implement(filepath, entry.finalChange);
                 if (!implResult.success) {
                     roundEntry.error = implResult.error || 'EngineeringSwarm failed';
                     entry.rounds.push(roundEntry);
                     break;
                 }
+                roundEntry.implementationEvidence = implResult.evidence || null;
             } catch (e) {
                 roundEntry.error = e.message;
                 entry.rounds.push(roundEntry);
@@ -170,8 +179,9 @@ export class SelfModificationPipeline {
                     const verified = await this._poseidon.verify(
                         `Change to ${filepath} is correct, safe, and solves the stated problem`,
                         {
-                            falsificationTest: lastNemesis.falsificationTest || `NEMESIS score ${lastNemesis.score.toFixed(2)} >= 0.70 threshold`,
-                            testResult: lastNemesis.score >= 0.70
+                            falsificationTest: lastNemesis.falsificationTest || 'Engineering verification and NEMESIS review must both pass',
+                            testResult: lastNemesis.score >= 0.70 && implResult?.evidence?.verification?.passed === true,
+                            evidence: implResult?.evidence || null,
                         }
                     );
 
@@ -332,7 +342,7 @@ Output ONLY the refined change description, nothing else.`;
         if (!swarm) return { success: false, error: 'EngineeringSwarm not loaded' };
 
         try {
-            const absPath = path.resolve(ROOT, filepath);
+            const absPath = resolveWithinRoot(ROOT, filepath, 'Self-modification path');
             const result = await swarm.modifyCode(absPath, changeDescription);
             return result;
         } catch (e) {
@@ -362,7 +372,7 @@ Output ONLY the refined change description, nothing else.`;
             }
         }
 
-        const promotionAllowed = syntax.valid === true;
+        let promotionAllowed = syntax.valid === true;
         const manifest = {
             id,
             source: 'SelfModificationPipeline',
@@ -385,7 +395,30 @@ Output ONLY the refined change description, nothing else.`;
                     : 'Do not promote; revise in sandbox and rerun validation.'
             }
         };
-        await fs.writeFile(path.join(stageDir, 'pulse-self-mod-manifest.json'), JSON.stringify(manifest, null, 2), 'utf8');
+        const manifestPath = path.join(stageDir, 'pulse-self-mod-manifest.json');
+        let truthEntry = null;
+        try {
+            truthEntry = await recordTruth(`Self-modification sandbox ${manifest.status}: ${manifest.filepath}`, {
+                status: promotionAllowed ? 'verified' : 'rejected',
+                confidence: promotionAllowed ? 0.9 : 1,
+                proof: { syntax, manifest: manifestPath },
+                source: 'self_modification_pipeline',
+                artifactPath: path.relative(ROOT, manifestPath).replace(/\\/g, '/'),
+                metadata: { entryId: entry.id, filepath: manifest.filepath }
+            });
+        } catch (error) {
+            promotionAllowed = false;
+            manifest.status = 'rejected_in_sandbox';
+            manifest.promotion.allowed = false;
+            manifest.promotion.evidence = `Truth ledger write failed: ${error.message}`;
+            manifest.promotion.nextStep = 'Do not promote; restore truth ledger availability and rerun validation.';
+        }
+        manifest.truthLedger = truthEntry
+            ? { required: true, recorded: true, id: truthEntry.id }
+            : { required: true, recorded: false };
+        manifest.promotion.allowed = promotionAllowed;
+        manifest.status = promotionAllowed ? 'ready_for_promotion' : 'rejected_in_sandbox';
+        await fs.writeFile(manifestPath, JSON.stringify(manifest, null, 2), 'utf8');
         return manifest;
     }
 

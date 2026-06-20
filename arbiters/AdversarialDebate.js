@@ -21,6 +21,7 @@
 
 import fs from 'fs/promises';
 import path from 'path';
+import { recordEvidenceDebate } from '../core/EvidenceDebateLedger.js';
 
 export class AdversarialDebate {
     constructor({ rootPath, quadBrain = null }) {
@@ -135,6 +136,16 @@ export class AdversarialDebate {
         // Store debate
         this.debates.push(debate);
         await this.saveState();
+        await recordEvidenceDebate({
+            id: debate.id,
+            proposal: tradeProposal,
+            evidence: this._extractDebateEvidence(debate),
+            counterexample: this._extractDebateCounterexample(debate),
+            testPlan: verdict.falsificationTest || verdict.recommendation || 'Verify decision against subsequent price/risk outcome before reuse.',
+            verdict,
+            artifactPath: path.relative(this.rootPath, path.join(this.dataPath, 'debate_state.json')).replace(/\\/g, '/'),
+            messages: debate.rounds.flatMap(round => [round.bull, round.bear]).filter(Boolean)
+        }).catch(() => {});
 
         console.log('\n' + '='.repeat(70));
         console.log(`✅ Debate Complete (${(debate.durationMs / 1000).toFixed(1)}s)`);
@@ -147,6 +158,23 @@ export class AdversarialDebate {
             confidence: verdict.confidence,
             recommendation: verdict.recommendation
         };
+    }
+
+    _extractDebateEvidence(debate) {
+        return (debate.rounds || []).flatMap(round =>
+            [round.bull, round.bear]
+                .filter(Boolean)
+                .flatMap(arg => Array.isArray(arg.points) ? arg.points : [])
+                .slice(0, 12)
+        );
+    }
+
+    _extractDebateCounterexample(debate) {
+        const bearPoints = (debate.rounds || [])
+            .map(round => round.bear)
+            .filter(Boolean)
+            .flatMap(arg => Array.isArray(arg.points) ? arg.points : []);
+        return bearPoints[0] || 'No explicit counterexample produced by debate.';
     }
 
     /**

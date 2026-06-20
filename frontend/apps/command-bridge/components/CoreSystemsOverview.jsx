@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { AlertTriangle, CheckCircle, Cpu, FlaskConical, RefreshCw, Shield, Target } from 'lucide-react';
+import AgenticProofPanel from './AgenticProofPanel.jsx';
 
 const stateTone = {
   ready: 'border-emerald-500/20 bg-emerald-500/5 text-emerald-300',
@@ -14,6 +15,15 @@ function ageLabel(timestamp) {
   return seconds < 60 ? `${seconds}s ago` : `${Math.floor(seconds / 60)}m ago`;
 }
 
+function normalizePayload(payload) {
+  if (typeof payload !== 'string') return payload;
+  try {
+    return JSON.parse(payload);
+  } catch {
+    return { success: false, error: 'Core snapshot returned an unreadable payload' };
+  }
+}
+
 const CoreSystemsOverview = ({ isConnected }) => {
   const [snapshot, setSnapshot] = useState(null);
   const [error, setError] = useState(null);
@@ -23,7 +33,7 @@ const CoreSystemsOverview = ({ isConnected }) => {
     if (!isConnected) return;
     try {
       const response = await fetch('/api/soma/core-systems/snapshot');
-      const data = await response.json();
+      const data = normalizePayload(await response.json());
       if (!response.ok || !data.success) throw new Error(data.error || 'Snapshot unavailable');
       setSnapshot(data);
       setError(null);
@@ -95,13 +105,20 @@ const CoreSystemsOverview = ({ isConnected }) => {
 
       <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
         {readiness.components.map(component => (
-          <div key={component.id} className={`rounded-lg border px-3 py-2 ${stateTone[component.state] || stateTone.offline}`}>
-            <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider">
-              <span>{component.label}</span>
-              {component.ready ? <CheckCircle className="h-3 w-3" /> : <AlertTriangle className="h-3 w-3" />}
+          <React.Fragment key={component.id}>
+            <div className={`rounded-lg border px-3 py-2 ${stateTone[component.state] || stateTone.offline}`}>
+              <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider">
+                <span>{component.label}</span>
+                {component.ready ? <CheckCircle className="h-3 w-3" /> : <AlertTriangle className="h-3 w-3" />}
+              </div>
+              <div className="mt-1 truncate text-[10px] font-normal text-zinc-400" title={component.detail}>{component.detail}</div>
             </div>
-            <div className="mt-1 truncate text-[10px] font-normal text-zinc-400" title={component.detail}>{component.detail}</div>
-          </div>
+            {component.id === 'market' && (
+              <div className="col-span-2 lg:col-span-4">
+                <AgenticProofPanel />
+              </div>
+            )}
+          </React.Fragment>
         ))}
       </div>
 

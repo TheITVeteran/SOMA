@@ -21,6 +21,7 @@ import json
 import time
 import threading
 import subprocess
+import socket
 import urllib.request
 from collections import deque
 from datetime import datetime, timezone
@@ -30,6 +31,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from marionette_config import CONFIG
 
 SELF_PID = os.getpid()
+HIDDEN_PROCESS_FLAGS = getattr(subprocess, "CREATE_NO_WINDOW", 0)
 
 
 def now() -> float:
@@ -103,6 +105,15 @@ def http_ok(url: str, timeout: int) -> bool:
         return False
 
 
+def tcp_ok(host: str, port: int, timeout: float = 0.75) -> bool:
+    """Cheap second liveness signal that does not depend on the Node event loop."""
+    try:
+        with socket.create_connection((host, int(port)), timeout=timeout):
+            return True
+    except OSError:
+        return False
+
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Per-service supervisor
 # ─────────────────────────────────────────────────────────────────────────────
@@ -129,6 +140,7 @@ class ServiceMonitor:
         self.restart_times = deque()     # timestamps of recent restarts
         self.circuit_open_until = 0.0
         self.total_restarts = 0
+        self.last_probe = {"http": None, "listener": None, "failed_at": None}
         self.deploying = False           # managed deploy in progress (skip auto-recovery)
         self.deploy_state = "idle"       # idle|deploying|verifying|succeeded|rolled_back|failed
 
@@ -175,10 +187,13 @@ class ServiceMonitor:
         if healthy:
             self.consecutive_fails = 0
             self.last_healthy = now()
+            self.last_probe = {"http": True, "listener": True, "failed_at": None}
             self._set("healthy")
             return
 
         self.consecutive_fails += 1
+        listener_alive = tcp_ok("127.0.0.1", self.spec["port"])
+        self.last_probe = {"http": False, "listener": listener_alive, "failed_at": iso()}
 
         # Someone else (you / Claude / start script) may already be launching it.
         # If a YOUNG process is sitting on the port, it's booting — wait, don't fight.
@@ -190,15 +205,21 @@ class ServiceMonitor:
                 self._set("booting")
                 return
 
-        if self.consecutive_fails < CONFIG["FAILS_TO_DEAD"]:
+        dead_threshold = (CONFIG["FAILS_TO_DEAD_WITH_LISTENER"]
+                          if listener_alive else CONFIG["FAILS_TO_DEAD"])
+        if self.consecutive_fails < dead_threshold:
             if self.consecutive_fails >= CONFIG["FAILS_TO_STUCK"] and self.state != "stuck":
                 self._set("stuck")
                 supervisor.alert(self.name, "stuck",
-                                 f"{self.name} unresponsive ({self.consecutive_fails} fails) — watching before restart")
+                                 f"{self.name} HTTP health unresponsive ({self.consecutive_fails}/{dead_threshold}); "
+                                 f"listener={'alive' if listener_alive else 'missing'} — watching before restart")
             return
 
         # Declared DEAD → recover (if circuit allows).
-        self.recover(supervisor, reason=f"{self.consecutive_fails} consecutive health failures")
+        self.recover(supervisor, reason=(
+            f"{self.consecutive_fails} consecutive HTTP health failures; "
+            f"listener={'alive' if listener_alive else 'missing'}"
+        ))
 
     # ── recovery ──
     def recover(self, supervisor, reason=""):
@@ -226,7 +247,7 @@ class ServiceMonitor:
             subprocess.Popen(
                 self.spec["start_cmd"],
                 cwd=self.spec["start_dir"],
-                creationflags=getattr(subprocess, "CREATE_NEW_CONSOLE", 0),
+                creationflags=HIDDEN_PROCESS_FLAGS,
                 close_fds=True,
             )
             launched = True
@@ -255,6 +276,9 @@ class ServiceMonitor:
             "circuit_open": self._circuit_is_open(),
             "circuit_reopen_in_s": max(0, round(self.circuit_open_until - now())) if self._circuit_is_open() else 0,
             "booting": now() < self.grace_until,
+            "probe": self.last_probe,
+            "recovery_threshold": (CONFIG["FAILS_TO_DEAD_WITH_LISTENER"]
+                                   if self.last_probe.get("listener") else CONFIG["FAILS_TO_DEAD"]),
         }
 
 
@@ -309,9 +333,18 @@ class Supervisor:
                    + (f" | not installed (skipped): {', '.join(skipped)}" if skipped else ""))
         for m in installed:
             if not http_ok(m.spec["health_url"], CONFIG["HEALTH_TIMEOUT_SECONDS"]):
-                self.log_action(m.name, "cold_start", {"reason": "down at supervisor launch"})
-                with self._lock:
-                    m.recover(self, reason="cold start — service down when supervisor launched")
+                if tcp_ok("127.0.0.1", m.spec["port"]):
+                    m.last_probe = {"http": False, "listener": True, "failed_at": iso()}
+                    m.grace_until = now() + CONFIG["COLD_START_LISTENER_GRACE_SECONDS"]
+                    m._set("booting")
+                    self.log_action(m.name, "cold_start_degraded", {
+                        "reason": "HTTP health unavailable but listener is alive",
+                        "grace_s": CONFIG["COLD_START_LISTENER_GRACE_SECONDS"],
+                    })
+                else:
+                    self.log_action(m.name, "cold_start", {"reason": "down at supervisor launch"})
+                    with self._lock:
+                        m.recover(self, reason="cold start — service listener missing")
 
     # ── main loop ──
     def loop(self):
@@ -397,7 +430,7 @@ class Supervisor:
             time.sleep(2)
         try:
             subprocess.Popen(m.spec["start_cmd"], cwd=m.spec["start_dir"],
-                             creationflags=getattr(subprocess, "CREATE_NEW_CONSOLE", 0),
+                             creationflags=HIDDEN_PROCESS_FLAGS,
                              close_fds=True)
         except Exception as e:
             self.alert(m.name, "launch_failed", f"deploy launch failed: {e}")

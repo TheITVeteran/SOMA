@@ -16,6 +16,11 @@ CONFIG = {
     "HEALTH_TIMEOUT_SECONDS": 4,       # per-ping HTTP timeout
     "FAILS_TO_STUCK": 2,               # consecutive fails -> "stuck" (warn)
     "FAILS_TO_DEAD": 4,                # consecutive fails -> "dead" (recover)
+    # A listening socket means the process still exists and may only be under
+    # temporary event-loop or CPU pressure. Give it roughly two minutes before
+    # replacing it; a process with no listener still uses FAILS_TO_DEAD.
+    "FAILS_TO_DEAD_WITH_LISTENER": 12,
+    "COLD_START_LISTENER_GRACE_SECONDS": 90,
 
     # Managed-deploy health window: a service gets boot_grace_s + this many
     # seconds to come back healthy before a deploy is declared failed. Generous
@@ -55,16 +60,16 @@ CONFIG = {
             "detect_file": "start_production.bat",
             # Recovery uses the LEAN launcher (no WSL/Redis/Siren preamble that
             # can hang) so bringing SOMA back never blocks on optional extras.
-            "start_cmd": ["cmd", "/c", "start", "", "cmd", "/c", "start-soma-core.bat"],
+            "start_cmd": ["cmd", "/c", "start-soma-core.bat"],
         },
         "max": {
             "required": False,
             "health_url": "http://127.0.0.1:3100/health",
             "port": 3100,
             "boot_grace_s": 35,
-            "start_dir": r"C:\Users\barry\Desktop\MAX1",
+            "start_dir": r"C:\Users\barry\Desktop\The Stack\MAX",
             "detect_file": "start-local.bat",
-            "start_cmd": ["cmd", "/c", "start", "", "cmd", "/c", "start-local.bat"],
+            "start_cmd": ["cmd", "/c", "start-local.bat"],
         },
     },
 

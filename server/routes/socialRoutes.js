@@ -587,7 +587,13 @@ export default function createSocialRoutes(system) {
         try {
             const { text, platform = 'bluesky', scheduledFor, type = 'generated_image_post' } = req.body || {};
             if (!text?.trim()) return res.status(400).json({ ok: false, error: 'text is required' });
-            const generated = await somaImageGeneration.generate(req.body || {});
+            const generated = await somaImageGeneration.generate({
+                ...(req.body || {}),
+                platform,
+                publicPost: true,
+                purpose: 'bluesky-post',
+                sourceText: text.trim(),
+            });
             const queued = socialQueue.push({
                 platform,
                 text: text.trim(),
@@ -606,7 +612,13 @@ export default function createSocialRoutes(system) {
         try {
             const { text, platform = 'bluesky' } = req.body || {};
             if (!text?.trim()) return res.status(400).json({ ok: false, error: 'text is required' });
-            const generated = await somaImageGeneration.generate(req.body || {});
+            const generated = await somaImageGeneration.generate({
+                ...(req.body || {}),
+                platform,
+                publicPost: true,
+                purpose: 'bluesky-post',
+                sourceText: text.trim(),
+            });
             const images = [{ path: generated.image.path, alt: generated.image.alt || generated.alt }];
             let result;
             if (platform === 'bluesky') {

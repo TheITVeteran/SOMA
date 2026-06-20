@@ -192,23 +192,18 @@ function chapterImageConcepts(story, chapter, count = MAX_STORY_SCENE_IMAGES) {
 
 function buildImagePrompt({ story, chapter, kind, concept, rotation, style }) {
     const chapterTitle = chapter?.title || `Chapter ${chapter?.n || ''}`.trim();
-    const palette = rotation.palette?.length ? rotation.palette.join(', ') : rotation.paletteName;
     const base = kind === 'cover'
-        ? `Premium chapter key art for ${story?.title || 'SOMA Saga'}, chapter ${chapter?.n}: ${chapterTitle}. This is not a literal book cover and must contain no title text or typography.`
-        : `Cinematic scene card for ${story?.title || 'SOMA Saga'}, chapter ${chapter?.n}: ${chapterTitle}.`;
+        ? `Chapter key image for ${story?.title || 'SOMA Saga'}, chapter ${chapter?.n}: ${chapterTitle}. This is a narrative scene, not a literal book cover.`
+        : `Narrative scene from ${story?.title || 'SOMA Saga'}, chapter ${chapter?.n}: ${chapterTitle}.`;
     const subject = kind === 'cover'
         ? `Core tension: ${String(story?.arc || chapterExcerpt(chapter, 700)).slice(0, 700)}`
         : `Scene seed: ${String(concept?.excerpt || chapterExcerpt(chapter, 700)).slice(0, 700)}`;
     return [
         base,
         subject,
-        `Visual identity: ${style.identity}`,
-        `Composition: ${rotation.composition || 'cinematic still'}.`,
-        `Recurring symbol: ${rotation.symbol || 'subtle signal thread'}.`,
-        `Palette: ${palette || 'violet, teal, charcoal, soft amber'}.`,
-        `Mood: ${style.mood.slice(0, 4).join(', ')}.`,
-        `Quality direction: beautiful, coherent, premium speculative fiction illustration, grounded physical scene, strong depth, no readable text, no letters, no numbers, no captions, no signage, no logos, no watermark.`,
-        `Avoid: ${style.bans.join(', ')}.`,
+        `Show the specific people, place, action, and physical stakes described in the scene seed.`,
+        `Use ${rotation.symbol || 'the story recurring symbol'} only if it occurs naturally in the scene; never make it the default focal subject.`,
+        `No readable text, letters, numbers, captions, signage, logos, or watermark.`,
     ].join(' ');
 }
 

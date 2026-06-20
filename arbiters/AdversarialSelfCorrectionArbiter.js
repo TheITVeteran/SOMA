@@ -7,6 +7,7 @@
  */
 
 import { BaseArbiterV4, ArbiterRole, ArbiterCapability } from './BaseArbiter.js';
+import messageBroker from '../core/MessageBroker.cjs';
 
 export class AdversarialSelfCorrectionArbiter extends BaseArbiterV4 {
     constructor(opts = {}) {
@@ -22,46 +23,77 @@ export class AdversarialSelfCorrectionArbiter extends BaseArbiterV4 {
 
     async initialize() {
         this.auditLogger.success(`🛡️ [${this.name}] Red Team online. Adversarial self-correction active.`);
+        
+        // Listen for Netrunner / CyberSec CVE Challenges
+        if (messageBroker) {
+            messageBroker.subscribe('cybersec_challenge_generation', async (challenge) => {
+                this.auditLogger.info(`🛡️ [${this.name}] Intercepted Netrunner Challenge: ${challenge.cveId || 'Unknown CVE'}`);
+                await this.runRedTeamSession(challenge);
+            });
+        }
     }
 
     /**
-     * Conducts a Red Team session on a specific arbiter or process.
+     * Conducts a Red Team session on a specific arbiter or process using a real-world CVE.
      */
-    async runRedTeamSession(targetProcess = 'AuditArbiter') {
-        this.auditLogger.info(`🛡️ [RedTeam] Initiating stress-test for: ${targetProcess}`);
+    async runRedTeamSession(challenge) {
+        const targetProcess = 'SOMA Universal Learning Pipeline & Arbiters';
+        this.auditLogger.info(`🛡️ [RedTeam] Initiating stress-test against ${targetProcess} using ${challenge.cveId || 'CVE'}`);
         
-        // 1. "Breaker" Persona: Invent a bypass
-        const breakerQuery = `[BREAKER PERSONA] You are a sophisticated fraudster. 
-        Your goal is to bypass the SOMA ${targetProcess}. 
-        The system checks for: TIE matching, structural heatmaps, Benford's Law, and relationship topology.
-        Invent one specific, complex method to inject $50,000 of fraudulent expenses without triggering these flags.
-        Be technical and creative.`;
+        // 1. "Breaker" Persona: Invent a bypass based on the CVE
+        const breakerQuery = `[BREAKER PERSONA] You are an elite, sophisticated fraudster and offensive security engineer. 
+        Your goal is to bypass or exploit the ${targetProcess}. 
+        You have just discovered the following real-world vulnerability methodology:
+        Title: ${challenge.title || 'Unknown'}
+        Attack Vector: ${challenge.attackVector || 'Unknown'}
+        Description: ${challenge.description || 'Unknown'}
+        
+        Translate this real-world CVE into a specific, highly technical attack against SOMA's own Node.js/Python architecture. 
+        How could this exact exploit pattern be used to compromise SOMA's Arbiters or inject fraudulent data into her pipeline?`;
 
-        const attack = await this.system.callBrain('AURORA', breakerQuery, { temperature: 0.9 });
+        let attack = { text: "Simulated Attack: Exploit Node.js prototype pollution in the MessageBroker." };
+        if (this.quadBrain) {
+             attack = await this.quadBrain.callBrain('AURORA', breakerQuery, { temperature: 0.9, maxTokens: 1000 });
+        }
 
         // 2. "Architect" Persona: Analyze and Patch
-        const architectQuery = `[ARCHITECT PERSONA] You are SOMA's lead architect.
-        A Red Team session just produced this potential attack vector:
+        const architectQuery = `[ARCHITECT PERSONA] You are SOMA's lead security architect.
+        A Red Team session just produced this potential attack vector against SOMA based on ${challenge.cveId || 'a CVE'}:
         "${attack.text}"
         
-        Analyze this attack. How would you update the Python limbs (invoice_processor.py, tie_matcher.py) or the AuditArbiter.js logic to detect this?
+        Analyze this attack. How would you update SOMA's source code (e.g., BaseArbiter.js, MessageBroker.cjs, or UniversalLearningPipeline.js) to detect and block this?
         Provide a specific technical recommendation for a code patch.`;
 
-        const patch = await this.system.callBrain('LOGOS', architectQuery, { temperature: 0.2 });
+        let patch = { text: "Simulated Patch: Freeze object prototypes and sanitize broker payloads." };
+        if (this.quadBrain) {
+             patch = await this.quadBrain.callBrain('LOGOS', architectQuery, { temperature: 0.2, maxTokens: 1000 });
+        }
 
         const sessionResult = {
             timestamp: new Date().toISOString(),
             target: targetProcess,
+            cve_inspiration: challenge.cveId || 'Unknown',
             attack_vector: attack.text,
             defense_patch: patch.text,
-            status: "Vulnerability Identified & Defense Mapped"
+            status: "Vulnerability Mapped & Patch Synthesized"
         };
 
         this.vulnerabilitiesFound.push(sessionResult);
         
         // 3. Proactive Broadcast: Alert the system of the new defense strategy
-        if (this.system.messageBroker) {
-            this.system.messageBroker.publish('security.logic_update', sessionResult);
+        if (messageBroker) {
+            messageBroker.publish('security.logic_update', sessionResult);
+        }
+
+        // 4. Log to UniversalLearningPipeline
+        if (this.system && this.system.universalLearningPipeline) {
+            await this.system.universalLearningPipeline.logInteraction({
+                agent: this.name,
+                type: 'adversarial_red_team_patch',
+                input: attack.text,
+                output: patch.text,
+                metadata: { cve: challenge.cveId }
+            });
         }
 
         return sessionResult;

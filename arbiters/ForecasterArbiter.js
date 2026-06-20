@@ -98,11 +98,11 @@ export class ForecasterArbiter extends BaseArbiterV4 {
                     const system = global.__SOMA_SYSTEM;
                     if (system?.universalLearningPipeline) {
                         system.universalLearningPipeline.logInteraction({
-                            source: 'ForecasterArbiter',
-                            action: 'autonomous_guess',
-                            details: { matchup: game.name, prediction: forecast.prediction, win_probability: forecast.win_probability },
-                            outcome: 'success',
-                            tags: ['forecaster', 'autonomous', 'guessing']
+                            agent: 'ForecasterArbiter',
+                            type: 'autonomous_guess',
+                            input: { matchup: game.name },
+                            output: { prediction: forecast.prediction, win_probability: forecast.win_probability, status: 'success' },
+                            metadata: { tags: ['forecaster', 'autonomous', 'guessing'] }
                         }).catch(() => {});
                     }
                 }
